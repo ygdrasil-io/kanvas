@@ -48,6 +48,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FilterMaskShader,
     W6FilterMaskTable,
     W6FilterMaterializedSource,
+    W6FilterDropShadowColorize,
 }
 
 /** IIf1's one-coverage plus pre-issued W5 material ABI; neither table nor source materialization belongs here. */
@@ -152,6 +153,37 @@ public class W6FilterMaterializedSourceRecipeV1 internal constructor(
 public class W6FilterMaterializedSourceNativeSiteRecipeV1 internal constructor(public val host: W6FilterMaterializedSourceRecipeV1) : NativeSiteRecipeV1 {
     override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterMaterializedSource
     override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) { text("owner", host.ownerPassId.value); text("target", host.target.value); text("input.0", host.source.value); text("input.1", host.coverage.value); int("inputCount", 2); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("sourceExtentWidth", host.copySourceExtent().width); int("sourceExtentHeight", host.copySourceExtent().height); int("coverageExtentWidth", host.copyCoverageExtent().width); int("coverageExtentHeight", host.copyCoverageExtent().height); rect("sourceKnown", host.copySourceKnownContentTargetLocalI32()); rect("coverageKnown", host.copyCoverageKnownContentTargetLocalI32()); point("sourceOffset", host.copyOutputToSourceOffsetTargetLocalI32()); point("coverageOffset", host.copyOutputToCoverageOffsetTargetLocalI32()); point("targetOriginDevice", host.copyTargetOriginDeviceI32()); enum("alphaMode", host.alphaMode); enum("targetFormat", host.targetFormat); enum("sourceFormat", host.sourceFormat); enum("coverageFormat", host.coverageFormat); int("sampleCount", host.sampleCountI32); int("sourceSampleCount", host.sourceSampleCountI32); int("coverageSampleCount", host.coverageSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32) }
+}
+
+/** IIg1's single blurred-alpha input, with its exact color and linear DECAL mapping frozen by the planner. */
+public enum class W6FilterDropShadowColorizeShaderFamilyV1 { LinearDecalBlurredAlphaColorize }
+public enum class W6FilterDropShadowColorizeGroupZeroAbiV1 { BlurredAlphaTexture }
+public class W6FilterDropShadowColorizeRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId, public val target: PlanResourceId, public val blurredSource: PlanResourceId,
+    public val colorArgbU32: UInt, offsetF64: org.graphiks.math.vector.Vector2F64,
+    sourceCoordinateOffsetTargetLocalF64: org.graphiks.math.vector.Vector2F64,
+    sourceFootprintTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    outputFootprintTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    extent: org.graphiks.math.geometry.SizeI32, blurredExtent: org.graphiks.math.geometry.SizeI32,
+    public val targetFormat: PlanLogicalColorFormat, public val blurredFormat: PlanLogicalColorFormat,
+    public val sampleCountI32: Int, public val blurredSampleCountI32: Int,
+    public val shaderFamily: W6FilterDropShadowColorizeShaderFamilyV1 = W6FilterDropShadowColorizeShaderFamilyV1.LinearDecalBlurredAlphaColorize,
+    public val groupZeroAbi: W6FilterDropShadowColorizeGroupZeroAbiV1 = W6FilterDropShadowColorizeGroupZeroAbiV1.BlurredAlphaTexture,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val o = org.graphiks.math.vector.Vector2F64(offsetF64.x, offsetF64.y); private val so = org.graphiks.math.vector.Vector2F64(sourceCoordinateOffsetTargetLocalF64.x, sourceCoordinateOffsetTargetLocalF64.y)
+    private val sf = sourceFootprintTargetLocalI32.copy(); private val of = outputFootprintTargetLocalI32.copy(); private val e = extent.copy(); private val be = blurredExtent.copy()
+    init { require(target != blurredSource && o.x.isFinite() && o.y.isFinite() && so.x.isFinite() && so.y.isFinite() && !sf.isEmpty && !of.isEmpty && sf.left == 0 && sf.top == 0 && of.left == 0 && of.top == 0 && sampleCountI32 == 1 && blurredSampleCountI32 == 1 && e.width == of.width() && e.height == of.height() && be.width == sf.width() && be.height == sf.height()) }
+    public fun copyOffsetF64() = org.graphiks.math.vector.Vector2F64(o.x, o.y); public fun copySourceCoordinateOffsetTargetLocalF64() = org.graphiks.math.vector.Vector2F64(so.x, so.y)
+    public fun copySourceFootprintTargetLocalI32() = sf.copy(); public fun copyOutputFootprintTargetLocalI32() = of.copy(); public fun copyExtent() = e.copy(); public fun copyBlurredExtent() = be.copy()
+    public fun canonicalLogicalEncodingV1() = W6FilterDropShadowColorizeNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+public class W6FilterDropShadowColorizeNativeSiteRecipeV1 internal constructor(public val host: W6FilterDropShadowColorizeRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterDropShadowColorize
+    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
+        text("owner", host.ownerPassId.value); text("target", host.target.value); text("blurredSource", host.blurredSource.value); text("colorArgb", host.colorArgbU32.toString(16)); double("offset.x", host.copyOffsetF64().x); double("offset.y", host.copyOffsetF64().y); double("sourceCoordinateOffset.x", host.copySourceCoordinateOffsetTargetLocalF64().x); double("sourceCoordinateOffset.y", host.copySourceCoordinateOffsetTargetLocalF64().y); rect("sourceFootprint", host.copySourceFootprintTargetLocalI32()); rect("outputFootprint", host.copyOutputFootprintTargetLocalI32()); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("blurredExtentWidth", host.copyBlurredExtent().width); int("blurredExtentHeight", host.copyBlurredExtent().height); enum("targetFormat", host.targetFormat); enum("blurredFormat", host.blurredFormat); int("sampleCount", host.sampleCountI32); int("blurredSampleCount", host.blurredSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
 }
 
 /** IIe2a's one-texture mask-style site.  The two-texture styles stay outside this slice. */
@@ -1092,6 +1124,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         maskShaders: Map<PlanPassId, W6FilterMaskShaderRecipeV1>,
         maskTables: Map<PlanPassId, W6FilterMaskTableRecipeV1>,
         materializedSources: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1>,
+        dropShadowColorizes: Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -1119,6 +1152,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FilterMaskShaderNativeSiteRecipeV1 -> maskShaders[recipe.host.ownerPassId] === recipe.host
             is W6FilterMaskTableNativeSiteRecipeV1 -> maskTables[recipe.host.ownerPassId] === recipe.host
             is W6FilterMaterializedSourceNativeSiteRecipeV1 -> materializedSources[recipe.host.ownerPassId] === recipe.host
+            is W6FilterDropShadowColorizeNativeSiteRecipeV1 -> dropShadowColorizes[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -1155,6 +1189,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     maskShaders: Map<PlanPassId, W6FilterMaskShaderRecipeV1> = emptyMap(),
     maskTables: Map<PlanPassId, W6FilterMaskTableRecipeV1> = emptyMap(),
     materializedSources: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1> = emptyMap(),
+    dropShadowColorizes: Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -1181,6 +1216,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     maskShaders.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     maskTables.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     materializedSources.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    dropShadowColorizes.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -1206,6 +1242,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingMaskShaders = maskShaders.toMutableMap()
     val remainingMaskTables = maskTables.toMutableMap()
     val remainingMaterializedSources = materializedSources.toMutableMap()
+    val remainingDropShadowColorizes = dropShadowColorizes.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -1245,6 +1282,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingMaskShaders.remove(pass.id)?.let { add(W6FilterMaskShaderNativeSiteRecipeV1(it)) }
                 remainingMaskTables.remove(pass.id)?.let { add(W6FilterMaskTableNativeSiteRecipeV1(it)) }
                 remainingMaterializedSources.remove(pass.id)?.let { add(W6FilterMaterializedSourceNativeSiteRecipeV1(it)) }
+                remainingDropShadowColorizes.remove(pass.id)?.let { add(W6FilterDropShadowColorizeNativeSiteRecipeV1(it)) }
             }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
@@ -1254,7 +1292,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty() && remainingMaterializedSources.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty() && remainingMaterializedSources.isEmpty() && remainingDropShadowColorizes.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -1599,6 +1637,31 @@ public fun freezeW6FilterMaterializedSourceRecipesV1(passes: List<PlanPass>, res
         val tf = (target.format as? PlanTextureFormat.Color)?.value ?: error("MaterializedSource requires color target."); val sf = (source.format as? PlanTextureFormat.Color)?.value ?: error("MaterializedSource requires color source."); val cf = (coverage.format as? PlanTextureFormat.Color)?.value ?: error("MaterializedSource requires color coverage.")
         require(PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() && PlanResourceUsage.Sampled in coverage.usages())
         require(put(pass.id, W6FilterMaterializedSourceRecipeV1(pass.id, pass.output, pass.inputs().first(), pass.inputs().last(), requireNotNull(target.copyExtent()), requireNotNull(source.copyExtent()), requireNotNull(coverage.copyExtent()), sourceSampling.copyKnownContentInputTargetLocalI32(), coverageSampling.copyKnownContentInputTargetLocalI32(), sourceSampling.copyOutputToInputOffsetTargetLocalI32(), coverageSampling.copyOutputToInputOffsetTargetLocalI32(), operation.bounds.copyTargetOriginDeviceI32(), if (alphaReplacement[pass.inputs().first()] == true) W6FilterMaterializedSourceAlphaModeV1.ReplaceSourceAlpha else W6FilterMaterializedSourceAlphaModeV1.MultiplySourceAlpha, tf, sf, cf, target.sampleCountI32, source.sampleCountI32, coverage.sampleCountI32)) == null)
+    }
+}
+
+/** Freezes the one-input IIg1 colorize pass; IIg2 composite remains a separate future family. */
+public fun freezeW6FilterDropShadowColorizeRecipesV1(
+    passes: List<PlanPass>, resources: List<PlanResource>,
+): Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1> = LinkedHashMap<PlanPassId, W6FilterDropShadowColorizeRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+        val operation = pass.operation as? FilterPassOperationV1.DropShadowColorize ?: return@forEach
+        val sampling = requireNotNull(operation.linearSampling)
+        require(pass.inputs().size == 1)
+        val target = resources.single { it.id == pass.output }
+        val blurred = resources.single { it.id == pass.inputs().single() }
+        val targetFormat = (target.format as? PlanTextureFormat.Color)?.value
+            ?: error("DropShadowColorize requires color target.")
+        val blurredFormat = (blurred.format as? PlanTextureFormat.Color)?.value
+            ?: error("DropShadowColorize requires color source.")
+        require(PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in blurred.usages())
+        require(put(pass.id, W6FilterDropShadowColorizeRecipeV1(
+            pass.id, pass.output, pass.inputs().single(), operation.color.value, operation.copyOffsetF64(),
+            sampling.copySourceCoordinateOffsetTargetLocalF64(), sampling.copySourceFootprintTargetLocalI32(),
+            sampling.copyOutputFootprintTargetLocalI32(), requireNotNull(target.copyExtent()),
+            requireNotNull(blurred.copyExtent()), targetFormat, blurredFormat, target.sampleCountI32,
+            blurred.sampleCountI32,
+        )) == null)
     }
 }
 

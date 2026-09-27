@@ -655,6 +655,25 @@ private fun preflightW6FilterMaterializedSources(frame: GPUW6aLayerFramePlan, fr
     }
 }
 
+/** IIg1 checks the sealed color, F64 offset and linear DECAL geometry before native allocation. */
+private fun preflightW6FilterDropShadowColorizes(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterDropShadowColorizeRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterDropShadowColorizeRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterDropShadowColorizeRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass
+            ?: error("DropShadowColorize owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.DropShadowColorize
+            ?: error("DropShadowColorize operation changed after seal.")
+        val sampling = requireNotNull(operation.linearSampling)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val target = frame.physical.resource(actual.target); val blurred = frame.physical.resource(actual.blurredSource)
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.blurredSource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.blurredSource == pass.inputs().single() && actual.colorArgbU32 == operation.color.value && actual.copyOffsetF64() == operation.copyOffsetF64() && actual.copySourceCoordinateOffsetTargetLocalF64() == sampling.copySourceCoordinateOffsetTargetLocalF64() && actual.copySourceFootprintTargetLocalI32() == sampling.copySourceFootprintTargetLocalI32() && actual.copyOutputFootprintTargetLocalI32() == sampling.copyOutputFootprintTargetLocalI32() && actual.groupZeroAbi == W6FilterDropShadowColorizeGroupZeroAbiV1.BlurredAlphaTexture && actual.shaderFamily == W6FilterDropShadowColorizeShaderFamilyV1.LinearDecalBlurredAlphaColorize && actual.load == AttachmentLoadPlan.ClearTransparent && actual.store == AttachmentStorePlan.Store && actual.blend == BlendPlan.LegacySrcOverV1 && actual.draw == W6FullscreenEmptyDrawV1() && target.copyExtent() == actual.copyExtent() && blurred.copyExtent() == actual.copyBlurredExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && blurred.format == PlanTextureFormat.Color(actual.blurredFormat) && target.sampleCountI32 == actual.sampleCountI32 && blurred.sampleCountI32 == actual.blurredSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in blurred.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null) { "W6 DropShadowColorize physical or recorded preflight differs from its frozen recipe." }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -723,6 +742,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterMaskShaders(frame, framePlan)
             preflightW6FilterMaskTables(frame, framePlan)
             preflightW6FilterMaterializedSources(frame, framePlan)
+            preflightW6FilterDropShadowColorizes(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1482,6 +1502,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMaterializedSourceNativeSiteRecipeV1) {
                             val recipe = frame.physical.w6FilterMaterializedSourceRecipe(pass.id)
                             renderOperands += maskedMaterialSourceRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), views.getValue(recipe.coverage), generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterDropShadowColorizeNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterDropShadowColorizeRecipe(pass.id)
+                            renderOperands += dropShadowColorizeRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.blurredSource), generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -1506,13 +1529,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             is FilterPassOperationV1.MaskShader -> error("MaskShader pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaskTable -> error("MaskTable pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaterializedSource -> error("MaterializedSource pass is missing its frozen native-site recipe.")
-                            is FilterPassOperationV1.DropShadowColorize -> {
-                                require(pass.inputs().size == 1)
-                                val input = pass.inputs().single()
-                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
-                                    dropShadowColorizeShader(operation),
-                                    BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
-                            }
+                            is FilterPassOperationV1.DropShadowColorize -> error("DropShadowColorize pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.DropShadowComposite -> {
                                 require(pass.inputs().isNotEmpty())
                                 val shadow = pass.inputs().first()
@@ -2752,15 +2769,27 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         }
     """
 
-    /** Colors the already-blurred alpha using only the frozen offset/color payload. */
-    private fun dropShadowColorizeShader(
-        operation: FilterPassOperationV1.DropShadowColorize,
-    ): String {
-        val sampling = requireNotNull(operation.linearSampling) { "W6b shadow colorize has no sealed linear sampling transform." }
-        val sourceOffset = sampling.copySourceCoordinateOffsetTargetLocalF64()
-        val sourceFootprint = sampling.copySourceFootprintTargetLocalI32()
-        val outputFootprint = sampling.copyOutputFootprintTargetLocalI32()
-        val color = operation.color
+    /** Mechanical IIg1 translation: the planner-owned recipe is the complete native authority. */
+    private fun dropShadowColorizeRender(
+        stepIndex: Int, target: GPUTextureView, blurredSource: GPUTextureView, generation: GPUDeviceGenerationID,
+        recipe: W6FilterDropShadowColorizeRecipeV1, pass: PlanPass.FilterPass, owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output && pass.inputs() == listOf(recipe.blurredSource) && recipe.groupZeroAbi == W6FilterDropShadowColorizeGroupZeroAbiV1.BlurredAlphaTexture && recipe.shaderFamily == W6FilterDropShadowColorizeShaderFamilyV1.LinearDecalBlurredAlphaColorize && recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val extent = recipe.copyExtent()
+        return textureRender(stepIndex, target, blurredSource, generation, dropShadowColorizeShader(recipe), recipe.blend,
+            0, 0, extent.width, extent.height, pass, owned)
+    }
+
+    /** Colors the already-blurred alpha using only the frozen recipe payload. */
+    private fun dropShadowColorizeShader(recipe: W6FilterDropShadowColorizeRecipeV1): String {
+        val sourceOffset = recipe.copySourceCoordinateOffsetTargetLocalF64()
+        val sourceFootprint = recipe.copySourceFootprintTargetLocalI32()
+        val outputFootprint = recipe.copyOutputFootprintTargetLocalI32()
+        val color = recipe.colorArgbU32
+        val alpha = ((color shr 24) and 0xffu).toInt()
+        val red = ((color shr 16) and 0xffu).toInt()
+        val green = ((color shr 8) and 0xffu).toInt()
+        val blue = (color and 0xffu).toInt()
         return W6A_VERTEX_SHADER + """
             @group(0) @binding(0) var w6b_shadow_blur: texture_2d<f32>;
             fn w6b_shadow_decal(coordinate: vec2<i32>) -> vec4<f32> {
@@ -2781,8 +2810,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 let top = mix(w6b_shadow_decal(lower), w6b_shadow_decal(lower + vec2<i32>(1, 0)), fraction.x);
                 let bottom = mix(w6b_shadow_decal(lower + vec2<i32>(0, 1)),
                     w6b_shadow_decal(lower + vec2<i32>(1, 1)), fraction.x);
-                let alpha = mix(top, bottom, fraction.y).a * ${color.alpha / 255f}f;
-                let color_encoded = vec3<f32>(${color.red / 255f}f, ${color.green / 255f}f, ${color.blue / 255f}f);
+                let alpha = mix(top, bottom, fraction.y).a * ${alpha / 255f}f;
+                let color_encoded = vec3<f32>(${red / 255f}f, ${green / 255f}f, ${blue / 255f}f);
                 let color_linear = select(
                     pow((color_encoded + vec3<f32>(0.055)) / vec3<f32>(1.055), vec3<f32>(2.4)),
                     color_encoded / vec3<f32>(12.92),

@@ -71,6 +71,7 @@ internal class SourcePhysicalConstructionV1(
     val w6FilterMaskShaderRecipes: Map<PlanPassId, W6FilterMaskShaderRecipeV1> = emptyMap(),
     val w6FilterMaskTableRecipes: Map<PlanPassId, W6FilterMaskTableRecipeV1> = emptyMap(),
     val w6FilterMaterializedSourceRecipes: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1> = emptyMap(),
+    val w6FilterDropShadowColorizeRecipes: Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1> = emptyMap(),
     /** Versioned catalog derived exclusively from the preceding final planner recipes. */
     val nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1.Empty,
 )
@@ -148,6 +149,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     filterMaskShaderRecipes: Map<PlanPassId, W6FilterMaskShaderRecipeV1>,
     filterMaskTableRecipes: Map<PlanPassId, W6FilterMaskTableRecipeV1>,
     filterMaterializedSourceRecipes: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1>,
+    filterDropShadowColorizeRecipes: Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1>,
     nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1,
 ) {
     private val resources = immutableList(resources)
@@ -182,6 +184,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val maskShaders = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMaskShaderRecipes))
     private val maskTables = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMaskTableRecipes))
     private val materializedSources = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMaterializedSourceRecipes))
+    private val dropShadowColorizes = java.util.Collections.unmodifiableMap(LinkedHashMap(filterDropShadowColorizeRecipes))
     private val colorFilters = java.util.Collections.unmodifiableMap(LinkedHashMap(filterColorFilterRecipes))
     private val nativeSiteRecipes = nativeSiteRecipeCatalogV1
     private val slots = immutableList(buildList {
@@ -312,6 +315,10 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6FilterMaskTableRecipes(): Map<PlanPassId, W6FilterMaskTableRecipeV1> = maskTables
     public fun w6FilterMaterializedSourceRecipe(passId: PlanPassId): W6FilterMaterializedSourceRecipeV1 = (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterMaterializedSourceNativeSiteRecipeV1)?.host ?: error("Missing frozen W6 MaterializedSource recipe.")
     public fun w6FilterMaterializedSourceRecipes(): Map<PlanPassId, W6FilterMaterializedSourceRecipeV1> = materializedSources
+    public fun w6FilterDropShadowColorizeRecipe(passId: PlanPassId): W6FilterDropShadowColorizeRecipeV1 =
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterDropShadowColorizeNativeSiteRecipeV1)?.host
+            ?: error("Missing frozen W6 DropShadowColorize recipe.")
+    public fun w6FilterDropShadowColorizeRecipes(): Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1> = dropShadowColorizes
     /** Ordered planner catalog consumed by the bounded 2P0–2P6 renderer sites. */
     public fun nativeSiteRecipeCatalogV1(): NativeSiteRecipeCatalogV1 = nativeSiteRecipes
 
@@ -456,9 +463,12 @@ public class PlanPhysicalLayoutV1 private constructor(
             val expectedMaterializedSources = freezeW6FilterMaterializedSourceRecipesV1(graph.passes(), rows)
             require(source.w6FilterMaterializedSourceRecipes.keys == expectedMaterializedSources.keys)
             source.w6FilterMaterializedSourceRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedMaterializedSources.getValue(id).canonicalLogicalEncodingV1()) }
+            val expectedDropShadowColorizes = freezeW6FilterDropShadowColorizeRecipesV1(graph.passes(), rows)
+            require(source.w6FilterDropShadowColorizeRecipes.keys == expectedDropShadowColorizes.keys)
+            source.w6FilterDropShadowColorizeRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedDropShadowColorizes.getValue(id).canonicalLogicalEncodingV1()) }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
                 graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
-                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals, expectedMaskBlurDualSources, expectedMaskShaders, expectedMaskTables, expectedMaterializedSources,
+                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals, expectedMaskBlurDualSources, expectedMaskShaders, expectedMaskTables, expectedMaterializedSources, expectedDropShadowColorizes,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -485,6 +495,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterMaskShaderRecipes,
                 source.w6FilterMaskTableRecipes,
                 source.w6FilterMaterializedSourceRecipes,
+                source.w6FilterDropShadowColorizeRecipes,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
@@ -693,6 +704,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterMaskShaderRecipes,
                 source.w6FilterMaskTableRecipes,
                 source.w6FilterMaterializedSourceRecipes,
+                source.w6FilterDropShadowColorizeRecipes,
                 source.nativeSiteRecipeCatalogV1)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
