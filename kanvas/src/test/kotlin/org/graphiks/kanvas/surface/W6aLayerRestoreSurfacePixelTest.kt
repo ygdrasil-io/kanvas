@@ -117,6 +117,46 @@ class W6aLayerRestoreSurfacePixelTest {
     }
 
     @Test
+    fun `filtered layer difference restore reads blue parent after image filter`() {
+        // The image filter replaces the child with opaque red before restore. DIFFERENCE against
+        // the immediately preceding opaque blue parent is opaque magenta.
+        val expected = rgbaCpu(255, 0, 255, 255)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val redImageFilter = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Red, BlendMode.SRC))
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(paint = Paint(imageFilter = redImageFilter, blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `filtered layer color filter difference restore reads blue parent after image filter`() {
+        // The image filter makes the layer red, then the restore color filter replaces it with
+        // green. DIFFERENCE against the fresh blue parent is therefore opaque cyan.
+        val expected = rgbaCpu(0, 255, 255, 255)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val redImageFilter = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Red, BlendMode.SRC))
+        val greenRestoreFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SRC)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(paint = Paint(
+                imageFilter = redImageFilter,
+                colorFilter = greenRestoreFilter,
+                blendMode = BlendMode.DIFFERENCE,
+                antiAlias = false,
+            ))
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `emptyLayerColorFilterThatCreatesAlphaIsNotElided`() {
         // Transparent black through this matrix becomes opaque green, so an empty layer is not a no-op.
         val expected = rgbaCpu(0, 255, 0, 255)
