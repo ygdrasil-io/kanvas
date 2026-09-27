@@ -109,6 +109,9 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
 
     @Test
     fun `parent and descendant Picture mask blurs preserve sealed alpha overlap and transparent hole`() {
+        // Fix the public pixel oracle before either Picture or Surface construction: this witness
+        // crosses the CoverageAlpha source path, including target-local sampling and its Load.
+        val expected = W6bMaskBlurCpuOracle.renderNestedPictureMaskBlur()
         val bounds = fullBounds()
         val child = PictureRecorder().also { recorder ->
             recorder.beginRecording(bounds).apply {
@@ -123,13 +126,15 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
                 antiAlias = false,
             ))
         }.finishRecordingAsPicture()
-        val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
             surface.canvas {
                 drawPicture(parent, Paint(maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f), antiAlias = false))
             }
-        }.render().pixels
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
 
-        W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderNestedPictureMaskBlur(), actual, toleranceI32 = 18)
+        W6bMaskBlurCpuOracle.assertNear(expected, result.pixels, toleranceI32 = 18)
     }
 
     @Test

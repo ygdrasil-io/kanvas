@@ -204,6 +204,41 @@ private fun preflightW6FullscreenEmpties(frame: GPUW6aLayerFramePlan, framePlan:
     }
 }
 
+/** Checks the Ib1 recorded step separately from its later texture binding before any allocation. */
+private fun preflightW6FullscreenCoverageAlphas(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FullscreenCoverageAlphaRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FullscreenCoverageAlphaRecipes().keys == expected.keys)
+    expected.forEach { (passId, frozen) ->
+        val actual = frame.physical.w6FullscreenCoverageAlphaRecipe(passId)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1()) {
+            "W6 CoverageAlpha native preflight differs from its frozen planner recipe."
+        }
+        val pass = frame.graph.passes().single { it.id == passId } as? PlanPass.FilterCoverageSourcePass
+            ?: error("W6 CoverageAlpha owner is not a coverage source pass.")
+        val alpha = requireNotNull(pass.sealedAlphaSource)
+        val sampling = requireNotNull(pass.sealedAlphaSampling)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == passId }
+        val expectedUses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+            frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false,
+        ))
+        val target = frame.physical.resource(actual.target)
+        val source = frame.physical.resource(actual.source)
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.source == alpha.sealedSourceId &&
+            actual.sourceGenerationI64 == alpha.sealedSourceGenerationI64 &&
+            actual.copySourceSampleBoundsTargetI32() == alpha.copySampleBoundsTargetI32() &&
+            actual.copyOutputToInputOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32() &&
+            target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) &&
+            target.sampleCountI32 == actual.sampleCountI32 && PlanResourceUsage.Sampled in source.usages() &&
+            render.target == frame.refs.getValue(actual.target) && render.resourceUses == expectedUses && render.drawPackets.isEmpty() &&
+            render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store &&
+            render.samplePlan is GPUSamplePlan.SingleSampleFrame) {
+            "W6 CoverageAlpha recorded resource use or attachment differs from its frozen recipe."
+        }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -254,6 +289,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         try {
             val graph = frame.graph
             preflightW6FullscreenEmpties(frame, framePlan)
+            preflightW6FullscreenCoverageAlphas(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -901,13 +937,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
                         when (val binding = pass.rasterBinding) {
                             null -> pass.sealedAlphaSource?.let { alpha ->
-                                val offset = requireNotNull(pass.sealedAlphaSampling) {
-                                    "W6b sealed alpha source has no target-local sampling."
-                                }.copyOutputToInputOffsetTargetLocalI32()
-                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(alpha.sealedSourceId), generation,
-                                    W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.alphaCoverageFragment(
-                                        offset.x, offset.y,
-                                    ), BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
+                                val recipe = frame.physical.w6FullscreenCoverageAlphaRecipe(pass.id)
+                                require(recipe.source == alpha.sealedSourceId)
+                                renderOperands += coverageAlphaRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), generation,
+                                    recipe, pass, owned)
                             } ?: run {
                                 // Task 3's image-only witness owns no mask producer and remains
                                 // transparent.  This is plan-published absence, not discovery.
@@ -1903,6 +1936,44 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             operationKindOverride = if (pass is PlanPass.LayerComposite) GPUEncoderOperationKind.LayerComposite else null,
             w6aPassV1 = pass,
         )
+    }
+
+    /** Mechanical Ib1 translation: texture-only group zero, Load, and planner-sealed target-local offset. */
+    private fun coverageAlphaRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        source: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        recipe: W6FullscreenCoverageAlphaRecipeV1,
+        pass: PlanPass.FilterCoverageSourcePass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output && recipe.load == AttachmentLoadPlan.Load &&
+            recipe.groupZeroAbi == W6FullscreenCoverageAlphaGroupZeroAbiV1.Texture &&
+            recipe.shaderFamily == W6FullscreenCoverageAlphaShaderFamilyV1.AlphaCoverageTextureLoad)
+        val alpha = requireNotNull(pass.sealedAlphaSource)
+        val sampling = requireNotNull(pass.sealedAlphaSampling)
+        val offset = recipe.copyOutputToInputOffsetTargetLocalI32()
+        require(recipe.source == alpha.sealedSourceId && recipe.sourceGenerationI64 == alpha.sealedSourceGenerationI64 &&
+            recipe.copySourceSampleBoundsTargetI32() == alpha.copySampleBoundsTargetI32() &&
+            offset == sampling.copyOutputToInputOffsetTargetLocalI32())
+        val extent = recipe.copyExtent()
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+        ))))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.alphaCoverageFragment(offset.x, offset.y),
+            layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, source)))))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Load),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32,
+                    recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
+            ), w6aPassV1 = pass)
     }
 
     /** Binds the FilterPass input list positionally; each W6c shader consumes that frozen order. */

@@ -531,8 +531,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                         }
                         val clear = when (pass) {
                             is PlanPass.PictureAggregateBeginPass, is PlanPass.PictureSourcePass,
-                            is PlanPass.FilterPass, is PlanPass.FilterSourceClear,
-                            is PlanPass.FilterCoverageSourcePass -> true
+                            is PlanPass.FilterPass, is PlanPass.FilterSourceClear -> true
+                            is PlanPass.FilterCoverageSourcePass -> pass.sealedAlphaSource == null
                             is PlanPass.RenderPass -> pass.load == AttachmentLoadPlan.ClearTransparent
                             else -> false
                         }
