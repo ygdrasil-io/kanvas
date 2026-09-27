@@ -6,6 +6,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
@@ -16,6 +17,25 @@ import org.junit.jupiter.api.Test
 
 /** Public pixels for contextual W6c Compose evaluation. */
 class W6cComposeSurfaceTest {
+    /** A direct filter terminal must apply its frozen SRC blend over the immediate parent once. */
+    @Test
+    fun directImageColorFilterSrcCompositeReplacesOpaqueParent() {
+        // Luma(red) is transparent black with alpha round(0.2126 * 255) = 54; SRC replaces green.
+        val expected = ubyteArrayOf(0u, 0u, 0u, 54u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Red, imageFilter = ImageFilter.ColorFilter(ColorFilter.Luma),
+                blendMode = BlendMode.SRC, antiAlias = false))
+        }
+
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
     /**
      * A regression in which Compose binds outer to the original layer source would place the
      * luma alpha in pixel zero. The independent expected pixels are transparent then luma(red).
