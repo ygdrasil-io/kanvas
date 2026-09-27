@@ -1150,17 +1150,14 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     }
                     is PlanPass.FilterPass -> {
                         val outputExtent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
-                        when (val operation = pass.operation) {
-                            is FilterPassOperationV1.Crop -> {
-                                require(pass.inputs().size == 1)
-                                val recipe = frame.physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(pass.id, 0, 0)) as? W6FilterSpatialCropNativeSiteRecipeV1
-                                    ?: error("Crop pass is missing its frozen native-site recipe.")
-                                require(recipe.host === frame.physical.w6FilterSpatialCropRecipe(pass.id) && recipe.host.target == pass.output && recipe.host.source == pass.inputs().single())
-                                renderOperands += textureRender(stepIndex, views.getValue(pass.output),
-                                    views.getValue(pass.inputs().single()), generation,
-                                    W6A_VERTEX_SHADER + GPUW6cSpatialSamplingPass.fragment(recipe.host), recipe.host.blend,
-                                    0, 0, outputExtent.width, outputExtent.height, pass, owned)
-                            }
+                        val cropRecipe = frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0))
+                            as? W6FilterSpatialCropNativeSiteRecipeV1
+                        if (cropRecipe != null) {
+                            require(cropRecipe.host === frame.physical.w6FilterSpatialCropRecipe(pass.id))
+                            renderOperands += spatialCropRender(stepIndex, views.getValue(cropRecipe.host.target),
+                                views.getValue(cropRecipe.host.source), generation, cropRecipe.host, pass, owned)
+                        } else when (val operation = pass.operation) {
+                            is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset,
                             is FilterPassOperationV1.Tile,
                             -> {
@@ -2130,6 +2127,38 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()),
                 GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32,
                     recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32))), w6aPassV1 = pass)
+    }
+
+    /** Mechanical IIa1 translation: every native selection is carried by the frozen Crop recipe. */
+    private fun spatialCropRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        source: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        recipe: W6FilterSpatialCropRecipeV1,
+        pass: PlanPass.FilterPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.groupZeroAbi == W6FilterSpatialCropGroupZeroAbiV1.Texture &&
+            recipe.shaderFamily == W6FilterSpatialCropShaderFamilyV1.TargetLocalCropTextureLoad &&
+            recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val extent = recipe.copyExtent()
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+        ))))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + GPUW6cSpatialSamplingPass.fragment(recipe), layout,
+            w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, source)))))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear, clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32,
+                    recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
+            ), w6aPassV1 = pass)
     }
 
     private fun textureRender(
