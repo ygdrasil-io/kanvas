@@ -27,6 +27,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6bCoverageRaster,
     W6FullscreenEmpty,
     W6FullscreenCoverageAlpha,
+    W6FullscreenCoverageSolidRect,
 }
 
 /**
@@ -169,6 +170,60 @@ public class W6FullscreenCoverageAlphaNativeSiteRecipeV1 internal constructor(
         point("outputToInputOffsetTargetLocal", host.copyOutputToInputOffsetTargetLocalI32())
         enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat); int("sampleCount", host.sampleCountI32)
         blend("blend", host.blend); enum("topology", host.topology); enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily)
+        int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32)
+        int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
+}
+
+public enum class W6FullscreenCoverageSolidRectGroupZeroAbiV1 { Empty }
+public enum class W6FullscreenCoverageSolidRectPhaseV1 { CoverageSolidRect }
+public enum class W6FullscreenCoverageSolidRectShaderFamilyV1 { SolidRectCoverageOpaque }
+
+/** Planner-owned Ib2 full-target raw coverage for the existing admitted SolidRect raster path. */
+public class W6FullscreenCoverageSolidRectRecipeV1 internal constructor(
+    override val ownerPassId: PlanPassId,
+    public val target: PlanResourceId,
+    extent: org.graphiks.math.geometry.SizeI32,
+    scissorTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent,
+    public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val clearColor: W6CanonicalColorF32V1 = W6CanonicalColorF32V1.of(0f, 0f, 0f, 0f),
+    public val targetFormat: PlanLogicalColorFormat,
+    public val sampleCountI32: Int,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
+    public val topology: W6FullscreenEmptyTopologyV1 = W6FullscreenEmptyTopologyV1.FullscreenTriangle,
+    public val groupZeroAbi: W6FullscreenCoverageSolidRectGroupZeroAbiV1 = W6FullscreenCoverageSolidRectGroupZeroAbiV1.Empty,
+    public val shaderFamily: W6FullscreenCoverageSolidRectShaderFamilyV1 = W6FullscreenCoverageSolidRectShaderFamilyV1.SolidRectCoverageOpaque,
+    public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) : W6FullscreenRecipeV1 {
+    override val variant: W6FullscreenRecipeVariantV1 = W6FullscreenRecipeVariantV1.CoverageSolidRect
+    public val phase: W6FullscreenCoverageSolidRectPhaseV1 = W6FullscreenCoverageSolidRectPhaseV1.CoverageSolidRect
+    private val frozenExtent = extent.copy()
+    private val frozenScissorTargetLocalI32 = scissorTargetLocalI32.copy()
+    init {
+        require(sampleCountI32 == 1 && frozenScissorTargetLocalI32 == org.graphiks.math.geometry.RectI32(
+            0, 0, frozenExtent.width, frozenExtent.height,
+        ))
+    }
+    public fun copyExtent(): org.graphiks.math.geometry.SizeI32 = frozenExtent.copy()
+    public fun copyScissorTargetLocalI32(): org.graphiks.math.geometry.RectI32 = frozenScissorTargetLocalI32.copy()
+    public fun nativeSiteOwnerV1(): NativeSiteOwnerV1 = NativeSiteOwnerV1(ownerPassId, 0, 0)
+    public fun canonicalLogicalEncodingV1(): String = W6FullscreenCoverageSolidRectNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+
+public class W6FullscreenCoverageSolidRectNativeSiteRecipeV1 internal constructor(
+    public val host: W6FullscreenCoverageSolidRectRecipeV1,
+) : NativeSiteRecipeV1 {
+    override val versionI32: Int = 1
+    override val owner: NativeSiteOwnerV1 = host.nativeSiteOwnerV1()
+    override val family: NativeSiteRecipeFamilyV1 = NativeSiteRecipeFamilyV1.W6FullscreenCoverageSolidRect
+    override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
+        enum("variant", host.variant); enum("phase", host.phase); text("owner", host.ownerPassId.value)
+        int("ordinal", owner.drawOrPacketOrdinalI32); int("bundle", owner.bundleOrdinalI32); text("target", host.target.value)
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); rect("scissor", host.copyScissorTargetLocalI32())
+        enum("load", host.load); enum("store", host.store); color("clearColor", host.clearColor); enum("targetFormat", host.targetFormat)
+        int("sampleCount", host.sampleCountI32); blend("blend", host.blend); enum("topology", host.topology)
+        enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily)
         int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32)
         int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
     }
@@ -378,6 +433,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         coverageRasters: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
         fullscreenEmpties: Map<PlanPassId, W6FullscreenEmptyRecipeV1>,
         coverageAlphas: Map<PlanPassId, W6FullscreenCoverageAlphaRecipeV1>,
+        coverageSolidRects: Map<PlanPassId, W6FullscreenCoverageSolidRectRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -388,6 +444,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6bCoverageRasterNativeSiteRecipeV1 -> coverageRasters[recipe.host.ownerPassId]?.bundle(recipe.host.bundleOrdinalI32) === recipe.host
             is W6FullscreenEmptyNativeSiteRecipeV1 -> fullscreenEmpties[recipe.host.ownerPassId] === recipe.host
             is W6FullscreenCoverageAlphaNativeSiteRecipeV1 -> coverageAlphas[recipe.host.ownerPassId] === recipe.host
+            is W6FullscreenCoverageSolidRectNativeSiteRecipeV1 -> coverageSolidRects[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -407,6 +464,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     coverageRasters: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
     fullscreenEmpties: Map<PlanPassId, W6FullscreenEmptyRecipeV1> = emptyMap(),
     coverageAlphas: Map<PlanPassId, W6FullscreenCoverageAlphaRecipeV1> = emptyMap(),
+    coverageSolidRects: Map<PlanPassId, W6FullscreenCoverageSolidRectRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -416,6 +474,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     coverageRasters.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     fullscreenEmpties.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     coverageAlphas.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    coverageSolidRects.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -424,6 +483,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingCoverageRasters = coverageRasters.toMutableMap()
     val remainingEmpties = fullscreenEmpties.toMutableMap()
     val remainingCoverageAlphas = coverageAlphas.toMutableMap()
+    val remainingCoverageSolidRects = coverageSolidRects.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -442,6 +502,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingCoverageRasters.remove(pass.id)?.bundles()?.forEach { add(W6bCoverageRasterNativeSiteRecipeV1(it)) }
                 remainingEmpties.remove(pass.id)?.let { add(W6FullscreenEmptyNativeSiteRecipeV1(it)) }
                 remainingCoverageAlphas.remove(pass.id)?.let { add(W6FullscreenCoverageAlphaNativeSiteRecipeV1(it)) }
+                remainingCoverageSolidRects.remove(pass.id)?.let { add(W6FullscreenCoverageSolidRectNativeSiteRecipeV1(it)) }
             }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
@@ -451,10 +512,29 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
+
+/** Freezes only Ib2 SolidRect coverage sites; this is intentionally separate from W6b raster bundles. */
+public fun freezeW6FullscreenCoverageSolidRectRecipesV1(
+    passes: List<PlanPass>,
+    resources: List<PlanResource>,
+): Map<PlanPassId, W6FullscreenCoverageSolidRectRecipeV1> = LinkedHashMap<PlanPassId, W6FullscreenCoverageSolidRectRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().forEach { pass ->
+        val binding = pass.rasterBinding ?: return@forEach
+        if (binding.draw !is SolidRectDraw) return@forEach
+        require(pass.sealedAlphaSource == null && binding.depthStencil == null)
+        val target = resources.single { it.id == pass.output }
+        val format = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 CoverageSolidRect requires a color attachment.")
+        val extent = requireNotNull(target.copyExtent())
+        require(target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
+        require(put(pass.id, W6FullscreenCoverageSolidRectRecipeV1(pass.id, pass.output, extent,
+            org.graphiks.math.geometry.RectI32(0, 0, extent.width, extent.height), targetFormat = format,
+            sampleCountI32 = target.sampleCountI32)) == null)
+    }
+}
 
 /** Freezes only the Ib1 alpha-source coverage sites; raster, solid and retain remain separate variants. */
 public fun freezeW6FullscreenCoverageAlphaRecipesV1(

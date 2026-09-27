@@ -239,6 +239,30 @@ private fun preflightW6FullscreenCoverageAlphas(frame: GPUW6aLayerFramePlan, fra
     }
 }
 
+/** Authenticates all Ib2 Clear/empty-group SolidRect sites before the first device.create*. */
+private fun preflightW6FullscreenCoverageSolidRects(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FullscreenCoverageSolidRectRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FullscreenCoverageSolidRectRecipes().keys == expected.keys)
+    expected.forEach { (passId, frozen) ->
+        val actual = frame.physical.w6FullscreenCoverageSolidRectRecipe(passId)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == passId } as? PlanPass.FilterCoverageSourcePass
+            ?: error("W6 CoverageSolidRect owner is not a coverage source pass.")
+        val binding = requireNotNull(pass.rasterBinding)
+        val target = frame.physical.resource(actual.target)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == passId }
+        require(binding.draw is SolidRectDraw && pass.sealedAlphaSource == null && binding.depthStencil == null &&
+            actual.ownerPassId == pass.id && actual.target == pass.output && actual.copyScissorTargetLocalI32() ==
+                org.graphiks.math.geometry.RectI32(0, 0, actual.copyExtent().width, actual.copyExtent().height) &&
+            target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) &&
+            target.sampleCountI32 == actual.sampleCountI32 && render.target == frame.refs.getValue(actual.target) &&
+            render.resourceUses.isEmpty() && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" &&
+            render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame) {
+            "W6 CoverageSolidRect recorded render step differs from its frozen recipe."
+        }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -290,6 +314,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             val graph = frame.graph
             preflightW6FullscreenEmpties(frame, framePlan)
             preflightW6FullscreenCoverageAlphas(frame, framePlan)
+            preflightW6FullscreenCoverageSolidRects(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -935,8 +960,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     }
                     is PlanPass.FilterCoverageSourcePass -> {
                         // The frozen catalog, not nullable pass fields, chooses the native site.
-                        // Pass fields below authenticate the selected recipe or serve the explicitly
-                        // still-open SolidRect bridge until Ib2 supplies its frozen variant.
+                        // Pass fields below only authenticate the selected frozen recipe.
                         when (val recipe = frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(
                             NativeSiteOwnerV1(pass.id, 0, 0),
                         )) {
@@ -960,17 +984,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                         ?: error("W6b coverage requires its frozen render step"), pass, binding,
                                     geometryBuffers, uniform, owned)
                             }
-                            null -> {
-                                // Ib2 is intentionally not frozen yet.  This is the only allowed
-                                // transient CoverageSource branch; every other missing recipe is an error.
-                                val binding = requireNotNull(pass.rasterBinding) {
-                                    "Unfrozen CoverageSource site is neither the Ib2 SolidRect bridge nor a frozen recipe."
-                                }
-                                require(binding.draw is SolidRectDraw)
-                                val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
-                                renderOperands += coverageSolidRectRender(stepIndex, views.getValue(pass.output), generation,
-                                    extent.width, extent.height, pass, owned)
+                            is W6FullscreenCoverageSolidRectNativeSiteRecipeV1 -> {
+                                val host = frame.physical.w6FullscreenCoverageSolidRectRecipe(pass.id)
+                                require(recipe.host === host)
+                                renderOperands += coverageSolidRectRender(stepIndex, views.getValue(host.target), generation,
+                                    host, pass, owned)
                             }
+                            null -> error("CoverageSource pass is missing its frozen native-site recipe.")
                             else -> error("CoverageSource pass selected an inadmissible frozen native-site recipe ${recipe.family}.")
                         }
                     }
@@ -1532,25 +1552,32 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         stepIndex: Int,
         target: GPUTextureView,
         generation: GPUDeviceGenerationID,
-        widthI32: Int,
-        heightI32: Int,
-        pass: PlanPass,
+        recipe: W6FullscreenCoverageSolidRectRecipeV1,
+        pass: PlanPass.FilterCoverageSourcePass,
         owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
+        val binding = requireNotNull(pass.rasterBinding)
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output && binding.draw is SolidRectDraw &&
+            pass.sealedAlphaSource == null && binding.depthStencil == null && recipe.load == AttachmentLoadPlan.ClearTransparent &&
+            recipe.groupZeroAbi == W6FullscreenCoverageSolidRectGroupZeroAbiV1.Empty &&
+            recipe.shaderFamily == W6FullscreenCoverageSolidRectShaderFamilyV1.SolidRectCoverageOpaque)
+        val scissor = recipe.copyScissorTargetLocalI32()
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = emptyList())))
         val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.solidRectCoverageFragment(), layout,
-            w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+            w6aColorTarget(recipe.blend), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = emptyList())))
         return GPUPreparedNativeScopeOperand.Render(
             stepIndex,
             GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
                 loadOperation = GPUPreparedNativeLoadOperation.Clear,
-                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+                clearColor = GPUPreparedNativeClearColor(recipe.clearColor.redF32.toDouble(), recipe.clearColor.greenF32.toDouble(),
+                    recipe.clearColor.blueF32.toDouble(), recipe.clearColor.alphaF32.toDouble())),
             listOf(
                 GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
                 GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
-                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
-                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+                GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32,
+                    recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
             ),
             w6aPassV1 = pass,
         )

@@ -90,7 +90,9 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
 
     @Test
     fun `explicit W6a layer keeps its masked auto-layer in parent child parent restore order`() {
-        val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+        // This non-AA rect takes the planner-owned CoverageSolidRect fullscreen branch.
+        val expected = W6bMaskBlurCpuOracle.renderLayerOverBlue()
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
             surface.canvas {
                 drawRect(fullBounds(), Paint(ColorARGB.Blue, antiAlias = false))
                 saveLayer(SaveLayerRec())
@@ -102,9 +104,11 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
                 ))
                 restore()
             }
-        }.render().pixels
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
 
-        W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderLayerOverBlue(), actual)
+        W6bMaskBlurCpuOracle.assertNear(expected, result.pixels)
     }
 
     @Test
