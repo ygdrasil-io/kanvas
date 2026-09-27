@@ -41,6 +41,43 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FilterMerge,
     W6FilterBlend,
     W6FilterSeparableBlur,
+    W6FilterMaskBlurNormal,
+}
+
+/** IIe2a's one-texture mask-style site.  The two-texture styles stay outside this slice. */
+public enum class W6FilterMaskBlurNormalShaderFamilyV1 { BlurredCoverageTextureLoad }
+public enum class W6FilterMaskBlurNormalGroupZeroAbiV1 { BlurredCoverageTexture }
+public class W6FilterMaskBlurNormalRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId, public val target: PlanResourceId, public val blurredSource: PlanResourceId,
+    public val style: org.graphiks.kanvas.render.ir.MaskBlurStyle = org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL,
+    extent: org.graphiks.math.geometry.SizeI32, blurredExtent: org.graphiks.math.geometry.SizeI32,
+    known: org.graphiks.math.geometry.RectI32, offset: org.graphiks.math.geometry.Point2I32,
+    public val targetFormat: PlanLogicalColorFormat, public val blurredFormat: PlanLogicalColorFormat,
+    public val sampleCountI32: Int, public val blurredSampleCountI32: Int,
+    public val shaderFamily: W6FilterMaskBlurNormalShaderFamilyV1 = W6FilterMaskBlurNormalShaderFamilyV1.BlurredCoverageTextureLoad,
+    public val groupZeroAbi: W6FilterMaskBlurNormalGroupZeroAbiV1 = W6FilterMaskBlurNormalGroupZeroAbiV1.BlurredCoverageTexture,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val frozenExtent = extent.copy(); private val frozenBlurredExtent = blurredExtent.copy(); private val frozenKnown = known.copy()
+    private val frozenOffset = org.graphiks.math.geometry.Point2I32(offset.x, offset.y)
+    init { require(style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL && sampleCountI32 == 1 && blurredSampleCountI32 == 1 && !frozenKnown.isEmpty) }
+    public fun copyExtent() = frozenExtent.copy(); public fun copyBlurredExtent() = frozenBlurredExtent.copy()
+    public fun copyKnownContentTargetLocalI32() = frozenKnown.copy()
+    public fun copyOutputToBlurredOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenOffset.x, frozenOffset.y)
+    public fun canonicalLogicalEncodingV1() = W6FilterMaskBlurNormalNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+public class W6FilterMaskBlurNormalNativeSiteRecipeV1 internal constructor(public val host: W6FilterMaskBlurNormalRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterMaskBlurNormal
+    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
+        text("owner", host.ownerPassId.value); text("target", host.target.value); text("blurredSource", host.blurredSource.value); enum("style", host.style)
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height)
+        int("blurredExtentWidth", host.copyBlurredExtent().width); int("blurredExtentHeight", host.copyBlurredExtent().height)
+        rect("known", host.copyKnownContentTargetLocalI32()); point("offset", host.copyOutputToBlurredOffsetTargetLocalI32())
+        enum("targetFormat", host.targetFormat); enum("blurredFormat", host.blurredFormat); int("sampleCount", host.sampleCountI32); int("blurredSampleCount", host.blurredSampleCountI32)
+        enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend)
+        int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
 }
 
 /** IIe1's backend-neutral fullscreen blur selection; X/Y and image/mask phases remain distinct. */
@@ -904,6 +941,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         merges: Map<PlanPassId, W6FilterMergeRecipeV1>,
         blends: Map<PlanPassId, W6FilterBlendRecipeV1>,
         separableBlurs: Map<PlanPassId, W6FilterSeparableBlurRecipeV1>,
+        maskBlurNormals: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -926,6 +964,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FilterMergeNativeSiteRecipeV1 -> merges[recipe.host.ownerPassId] === recipe.host
             is W6FilterBlendNativeSiteRecipeV1 -> blends[recipe.host.ownerPassId] === recipe.host
             is W6FilterSeparableBlurNativeSiteRecipeV1 -> separableBlurs[recipe.host.ownerPassId] === recipe.host
+            is W6FilterMaskBlurNormalNativeSiteRecipeV1 -> maskBlurNormals[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -957,6 +996,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     merges: Map<PlanPassId, W6FilterMergeRecipeV1> = emptyMap(),
     blends: Map<PlanPassId, W6FilterBlendRecipeV1> = emptyMap(),
     separableBlurs: Map<PlanPassId, W6FilterSeparableBlurRecipeV1> = emptyMap(),
+    maskBlurNormals: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -978,6 +1018,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     merges.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     blends.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     separableBlurs.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    maskBlurNormals.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -998,6 +1039,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingMerges = merges.toMutableMap()
     val remainingBlends = blends.toMutableMap()
     val remainingSeparableBlurs = separableBlurs.toMutableMap()
+    val remainingMaskBlurNormals = maskBlurNormals.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -1032,6 +1074,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingMerges.remove(pass.id)?.let { add(W6FilterMergeNativeSiteRecipeV1(it)) }
                 remainingBlends.remove(pass.id)?.let { add(W6FilterBlendNativeSiteRecipeV1(it)) }
                 remainingSeparableBlurs.remove(pass.id)?.let { add(W6FilterSeparableBlurNativeSiteRecipeV1(it)) }
+                remainingMaskBlurNormals.remove(pass.id)?.let { add(W6FilterMaskBlurNormalNativeSiteRecipeV1(it)) }
             }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
@@ -1041,7 +1084,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -1285,6 +1328,23 @@ public fun freezeW6FilterSeparableBlurRecipesV1(passes: List<PlanPass>, resource
         val sourceFormat = (source.format as? PlanTextureFormat.Color)?.value ?: error("W6 SeparableBlur requires color source.")
         require(target.sampleCountI32 == 1 && source.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages())
         require(put(pass.id, W6FilterSeparableBlurRecipeV1(pass.id, pass.output, pass.inputs().single(), operation.kind, operation.axis, operation.sigmaF32, operation.tileMode, requireNotNull(target.copyExtent()), requireNotNull(source.copyExtent()), sampling.copyKnownContentInputTargetLocalI32(), sampling.copyOutputToInputOffsetTargetLocalI32(), targetFormat, sourceFormat, target.sampleCountI32, source.sampleCountI32)) == null)
+    }
+}
+
+/** Freezes only IIe2a: NORMAL samples blurred coverage; the original-input styles remain open. */
+public fun freezeW6FilterMaskBlurNormalRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1> = LinkedHashMap<PlanPassId, W6FilterMaskBlurNormalRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+        val operation = pass.operation as? FilterPassOperationV1.MaskBlurStyle ?: return@forEach
+        if (operation.style != org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL) return@forEach
+        require(pass.frozenSamplingProgram == null && pass.inputs().size == 1 && operation.originalCoverageSource == null && operation.originalSampling == null)
+        val sampling = requireNotNull(operation.blurredSampling)
+        val target = resources.single { it.id == pass.output }; val blurred = resources.single { it.id == operation.blurredCoverageSource }
+        val targetFormat = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 MaskBlur NORMAL requires color target.")
+        val blurredFormat = (blurred.format as? PlanTextureFormat.Color)?.value ?: error("W6 MaskBlur NORMAL requires color source.")
+        require(target.sampleCountI32 == 1 && blurred.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in blurred.usages())
+        require(put(pass.id, W6FilterMaskBlurNormalRecipeV1(pass.id, pass.output, operation.blurredCoverageSource, operation.style,
+            requireNotNull(target.copyExtent()), requireNotNull(blurred.copyExtent()), sampling.copyKnownContentInputTargetLocalI32(),
+            sampling.copyOutputToInputOffsetTargetLocalI32(), targetFormat, blurredFormat, target.sampleCountI32, blurred.sampleCountI32)) == null)
     }
 }
 

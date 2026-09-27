@@ -66,6 +66,7 @@ internal class SourcePhysicalConstructionV1(
     val w6FilterMergeRecipes: Map<PlanPassId, W6FilterMergeRecipeV1> = emptyMap(),
     val w6FilterBlendRecipes: Map<PlanPassId, W6FilterBlendRecipeV1> = emptyMap(),
     val w6FilterSeparableBlurRecipes: Map<PlanPassId, W6FilterSeparableBlurRecipeV1> = emptyMap(),
+    val w6FilterMaskBlurNormalRecipes: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1> = emptyMap(),
     /** Versioned catalog derived exclusively from the preceding final planner recipes. */
     val nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1.Empty,
 )
@@ -138,6 +139,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     filterMergeRecipes: Map<PlanPassId, W6FilterMergeRecipeV1>,
     filterBlendRecipes: Map<PlanPassId, W6FilterBlendRecipeV1>,
     filterSeparableBlurRecipes: Map<PlanPassId, W6FilterSeparableBlurRecipeV1>,
+    filterMaskBlurNormalRecipes: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1>,
     nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1,
 ) {
     private val resources = immutableList(resources)
@@ -167,6 +169,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val merges = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMergeRecipes))
     private val blends = java.util.Collections.unmodifiableMap(LinkedHashMap(filterBlendRecipes))
     private val separableBlurs = java.util.Collections.unmodifiableMap(LinkedHashMap(filterSeparableBlurRecipes))
+    private val maskBlurNormals = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMaskBlurNormalRecipes))
     private val colorFilters = java.util.Collections.unmodifiableMap(LinkedHashMap(filterColorFilterRecipes))
     private val nativeSiteRecipes = nativeSiteRecipeCatalogV1
     private val slots = immutableList(buildList {
@@ -283,6 +286,9 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6FilterBlendRecipes(): Map<PlanPassId, W6FilterBlendRecipeV1> = blends
     public fun w6FilterSeparableBlurRecipe(passId: PlanPassId): W6FilterSeparableBlurRecipeV1 = (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterSeparableBlurNativeSiteRecipeV1)?.host ?: error("Missing frozen W6 SeparableBlur recipe.")
     public fun w6FilterSeparableBlurRecipes(): Map<PlanPassId, W6FilterSeparableBlurRecipeV1> = separableBlurs
+    public fun w6FilterMaskBlurNormalRecipe(passId: PlanPassId): W6FilterMaskBlurNormalRecipeV1 =
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterMaskBlurNormalNativeSiteRecipeV1)?.host ?: error("Missing frozen W6 MaskBlur NORMAL recipe.")
+    public fun w6FilterMaskBlurNormalRecipes(): Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1> = maskBlurNormals
     /** Ordered planner catalog consumed by the bounded 2P0–2P6 renderer sites. */
     public fun nativeSiteRecipeCatalogV1(): NativeSiteRecipeCatalogV1 = nativeSiteRecipes
 
@@ -412,9 +418,12 @@ public class PlanPhysicalLayoutV1 private constructor(
             val expectedSeparableBlurs = freezeW6FilterSeparableBlurRecipesV1(graph.passes(), rows)
             require(source.w6FilterSeparableBlurRecipes.keys == expectedSeparableBlurs.keys)
             source.w6FilterSeparableBlurRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedSeparableBlurs.getValue(id).canonicalLogicalEncodingV1()) }
+            val expectedMaskBlurNormals = freezeW6FilterMaskBlurNormalRecipesV1(graph.passes(), rows)
+            require(source.w6FilterMaskBlurNormalRecipes.keys == expectedMaskBlurNormals.keys)
+            source.w6FilterMaskBlurNormalRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedMaskBlurNormals.getValue(id).canonicalLogicalEncodingV1()) }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
                 graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
-                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs,
+                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -436,6 +445,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterMergeRecipes,
                 source.w6FilterBlendRecipes,
                 source.w6FilterSeparableBlurRecipes,
+                source.w6FilterMaskBlurNormalRecipes,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
@@ -639,6 +649,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterMergeRecipes,
                 source.w6FilterBlendRecipes,
                 source.w6FilterSeparableBlurRecipes,
+                source.w6FilterMaskBlurNormalRecipes,
                 source.nativeSiteRecipeCatalogV1)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)

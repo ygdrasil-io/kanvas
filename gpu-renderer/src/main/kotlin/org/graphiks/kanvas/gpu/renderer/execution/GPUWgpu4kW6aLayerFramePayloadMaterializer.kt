@@ -548,6 +548,23 @@ private fun preflightW6FilterSeparableBlurs(frame: GPUW6aLayerFramePlan, framePl
     }
 }
 
+/** IIe2a authenticates the NORMAL one-texture style before any native allocation. */
+private fun preflightW6FilterMaskBlurNormals(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterMaskBlurNormalRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterMaskBlurNormalRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterMaskBlurNormalRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 MaskBlur NORMAL owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.MaskBlurStyle ?: error("W6 MaskBlur NORMAL operation changed after seal.")
+        val sampling = requireNotNull(operation.blurredSampling)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val source = frame.physical.resource(actual.blurredSource); val target = frame.physical.resource(actual.target)
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.blurredSource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.blurredSource == operation.blurredCoverageSource && actual.style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL && operation.style == actual.style && operation.originalCoverageSource == null && operation.originalSampling == null && pass.inputs() == listOf(actual.blurredSource) && actual.groupZeroAbi == W6FilterMaskBlurNormalGroupZeroAbiV1.BlurredCoverageTexture && actual.shaderFamily == W6FilterMaskBlurNormalShaderFamilyV1.BlurredCoverageTextureLoad && actual.copyKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32() && actual.copyOutputToBlurredOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32() && target.copyExtent() == actual.copyExtent() && source.copyExtent() == actual.copyBlurredExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.blurredFormat) && target.sampleCountI32 == actual.sampleCountI32 && source.sampleCountI32 == actual.blurredSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null) { "W6 MaskBlur NORMAL physical or recorded preflight differs from its frozen recipe." }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -611,6 +628,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterMerges(frame, framePlan)
             preflightW6FilterBlends(frame, framePlan)
             preflightW6FilterSeparableBlurs(frame, framePlan)
+            preflightW6FilterMaskBlurNormals(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1356,6 +1374,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             val shader = W6A_VERTEX_SHADER + W6bSeparableBlurSnippet.fragment(recipe.axis, recipe.sigmaF32, recipe.tileMode, offset.x, offset.y, known.left, known.top, known.right, known.bottom, recipe.kind in setOf(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y))
                             val extent = recipe.copyExtent()
                             renderOperands += separableBlurRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), generation, shader, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMaskBlurNormalNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterMaskBlurNormalRecipe(pass.id)
+                            renderOperands += maskBlurNormalRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.blurredSource), generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -1366,6 +1387,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             is FilterPassOperationV1.Morphology -> error("Morphology pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.SeparableBlur -> error("SeparableBlur pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaskBlurStyle -> {
+                                if (operation.style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL) error("MaskBlur NORMAL pass is missing its frozen native-site recipe.")
                                 val blurredOffset = requireNotNull(operation.blurredSampling) {
                                     "W6b mask style has no sealed blurred sampling."
                                 }.copyOutputToInputOffsetTargetLocalI32()
@@ -2086,6 +2108,33 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             ),
             w6aPassV1 = pass,
         )
+    }
+
+    /** Mechanical IIe2a translation: NORMAL has exactly one blurred-coverage binding. */
+    private fun maskBlurNormalRender(
+        stepIndex: Int, target: GPUTextureView, blurred: GPUTextureView, generation: GPUDeviceGenerationID,
+        recipe: W6FilterMaskBlurNormalRecipeV1, pass: PlanPass.FilterPass, owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output && recipe.blurredSource == pass.inputs().single() &&
+            recipe.groupZeroAbi == W6FilterMaskBlurNormalGroupZeroAbiV1.BlurredCoverageTexture &&
+            recipe.style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL && recipe.shaderFamily == W6FilterMaskBlurNormalShaderFamilyV1.BlurredCoverageTextureLoad &&
+            recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val offset = recipe.copyOutputToBlurredOffsetTargetLocalI32(); val extent = recipe.copyExtent()
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+        ))))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskStyleFragment(
+            org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL, offset.x, offset.y, null, null,
+        ), layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, blurred)))))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear, clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32))),
+            w6aPassV1 = pass)
     }
 
     /** Applies exactly one frozen mask to an already materialized source texture. */
