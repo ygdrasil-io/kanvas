@@ -100,7 +100,11 @@ public fun freezeW6FilterCompositeLayerFilteredRecipesV1(
     passes: List<PlanPass>,
     resources: List<PlanResource>,
 ): Map<PlanPassId, W6FilterCompositeLayerFilteredRecipeV1> {
-    val uniform = resources.single { it.role == PlanResourceRole.UniformData && it.kind == PlanResourceKind.Buffer }
+    val uniform = resources.single {
+        it.id == planResourceId(PlanResourceRole.UniformData, 0) &&
+            it.kind == PlanResourceKind.Buffer &&
+            it.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination)
+    }
     return java.util.Collections.unmodifiableMap(linkedMapOf<PlanPassId, W6FilterCompositeLayerFilteredRecipeV1>().apply {
         passes.filterIsInstance<PlanPass.FilterComposite>().forEach { pass ->
             val operation = pass.operation as? FilterCompositeOperationV1.Layer ?: return@forEach

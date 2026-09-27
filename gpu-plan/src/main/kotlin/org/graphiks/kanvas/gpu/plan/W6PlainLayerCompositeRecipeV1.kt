@@ -156,7 +156,11 @@ public class W6FilteredLayerCompositeRecipeV1 internal constructor(
 }
 
 public fun freezeW6FilteredLayerCompositeRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<W6LayerCompositeSiteKeyV1, W6FilteredLayerCompositeRecipeV1> {
-    val uniform = resources.single { it.role == PlanResourceRole.UniformData && it.kind == PlanResourceKind.Buffer }
+    val uniform = resources.single {
+        it.id == planResourceId(PlanResourceRole.UniformData, 0) &&
+            it.kind == PlanResourceKind.Buffer &&
+            it.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination)
+    }
     return java.util.Collections.unmodifiableMap(linkedMapOf<W6LayerCompositeSiteKeyV1, W6FilteredLayerCompositeRecipeV1>().apply {
         passes.filterIsInstance<PlanPass.LayerComposite>().forEach { pass ->
             val filter = pass.restore.colorFilter ?: return@forEach
