@@ -573,6 +573,10 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                     add(GPUFrameResourceUse(refs.getValue(binding.uniformResource),
                                         GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false))
                                 }
+                                (pass.operation as? FilterPassOperationV1.MaskTable)?.let { operation ->
+                                    add(GPUFrameResourceUse(refs.getValue(operation.tableResourceId),
+                                        GPUFrameResourceRole.StorageData, GPUFrameResourceUsage.Storage, GPUFrameResourceLifetime.FrameLocal, false))
+                                }
                             }
                             is PlanPass.FilterComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))

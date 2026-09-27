@@ -3236,6 +3236,7 @@ internal class W6aLayerGraphConstruction(
         val w6FilterMaskBlurNormalRecipes = freezeW6FilterMaskBlurNormalRecipesV1(passes, resources + source.resources)
         val w6FilterMaskBlurDualSourceRecipes = freezeW6FilterMaskBlurDualSourceRecipesV1(passes, resources + source.resources)
         val w6FilterMaskShaderRecipes = freezeW6FilterMaskShaderRecipesV1(passes, resources + source.resources, requireNotNull(table))
+        val w6FilterMaskTableRecipes = freezeW6FilterMaskTableRecipesV1(passes, resources + source.resources)
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
             passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
             plainLayerCompositeRecipes, clipMaskInitializeRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
@@ -3244,7 +3245,7 @@ internal class W6aLayerGraphConstruction(
             w6FullscreenCoverageRetainRecipes,
             w6FullscreenPictureSourceLayerRecipes,
             w6FullscreenPictureSourceGraphRecipes,
-            w6FilterSpatialCropRecipes, w6FilterSpatialOffsetRecipes, w6FilterSpatialTileRecipes, w6FilterMorphologyRecipes, w6FilterColorFilterRecipes, w6FilterMergeRecipes, w6FilterBlendRecipes, w6FilterSeparableBlurRecipes, w6FilterMaskBlurNormalRecipes, w6FilterMaskBlurDualSourceRecipes, w6FilterMaskShaderRecipes,
+            w6FilterSpatialCropRecipes, w6FilterSpatialOffsetRecipes, w6FilterSpatialTileRecipes, w6FilterMorphologyRecipes, w6FilterColorFilterRecipes, w6FilterMergeRecipes, w6FilterBlendRecipes, w6FilterSeparableBlurRecipes, w6FilterMaskBlurNormalRecipes, w6FilterMaskBlurDualSourceRecipes, w6FilterMaskShaderRecipes, w6FilterMaskTableRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3276,6 +3277,7 @@ internal class W6aLayerGraphConstruction(
             w6FilterMaskBlurNormalRecipes = w6FilterMaskBlurNormalRecipes,
             w6FilterMaskBlurDualSourceRecipes = w6FilterMaskBlurDualSourceRecipes,
             w6FilterMaskShaderRecipes = w6FilterMaskShaderRecipes,
+            w6FilterMaskTableRecipes = w6FilterMaskTableRecipes,
             nativeSiteRecipeCatalogV1 = nativeSiteRecipeCatalog,
         )
         val allResources = resources + finalSource.resources

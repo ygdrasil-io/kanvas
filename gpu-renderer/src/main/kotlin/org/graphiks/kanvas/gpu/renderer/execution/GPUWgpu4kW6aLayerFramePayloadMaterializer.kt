@@ -620,6 +620,26 @@ private fun preflightW6FilterMaskShaders(frame: GPUW6aLayerFramePlan, framePlan:
     }
 }
 
+/** IIf2 authenticates both recorded bindings, including the exact immutable LUT storage window, before device.create*. */
+private fun preflightW6FilterMaskTables(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterMaskTableRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterMaskTableRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterMaskTableRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 MaskTable owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.MaskTable ?: error("W6 MaskTable operation changed after seal.")
+        val sampling = requireNotNull(operation.sampling)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val target = frame.physical.resource(actual.target); val coverage = frame.physical.resource(actual.coverageSource); val table = frame.physical.resource(actual.tableResource)
+        val uses = listOf(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.coverageSource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.tableResource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.StorageData, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Storage, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+        )
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.coverageSource == pass.inputs().single() && actual.tableResource == operation.tableResourceId && actual.copyTable().copyToUByteArray().contentEquals(operation.copyTable().copyToUByteArray()) && actual.tableGenerationI64 == operation.generationI64 && actual.tableOwnerMaskOccurrenceI32 == operation.ownerMaskOccurrenceI32 && actual.tableOffsetBytesI64 == 0L && actual.tableRangeBytesI64 == 256L && actual.groupZeroAbi == W6FilterMaskTableGroupZeroAbiV1.CoverageTextureThenTableStorage && actual.shaderFamily == W6FilterMaskTableShaderFamilyV1.CoverageLookupStorageU32 && actual.load == AttachmentLoadPlan.ClearTransparent && actual.store == AttachmentStorePlan.Store && actual.blend == BlendPlan.LegacySrcOverV1 && actual.draw == W6FullscreenEmptyDrawV1() && actual.copyKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32() && actual.copyOutputToCoverageOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32() && target.copyExtent() == actual.copyExtent() && coverage.copyExtent() == actual.copyCoverageExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && coverage.format == PlanTextureFormat.Color(actual.coverageFormat) && target.sampleCountI32 == actual.sampleCountI32 && coverage.sampleCountI32 == actual.coverageSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in coverage.usages() && table.role == PlanResourceRole.MaskTableData && table.kind == PlanResourceKind.Buffer && table.byteSize == actual.tableRangeBytesI64 && table.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination) && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null) { "W6 MaskTable physical or recorded preflight differs from its frozen recipe." }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -686,6 +706,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterMaskBlurNormals(frame, framePlan)
             preflightW6FilterMaskBlurDualSources(frame, framePlan)
             preflightW6FilterMaskShaders(frame, framePlan)
+            preflightW6FilterMaskTables(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1469,14 +1490,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             }
                             is FilterPassOperationV1.MaskShader -> error("MaskShader pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaskTable -> {
-                                require(pass.inputs().size == 1)
-                                val input = pass.inputs().single()
-                                val offset = requireNotNull(operation.sampling) {
-                                    "W6b mask table has no sealed target-local sampling."
-                                }.copyOutputToInputOffsetTargetLocalI32()
-                                renderOperands += maskTableCoverageRender(stepIndex, views.getValue(pass.output), views.getValue(input),
-                                    maskTableBuffers.getValue(operation.tableResourceId), generation, offset.x, offset.y,
-                                    outputExtent.width, outputExtent.height, pass, owned)
+                                val recipe = frame.physical.w6FilterMaskTableRecipe(pass.id)
+                                renderOperands += maskTableCoverageRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.coverageSource),
+                                    maskTableBuffers.getValue(recipe.tableResource), generation, recipe, pass, owned)
                             }
                             is FilterPassOperationV1.MaterializedSource -> {
                                 require(pass.inputs().size == 2)
@@ -2004,23 +2020,26 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         coverage: GPUTextureView,
         table: GPUBuffer,
         generation: GPUDeviceGenerationID,
-        outputToInputOffsetTargetLocalXI32: Int,
-        outputToInputOffsetTargetLocalYI32: Int,
-        widthI32: Int,
-        heightI32: Int,
+        recipe: W6FilterMaskTableRecipeV1,
         pass: PlanPass,
         owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
             BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
             BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, buffer = BufferBindingLayout(
-                type = GPUBufferBindingType.ReadOnlyStorage, minBindingSize = 256uL)),
+                type = GPUBufferBindingType.ReadOnlyStorage, minBindingSize = recipe.tableRangeBytesI64.toULong())),
         ))))
+        require(recipe.groupZeroAbi == W6FilterMaskTableGroupZeroAbiV1.CoverageTextureThenTableStorage &&
+            recipe.shaderFamily == W6FilterMaskTableShaderFamilyV1.CoverageLookupStorageU32 &&
+            recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val offset = recipe.copyOutputToCoverageOffsetTargetLocalI32()
+        val extent = recipe.copyExtent()
         val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskTableCoverageFragment(
-            outputToInputOffsetTargetLocalXI32, outputToInputOffsetTargetLocalYI32,
-        ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+            offset.x, offset.y,
+        ), layout, w6aColorTarget(recipe.blend), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
-            entries = listOf(BindGroupEntry(0u, coverage), BindGroupEntry(1u, BufferBinding(table, 0uL, 256uL))))))
+            entries = listOf(BindGroupEntry(0u, coverage), BindGroupEntry(1u, BufferBinding(table,
+                recipe.tableOffsetBytesI64.toULong(), recipe.tableRangeBytesI64.toULong()))))))
         return GPUPreparedNativeScopeOperand.Render(
             stepIndex,
             GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
@@ -2029,8 +2048,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             listOf(
                 GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
                 GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
-                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
-                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
             ),
             w6aPassV1 = pass,
         )
