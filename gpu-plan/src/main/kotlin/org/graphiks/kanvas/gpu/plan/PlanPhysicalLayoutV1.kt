@@ -68,6 +68,7 @@ internal class SourcePhysicalConstructionV1(
     val w6FilterSeparableBlurRecipes: Map<PlanPassId, W6FilterSeparableBlurRecipeV1> = emptyMap(),
     val w6FilterMaskBlurNormalRecipes: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1> = emptyMap(),
     val w6FilterMaskBlurDualSourceRecipes: Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1> = emptyMap(),
+    val w6FilterMaskShaderRecipes: Map<PlanPassId, W6FilterMaskShaderRecipeV1> = emptyMap(),
     /** Versioned catalog derived exclusively from the preceding final planner recipes. */
     val nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1.Empty,
 )
@@ -142,6 +143,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     filterSeparableBlurRecipes: Map<PlanPassId, W6FilterSeparableBlurRecipeV1>,
     filterMaskBlurNormalRecipes: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1>,
     filterMaskBlurDualSourceRecipes: Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1>,
+    filterMaskShaderRecipes: Map<PlanPassId, W6FilterMaskShaderRecipeV1>,
     nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1,
 ) {
     private val resources = immutableList(resources)
@@ -173,6 +175,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val separableBlurs = java.util.Collections.unmodifiableMap(LinkedHashMap(filterSeparableBlurRecipes))
     private val maskBlurNormals = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMaskBlurNormalRecipes))
     private val maskBlurDualSources = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMaskBlurDualSourceRecipes))
+    private val maskShaders = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMaskShaderRecipes))
     private val colorFilters = java.util.Collections.unmodifiableMap(LinkedHashMap(filterColorFilterRecipes))
     private val nativeSiteRecipes = nativeSiteRecipeCatalogV1
     private val slots = immutableList(buildList {
@@ -295,6 +298,9 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6FilterMaskBlurDualSourceRecipe(passId: PlanPassId): W6FilterMaskBlurDualSourceRecipeV1 =
         (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterMaskBlurDualSourceNativeSiteRecipeV1)?.host ?: error("Missing frozen W6 dual-source MaskBlur recipe.")
     public fun w6FilterMaskBlurDualSourceRecipes(): Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1> = maskBlurDualSources
+    public fun w6FilterMaskShaderRecipe(passId: PlanPassId): W6FilterMaskShaderRecipeV1 =
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterMaskShaderNativeSiteRecipeV1)?.host ?: error("Missing frozen W6 MaskShader recipe.")
+    public fun w6FilterMaskShaderRecipes(): Map<PlanPassId, W6FilterMaskShaderRecipeV1> = maskShaders
     /** Ordered planner catalog consumed by the bounded 2P0–2P6 renderer sites. */
     public fun nativeSiteRecipeCatalogV1(): NativeSiteRecipeCatalogV1 = nativeSiteRecipes
 
@@ -430,9 +436,12 @@ public class PlanPhysicalLayoutV1 private constructor(
             val expectedMaskBlurDualSources = freezeW6FilterMaskBlurDualSourceRecipesV1(graph.passes(), rows)
             require(source.w6FilterMaskBlurDualSourceRecipes.keys == expectedMaskBlurDualSources.keys)
             source.w6FilterMaskBlurDualSourceRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedMaskBlurDualSources.getValue(id).canonicalLogicalEncodingV1()) }
+            val expectedMaskShaders = freezeW6FilterMaskShaderRecipesV1(graph.passes(), rows)
+            require(source.w6FilterMaskShaderRecipes.keys == expectedMaskShaders.keys)
+            source.w6FilterMaskShaderRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedMaskShaders.getValue(id).canonicalLogicalEncodingV1()) }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
                 graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
-                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals, expectedMaskBlurDualSources,
+                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals, expectedMaskBlurDualSources, expectedMaskShaders,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -456,6 +465,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterSeparableBlurRecipes,
                 source.w6FilterMaskBlurNormalRecipes,
                 source.w6FilterMaskBlurDualSourceRecipes,
+                source.w6FilterMaskShaderRecipes,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
@@ -661,6 +671,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterSeparableBlurRecipes,
                 source.w6FilterMaskBlurNormalRecipes,
                 source.w6FilterMaskBlurDualSourceRecipes,
+                source.w6FilterMaskShaderRecipes,
                 source.nativeSiteRecipeCatalogV1)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)

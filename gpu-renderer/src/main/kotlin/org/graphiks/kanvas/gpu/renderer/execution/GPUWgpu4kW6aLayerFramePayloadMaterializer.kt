@@ -582,6 +582,26 @@ private fun preflightW6FilterMaskBlurDualSources(frame: GPUW6aLayerFramePlan, fr
     }
 }
 
+/** IIf1 authenticates the frozen coverage/W5-material group ABI before any device.create*. */
+private fun preflightW6FilterMaskShaders(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterMaskShaderRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterMaskShaderRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterMaskShaderRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 MaskShader owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.MaskShader ?: error("W6 MaskShader operation changed after seal.")
+        val binding = operation.materialBinding as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned
+            ?: error("W6 MaskShader lost its sealed W5 material binding.")
+        val sampling = requireNotNull(operation.sampling)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val coverage = frame.physical.resource(actual.coverageSource); val target = frame.physical.resource(actual.target)
+        val uniform = frame.physical.resource(actual.uniformResource)
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.coverageSource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.coverageSource == pass.inputs().single() && actual.occurrenceIdI32 == binding.occurrenceIdI32 && actual.material == binding.material && actual.uniformResource == binding.uniformResource && actual.uniformOffsetBytesI64 == binding.uniformOffsetBytesI64 && actual.uniformCapacityBytesI64 == binding.uniformCapacityBytesI64 && actual.copyMaterialDeviceOriginI32() == binding.materialDeviceOriginI32 && binding.materialAuthority.materialPlanRef() == actual.material && pass.inputs() == listOf(actual.coverageSource) && actual.groupZeroAbi == W6FilterMaskShaderGroupZeroAbiV1.CoverageThenFrozenW5Material && actual.shaderFamily == W6FilterMaskShaderFamilyV1.FrozenW5MaterialCoverageAlpha && actual.load == AttachmentLoadPlan.ClearTransparent && actual.store == AttachmentStorePlan.Store && actual.blend == BlendPlan.LegacySrcOverV1 && actual.draw == W6FullscreenEmptyDrawV1() && actual.copyKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32() && actual.copyOutputToCoverageOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32() && target.copyExtent() == actual.copyExtent() && coverage.copyExtent() == actual.copyCoverageExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && coverage.format == PlanTextureFormat.Color(actual.coverageFormat) && target.sampleCountI32 == actual.sampleCountI32 && coverage.sampleCountI32 == actual.coverageSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in coverage.usages() && uniform.role == PlanResourceRole.SourceUniformData && uniform.byteSize == actual.uniformCapacityBytesI64 && Math.addExact(actual.uniformOffsetBytesI64, 16L) <= actual.uniformCapacityBytesI64 && frame.maskShaderMaterial(binding).binding == binding && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null) { "W6 MaskShader physical or recorded preflight differs from its frozen recipe." }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -647,6 +667,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterSeparableBlurs(frame, framePlan)
             preflightW6FilterMaskBlurNormals(frame, framePlan)
             preflightW6FilterMaskBlurDualSources(frame, framePlan)
+            preflightW6FilterMaskShaders(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1398,6 +1419,15 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMaskBlurDualSourceNativeSiteRecipeV1) {
                             val recipe = frame.physical.w6FilterMaskBlurDualSourceRecipe(pass.id)
                             renderOperands += maskBlurDualSourceRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.blurredSource), views.getValue(recipe.originalSource), generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMaskShaderNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterMaskShaderRecipe(pass.id)
+                            val binding = (pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding as?
+                                FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned
+                                ?: error("W6 MaskShader lost its frozen W5 material binding.")
+                            val material = frame.maskShaderMaterial(binding)
+                            renderOperands += maskShaderRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.coverageSource), generation,
+                                recipe, material, sourceUniformBuffers.getValue(recipe.uniformResource),
+                                maskShaderResources.getValue(material), pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -1419,22 +1449,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     operation.style, blurredOffset.x, blurredOffset.y, originalOffset?.x, originalOffset?.y,
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
-                            is FilterPassOperationV1.MaskShader -> {
-                                require(pass.inputs().size == 1)
-                                val binding = operation.materialBinding as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned
-                                    ?: error("W6b mask shader lost its frozen W5 material binding.")
-                                val input = pass.inputs().single()
-                                val offset = requireNotNull(operation.sampling) {
-                                    "W6b mask shader has no sealed target-local sampling."
-                                }.copyOutputToInputOffsetTargetLocalI32()
-                                // Device position is the pre-issued W5 material bridge, not a
-                                // W6b bounds/origin reconstruction in native lowering.
-                                val outputOrigin = binding.materialDeviceOriginI32
-                                maskShaderCoverageRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
-                                    frame.maskShaderMaterial(binding), sourceUniformBuffers.getValue(binding.uniformResource),
-                                    maskShaderResources.getValue(frame.maskShaderMaterial(binding)), offset.x, offset.y, outputOrigin.x, outputOrigin.y,
-                                    outputExtent.width, outputExtent.height, pass, owned).also(renderOperands::add)
-                            }
+                            is FilterPassOperationV1.MaskShader -> error("MaskShader pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaskTable -> {
                                 require(pass.inputs().size == 1)
                                 val input = pass.inputs().single()
@@ -2003,24 +2018,32 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         )
     }
 
-    /** Multiplies frozen raw coverage by the alpha of its already-issued W5 material row. */
-    private fun maskShaderCoverageRender(
+    /** Mechanical IIf1 translator: every native operand comes from the catalogued recipe. */
+    private fun maskShaderRender(
         stepIndex: Int,
         target: GPUTextureView,
         coverage: GPUTextureView,
         generation: GPUDeviceGenerationID,
+        recipe: W6FilterMaskShaderRecipeV1,
         material: GPUW6bMaskShaderMaterialV1,
         uniform: GPUBuffer,
         resources: Map<Int, GPUW6bMaskShaderResourceV1>,
-        outputToInputOffsetTargetLocalXI32: Int,
-        outputToInputOffsetTargetLocalYI32: Int,
-        outputOriginDeviceXI32: Int,
-        outputOriginDeviceYI32: Int,
-        widthI32: Int,
-        heightI32: Int,
         pass: PlanPass,
         owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.occurrenceIdI32 == material.binding.occurrenceIdI32 &&
+            recipe.material == material.binding.material && recipe.uniformResource == material.binding.uniformResource &&
+            recipe.uniformOffsetBytesI64 == material.binding.uniformOffsetBytesI64 &&
+            recipe.uniformCapacityBytesI64 == material.binding.uniformCapacityBytesI64 &&
+            recipe.copyMaterialDeviceOriginI32() == material.binding.materialDeviceOriginI32 &&
+            recipe.groupZeroAbi == W6FilterMaskShaderGroupZeroAbiV1.CoverageThenFrozenW5Material &&
+            recipe.shaderFamily == W6FilterMaskShaderFamilyV1.FrozenW5MaterialCoverageAlpha &&
+            recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store) {
+            "W6 MaskShader recipe and W5 material ABI differ."
+        }
+        val offset = recipe.copyOutputToCoverageOffsetTargetLocalI32()
+        val origin = recipe.copyMaterialDeviceOriginI32()
+        val extent = recipe.copyExtent()
         val stage = material.stage
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries =
             listOf(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout())) +
@@ -2048,9 +2071,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             stage.bindingManifest.fold(stage.declarationsWgsl) { declarations, binding ->
                 declarations.replace("@group(1) @binding(${binding.bindingI32})",
                     "@group(0) @binding(${binding.bindingI32 + 1})")
-            }, material.sourceInputWgsl, outputToInputOffsetTargetLocalXI32, outputToInputOffsetTargetLocalYI32,
-            outputOriginDeviceXI32, outputOriginDeviceYI32,
-        ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+            }, material.sourceInputWgsl, offset.x, offset.y, origin.x, origin.y,
+        ), layout, w6aColorTarget(recipe.blend), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
             entries = listOf(BindGroupEntry(0u, coverage)) + stage.bindingManifest.map { binding -> when (binding.resourceKind) {
                 "uniformBuffer" -> BindGroupEntry((binding.bindingI32 + 1).toUInt(), BufferBinding(uniform,
@@ -2079,8 +2101,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             listOf(
                 GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
                 GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
-                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
-                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
             ),
             w6aPassV1 = pass,
         )

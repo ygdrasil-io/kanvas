@@ -43,6 +43,42 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FilterSeparableBlur,
     W6FilterMaskBlurNormal,
     W6FilterMaskBlurDualSource,
+    W6FilterMaskShader,
+}
+
+/** IIf1's one-coverage plus pre-issued W5 material ABI; neither table nor source materialization belongs here. */
+public enum class W6FilterMaskShaderFamilyV1 { FrozenW5MaterialCoverageAlpha }
+public enum class W6FilterMaskShaderGroupZeroAbiV1 { CoverageThenFrozenW5Material }
+public class W6FilterMaskShaderRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId, public val target: PlanResourceId, public val coverageSource: PlanResourceId,
+    public val occurrenceIdI32: Int, public val material: MaterialPlanRef, public val uniformResource: PlanResourceId,
+    public val uniformOffsetBytesI64: Long, public val uniformCapacityBytesI64: Long,
+    materialDeviceOriginI32: org.graphiks.math.geometry.Point2I32,
+    extent: org.graphiks.math.geometry.SizeI32, coverageExtent: org.graphiks.math.geometry.SizeI32,
+    known: org.graphiks.math.geometry.RectI32, offset: org.graphiks.math.geometry.Point2I32,
+    public val targetFormat: PlanLogicalColorFormat, public val coverageFormat: PlanLogicalColorFormat,
+    public val sampleCountI32: Int, public val coverageSampleCountI32: Int,
+    public val shaderFamily: W6FilterMaskShaderFamilyV1 = W6FilterMaskShaderFamilyV1.FrozenW5MaterialCoverageAlpha,
+    public val groupZeroAbi: W6FilterMaskShaderGroupZeroAbiV1 = W6FilterMaskShaderGroupZeroAbiV1.CoverageThenFrozenW5Material,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val frozenExtent = extent.copy(); private val frozenCoverageExtent = coverageExtent.copy(); private val frozenKnown = known.copy()
+    private val frozenOffset = org.graphiks.math.geometry.Point2I32(offset.x, offset.y)
+    private val frozenMaterialDeviceOrigin = org.graphiks.math.geometry.Point2I32(materialDeviceOriginI32.x, materialDeviceOriginI32.y)
+    init { require(occurrenceIdI32 >= 0 && uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 >= 16L && uniformOffsetBytesI64 % 4L == 0L && uniformCapacityBytesI64 % 16L == 0L && sampleCountI32 == 1 && coverageSampleCountI32 == 1 && !frozenKnown.isEmpty) }
+    public fun copyExtent() = frozenExtent.copy(); public fun copyCoverageExtent() = frozenCoverageExtent.copy(); public fun copyKnownContentTargetLocalI32() = frozenKnown.copy()
+    public fun copyOutputToCoverageOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenOffset.x, frozenOffset.y)
+    public fun copyMaterialDeviceOriginI32() = org.graphiks.math.geometry.Point2I32(frozenMaterialDeviceOrigin.x, frozenMaterialDeviceOrigin.y)
+    public fun canonicalLogicalEncodingV1() = W6FilterMaskShaderNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+public class W6FilterMaskShaderNativeSiteRecipeV1 internal constructor(public val host: W6FilterMaskShaderRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterMaskShader
+    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
+        text("owner", host.ownerPassId.value); text("target", host.target.value); text("coverageSource", host.coverageSource.value); int("occurrence", host.occurrenceIdI32); int("material", host.material.indexI32); text("uniformResource", host.uniformResource.value); long("uniformOffset", host.uniformOffsetBytesI64); long("uniformCapacity", host.uniformCapacityBytesI64); point("materialDeviceOrigin", host.copyMaterialDeviceOriginI32())
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("coverageExtentWidth", host.copyCoverageExtent().width); int("coverageExtentHeight", host.copyCoverageExtent().height); rect("known", host.copyKnownContentTargetLocalI32()); point("offset", host.copyOutputToCoverageOffsetTargetLocalI32())
+        enum("targetFormat", host.targetFormat); enum("coverageFormat", host.coverageFormat); int("sampleCount", host.sampleCountI32); int("coverageSampleCount", host.coverageSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
 }
 
 /** IIe2a's one-texture mask-style site.  The two-texture styles stay outside this slice. */
@@ -980,6 +1016,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         separableBlurs: Map<PlanPassId, W6FilterSeparableBlurRecipeV1>,
         maskBlurNormals: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1>,
         maskBlurDualSources: Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1>,
+        maskShaders: Map<PlanPassId, W6FilterMaskShaderRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -1004,6 +1041,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FilterSeparableBlurNativeSiteRecipeV1 -> separableBlurs[recipe.host.ownerPassId] === recipe.host
             is W6FilterMaskBlurNormalNativeSiteRecipeV1 -> maskBlurNormals[recipe.host.ownerPassId] === recipe.host
             is W6FilterMaskBlurDualSourceNativeSiteRecipeV1 -> maskBlurDualSources[recipe.host.ownerPassId] === recipe.host
+            is W6FilterMaskShaderNativeSiteRecipeV1 -> maskShaders[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -1037,6 +1075,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     separableBlurs: Map<PlanPassId, W6FilterSeparableBlurRecipeV1> = emptyMap(),
     maskBlurNormals: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1> = emptyMap(),
     maskBlurDualSources: Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1> = emptyMap(),
+    maskShaders: Map<PlanPassId, W6FilterMaskShaderRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -1060,6 +1099,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     separableBlurs.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     maskBlurNormals.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     maskBlurDualSources.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    maskShaders.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -1082,6 +1122,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingSeparableBlurs = separableBlurs.toMutableMap()
     val remainingMaskBlurNormals = maskBlurNormals.toMutableMap()
     val remainingMaskBlurDualSources = maskBlurDualSources.toMutableMap()
+    val remainingMaskShaders = maskShaders.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -1118,6 +1159,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingSeparableBlurs.remove(pass.id)?.let { add(W6FilterSeparableBlurNativeSiteRecipeV1(it)) }
                 remainingMaskBlurNormals.remove(pass.id)?.let { add(W6FilterMaskBlurNormalNativeSiteRecipeV1(it)) }
                 remainingMaskBlurDualSources.remove(pass.id)?.let { add(W6FilterMaskBlurDualSourceNativeSiteRecipeV1(it)) }
+                remainingMaskShaders.remove(pass.id)?.let { add(W6FilterMaskShaderNativeSiteRecipeV1(it)) }
             }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
@@ -1127,7 +1169,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -1408,6 +1450,27 @@ public fun freezeW6FilterMaskBlurDualSourceRecipesV1(passes: List<PlanPass>, res
             blurredSampling.copyKnownContentInputTargetLocalI32(), originalSampling.copyKnownContentInputTargetLocalI32(),
             blurredSampling.copyOutputToInputOffsetTargetLocalI32(), originalSampling.copyOutputToInputOffsetTargetLocalI32(),
             targetFormat, blurredFormat, originalFormat, target.sampleCountI32, blurred.sampleCountI32, original.sampleCountI32)) == null)
+    }
+}
+
+/** IIf1 freezes the existing W5 material row as an ordered coverage/material group-zero contract. */
+public fun freezeW6FilterMaskShaderRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<PlanPassId, W6FilterMaskShaderRecipeV1> = LinkedHashMap<PlanPassId, W6FilterMaskShaderRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+        val operation = pass.operation as? FilterPassOperationV1.MaskShader ?: return@forEach
+        val binding = operation.materialBinding as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned
+            ?: error("W6 MaskShader requires its published W5 material binding.")
+        val sampling = requireNotNull(operation.sampling)
+        require(pass.frozenSamplingProgram == null && pass.inputs().size == 1 && binding.materialAuthority.materialPlanRef() == binding.material)
+        val target = resources.single { it.id == pass.output }; val coverage = resources.single { it.id == pass.inputs().single() }
+        val uniform = resources.single { it.id == binding.uniformResource }
+        val targetFormat = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 MaskShader requires color target.")
+        val coverageFormat = (coverage.format as? PlanTextureFormat.Color)?.value ?: error("W6 MaskShader requires color coverage.")
+        require(target.sampleCountI32 == 1 && coverage.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in coverage.usages() && uniform.role == PlanResourceRole.SourceUniformData && uniform.byteSize == binding.uniformCapacityBytesI64 && Math.addExact(binding.uniformOffsetBytesI64, 16L) <= binding.uniformCapacityBytesI64)
+        require(put(pass.id, W6FilterMaskShaderRecipeV1(pass.id, pass.output, pass.inputs().single(), binding.occurrenceIdI32,
+            binding.material, binding.uniformResource, binding.uniformOffsetBytesI64, binding.uniformCapacityBytesI64,
+            binding.materialDeviceOriginI32, requireNotNull(target.copyExtent()), requireNotNull(coverage.copyExtent()),
+            sampling.copyKnownContentInputTargetLocalI32(), sampling.copyOutputToInputOffsetTargetLocalI32(), targetFormat,
+            coverageFormat, target.sampleCountI32, coverage.sampleCountI32)) == null)
     }
 }
 
