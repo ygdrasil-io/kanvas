@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.SizeI32
 
 /** Stable planner-owned location of the one fullscreen restore operation in a LayerComposite pass. */
 public data class W6LayerCompositeSiteKeyV1(
@@ -113,6 +114,8 @@ public class W6FilteredLayerCompositeRecipeV1 internal constructor(
     public val site: W6LayerCompositeSiteKeyV1,
     public val source: PlanResourceId,
     public val destination: PlanResourceId,
+    targetExtentI32: SizeI32,
+    sourceExtentI32: SizeI32,
     sourceBoundsLayerI32: RectI32,
     destinationOriginParentI32: Point2I32,
     scissorParentI32: RectI32,
@@ -132,16 +135,20 @@ public class W6FilteredLayerCompositeRecipeV1 internal constructor(
     public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
 ) {
     private val frozenSourceBounds = sourceBoundsLayerI32.copy()
+    private val frozenTargetExtent = targetExtentI32.copy()
+    private val frozenSourceExtent = sourceExtentI32.copy()
     private val frozenDestinationOrigin = Point2I32(destinationOriginParentI32.x, destinationOriginParentI32.y)
     private val frozenScissor = scissorParentI32.copy()
     public val alphaF32: Float = if (alphaF32 == 0f) 0f else alphaF32
     init {
-        require(source != destination && !frozenSourceBounds.isEmpty && !frozenScissor.isEmpty)
+        require(source != destination && !frozenSourceBounds.isEmpty && !frozenScissor.isEmpty && frozenTargetExtent.width > 0 && frozenTargetExtent.height > 0 && frozenSourceExtent.width > 0 && frozenSourceExtent.height > 0)
         require(alphaF32.isFinite() && alphaF32 in 0f..1f && blend !is BlendPlan.DestinationReadV1)
         require(target == W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample && sourceFormat == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL && sourceSampleCountI32 == 1)
         require(uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 >= 16L && Math.addExact(uniformOffsetBytesI64, maxOf(16L, execution.dynamicByteCountI64)) <= uniformCapacityBytesI64)
     }
     public fun copySourceBoundsLayerI32() = frozenSourceBounds.copy()
+    public fun copyTargetExtentI32() = frozenTargetExtent.copy()
+    public fun copySourceExtentI32() = frozenSourceExtent.copy()
     public fun copyDestinationOriginParentI32() = Point2I32(frozenDestinationOrigin.x, frozenDestinationOrigin.y)
     public fun copyScissorParentI32() = frozenScissor.copy()
     public fun nativeSiteOwnerV1() = NativeSiteOwnerV1(site.ownerPassId, site.siteOrdinalI32, 0)
@@ -154,12 +161,16 @@ public fun freezeW6FilteredLayerCompositeRecipesV1(passes: List<PlanPass>, resou
         passes.filterIsInstance<PlanPass.LayerComposite>().forEach { pass ->
             val filter = pass.restore.colorFilter ?: return@forEach
             if (pass.restore.blend is BlendPlan.DestinationReadV1) return@forEach
-            val uniformOffset = pass.restore.colorFilterUniformOffsetI64 ?: return@forEach
+            val uniformOffset = requireNotNull(pass.restore.colorFilterUniformOffsetI64) {
+                "Active filtered LayerComposite ${pass.id.value} is missing its sealed W5f uniform window."
+            }
             val bounds = pass.copySourceBoundsLayerI32(); val origin = pass.copyDestinationOriginParentI32()
             val scissor = RectI32(origin.x, origin.y, Math.addExact(origin.x, bounds.width()), Math.addExact(origin.y, bounds.height()))
             val site = W6LayerCompositeSiteKeyV1(pass.id, 0)
-            require(put(site, W6FilteredLayerCompositeRecipeV1(site, pass.source, pass.destination, bounds, origin, scissor,
-                pass.restore.alphaF32, pass.restore.blend, filter, uniform.id, uniformOffset, uniform.byteSize,
+            val target = resources.single { it.id == pass.destination }
+            val source = resources.single { it.id == pass.source }
+            require(put(site, W6FilteredLayerCompositeRecipeV1(site, pass.source, pass.destination,
+                requireNotNull(target.copyExtent()), requireNotNull(source.copyExtent()), bounds, origin, scissor, pass.restore.alphaF32, pass.restore.blend, filter, uniform.id, uniformOffset, uniform.byteSize,
                 W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, 1)) == null)
         }
     })

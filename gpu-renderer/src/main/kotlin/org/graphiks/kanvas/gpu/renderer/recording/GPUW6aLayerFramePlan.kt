@@ -253,9 +253,14 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             require(recipe.host.uniformResource == binding.uniformResource)
             recipe.host.uniformResource
         }.toSet()
+        val filteredLayerCompositeUniformIds = graph.passes().filterIsInstance<PlanPass.LayerComposite>().mapNotNull { pass ->
+            physical.w6FilteredLayerCompositeRecipeOrNull(W6LayerCompositeSiteKeyV1(pass.id, 0))?.also { recipe ->
+                require(recipe.source == pass.source && recipe.destination == pass.destination)
+            }?.uniformResource
+        }.toSet()
         val preparations = graph.resources().filter { it.kind == PlanResourceKind.Texture2D && it.lifetime == PlanResourceLifetime.FrameLocal ||
             it.role in setOf(PlanResourceRole.ReadbackStaging, PlanResourceRole.MaskTableData) || physical.w4eGeometryBindings().any { binding ->
-                it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } || it.id in colorFilterUniformIds || it.id in maskShaderUniformIds }
+                it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } || it.id in colorFilterUniformIds || it.id in maskShaderUniformIds || it.id in filteredLayerCompositeUniformIds }
             .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
                 resource.copyExtent()?.let { GPUFrameTextureDescriptor(GPUPixelBounds(0, 0, it.width, it.height),
                     when (resource.format) {
@@ -554,8 +559,15 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             else -> false
                         }
                         val sampled = when (pass) {
-                            is PlanPass.LayerComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
-                                GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
+                            is PlanPass.LayerComposite -> buildList {
+                                add(GPUFrameResourceUse(refs.getValue(pass.source),
+                                    GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
+                                physical.w6FilteredLayerCompositeRecipeOrNull(W6LayerCompositeSiteKeyV1(pass.id, 0))?.let { recipe ->
+                                    require(recipe.source == pass.source && recipe.destination == pass.destination)
+                                    add(GPUFrameResourceUse(refs.getValue(recipe.uniformResource),
+                                        GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false))
+                                }
+                            }
                             is PlanPass.PictureSourcePass -> listOfNotNull((pass.graphTextureOperand?.sealedSourceId ?: pass.layerInput)?.let { source -> GPUFrameResourceUse(
                                 refs.getValue(source), GPUFrameResourceRole.FilterTarget,
                                 GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false) })
@@ -599,6 +611,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 require(plainLayerCompositeSites.add(site)) {
                                     "W6 plain layer-composite recipe projected more than once."
                                 }
+                            }
+                            physical.w6FilteredLayerCompositeRecipeOrNull(site)?.let { recipe ->
+                                require(recipe.site == site && recipe.source == pass.source && recipe.destination == pass.destination)
                             }
                         }
                         add(GPUFrameStep.RenderPassStep(refs.getValue(targetId) as GPUFrameTargetRef,
