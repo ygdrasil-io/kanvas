@@ -571,11 +571,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             is PlanPass.PictureSourcePass -> listOfNotNull((pass.graphTextureOperand?.sealedSourceId ?: pass.layerInput)?.let { source -> GPUFrameResourceUse(
                                 refs.getValue(source), GPUFrameResourceRole.FilterTarget,
                                 GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false) })
-                            is PlanPass.PictureComposite -> physical.w6PictureCompositeRecipeOrNull(pass.id)?.let { recipe ->
-                                require(recipe.ownerPassId == pass.id && recipe.source == pass.source && recipe.destination == pass.destination)
-                                listOf(GPUFrameResourceUse(refs.getValue(recipe.source), GPUFrameResourceRole.FilterTarget,
-                                    GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
-                            } ?: listOf(GPUFrameResourceUse(refs.getValue(pass.source),
+                            is PlanPass.PictureComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
                             is PlanPass.FilterPass -> buildList {
                                 pass.inputs().forEach { input -> add(GPUFrameResourceUse(refs.getValue(input),
