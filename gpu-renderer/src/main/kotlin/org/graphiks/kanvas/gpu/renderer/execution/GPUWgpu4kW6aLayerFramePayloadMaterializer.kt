@@ -312,7 +312,8 @@ private fun preflightW6FullscreenPictureSourceLayers(frame: GPUW6aLayerFramePlan
                 actual.copyOutputToInputOffsetTargetLocalI32() && actual.ownerPassId == pass.id && actual.target == pass.output &&
             target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) &&
             target.sampleCountI32 == actual.sampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() &&
-            source.copyExtent() != null && PlanResourceUsage.Sampled in source.usages() &&
+            source.copyExtent() == actual.copySourceExtent() && source.format == PlanTextureFormat.Color(actual.sourceFormat) &&
+            source.sampleCountI32 == actual.sourceSampleCountI32 && PlanResourceUsage.Sampled in source.usages() &&
             render.target == frame.refs.getValue(actual.target) && render.resourceUses == expectedUses &&
             render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" &&
             render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame &&
