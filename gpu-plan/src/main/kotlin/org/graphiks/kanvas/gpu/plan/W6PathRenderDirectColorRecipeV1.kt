@@ -119,6 +119,7 @@ public fun freezeW6PathRenderDirectColorRecipesV1(bindings: List<PlanW4eGeometry
                 is PathDrawGeometry.Stroke -> source.valueF32.copyFillGeometryF32() to W6PathRenderDirectColorGeometryKindV1.Stroke
                 is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty -> return@forEach
             }
+            if (mask != null && geometryKind != W6PathRenderDirectColorGeometryKindV1.Fill) return@forEach
             if (geometry.copyDirectTriangleF32OrNull() == null) return@forEach
             val geometrySlice = requireNotNull(binding.payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_DIRECT))
             val uniformSlice = requireNotNull(binding.payload.uniformSlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM))
