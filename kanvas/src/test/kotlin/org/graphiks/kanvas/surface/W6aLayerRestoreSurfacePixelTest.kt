@@ -6,6 +6,7 @@ import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.assertContentEquals
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
@@ -52,7 +53,9 @@ class W6aLayerRestoreSurfacePixelTest {
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
             restore()
         }
-        assertContentEquals(expected, surface.render().pixels)
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test

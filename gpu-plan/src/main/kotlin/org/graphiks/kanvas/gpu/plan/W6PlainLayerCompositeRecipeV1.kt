@@ -105,3 +105,62 @@ public fun freezeW6PlainLayerCompositeRecipesV1(
     }
     return java.util.Collections.unmodifiableMap(LinkedHashMap(recipes))
 }
+
+/** IIIa1's sole active filtered restore: one texture plus the pre-issued layer uniform window. */
+public enum class W6FilteredLayerCompositeShaderFamilyV1 { W5fColorOperationTextureLoad }
+public enum class W6FilteredLayerCompositeGroupZeroAbiV1 { TextureAndW5fUniform }
+public class W6FilteredLayerCompositeRecipeV1 internal constructor(
+    public val site: W6LayerCompositeSiteKeyV1,
+    public val source: PlanResourceId,
+    public val destination: PlanResourceId,
+    sourceBoundsLayerI32: RectI32,
+    destinationOriginParentI32: Point2I32,
+    scissorParentI32: RectI32,
+    alphaF32: Float,
+    public val blend: BlendPlan,
+    public val execution: ColorFilterExecutionPlanV1,
+    public val uniformResource: PlanResourceId,
+    public val uniformOffsetBytesI64: Long,
+    public val uniformCapacityBytesI64: Long,
+    public val target: W6PlainLayerCompositeTargetV1,
+    public val sourceFormat: PlanLogicalColorFormat,
+    public val sourceSampleCountI32: Int,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.Load,
+    public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val groupZeroAbi: W6FilteredLayerCompositeGroupZeroAbiV1 = W6FilteredLayerCompositeGroupZeroAbiV1.TextureAndW5fUniform,
+    public val shaderFamily: W6FilteredLayerCompositeShaderFamilyV1 = W6FilteredLayerCompositeShaderFamilyV1.W5fColorOperationTextureLoad,
+    public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val frozenSourceBounds = sourceBoundsLayerI32.copy()
+    private val frozenDestinationOrigin = Point2I32(destinationOriginParentI32.x, destinationOriginParentI32.y)
+    private val frozenScissor = scissorParentI32.copy()
+    public val alphaF32: Float = if (alphaF32 == 0f) 0f else alphaF32
+    init {
+        require(source != destination && !frozenSourceBounds.isEmpty && !frozenScissor.isEmpty)
+        require(alphaF32.isFinite() && alphaF32 in 0f..1f && blend !is BlendPlan.DestinationReadV1)
+        require(target == W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample && sourceFormat == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL && sourceSampleCountI32 == 1)
+        require(uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 >= 16L && Math.addExact(uniformOffsetBytesI64, maxOf(16L, execution.dynamicByteCountI64)) <= uniformCapacityBytesI64)
+    }
+    public fun copySourceBoundsLayerI32() = frozenSourceBounds.copy()
+    public fun copyDestinationOriginParentI32() = Point2I32(frozenDestinationOrigin.x, frozenDestinationOrigin.y)
+    public fun copyScissorParentI32() = frozenScissor.copy()
+    public fun nativeSiteOwnerV1() = NativeSiteOwnerV1(site.ownerPassId, site.siteOrdinalI32, 0)
+    public fun canonicalLogicalEncodingV1() = W6FilteredLayerCompositeNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+
+public fun freezeW6FilteredLayerCompositeRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<W6LayerCompositeSiteKeyV1, W6FilteredLayerCompositeRecipeV1> {
+    val uniform = resources.single { it.role == PlanResourceRole.UniformData && it.kind == PlanResourceKind.Buffer }
+    return java.util.Collections.unmodifiableMap(linkedMapOf<W6LayerCompositeSiteKeyV1, W6FilteredLayerCompositeRecipeV1>().apply {
+        passes.filterIsInstance<PlanPass.LayerComposite>().forEach { pass ->
+            val filter = pass.restore.colorFilter ?: return@forEach
+            if (pass.restore.blend is BlendPlan.DestinationReadV1) return@forEach
+            val uniformOffset = pass.restore.colorFilterUniformOffsetI64 ?: return@forEach
+            val bounds = pass.copySourceBoundsLayerI32(); val origin = pass.copyDestinationOriginParentI32()
+            val scissor = RectI32(origin.x, origin.y, Math.addExact(origin.x, bounds.width()), Math.addExact(origin.y, bounds.height()))
+            val site = W6LayerCompositeSiteKeyV1(pass.id, 0)
+            require(put(site, W6FilteredLayerCompositeRecipeV1(site, pass.source, pass.destination, bounds, origin, scissor,
+                pass.restore.alphaF32, pass.restore.blend, filter, uniform.id, uniformOffset, uniform.byteSize,
+                W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, 1)) == null)
+        }
+    })
+}
