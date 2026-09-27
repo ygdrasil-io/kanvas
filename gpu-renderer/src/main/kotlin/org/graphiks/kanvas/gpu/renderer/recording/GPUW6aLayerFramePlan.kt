@@ -200,6 +200,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val clipMaskProducerStencilCoverRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerStencilCoverRecipeV1>()
     /** I2 folds keep their planner owner/packet through W6 recording into native encoding. */
     private val clipMaskFoldRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskFoldRecipeV1>()
+    /** The ordinary W6 direct-colour site is projected before the W4e branch returns. */
+    private val pathRenderDirectColorRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6PathRenderDirectColorRecipeV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     /** W6b owns a distinct recipe-derived projection; it must never alias lowerer mappings. */
@@ -353,6 +355,40 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     val packet = if (prepared == null) builder.preparedClipPacket(native, pass.ordinal,
                         requireNotNull(authority.clipPassFor(native.id.value))) else builder.pathPacket(prepared, consumer, pass.ordinal,
                         color?.blend ?: BlendPlan.LegacySrcOverV1)
+                    if (native is PlanPass.PathRenderPass && native.phase == PathRenderPhase.SingleSampleDirectColor) {
+                        val recipe = physical.w6PathRenderDirectColorRecipes()[native.id]
+                        if (recipe != null) {
+                        require(consumer == null && prepared != null && recipe.passId == native.id &&
+                            recipe.packetOrdinalI32 == native.ordinal && recipe.target.id == native.target &&
+                            recipe.resolveTarget?.id == native.resolveTarget && recipe.depthStencil == null &&
+                            native.depthStencil == null && recipe.sampleCountI32 == 1 &&
+                            prepared.targetResourceId == recipe.target.id.value &&
+                            prepared.resolveTargetResourceId == null && prepared.depthStencilResourceId == null &&
+                            prepared.vertexResourceId == recipe.vertex.id.value && prepared.indexResourceId == recipe.index.id.value &&
+                            prepared.uniformResourceId == recipe.uniform.id.value && prepared.phase == native.phase &&
+                            prepared.sample == SamplePlan.SingleSample && prepared.load == recipe.load && prepared.store == recipe.store &&
+                            prepared.blend == recipe.blend && packet.blendPlan == recipe.blend) {
+                            "W6 direct-colour packet differs from its frozen final recipe."
+                        }
+                        val preparedGeometry = when (val source = prepared.copyGeometry()) {
+                            is PathDrawGeometry.Fill -> source.valueF32
+                            is PathDrawGeometry.Stroke -> source.valueF32.copyFillGeometryF32()
+                            is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty -> error("W6 direct-colour packet has no fill geometry.")
+                        }
+                        require(preparedGeometry.copyDirectTriangleF32OrNull()?.copyVerticesF32()?.contentEquals(
+                            requireNotNull(recipe.copyGeometryF32().copyDirectTriangleF32OrNull()).copyVerticesF32()) == true &&
+                            preparedGeometry.copyDirectTriangleF32OrNull()?.copyIndicesI32()?.contentEquals(
+                            requireNotNull(recipe.copyGeometryF32().copyDirectTriangleF32OrNull()).copyIndicesI32()) == true &&
+                            preparedGeometry.fillRule == recipe.copyGeometryF32().fillRule &&
+                            prepared.scissor.left == recipe.copyScissorI32().left && prepared.scissor.top == recipe.copyScissorI32().top &&
+                            prepared.scissor.right == recipe.copyScissorI32().right && prepared.scissor.bottom == recipe.copyScissorI32().bottom) {
+                            "W6 direct-colour prepared geometry or scissor differs from its frozen recipe."
+                        }
+                        require(pathRenderDirectColorRecipesByPacket.put(packet, recipe) == null) {
+                            "W6 direct-colour recipe projected more than once."
+                        }
+                        }
+                    }
                     if (native is PlanPass.ClipMaskInitialize) {
                         val recipe = physical.w4eClipMaskInitializeRecipe(native.id)
                         require(recipe.passId == native.id && recipe.output == native.output &&
@@ -900,6 +936,11 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             clipMaskFoldRecipesByPacket.size == physical.w4eClipMaskFoldRecipes().size) {
             "Every frozen W4e ClipMaskFold recipe must project to exactly one packet."
         }
+        require(pathRenderDirectColorRecipesByPacket.values.map { it.passId }.toSet() ==
+            physical.w6PathRenderDirectColorRecipes().keys &&
+            pathRenderDirectColorRecipesByPacket.size == physical.w6PathRenderDirectColorRecipes().size) {
+            "Every frozen W6 direct-colour recipe must project to exactly one packet."
+        }
     }
 
     internal fun taskList(): GPUTaskList = GPUTaskList(request.frameId, seal, listOf(recording), graph.id.value,
@@ -921,6 +962,10 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
 
     internal fun w4eClipMaskFoldRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskFoldRecipeV1? =
         clipMaskFoldRecipesByPacket[packet]
+
+    /** The renderer consumes only the recipe attached while recording this exact packet. */
+    internal fun w6PathRenderDirectColorRecipeOrNull(packet: GPUDrawPacket): W6PathRenderDirectColorRecipeV1? =
+        pathRenderDirectColorRecipesByPacket[packet]
 
     /** Exact plan-owned snapshot consumer, with coordinates in its target's local space. */
     internal fun destinationCopy(packet: GPUDrawPacket): PlanPass.TextureCopy? {

@@ -57,6 +57,7 @@ import java.util.IdentityHashMap
 import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
+import org.graphiks.kanvas.gpu.plan.AttachmentStorePlan
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
@@ -84,6 +85,10 @@ import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldLoadV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldShaderFamilyV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldStoreV1
 import org.graphiks.kanvas.gpu.plan.W4eNativePayloadPlan
+import org.graphiks.kanvas.gpu.plan.W6PathRenderDirectColorRecipeV1
+import org.graphiks.kanvas.gpu.plan.W6PathRenderDirectColorShaderFamilyV1
+import org.graphiks.kanvas.gpu.plan.W6PathRenderDirectColorTopologyV1
+import org.graphiks.kanvas.gpu.plan.W6PathRenderDirectColorGroupZeroAbiV1
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -398,6 +403,7 @@ internal fun encodeW4eNativePasses(
     clipMaskProducerStencilEdgeRecipesByPassId: Map<String, W4eClipMaskProducerStencilEdgeRecipeV1> = emptyMap(),
     clipMaskProducerStencilCoverRecipesByPassId: Map<String, W4eClipMaskProducerStencilCoverRecipeV1> = emptyMap(),
     clipMaskFoldRecipesByPassId: Map<String, W4eClipMaskFoldRecipeV1> = emptyMap(),
+    pathRenderDirectColorsByPassId: Map<String, W6PathRenderDirectColorRecipeV1> = emptyMap(),
 ): List<GPUPreparedNativeScopeOperand.Render> {
     requireW4eClipMaskInitializeRecipes(entries, clipMaskInitializeRecipesByPassId)
     val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
@@ -1270,7 +1276,25 @@ internal fun encodeW4eNativePasses(
                 val pathSampleCount = if (path.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
                 val hardBinaryCover = path.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeBinaryColorCover
                 val directPath = directGeometry != null && !hardBinaryCover
+                // This map is non-empty only for the early W6 IIIa1 projection.  Its preflight
+                // has already authenticated the catalog owner, U/V/I slices and recorded uses;
+                // select all native axes here before either pipeline or bind-group creation.
+                val frozenDirectColor = pathRenderDirectColorsByPassId[entry.packet.passId]
                 val pipeline = when {
+                    frozenDirectColor != null -> {
+                        require(commonSource && maskConsumer == null && directPath &&
+                            frozenDirectColor.passId.value == entry.packet.passId &&
+                            frozenDirectColor.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
+                            frozenDirectColor.sampleCountI32 == 1 && frozenDirectColor.resolveTarget == null &&
+                            frozenDirectColor.depthStencil == null && frozenDirectColor.shaderFamily == W6PathRenderDirectColorShaderFamilyV1.W4ePathMaterial &&
+                            frozenDirectColor.topology == W6PathRenderDirectColorTopologyV1.TriangleList &&
+                            frozenDirectColor.groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eConsumerUniform &&
+                            frozenDirectColor.load == AttachmentLoadPlan.Load && frozenDirectColor.store == AttachmentStorePlan.Store) {
+                            "W6 direct-colour native packet has no matching frozen IIIa1 recipe."
+                        }
+                        createW4eUnmaskedPathPipeline(device, GPUTextureFormat.RGBA8UnormSrgb,
+                            frozenDirectColor.sampleCountI32, owned, finalBlend = entry.packet.blendPlan)
+                    }
                     maskConsumer == null && directPath -> createW4eUnmaskedPathPipeline(
                         device, GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount, owned,
                         finalBlend = entry.packet.blendPlan.takeIf { commonSource },

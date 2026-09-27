@@ -3237,6 +3237,7 @@ internal class W6aLayerGraphConstruction(
         val clipMaskProducerRecipes = freezeW4eClipMaskProducerRecipesV1(finalW4eBindings, resources + source.resources)
         val clipMaskProducerDirectTriangleRecipes = freezeW4eClipMaskProducerDirectTriangleRecipesV1(finalW4eBindings, resources + source.resources)
         val clipMaskProducerStencilEdgeRecipes = freezeW4eClipMaskProducerStencilEdgeRecipesV1(finalW4eBindings, resources + source.resources)
+        val pathRenderDirectColorRecipes = freezeW6PathRenderDirectColorRecipesV1(finalW4eBindings, resources + source.resources)
         val clipMaskFoldRecipes = freezeW4eClipMaskFoldRecipesV1(finalW4eBindings, resources + source.resources)
         val w6bCoverageRasterGeometry = freezeW6bCoverageRasterGeometryV1(passes, resources + source.resources, caps)
         val w6bCoverageRasterHostRecipes = freezeW6bCoverageRasterHostsV1(passes, resources + source.resources, w6bCoverageRasterGeometry)
@@ -3271,6 +3272,7 @@ internal class W6aLayerGraphConstruction(
             w6FullscreenPictureSourceLayerRecipes,
             w6FullscreenPictureSourceGraphRecipes,
             w6FilterSpatialCropRecipes, w6FilterSpatialOffsetRecipes, w6FilterSpatialTileRecipes, w6FilterMorphologyRecipes, w6FilterColorFilterRecipes, w6FilterMergeRecipes, w6FilterBlendRecipes, w6FilterSeparableBlurRecipes, w6FilterMaskBlurNormalRecipes, w6FilterMaskBlurDualSourceRecipes, w6FilterMaskShaderRecipes, w6FilterMaskTableRecipes, w6FilterMaterializedSourceRecipes, w6FilterDropShadowColorizeRecipes, w6FilterDropShadowCompositeRecipes,
+            pathRenderDirectColors = pathRenderDirectColorRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3303,6 +3305,7 @@ internal class W6aLayerGraphConstruction(
             w4eClipMaskProducerRecipes = clipMaskProducerRecipes,
             w4eClipMaskProducerDirectTriangleRecipes = clipMaskProducerDirectTriangleRecipes,
             w4eClipMaskProducerStencilEdgeRecipes = clipMaskProducerStencilEdgeRecipes,
+            w6PathRenderDirectColorRecipes = pathRenderDirectColorRecipes,
             w4eClipMaskFoldRecipes = clipMaskFoldRecipes,
             w6bCoverageRasterGeometry = w6bCoverageRasterGeometry,
             w6bCoverageRasterHostRecipes = w6bCoverageRasterHostRecipes,

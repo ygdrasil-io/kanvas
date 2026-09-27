@@ -66,6 +66,7 @@ internal class SourcePhysicalConstructionV1(
     val w4eClipMaskProducerRecipes: Map<PlanPassId, W4eClipMaskProducerRecipeV1> = emptyMap(),
     val w4eClipMaskProducerDirectTriangleRecipes: Map<PlanPassId, W4eClipMaskProducerDirectTriangleRecipeV1> = emptyMap(),
     val w4eClipMaskProducerStencilEdgeRecipes: Map<PlanPassId, W4eClipMaskProducerStencilEdgeRecipeV1> = emptyMap(),
+    val w6PathRenderDirectColorRecipes: Map<PlanPassId, W6PathRenderDirectColorRecipeV1> = emptyMap(),
     val w4eClipMaskFoldRecipes: Map<PlanPassId, W4eClipMaskFoldRecipeV1> = emptyMap(),
     /** Final W6b V/I/U coverage-raster bundles; renderer selection remains intentionally open until 2P7b. */
     val w6bCoverageRasterGeometry: Map<PlanPassId, W6bCoverageRasterGeometryV1> = emptyMap(),
@@ -196,6 +197,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     filterDropShadowColorizeRecipes: Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1>,
     filterDropShadowCompositeRecipes: Map<PlanPassId, W6FilterDropShadowCompositeRecipeV1>,
     nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1,
+    pathRenderDirectColorRecipes: Map<PlanPassId, W6PathRenderDirectColorRecipeV1> = emptyMap(),
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
@@ -229,6 +231,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val clipMaskProducers = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskProducerRecipes))
     private val clipMaskProducerDirectTriangles = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskProducerDirectTriangleRecipes))
     private val clipMaskProducerStencilEdges = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskProducerStencilEdgeRecipes))
+    private val pathRenderDirectColors = java.util.Collections.unmodifiableMap(LinkedHashMap(pathRenderDirectColorRecipes))
     private val clipMaskFolds = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskFoldRecipes))
     private val coverageRasterGeometry = java.util.Collections.unmodifiableMap(LinkedHashMap(w6bCoverageRasterGeometry))
     private val coverageRasterHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(w6bCoverageRasterHostRecipes))
@@ -373,6 +376,10 @@ public class PlanPhysicalLayoutV1 private constructor(
             ?.host ?: error("Missing frozen W4e direct-triangle ClipMaskProducer recipe for ${passId.value}.")
     public fun w4eClipMaskProducerDirectTriangleRecipes(): Map<PlanPassId, W4eClipMaskProducerDirectTriangleRecipeV1> = clipMaskProducerDirectTriangles
     public fun w4eClipMaskProducerStencilEdgeRecipes(): Map<PlanPassId, W4eClipMaskProducerStencilEdgeRecipeV1> = clipMaskProducerStencilEdges
+    public fun w6PathRenderDirectColorRecipe(passId: PlanPassId): W6PathRenderDirectColorRecipeV1 =
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, pathRenderDirectColors.getValue(passId).packetOrdinalI32, 0)) as? W6PathRenderDirectColorNativeSiteRecipeV1)?.host
+            ?: error("Missing frozen W6 direct path-color recipe for ${passId.value}.")
+    public fun w6PathRenderDirectColorRecipes(): Map<PlanPassId, W6PathRenderDirectColorRecipeV1> = pathRenderDirectColors
     /** Bundle one is frozen beside edge bundle zero under the same packet owner. */
     public fun w4eClipMaskProducerStencilCoverRecipe(passId: PlanPassId): W4eClipMaskProducerStencilCoverRecipeV1 {
         val edge = clipMaskProducerStencilEdges.getValue(passId)
@@ -607,6 +614,12 @@ public class PlanPhysicalLayoutV1 private constructor(
                 require(W4eClipMaskProducerDirectTriangleNativeSiteRecipeV1(recipe).canonicalLogicalEncodingV1 ==
                     W4eClipMaskProducerDirectTriangleNativeSiteRecipeV1(expectedDirectTriangles.getValue(passId)).canonicalLogicalEncodingV1)
             }
+            val expectedPathRenderDirectColors = freezeW6PathRenderDirectColorRecipesV1(source.w4eGeometry, rows)
+            require(source.w6PathRenderDirectColorRecipes.keys == expectedPathRenderDirectColors.keys)
+            source.w6PathRenderDirectColorRecipes.forEach { (passId, recipe) ->
+                require(W6PathRenderDirectColorNativeSiteRecipeV1(recipe).canonicalLogicalEncodingV1 ==
+                    W6PathRenderDirectColorNativeSiteRecipeV1(expectedPathRenderDirectColors.getValue(passId)).canonicalLogicalEncodingV1)
+            }
             val expectedStencilEdges = freezeW4eClipMaskProducerStencilEdgeRecipesV1(source.w4eGeometry, rows)
             require(source.w4eClipMaskProducerStencilEdgeRecipes.keys == expectedStencilEdges.keys)
             source.w4eClipMaskProducerStencilEdgeRecipes.forEach { (passId, recipe) ->
@@ -722,6 +735,7 @@ public class PlanPhysicalLayoutV1 private constructor(
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
                 graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
                 expectedPlainLayerComposites, expectedFilteredLayerComposites, expectedLayerCompositeDestinations, expectedLayerCompositeFilteredDestinations, expectedPictureCompositeGraphs, expectedPictureCompositeGraphFiltered, expectedPictureCompositeGraphDestinations, expectedFilterCompositeDraws, expectedFilterCompositeLayerPlains, expectedFilterCompositeLayerFiltered, expectedFilterCompositeLayerDestinations, expectedFilterCompositeLayerFilteredDestinations, expectedFilterCompositePicturePlains, expectedFilterCompositePictureGraphs, expectedFilterCompositePictureGraphFiltereds, expectedFilterCompositePictureGraphDestinations, expectedFilterCompositePictureGraphFilteredDestinations, expectedFilterCompositePictureDestinations, expectedClipMaskInitializes, expectedClipMaskProducers, expectedDirectTriangles, expectedStencilEdges, expectedClipMaskFolds, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals, expectedMaskBlurDualSources, expectedMaskShaders, expectedMaskTables, expectedMaterializedSources, expectedDropShadowColorizes, expectedDropShadowComposites,
+                pathRenderDirectColors = expectedPathRenderDirectColors,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -750,6 +764,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterMaterializedSourceRecipes,
                 source.w6FilterDropShadowColorizeRecipes,
                 source.w6FilterDropShadowCompositeRecipes,
+                pathRenderDirectColors = source.w6PathRenderDirectColorRecipes,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
@@ -960,7 +975,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterMaterializedSourceRecipes,
                 source.w6FilterDropShadowColorizeRecipes,
                 source.w6FilterDropShadowCompositeRecipes,
-                source.nativeSiteRecipeCatalogV1)
+                source.nativeSiteRecipeCatalogV1, source.w6PathRenderDirectColorRecipes)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
             val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->

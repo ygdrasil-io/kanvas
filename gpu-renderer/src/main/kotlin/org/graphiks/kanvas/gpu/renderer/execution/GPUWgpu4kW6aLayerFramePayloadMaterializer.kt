@@ -47,6 +47,99 @@ private data class W4eClipMaskInitializeNativePreflight(
     val foldRecipesByPassId: Map<String, W4eClipMaskFoldRecipeV1>,
 )
 
+/** Authenticates the IIIa packet projection before the materializer creates any native handle. */
+private fun preflightW6PathRenderDirectColors(
+    frame: GPUW6aLayerFramePlan,
+    framePlan: GPUFramePlan,
+): Map<String, W6PathRenderDirectColorRecipeV1> {
+    val recipes = framePlan.steps.mapNotNull { step ->
+        val render = step as? GPUFrameStep.RenderPassStep ?: return@mapNotNull null
+        frame.w6PathRenderDirectColorRecipeOrNull(render.drawPackets.singleOrNull() ?: return@mapNotNull null)
+            ?.also { recipe ->
+                require(render.w6aPassV1?.id == recipe.passId && render.w6aPassV1?.ordinal == recipe.packetOrdinalI32)
+            }?.let { it.passId.value to it }
+    }.toMap()
+    require(recipes.keys == frame.physical.w6PathRenderDirectColorRecipes().keys.map { it.value }.toSet()) {
+        "W6 direct-colour recorded packets must cover exactly the frozen recipe catalog."
+    }
+    fun exact(row: PlanResource, frozen: W4eClipMaskProducerPhysicalOperandV1) =
+        row.id == frozen.id && row.role == frozen.role && row.format == frozen.format &&
+            row.copyExtent() == frozen.copyExtentI32() && row.sampleCountI32 == frozen.sampleCountI32 &&
+            row.byteSize == frozen.byteSizeI64 && row.lifetime == frozen.lifetime && row.usages() == frozen.usages()
+    recipes.forEach { (id, recipe) ->
+        val pass = frame.graph.passes().single { it.id == recipe.passId } as? PlanPass.PathRenderPass
+            ?: error("W6 direct-colour recipe owner is not a path pass.")
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == recipe.passId }
+        val packet = render.drawPackets.single()
+        val prepared = requireNotNull(packet.w4ePreparedPath)
+        val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(
+            NativeSiteOwnerV1(recipe.passId, recipe.packetOrdinalI32, 0),
+        ) as? W6PathRenderDirectColorNativeSiteRecipeV1
+        require(catalog?.host === recipe && pass.phase == PathRenderPhase.SingleSampleDirectColor &&
+            pass.id.value == id && pass.ordinal == recipe.packetOrdinalI32 && packet.w4ePreparedClipConsumer == null &&
+            prepared.phase == pass.phase && prepared.targetResourceId == recipe.target.id.value &&
+            prepared.resolveTargetResourceId == null && prepared.depthStencilResourceId == null &&
+            prepared.vertexResourceId == recipe.vertex.id.value && prepared.indexResourceId == recipe.index.id.value &&
+            prepared.uniformResourceId == recipe.uniform.id.value && prepared.sample == SamplePlan.SingleSample &&
+            prepared.load == recipe.load && prepared.store == recipe.store && prepared.blend == recipe.blend &&
+            packet.blendPlan == recipe.blend && render.target == frame.refs.getValue(recipe.target.id) &&
+            render.samplePlan == GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null &&
+            render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store) {
+            "W6 direct-colour packet differs from its frozen owner, phase, or attachment recipe."
+        }
+        val geometry = when (val source = prepared.copyGeometry()) {
+            is PathDrawGeometry.Fill -> source.valueF32
+            is PathDrawGeometry.Stroke -> source.valueF32.copyFillGeometryF32()
+            is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty -> error("W6 direct-colour prepared path has no fill geometry.")
+        }
+        val frozen = recipe.copyGeometryF32()
+        require(geometry.fillRule == frozen.fillRule && geometry.copyDirectTriangleF32OrNull()?.copyVerticesF32()?.contentEquals(
+            requireNotNull(frozen.copyDirectTriangleF32OrNull()).copyVerticesF32()) == true &&
+            geometry.copyDirectTriangleF32OrNull()?.copyIndicesI32()?.contentEquals(
+            requireNotNull(frozen.copyDirectTriangleF32OrNull()).copyIndicesI32()) == true &&
+            prepared.scissor.left == recipe.copyScissorI32().left && prepared.scissor.top == recipe.copyScissorI32().top &&
+            prepared.scissor.right == recipe.copyScissorI32().right && prepared.scissor.bottom == recipe.copyScissorI32().bottom) {
+            "W6 direct-colour prepared geometry/scissor changed after recipe freeze."
+        }
+        require(exact(frame.physical.resource(recipe.target.id), recipe.target) && exact(frame.physical.resource(recipe.vertex.id), recipe.vertex) &&
+            exact(frame.physical.resource(recipe.index.id), recipe.index) && exact(frame.physical.resource(recipe.uniform.id), recipe.uniform)) {
+            "W6 direct-colour physical U/V/I/target rows changed after recipe freeze."
+        }
+        val binding = requireNotNull(frame.physical.w4eGeometryBinding(recipe.passId))
+        val slice = requireNotNull(binding.payload.geometrySlice(id, W4eNativePayloadPlan.CONSUMER_DIRECT))
+        val uniform = requireNotNull(binding.payload.uniformSlice(id, W4eNativePayloadPlan.CONSUMER_UNIFORM))
+        val targetRole = when (recipe.target.role) {
+            PlanResourceRole.LogicalTarget -> org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.SceneTarget
+            PlanResourceRole.LayerTarget, PlanResourceRole.MultisampleColorTarget -> org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.LayerTarget
+            else -> error("W6 direct-colour recipe target has no W4e scene role.")
+        }
+        val expectedUses = listOf(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.target.id), targetRole,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, true),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.vertex.id),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.VertexData,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Vertex,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.index.id),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.IndexData,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Index,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.uniform.id),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.UniformData,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Uniform,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+        )
+        require(slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 &&
+            slice.baseVertex == recipe.baseVertexI32 && slice.vertexCount == recipe.vertexCountI32 &&
+            slice.maxLocalIndex == recipe.maxLocalIndexI32 && uniform.offsetBytes == recipe.uniformOffsetBytesI64 &&
+            uniform.byteSize == recipe.uniformByteSizeI64 && render.resourceUses == expectedUses) {
+            "W6 direct-colour recorded uses or U/V/I slices differ from the frozen recipe."
+        }
+    }
+    return recipes
+}
+
 /** Authenticates the final W4e binding and its recorded initialize packets before any device.create*. */
 private fun preflightW4eClipMaskInitializes(
     frame: GPUW6aLayerFramePlan,
@@ -1518,6 +1611,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterCompositeLayerFiltereds(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
+            val w6PathRenderDirectColors = preflightW6PathRenderDirectColors(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
             // native boundary.  A warm driver cache may avoid creation work, never this lease.
             val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
@@ -1794,7 +1888,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     clipMaskProducerDirectTriangleRecipesByPassId = clipMaskProducerDirectTriangleRecipes,
                     clipMaskProducerStencilEdgeRecipesByPassId = clipMaskProducerStencilEdgeRecipes,
                     clipMaskProducerStencilCoverRecipesByPassId = clipMaskProducerStencilCoverRecipes,
-                    clipMaskFoldRecipesByPassId = clipMaskFoldRecipes)
+                    clipMaskFoldRecipesByPassId = clipMaskFoldRecipes,
+                    pathRenderDirectColorsByPassId = w6PathRenderDirectColors)
                     .map { native ->
                         val pass = graph.passes()[native.sourceStepIndex - 1]
                         native.pass.depthStencilTarget?.let { pathViews[native.sourceStepIndex] = it.view }

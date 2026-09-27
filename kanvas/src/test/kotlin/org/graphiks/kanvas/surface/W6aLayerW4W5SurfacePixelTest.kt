@@ -37,6 +37,36 @@ import org.junit.jupiter.api.Test
  */
 class W6aLayerW4W5SurfacePixelTest {
     @Test
+    fun `unclipped direct triangle path keeps its translated asymmetric pixels in a W6 layer`() {
+        // This is a drawPath, not a clipPath: it reaches the W6-final DirectColor packet.
+        // Keep the public pixel oracle before Surface construction.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear,
+            clear, blue, blue, blue, clear,
+            clear, blue, blue, clear, clear,
+            clear, blue, clear, clear, clear,
+            clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val triangle = Path().apply {
+            moveTo(0f, 0f); lineTo(4f, 0f); lineTo(0f, 4f); close()
+        }
+
+        val surface = Surface(5, 5)
+        surface.canvas {
+            saveLayer()
+            translate(1f, 1f)
+            drawPath(triangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `even odd path clip preserves its stencil cover hole in a W6 layer`() {
         // The inner contour has the same winding as the exterior.  Only the frozen EVEN_ODD
         // stencil edge plus its non-zero cover test leaves this center pixel transparent.
