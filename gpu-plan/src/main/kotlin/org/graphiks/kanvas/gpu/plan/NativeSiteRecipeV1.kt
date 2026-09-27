@@ -164,6 +164,7 @@ public class W6FilterDropShadowColorizeRecipeV1 internal constructor(
     sourceCoordinateOffsetTargetLocalF64: org.graphiks.math.vector.Vector2F64,
     sourceFootprintTargetLocalI32: org.graphiks.math.geometry.RectI32,
     outputFootprintTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    scissorTargetLocalI32: org.graphiks.math.geometry.RectI32,
     extent: org.graphiks.math.geometry.SizeI32, blurredExtent: org.graphiks.math.geometry.SizeI32,
     public val targetFormat: PlanLogicalColorFormat, public val blurredFormat: PlanLogicalColorFormat,
     public val sampleCountI32: Int, public val blurredSampleCountI32: Int,
@@ -173,16 +174,16 @@ public class W6FilterDropShadowColorizeRecipeV1 internal constructor(
     public val blend: BlendPlan = BlendPlan.LegacySrcOverV1, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
 ) {
     private val o = org.graphiks.math.vector.Vector2F64(offsetF64.x, offsetF64.y); private val so = org.graphiks.math.vector.Vector2F64(sourceCoordinateOffsetTargetLocalF64.x, sourceCoordinateOffsetTargetLocalF64.y)
-    private val sf = sourceFootprintTargetLocalI32.copy(); private val of = outputFootprintTargetLocalI32.copy(); private val e = extent.copy(); private val be = blurredExtent.copy()
-    init { require(target != blurredSource && o.x.isFinite() && o.y.isFinite() && so.x.isFinite() && so.y.isFinite() && !sf.isEmpty && !of.isEmpty && sf.left == 0 && sf.top == 0 && of.left == 0 && of.top == 0 && sampleCountI32 == 1 && blurredSampleCountI32 == 1 && e.width == of.width() && e.height == of.height() && be.width == sf.width() && be.height == sf.height()) }
+    private val sf = sourceFootprintTargetLocalI32.copy(); private val of = outputFootprintTargetLocalI32.copy(); private val sc = scissorTargetLocalI32.copy(); private val e = extent.copy(); private val be = blurredExtent.copy()
+    init { require(target != blurredSource && o.x.isFinite() && o.y.isFinite() && so.x.isFinite() && so.y.isFinite() && !sf.isEmpty && !of.isEmpty && !sc.isEmpty && sf.left == 0 && sf.top == 0 && of.left == 0 && of.top == 0 && sc.left >= 0 && sc.top >= 0 && sc.right <= e.width && sc.bottom <= e.height && sampleCountI32 == 1 && blurredSampleCountI32 == 1 && e.width == of.width() && e.height == of.height() && be.width == sf.width() && be.height == sf.height()) }
     public fun copyOffsetF64() = org.graphiks.math.vector.Vector2F64(o.x, o.y); public fun copySourceCoordinateOffsetTargetLocalF64() = org.graphiks.math.vector.Vector2F64(so.x, so.y)
-    public fun copySourceFootprintTargetLocalI32() = sf.copy(); public fun copyOutputFootprintTargetLocalI32() = of.copy(); public fun copyExtent() = e.copy(); public fun copyBlurredExtent() = be.copy()
+    public fun copySourceFootprintTargetLocalI32() = sf.copy(); public fun copyOutputFootprintTargetLocalI32() = of.copy(); public fun copyScissorTargetLocalI32() = sc.copy(); public fun copyExtent() = e.copy(); public fun copyBlurredExtent() = be.copy()
     public fun canonicalLogicalEncodingV1() = W6FilterDropShadowColorizeNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
 }
 public class W6FilterDropShadowColorizeNativeSiteRecipeV1 internal constructor(public val host: W6FilterDropShadowColorizeRecipeV1) : NativeSiteRecipeV1 {
     override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterDropShadowColorize
     override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
-        text("owner", host.ownerPassId.value); text("target", host.target.value); text("blurredSource", host.blurredSource.value); text("colorArgb", host.colorArgbU32.toString(16)); double("offset.x", host.copyOffsetF64().x); double("offset.y", host.copyOffsetF64().y); double("sourceCoordinateOffset.x", host.copySourceCoordinateOffsetTargetLocalF64().x); double("sourceCoordinateOffset.y", host.copySourceCoordinateOffsetTargetLocalF64().y); rect("sourceFootprint", host.copySourceFootprintTargetLocalI32()); rect("outputFootprint", host.copyOutputFootprintTargetLocalI32()); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("blurredExtentWidth", host.copyBlurredExtent().width); int("blurredExtentHeight", host.copyBlurredExtent().height); enum("targetFormat", host.targetFormat); enum("blurredFormat", host.blurredFormat); int("sampleCount", host.sampleCountI32); int("blurredSampleCount", host.blurredSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+        text("owner", host.ownerPassId.value); text("target", host.target.value); text("blurredSource", host.blurredSource.value); text("colorArgb", host.colorArgbU32.toString(16)); double("offset.x", host.copyOffsetF64().x); double("offset.y", host.copyOffsetF64().y); double("sourceCoordinateOffset.x", host.copySourceCoordinateOffsetTargetLocalF64().x); double("sourceCoordinateOffset.y", host.copySourceCoordinateOffsetTargetLocalF64().y); rect("sourceFootprint", host.copySourceFootprintTargetLocalI32()); rect("outputFootprint", host.copyOutputFootprintTargetLocalI32()); rect("scissor", host.copyScissorTargetLocalI32()); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("blurredExtentWidth", host.copyBlurredExtent().width); int("blurredExtentHeight", host.copyBlurredExtent().height); enum("targetFormat", host.targetFormat); enum("blurredFormat", host.blurredFormat); int("sampleCount", host.sampleCountI32); int("blurredSampleCount", host.blurredSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
     }
 }
 
@@ -1658,7 +1659,7 @@ public fun freezeW6FilterDropShadowColorizeRecipesV1(
         require(put(pass.id, W6FilterDropShadowColorizeRecipeV1(
             pass.id, pass.output, pass.inputs().single(), operation.color.value, operation.copyOffsetF64(),
             sampling.copySourceCoordinateOffsetTargetLocalF64(), sampling.copySourceFootprintTargetLocalI32(),
-            sampling.copyOutputFootprintTargetLocalI32(), requireNotNull(target.copyExtent()),
+            sampling.copyOutputFootprintTargetLocalI32(), sampling.copyOutputFootprintTargetLocalI32(), requireNotNull(target.copyExtent()),
             requireNotNull(blurred.copyExtent()), targetFormat, blurredFormat, target.sampleCountI32,
             blurred.sampleCountI32,
         )) == null)

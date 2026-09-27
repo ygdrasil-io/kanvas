@@ -670,7 +670,7 @@ private fun preflightW6FilterDropShadowColorizes(frame: GPUW6aLayerFramePlan, fr
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
         val target = frame.physical.resource(actual.target); val blurred = frame.physical.resource(actual.blurredSource)
         val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.blurredSource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
-        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.blurredSource == pass.inputs().single() && actual.colorArgbU32 == operation.color.value && actual.copyOffsetF64() == operation.copyOffsetF64() && actual.copySourceCoordinateOffsetTargetLocalF64() == sampling.copySourceCoordinateOffsetTargetLocalF64() && actual.copySourceFootprintTargetLocalI32() == sampling.copySourceFootprintTargetLocalI32() && actual.copyOutputFootprintTargetLocalI32() == sampling.copyOutputFootprintTargetLocalI32() && actual.groupZeroAbi == W6FilterDropShadowColorizeGroupZeroAbiV1.BlurredAlphaTexture && actual.shaderFamily == W6FilterDropShadowColorizeShaderFamilyV1.LinearDecalBlurredAlphaColorize && actual.load == AttachmentLoadPlan.ClearTransparent && actual.store == AttachmentStorePlan.Store && actual.blend == BlendPlan.LegacySrcOverV1 && actual.draw == W6FullscreenEmptyDrawV1() && target.copyExtent() == actual.copyExtent() && blurred.copyExtent() == actual.copyBlurredExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && blurred.format == PlanTextureFormat.Color(actual.blurredFormat) && target.sampleCountI32 == actual.sampleCountI32 && blurred.sampleCountI32 == actual.blurredSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in blurred.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null) { "W6 DropShadowColorize physical or recorded preflight differs from its frozen recipe." }
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.blurredSource == pass.inputs().single() && actual.colorArgbU32 == operation.color.value && actual.copyOffsetF64() == operation.copyOffsetF64() && actual.copySourceCoordinateOffsetTargetLocalF64() == sampling.copySourceCoordinateOffsetTargetLocalF64() && actual.copySourceFootprintTargetLocalI32() == sampling.copySourceFootprintTargetLocalI32() && actual.copyOutputFootprintTargetLocalI32() == sampling.copyOutputFootprintTargetLocalI32() && actual.copyScissorTargetLocalI32() == sampling.copyOutputFootprintTargetLocalI32() && actual.groupZeroAbi == W6FilterDropShadowColorizeGroupZeroAbiV1.BlurredAlphaTexture && actual.shaderFamily == W6FilterDropShadowColorizeShaderFamilyV1.LinearDecalBlurredAlphaColorize && actual.load == AttachmentLoadPlan.ClearTransparent && actual.store == AttachmentStorePlan.Store && actual.blend == BlendPlan.LegacySrcOverV1 && actual.draw == W6FullscreenEmptyDrawV1() && target.copyExtent() == actual.copyExtent() && blurred.copyExtent() == actual.copyBlurredExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && blurred.format == PlanTextureFormat.Color(actual.blurredFormat) && target.sampleCountI32 == actual.sampleCountI32 && blurred.sampleCountI32 == actual.blurredSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in blurred.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null) { "W6 DropShadowColorize physical or recorded preflight differs from its frozen recipe." }
     }
 }
 
@@ -2775,9 +2775,29 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         recipe: W6FilterDropShadowColorizeRecipeV1, pass: PlanPass.FilterPass, owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
         require(recipe.ownerPassId == pass.id && recipe.target == pass.output && pass.inputs() == listOf(recipe.blurredSource) && recipe.groupZeroAbi == W6FilterDropShadowColorizeGroupZeroAbiV1.BlurredAlphaTexture && recipe.shaderFamily == W6FilterDropShadowColorizeShaderFamilyV1.LinearDecalBlurredAlphaColorize && recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
-        val extent = recipe.copyExtent()
-        return textureRender(stepIndex, target, blurredSource, generation, dropShadowColorizeShader(recipe), recipe.blend,
-            0, 0, extent.width, extent.height, pass, owned)
+        val scissor = recipe.copyScissorTargetLocalI32()
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+        ))))
+        val pipeline = pipeline(dropShadowColorizeShader(recipe), layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+            BindGroupEntry(0u, blurredSource),
+        ))))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(
+                GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load,
+                clearColor = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null,
+            ),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
+            ),
+            w6aPassV1 = pass,
+        )
     }
 
     /** Colors the already-blurred alpha using only the frozen recipe payload. */
