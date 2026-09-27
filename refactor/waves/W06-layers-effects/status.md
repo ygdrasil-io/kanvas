@@ -1134,3 +1134,40 @@ Terra avant le correctif ciblé ; aucune suite globale n'est revendiquée.
 IIIa1/IIIa2, IIIb2 et IIIc1–IIIc3 sont review-clean : **2A0b.III et 2A0b
 sont clos pour le seul gel/sélection des recettes W6a**. 2A0c W4e, 2A0d
 W5a, leases/B/B−1, 2B et le gate W6 global restent ouverts.
+
+### Préservation W6 — uniformes filtrés dans les lanes W4e
+
+Avant 2A0c.I1, deux témoins publics RRect échouaient pendant la publication
+W6 avec `Collection contains more than one matching element`. La cause n'était
+pas le GPU : quatre factories de recettes `LayerComposite` et
+`FilterComposite.Layer` filtrées cherchaient une ressource par le seul rôle
+`UniformData`, alors que les lanes W4e en portent aussi. Le commit `9f6f365`
+sélectionne l'ID exact de l'uniforme de frame `UniformData:0` et authentifie
+son type et ses usages. Les deux témoins RRect donnent XML `2/0/0/0`, la
+classe publique restore `14/0/0/0`; leurs workers natifs sortent ensuite
+133 (**UNKNOWN**). Revue indépendante Sol : **Approved**.
+
+### 2A0c.I1 — ClipMaskProducer Rect/RRect sur la route W6
+
+Les seuls producteurs analytiques finaux `Rect` et `RRect` ont une recette
+versionnée avec géométrie F32 issue de `:math`, owner/packet/bundle, cible,
+resolve, depth, U-slice et choix shader/ABI/load/store. Le catalogue, le
+seal physique, la projection sur les packets, le préflight des ressources et
+usages enregistrés avant allocation, puis la traduction native catalog-first
+la transportent sans nouveau site pour `Path` ou `Empty`. `Empty` est éliminé
+avant émission par le planner; la route W4d directe conserve son encodeur.
+Une revue Sol a relevé l'absence initiale des paramètres depth/stencil pour
+RRect AA; `3c58bb5` les fige dans la recette canonique et l'encodeur les
+consomme. La relecture ciblée a marqué ce finding **ADDRESSED**, sans nouveau
+Critical/Important. Implémentation initiale : `0f99d77`.
+
+Les compilations ciblées `:gpu-plan`, `:gpu-renderer` et
+`:kanvas:compileTestKotlin` sortent 0. La classe publique W6aLayerW4W5
+donne XML `20/0/0/0`, mais Gradle sort 1 après worker natif 133 :
+**UNKNOWN** global. Deux sélecteurs publics W4e directs, Rect/RRect/Path
+ordonné et distinction des clips Rect hard/analytic, passent avec Gradle
+exit 0. Une invocation plus large de `GPUPlanSurfacePixelTest` a produit
+`F4/E0/S2` sur d'autres routes; son état de base n'a pas été établi et
+aucune réussite de classe entière n'est revendiquée. I1 est review-clean ;
+`ClipMaskFold`, producteurs/path phases, W5a, leases/B/B−1 et 2B restent
+ouverts.
