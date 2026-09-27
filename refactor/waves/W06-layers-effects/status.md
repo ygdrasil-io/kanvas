@@ -1286,6 +1286,27 @@ sans finding Critical/Important, statique et limitée à IIIa1. Les DirectColor
 clippés, Stroke ou non triangulaires doivent être audités avant une clôture
 IIIa ; IIIb/c, IV, W5a, leases/B/B−1 et 2B restent ouverts.
 
+### 2A0c.IIIa2 — PathRenderPass DirectColor Stroke triangulaire
+
+Un Stroke public à largeur 1 et cap Butt, du point `(0,0)` à `(2^24,2^24)`,
+fournit un cas rare mais réel : les deux coins distants du contour se
+confondent après conversion F32 ; la géométrie finale de `:math` est un
+triangle direct. L'audit initial l'avait jugé inatteignable ; une review Sol
+a trouvé ce contre-exemple avant toute modification de production. La
+recette `SingleSampleDirectColor` porte maintenant un tag canonique Stroke
+distinct, sans changer l'encodage Fill de IIIa1. Le catalogue, le packet,
+le préflight pré-allocation et la sélection native couvrent ce site ; les
+autres formes restent sur leur route existante.
+
+Le témoin `Surface` public fixe la diagonale bleue littérale avant la
+construction et exige `Render` + `Readback`. Commit `ac3c20a`. Les trois
+compilations ciblées passent. La classe W6aLayerW4W5 affiche XML
+`25/0/0/0`, puis le worker natif sort 133 (**UNKNOWN** pour le build) ; le
+sélecteur W4e direct passe avec Gradle exit 0 sans build cache. Revue
+indépendante Sol : **Approved**, aucun finding Critical/Important, revue
+statique. IIIa1 et IIIa2 sont review-clean ; les DirectColor sous scissor
+ou masque et les phases IIIb/c restent ouverts.
+
 ### Diagnostic du worker natif 133 sur macOS
 
 Le GPU Metal Apple M2 Max est disponible et le décalage ABI toolkit/ktypes
