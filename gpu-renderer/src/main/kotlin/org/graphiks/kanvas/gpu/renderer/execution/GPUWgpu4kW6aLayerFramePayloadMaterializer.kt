@@ -1739,53 +1739,66 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         }
                     }
                     is PlanPass.PictureComposite -> {
+                        val catalogRecipe = frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0))
                         val operands = requireNotNull(pass.operands) { "W6b Picture composite needs frozen operands." }
                         val scissor = operands.copyCompositeScissorTargetLocalI32()
-                        val sampleOffset = operands.copySourceSampleOffsetTargetLocalI32()
-                        val operand = graphTextureOperandsBySource[pass.source]
-                        renderOperands += if (scissor == null) emptyRender(stepIndex, views.getValue(pass.destination), generation,
-                            pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned) else if (operand == null) {
-                            textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                                sampledCompositeShader(sampleOffset.x, sampleOffset.y, 1f), operands.blend,
-                                scissor.left, scissor.top, scissor.width(), scissor.height(), pass, owned)
-                        } else if (operand.colorFilter == null && operands.blend !is BlendPlan.DestinationReadV1) {
-                            val recipe = requireNotNull(frame.physical.w6PictureCompositeGraphRecipeOrNull(pass.id)) {
-                                "Missing frozen plain graph PictureComposite recipe."
-                            }
-                            require(recipe.graphSealedSource == operand.sealedSourceId &&
-                                recipe.graphSealedSourceGenerationI64 == operand.sealedSourceGenerationI64 &&
-                                recipe.alphaF32 == operand.alphaF32 && recipe.blend.canonicalLabel == operand.finalBlend.canonicalLabel) {
-                                "W6 PictureComposite plain graph bridge differs from its frozen recipe."
-                            }
-                            pictureCompositeGraphRender(stepIndex, views.getValue(recipe.destination),
-                                views.getValue(recipe.source), generation, recipe, pass, owned)
-                        } else {
-                            require(frame.physical.w6PictureCompositeGraphRecipeOrNull(pass.id) == null) {
-                                "IIIb2b bridge must not select the plain graph PictureComposite recipe."
-                            }
-                            require(operand.finalBlend.canonicalLabel == operands.blend.canonicalLabel) {
-                                "W6b Picture composite blend differs from its frozen graph-texture operand."
-                            }
-                            val filter = operand.colorFilter
-                            val filterOffset = filter?.let { requireNotNull(operand.colorFilterUniformOffsetI64) }
-                            val filterCapacity = filter?.let { requireNotNull(operand.colorFilterUniformByteCountI64) }
-                            val filterBuffer = filter?.let { execution ->
-                                val offset = requireNotNull(filterOffset)
-                                val capacity = requireNotNull(filterCapacity)
-                                val bindingBytes = maxOf(16L, execution.dynamicByteCountI64)
-                                require(Math.addExact(offset, bindingBytes) <= capacity)
-                                graphTextureUniformBuffers.getValue(operand.uniformResource).also { buffer ->
-                                    if (execution.dynamicByteCountI64 > 0L)
-                                        queue.writeBuffer(buffer, offset.toULong(), ArrayBuffer.of(execution.copyDynamicBytes()))
+                        renderOperands += when (catalogRecipe) {
+                            is W6FullscreenEmptyNativeSiteRecipeV1 -> {
+                                require(scissor == null && catalogRecipe.host.ownerPassId == pass.id) {
+                                    "PictureComposite Empty recipe must authenticate only its null-scissor owner."
                                 }
+                                emptyRender(stepIndex, views.getValue(pass.destination), generation, pass, catalogRecipe.host, owned)
                             }
-                            filteredCompositeRender(
-                                stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                                sampleOffset, requireNotNull(scissor), operand.alphaF32, filter, filterBuffer,
-                                if (filter == null) null else 0L, filterCapacity, filterOffset?.div(4L) ?: 0L,
-                                (operands.blend as? BlendPlan.DestinationReadV1)?.snapshotResource?.let(views::get),
-                                operands.blend, pass, owned,
-                            )
+                            is W6PictureCompositeGraphNativeSiteRecipeV1 -> {
+                                val operand = requireNotNull(graphTextureOperandsBySource[pass.source]) {
+                                    "Plain graph PictureComposite recipe requires its published graph operand."
+                                }
+                                val recipe = catalogRecipe.host
+                                require(scissor != null && operand.colorFilter == null && operands.blend !is BlendPlan.DestinationReadV1 &&
+                                    frame.physical.w6PictureCompositeGraphRecipeOrNull(pass.id) === recipe) {
+                                    "Plain graph PictureComposite catalog recipe differs from its pass or physical layout."
+                                }
+                                require(recipe.graphSealedSource == operand.sealedSourceId &&
+                                    recipe.graphSealedSourceGenerationI64 == operand.sealedSourceGenerationI64 &&
+                                    recipe.alphaF32 == operand.alphaF32 && recipe.blend.canonicalLabel == operand.finalBlend.canonicalLabel) {
+                                    "W6 PictureComposite plain graph bridge differs from its frozen recipe."
+                                }
+                                pictureCompositeGraphRender(stepIndex, views.getValue(recipe.destination),
+                                    views.getValue(recipe.source), generation, recipe, pass, owned)
+                            }
+                            null -> {
+                                val sampleOffset = operands.copySourceSampleOffsetTargetLocalI32()
+                                val operand = requireNotNull(graphTextureOperandsBySource[pass.source]) {
+                                    "PictureComposite without a catalog recipe is not an active graph bridge."
+                                }
+                                require(scissor != null && (operand.colorFilter != null || operands.blend is BlendPlan.DestinationReadV1)) {
+                                    "Only IIIb2b graph filter or destination-snapshot variants may bypass IIIb2a's catalog recipe."
+                                }
+                                require(operand.finalBlend.canonicalLabel == operands.blend.canonicalLabel) {
+                                    "W6b Picture composite blend differs from its frozen graph-texture operand."
+                                }
+                                val filter = operand.colorFilter
+                                val filterOffset = filter?.let { requireNotNull(operand.colorFilterUniformOffsetI64) }
+                                val filterCapacity = filter?.let { requireNotNull(operand.colorFilterUniformByteCountI64) }
+                                val filterBuffer = filter?.let { execution ->
+                                    val offset = requireNotNull(filterOffset)
+                                    val capacity = requireNotNull(filterCapacity)
+                                    val bindingBytes = maxOf(16L, execution.dynamicByteCountI64)
+                                    require(Math.addExact(offset, bindingBytes) <= capacity)
+                                    graphTextureUniformBuffers.getValue(operand.uniformResource).also { buffer ->
+                                        if (execution.dynamicByteCountI64 > 0L)
+                                            queue.writeBuffer(buffer, offset.toULong(), ArrayBuffer.of(execution.copyDynamicBytes()))
+                                    }
+                                }
+                                filteredCompositeRender(
+                                    stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                                    sampleOffset, requireNotNull(scissor), operand.alphaF32, filter, filterBuffer,
+                                    if (filter == null) null else 0L, filterCapacity, filterOffset?.div(4L) ?: 0L,
+                                    (operands.blend as? BlendPlan.DestinationReadV1)?.snapshotResource?.let(views::get),
+                                    operands.blend, pass, owned,
+                                )
+                            }
+                            else -> error("Unexpected native-site recipe for PictureComposite ${pass.id.value}.")
                         }
                     }
                     is PlanPass.FilterComposite -> {
