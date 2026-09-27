@@ -33,6 +33,42 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FullscreenPictureSourceGraph,
     W6FilterSpatialCrop,
     W6FilterSpatialOffset,
+    W6FilterSpatialTile,
+}
+
+/** Bounded IIa2b selection. Tile is the periodic REPEAT operation, never a generic sampler. */
+public enum class W6FilterSpatialTileGroupZeroAbiV1 { Texture }
+public enum class W6FilterSpatialTileShaderFamilyV1 { TargetLocalTileRepeatTextureLoad }
+public class W6FilterSpatialTileRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId, public val target: PlanResourceId, public val source: PlanResourceId,
+    extent: org.graphiks.math.geometry.SizeI32, sourceExtent: org.graphiks.math.geometry.SizeI32,
+    sourceDomainTargetLocalI32: org.graphiks.math.geometry.RectI32, clipTargetLocalF64: org.graphiks.math.geometry.RectF64,
+    outputToInputOffsetTargetLocalF64: org.graphiks.math.vector.Vector2F64,
+    public val targetFormat: PlanLogicalColorFormat, public val sampleCountI32: Int,
+    public val sourceFormat: PlanLogicalColorFormat, public val sourceSampleCountI32: Int,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
+    public val groupZeroAbi: W6FilterSpatialTileGroupZeroAbiV1 = W6FilterSpatialTileGroupZeroAbiV1.Texture,
+    public val shaderFamily: W6FilterSpatialTileShaderFamilyV1 = W6FilterSpatialTileShaderFamilyV1.TargetLocalTileRepeatTextureLoad,
+    public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val frozenExtent = extent.copy(); private val frozenSourceExtent = sourceExtent.copy(); private val frozenDomain = sourceDomainTargetLocalI32.copy(); private val frozenClip = clipTargetLocalF64.copy()
+    private val frozenOffset = org.graphiks.math.vector.Vector2F64(outputToInputOffsetTargetLocalF64.x, outputToInputOffsetTargetLocalF64.y)
+    init { require(target != source && sampleCountI32 == 1 && sourceSampleCountI32 == 1 && !frozenDomain.isEmpty && !frozenClip.isEmpty) }
+    public fun copyExtent() = frozenExtent.copy(); public fun copySourceExtent() = frozenSourceExtent.copy(); public fun copySourceDomainTargetLocalI32() = frozenDomain.copy(); public fun copyClipTargetLocalF64() = frozenClip.copy()
+    public fun copyOutputToInputOffsetTargetLocalF64() = org.graphiks.math.vector.Vector2F64(frozenOffset.x, frozenOffset.y)
+    public fun nativeSiteOwnerV1(): NativeSiteOwnerV1 = NativeSiteOwnerV1(ownerPassId, 0, 0)
+    public fun canonicalLogicalEncodingV1(): String = W6FilterSpatialTileNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+public class W6FilterSpatialTileNativeSiteRecipeV1 internal constructor(public val host: W6FilterSpatialTileRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = host.nativeSiteOwnerV1(); override val family = NativeSiteRecipeFamilyV1.W6FilterSpatialTile
+    override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
+        text("owner", host.ownerPassId.value); int("ordinal", owner.drawOrPacketOrdinalI32); int("bundle", owner.bundleOrdinalI32); text("target", host.target.value); text("input.0", host.source.value); int("inputCount", 1)
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("sourceExtentWidth", host.copySourceExtent().width); int("sourceExtentHeight", host.copySourceExtent().height)
+        rect("sourceDomain", host.copySourceDomainTargetLocalI32()); rectF64("clip", host.copyClipTargetLocalF64()); double("offsetX", host.copyOutputToInputOffsetTargetLocalF64().x); double("offsetY", host.copyOutputToInputOffsetTargetLocalF64().y)
+        text("tileMode", "REPEAT"); enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat); int("sampleCount", host.sampleCountI32); enum("sourceFormat", host.sourceFormat); int("sourceSampleCount", host.sourceSampleCountI32); blend("blend", host.blend); enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily)
+        int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
 }
 
 /** Bounded IIa2a selection. Offset is always target-local DECAL sampling. */
@@ -680,6 +716,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         pictureSourceGraphs: Map<PlanPassId, W6FullscreenPictureSourceGraphRecipeV1>,
         spatialCrops: Map<PlanPassId, W6FilterSpatialCropRecipeV1>,
         spatialOffsets: Map<PlanPassId, W6FilterSpatialOffsetRecipeV1>,
+        spatialTiles: Map<PlanPassId, W6FilterSpatialTileRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -696,6 +733,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FullscreenPictureSourceGraphNativeSiteRecipeV1 -> pictureSourceGraphs[recipe.host.ownerPassId] === recipe.host
             is W6FilterSpatialCropNativeSiteRecipeV1 -> spatialCrops[recipe.host.ownerPassId] === recipe.host
             is W6FilterSpatialOffsetNativeSiteRecipeV1 -> spatialOffsets[recipe.host.ownerPassId] === recipe.host
+            is W6FilterSpatialTileNativeSiteRecipeV1 -> spatialTiles[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -721,6 +759,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     pictureSourceGraphs: Map<PlanPassId, W6FullscreenPictureSourceGraphRecipeV1> = emptyMap(),
     spatialCrops: Map<PlanPassId, W6FilterSpatialCropRecipeV1> = emptyMap(),
     spatialOffsets: Map<PlanPassId, W6FilterSpatialOffsetRecipeV1> = emptyMap(),
+    spatialTiles: Map<PlanPassId, W6FilterSpatialTileRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -736,6 +775,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     pictureSourceGraphs.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     spatialCrops.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     spatialOffsets.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    spatialTiles.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -750,6 +790,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingPictureSourceGraphs = pictureSourceGraphs.toMutableMap()
     val remainingSpatialCrops = spatialCrops.toMutableMap()
     val remainingSpatialOffsets = spatialOffsets.toMutableMap()
+    val remainingSpatialTiles = spatialTiles.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -778,6 +819,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
             is PlanPass.FilterPass -> {
                 remainingSpatialCrops.remove(pass.id)?.let { add(W6FilterSpatialCropNativeSiteRecipeV1(it)) }
                 remainingSpatialOffsets.remove(pass.id)?.let { add(W6FilterSpatialOffsetNativeSiteRecipeV1(it)) }
+                remainingSpatialTiles.remove(pass.id)?.let { add(W6FilterSpatialTileNativeSiteRecipeV1(it)) }
             }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
@@ -787,7 +829,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -943,6 +985,19 @@ public fun freezeW6FilterSpatialOffsetRecipesV1(
             requireNotNull(target.copyExtent()), requireNotNull(source.copyExtent()), sampling.copySourceInputTargetLocalI32(),
             sampling.copyClipOutputTargetLocalF64(), sampling.copyOutputToInputOffsetTargetLocalF64(),
             targetFormat, target.sampleCountI32, sourceFormat, source.sampleCountI32)) == null)
+    }
+}
+
+public fun freezeW6FilterSpatialTileRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<PlanPassId, W6FilterSpatialTileRecipeV1> = LinkedHashMap<PlanPassId, W6FilterSpatialTileRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+        val operation = pass.operation as? FilterPassOperationV1.Tile ?: return@forEach
+        require(pass.inputs().size == 1 && pass.frozenSamplingProgram == null)
+        val target = resources.single { it.id == pass.output }; val source = resources.single { it.id == pass.inputs().single() }
+        val targetFormat = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 Tile requires color target.")
+        val sourceFormat = (source.format as? PlanTextureFormat.Color)?.value ?: error("W6 Tile requires color source.")
+        require(target.sampleCountI32 == 1 && source.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages())
+        val sampling = operation.sampling
+        require(put(pass.id, W6FilterSpatialTileRecipeV1(pass.id, pass.output, pass.inputs().single(), requireNotNull(target.copyExtent()), requireNotNull(source.copyExtent()), operation.copySourceInputTargetLocalI32(), sampling.copyClipOutputTargetLocalF64(), sampling.copyOutputToInputOffsetTargetLocalF64(), targetFormat, target.sampleCountI32, sourceFormat, source.sampleCountI32)) == null)
     }
 }
 
