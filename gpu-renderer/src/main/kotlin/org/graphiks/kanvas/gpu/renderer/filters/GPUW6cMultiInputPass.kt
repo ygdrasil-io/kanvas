@@ -5,6 +5,8 @@ import org.graphiks.kanvas.gpu.plan.BlendFormulaProgramV1
 import org.graphiks.kanvas.gpu.plan.FilterInputSamplingV1
 import org.graphiks.kanvas.gpu.plan.FilterPassOperationV1
 import org.graphiks.kanvas.gpu.plan.W6FilterMergeRecipeV1
+import org.graphiks.kanvas.gpu.plan.W6FilterBlendRecipeV1
+import org.graphiks.kanvas.gpu.plan.W6FilterBlendInputRecipeV1
 
 /** Native-only consumer of W6c's already ordered, already selected multi-input payloads. */
 internal object GPUW6cMultiInputPass {
@@ -24,7 +26,12 @@ internal object GPUW6cMultiInputPass {
         append("return result;\n}")
     }
 
-    internal fun blendFragment(operation: FilterPassOperationV1.Blend): String = buildString {
+    internal fun blendFragment(recipe: W6FilterBlendRecipeV1): String = buildString {
+        appendBlendDeclarations(listOf(recipe.background(), recipe.foreground()))
+        append(recipe.blendFormulaWgsl)
+        append("@fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {\nlet background = w6c_sample_0(position);\nlet foreground = w6c_sample_1(position);\nreturn w6d2_frozen_blend(foreground, background);\n}")
+    }
+    internal fun legacyBlendFragment(operation: FilterPassOperationV1.Blend): String = buildString {
         appendDeclarations(listOf(operation.backgroundSampling(), operation.foregroundSampling()))
         val formula = requireNotNull(BlendFormulaProgramV1.selectedBlendFunctionWgsl(
             operation.blend.frozenModeLabel(), "w6c_frozen_blend",
@@ -45,6 +52,12 @@ internal object GPUW6cMultiInputPass {
             append("let extent = vec2<i32>(textureDimensions(w6c_input_$indexI32));\n")
             append("if (coordinate.x < 0 || coordinate.y < 0 || coordinate.x >= extent.x || coordinate.y >= extent.y) { return vec4<f32>(0.0); }\n")
             append("return textureLoad(w6c_input_$indexI32, coordinate, 0);\n}\n")
+        }
+    }
+    private fun StringBuilder.appendBlendDeclarations(samplings: List<W6FilterBlendInputRecipeV1>) {
+        samplings.forEachIndexed { indexI32, sampling ->
+            val offset = sampling.copyOutputToInputOffsetTargetLocalI32()
+            append("@group(0) @binding($indexI32) var w6c_input_$indexI32: texture_2d<f32>;\nfn w6c_sample_$indexI32(position: vec4<f32>) -> vec4<f32> {\nlet coordinate = vec2<i32>(position.xy) + vec2<i32>(${offset.x}, ${offset.y});\nlet extent = vec2<i32>(textureDimensions(w6c_input_$indexI32));\nif (coordinate.x < 0 || coordinate.y < 0 || coordinate.x >= extent.x || coordinate.y >= extent.y) { return vec4<f32>(0.0); }\nreturn textureLoad(w6c_input_$indexI32, coordinate, 0);\n}\n")
         }
     }
 

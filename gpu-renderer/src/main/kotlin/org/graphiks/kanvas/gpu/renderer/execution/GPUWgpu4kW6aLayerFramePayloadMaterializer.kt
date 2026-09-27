@@ -473,6 +473,62 @@ private fun preflightW6FilterMerges(frame: GPUW6aLayerFramePlan, framePlan: GPUF
     }
 }
 
+/** IId2 authenticates Blend's ordered two inputs and its recorded fullscreen pass before device.create*. */
+private fun preflightW6FilterBlends(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterBlendRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterBlendRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterBlendRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass
+            ?: error("W6 Blend owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.Blend
+            ?: error("W6 Blend operation changed after seal.")
+        val inputs = listOf(actual.background(), actual.foreground())
+        val samplings = listOf(operation.backgroundSampling(), operation.foregroundSampling())
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single {
+            it.w6aPassV1?.id == id
+        }
+        val uses = inputs.map { input ->
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+                frame.refs.getValue(input.source),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal,
+                false,
+            )
+        }
+        val target = frame.physical.resource(actual.target)
+        require(
+            actual.ownerPassId == pass.id && actual.target == pass.output &&
+                inputs.map { it.source } == pass.inputs() && inputs.size == 2 &&
+                actual.blend == operation.blend &&
+                inputs.zip(samplings).all { (input, sampling) ->
+                    input.copyKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32() &&
+                        input.copyOutputToInputOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32()
+                } &&
+                actual.groupZeroAbi == W6FilterBlendGroupZeroAbiV1.BackgroundAndForegroundTextures &&
+                actual.shaderFamily == W6FilterBlendShaderFamilyV1.FrozenW5BlendFormulaTextureLoad &&
+                actual.load == AttachmentLoadPlan.ClearTransparent && actual.store == AttachmentStorePlan.Store &&
+                target.copyExtent() == actual.copyExtent() &&
+                target.format == PlanTextureFormat.Color(actual.targetFormat) &&
+                target.sampleCountI32 == actual.sampleCountI32 &&
+                PlanResourceUsage.RenderAttachment in target.usages() &&
+                inputs.all { input ->
+                    val source = frame.physical.resource(input.source)
+                    source.copyExtent() == input.copyExtent() &&
+                        source.format == PlanTextureFormat.Color(input.format) &&
+                        source.sampleCountI32 == input.sampleCountI32 &&
+                        PlanResourceUsage.Sampled in source.usages()
+                } &&
+                render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses &&
+                render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" &&
+                render.loadStore.storePlan == GPUStorePlan.Store &&
+                render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null,
+        ) { "W6 Blend physical or recorded preflight differs from its frozen recipe." }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -534,6 +590,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterMorphologies(frame, framePlan)
             preflightW6FilterColorFilters(frame, framePlan)
             preflightW6FilterMerges(frame, framePlan)
+            preflightW6FilterBlends(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1268,19 +1325,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMergeNativeSiteRecipeV1) {
                             val recipe = frame.physical.w6FilterMergeRecipe(pass.id)
                             renderOperands += mergeRender(stepIndex, views.getValue(recipe.target), recipe.inputs().map { views.getValue(it.source) }, generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterBlendNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterBlendRecipe(pass.id)
+                            renderOperands += blendRender(stepIndex, views.getValue(recipe.target),
+                                listOf(views.getValue(recipe.background().source), views.getValue(recipe.foreground().source)),
+                                generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Tile -> error("Tile pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.ColorFilter -> error("ColorFilter pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Merge -> error("Merge pass is missing its frozen native-site recipe.")
-                            is FilterPassOperationV1.Blend -> {
-                                require(pass.inputs().size == 2)
-                                renderOperands += multiInputRender(stepIndex, views.getValue(pass.output),
-                                    pass.inputs().map(views::getValue), generation,
-                                    W6A_VERTEX_SHADER + GPUW6cMultiInputPass.blendFragment(operation),
-                                    outputExtent.width, outputExtent.height, pass, owned)
-                            }
+                            is FilterPassOperationV1.Blend -> error("Blend pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Morphology -> error("Morphology pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.SeparableBlur -> {
                                 require(operation.kind in setOf(
@@ -2422,7 +2478,37 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         ), w6aPassV1 = pass)
     }
 
-    /** Binds the FilterPass input list positionally; Blend remains outside IId1. */
+    /** Mechanical IId2 translation: the Blend recipe owns target, ABI, shader, load/store and draw. */
+    private fun blendRender(stepIndex: Int, target: GPUTextureView, sources: List<GPUTextureView>, generation: GPUDeviceGenerationID,
+        recipe: W6FilterBlendRecipeV1, pass: PlanPass.FilterPass, owned: W6aOwnedHandles): GPUPreparedNativeScopeOperand.Render {
+        require(sources.size == 2 && recipe.ownerPassId == pass.id && recipe.target == pass.output &&
+            recipe.groupZeroAbi == W6FilterBlendGroupZeroAbiV1.BackgroundAndForegroundTextures &&
+            recipe.shaderFamily == W6FilterBlendShaderFamilyV1.FrozenW5BlendFormulaTextureLoad &&
+            recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = sources.indices.map {
+            BindGroupLayoutEntry(it.toUInt(), GPUShaderStage.Fragment, texture = TextureBindingLayout())
+        })))
+        // The formula has already applied recipe.blend in the fragment output.  The clear target
+        // therefore retains the historical source-over color target without blending it twice.
+        val pipeline = pipeline(W6A_VERTEX_SHADER + GPUW6cMultiInputPass.blendFragment(recipe), layout,
+            w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
+            entries = sources.mapIndexed { index, source -> BindGroupEntry(index.toUInt(), source) })))
+        val extent = recipe.copyExtent()
+        return GPUPreparedNativeScopeOperand.Render(stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32,
+                    recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
+            ), w6aPassV1 = pass)
+    }
+
+    /** Binds the non-Blend FilterPass input list positionally. */
     private fun multiInputRender(
         stepIndex: Int,
         target: GPUTextureView,
