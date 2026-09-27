@@ -31,6 +31,67 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FullscreenCoverageRetain,
     W6FullscreenPictureSourceLayer,
     W6FullscreenPictureSourceGraph,
+    W6FilterSpatialCrop,
+}
+
+/** The first bounded IIa site. Offset and Tile deliberately remain outside this family. */
+public enum class W6FilterSpatialCropGroupZeroAbiV1 { Texture }
+public enum class W6FilterSpatialCropShaderFamilyV1 { TargetLocalCropTextureLoad }
+
+/**
+ * Planner-owned Crop selection.  These are the complete target-local facts consumed by the
+ * renderer's WGSL translation; native lowering never reselects them from FilterPass.
+ */
+public class W6FilterSpatialCropRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId,
+    public val target: PlanResourceId,
+    public val source: PlanResourceId,
+    extent: org.graphiks.math.geometry.SizeI32,
+    sourceExtent: org.graphiks.math.geometry.SizeI32,
+    sourceDomainTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    clipTargetLocalF64: org.graphiks.math.geometry.RectF64,
+    outputToInputOffsetTargetLocalF64: org.graphiks.math.vector.Vector2F64,
+    public val tileMode: org.graphiks.kanvas.render.ir.TileMode,
+    public val targetFormat: PlanLogicalColorFormat,
+    public val sampleCountI32: Int,
+    public val sourceFormat: PlanLogicalColorFormat,
+    public val sourceSampleCountI32: Int,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent,
+    public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
+    public val groupZeroAbi: W6FilterSpatialCropGroupZeroAbiV1 = W6FilterSpatialCropGroupZeroAbiV1.Texture,
+    public val shaderFamily: W6FilterSpatialCropShaderFamilyV1 = W6FilterSpatialCropShaderFamilyV1.TargetLocalCropTextureLoad,
+    public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val frozenExtent = extent.copy(); private val frozenSourceExtent = sourceExtent.copy()
+    private val frozenDomain = sourceDomainTargetLocalI32.copy(); private val frozenClip = clipTargetLocalF64.copy()
+    private val frozenOffset = org.graphiks.math.vector.Vector2F64(outputToInputOffsetTargetLocalF64.x, outputToInputOffsetTargetLocalF64.y)
+    init { require(target != source && sampleCountI32 == 1 && sourceSampleCountI32 == 1 && !frozenDomain.isEmpty && !frozenClip.isEmpty) }
+    public fun copyExtent(): org.graphiks.math.geometry.SizeI32 = frozenExtent.copy()
+    public fun copySourceExtent(): org.graphiks.math.geometry.SizeI32 = frozenSourceExtent.copy()
+    public fun copySourceDomainTargetLocalI32(): org.graphiks.math.geometry.RectI32 = frozenDomain.copy()
+    public fun copyClipTargetLocalF64(): org.graphiks.math.geometry.RectF64 = frozenClip.copy()
+    public fun copyOutputToInputOffsetTargetLocalF64(): org.graphiks.math.vector.Vector2F64 = org.graphiks.math.vector.Vector2F64(frozenOffset.x, frozenOffset.y)
+    public fun nativeSiteOwnerV1(): NativeSiteOwnerV1 = NativeSiteOwnerV1(ownerPassId, 0, 0)
+    public fun canonicalLogicalEncodingV1(): String = W6FilterSpatialCropNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+
+public class W6FilterSpatialCropNativeSiteRecipeV1 internal constructor(public val host: W6FilterSpatialCropRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32: Int = 1
+    override val owner: NativeSiteOwnerV1 = host.nativeSiteOwnerV1()
+    override val family: NativeSiteRecipeFamilyV1 = NativeSiteRecipeFamilyV1.W6FilterSpatialCrop
+    override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
+        text("owner", host.ownerPassId.value); int("ordinal", owner.drawOrPacketOrdinalI32); int("bundle", owner.bundleOrdinalI32)
+        text("target", host.target.value); text("input.0", host.source.value); int("inputCount", 1)
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height)
+        int("sourceExtentWidth", host.copySourceExtent().width); int("sourceExtentHeight", host.copySourceExtent().height)
+        rect("sourceDomain", host.copySourceDomainTargetLocalI32()); rectF64("clip", host.copyClipTargetLocalF64())
+        double("offsetX", host.copyOutputToInputOffsetTargetLocalF64().x); double("offsetY", host.copyOutputToInputOffsetTargetLocalF64().y)
+        enum("tileMode", host.tileMode); enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat); int("sampleCount", host.sampleCountI32)
+        enum("sourceFormat", host.sourceFormat); int("sourceSampleCount", host.sourceSampleCountI32); blend("blend", host.blend)
+        enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily)
+        int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
 }
 
 /**
@@ -561,6 +622,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         coverageRetains: Map<PlanPassId, W6FullscreenCoverageRetainRecipeV1>,
         pictureSourceLayers: Map<PlanPassId, W6FullscreenPictureSourceLayerRecipeV1>,
         pictureSourceGraphs: Map<PlanPassId, W6FullscreenPictureSourceGraphRecipeV1>,
+        spatialCrops: Map<PlanPassId, W6FilterSpatialCropRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -575,6 +637,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FullscreenCoverageRetainNativeSiteRecipeV1 -> coverageRetains[recipe.host.ownerPassId] === recipe.host
             is W6FullscreenPictureSourceLayerNativeSiteRecipeV1 -> pictureSourceLayers[recipe.host.ownerPassId] === recipe.host
             is W6FullscreenPictureSourceGraphNativeSiteRecipeV1 -> pictureSourceGraphs[recipe.host.ownerPassId] === recipe.host
+            is W6FilterSpatialCropNativeSiteRecipeV1 -> spatialCrops[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -598,6 +661,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     coverageRetains: Map<PlanPassId, W6FullscreenCoverageRetainRecipeV1> = emptyMap(),
     pictureSourceLayers: Map<PlanPassId, W6FullscreenPictureSourceLayerRecipeV1> = emptyMap(),
     pictureSourceGraphs: Map<PlanPassId, W6FullscreenPictureSourceGraphRecipeV1> = emptyMap(),
+    spatialCrops: Map<PlanPassId, W6FilterSpatialCropRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -611,6 +675,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     coverageRetains.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     pictureSourceLayers.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     pictureSourceGraphs.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    spatialCrops.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -623,6 +688,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingCoverageRetains = coverageRetains.toMutableMap()
     val remainingPictureSourceLayers = pictureSourceLayers.toMutableMap()
     val remainingPictureSourceGraphs = pictureSourceGraphs.toMutableMap()
+    val remainingSpatialCrops = spatialCrops.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -648,6 +714,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingPictureSourceLayers.remove(pass.id)?.let { add(W6FullscreenPictureSourceLayerNativeSiteRecipeV1(it)) }
                 remainingPictureSourceGraphs.remove(pass.id)?.let { add(W6FullscreenPictureSourceGraphNativeSiteRecipeV1(it)) }
             }
+            is PlanPass.FilterPass -> remainingSpatialCrops.remove(pass.id)?.let { add(W6FilterSpatialCropNativeSiteRecipeV1(it)) }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
             is PlanPass.FilterComposite -> remainingEmpties.remove(pass.id)?.let { add(W6FullscreenEmptyNativeSiteRecipeV1(it)) }
@@ -656,7 +723,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -777,6 +844,25 @@ public fun freezeW6FullscreenEmptyRecipesV1(
     } }
 }
 
+/** Freezes IIa1 only. Offset and Tile remain deliberately absent until IIa2. */
+public fun freezeW6FilterSpatialCropRecipesV1(
+    passes: List<PlanPass>, resources: List<PlanResource>,
+): Map<PlanPassId, W6FilterSpatialCropRecipeV1> = LinkedHashMap<PlanPassId, W6FilterSpatialCropRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+        val operation = pass.operation as? FilterPassOperationV1.Crop ?: return@forEach
+        require(pass.inputs().size == 1 && pass.frozenSamplingProgram == null)
+        val target = resources.single { it.id == pass.output }; val source = resources.single { it.id == pass.inputs().single() }
+        val targetFormat = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 Crop requires color target.")
+        val sourceFormat = (source.format as? PlanTextureFormat.Color)?.value ?: error("W6 Crop requires color source.")
+        require(target.sampleCountI32 == 1 && source.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages())
+        val sampling = operation.sampling
+        require(put(pass.id, W6FilterSpatialCropRecipeV1(pass.id, pass.output, pass.inputs().single(),
+            requireNotNull(target.copyExtent()), requireNotNull(source.copyExtent()), sampling.copySourceInputTargetLocalI32(),
+            sampling.copyClipOutputTargetLocalF64(), sampling.copyOutputToInputOffsetTargetLocalF64(), operation.tileMode,
+            targetFormat, target.sampleCountI32, sourceFormat, source.sampleCountI32)) == null)
+    }
+}
+
 private fun W6GeometrySiteKeyV1.nativeSiteOwnerV1(): NativeSiteOwnerV1 =
     NativeSiteOwnerV1(ownerPassId, drawOrdinalI32, 0)
 
@@ -795,6 +881,7 @@ private class NativeSiteEncodingWriterV1(family: NativeSiteRecipeFamilyV1) {
 
     fun int(name: String, value: Int) { field(name, value.toString()) }
     fun long(name: String, value: Long) { field(name, value.toString()) }
+    fun double(name: String, value: Double) { field(name, value.toRawBits().toULong().toString(16)) }
     fun float(name: String, value: Float) { field(name, value.toRawBits().toUInt().toString(16)) }
     fun text(name: String, value: String) { field(name, value) }
     fun enum(name: String, value: Enum<*>) { field(name, value.name) }
@@ -848,6 +935,10 @@ private class NativeSiteEncodingWriterV1(family: NativeSiteRecipeFamilyV1) {
     fun rectF32(name: String, value: org.graphiks.math.geometry.RectF32) {
         float("$name.left", value.left); float("$name.top", value.top)
         float("$name.right", value.right); float("$name.bottom", value.bottom)
+    }
+    fun rectF64(name: String, value: org.graphiks.math.geometry.RectF64) {
+        double("$name.left", value.left); double("$name.top", value.top)
+        double("$name.right", value.right); double("$name.bottom", value.bottom)
     }
     fun rect(name: String, value: org.graphiks.math.geometry.RectI32) {
         int("$name.left", value.left)

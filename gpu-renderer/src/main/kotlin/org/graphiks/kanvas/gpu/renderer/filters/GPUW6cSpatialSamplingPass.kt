@@ -2,11 +2,17 @@ package org.graphiks.kanvas.gpu.renderer.filters
 
 import org.graphiks.kanvas.gpu.plan.FilterPassOperationV1
 import org.graphiks.kanvas.gpu.plan.SpatialSamplingV1
+import org.graphiks.kanvas.gpu.plan.W6FilterSpatialCropRecipeV1
 import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.geometry.RectI32
 
 /** Native consumer for an already sealed W6c spatial payload; it owns no bounds calculation. */
 internal object GPUW6cSpatialSamplingPass {
+    /** IIa1 consumes only planner-frozen Crop facts, never the mutable pass selector. */
+    internal fun fragment(recipe: W6FilterSpatialCropRecipeV1): String = sampler(
+        recipe.copySourceDomainTargetLocalI32(), recipe.copyClipTargetLocalF64(),
+        recipe.copyOutputToInputOffsetTargetLocalF64(), recipe.tileMode, false,
+    )
     internal fun fragment(operation: FilterPassOperationV1): String = when (operation) {
         is FilterPassOperationV1.Crop -> sampler(operation.sampling, operation.sampling.copySourceInputTargetLocalI32(), operation.tileMode, false)
         is FilterPassOperationV1.Offset -> sampler(operation.sampling, operation.sampling.copySourceInputTargetLocalI32(), TileMode.DECAL, false)
@@ -14,9 +20,11 @@ internal object GPUW6cSpatialSamplingPass {
         else -> error("W6c spatial sampler received ${operation.kind}.")
     }
 
-    private fun sampler(sampling: SpatialSamplingV1, sampleDomain: RectI32, tileMode: TileMode, periodic: Boolean): String {
-        val clip = sampling.copyClipOutputTargetLocalF64()
-        val offset = sampling.copyOutputToInputOffsetTargetLocalF64()
+    private fun sampler(sampling: SpatialSamplingV1, sampleDomain: RectI32, tileMode: TileMode, periodic: Boolean): String =
+        sampler(sampleDomain, sampling.copyClipOutputTargetLocalF64(), sampling.copyOutputToInputOffsetTargetLocalF64(), tileMode, periodic)
+
+    private fun sampler(sampleDomain: RectI32, clip: org.graphiks.math.geometry.RectF64,
+        offset: org.graphiks.math.vector.Vector2F64, tileMode: TileMode, periodic: Boolean): String {
         val repeat = periodic || tileMode == TileMode.REPEAT || tileMode == TileMode.MIRROR
         val coordinate = if (repeat) periodicCoordinate(sampleDomain, offset, tileMode) else """
             var source_position = vec2<i32>(floor(position.xy + vec2<f32>(${offset.x}f, ${offset.y}f)));

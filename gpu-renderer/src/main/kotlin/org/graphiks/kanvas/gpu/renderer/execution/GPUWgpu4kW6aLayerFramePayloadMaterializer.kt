@@ -359,6 +359,32 @@ private fun preflightW6FullscreenPictureSourceGraphs(frame: GPUW6aLayerFramePlan
     }
 }
 
+/** IIa1 authenticates Crop's exact physical and recorded texture use before device.create*. */
+private fun preflightW6FilterSpatialCrops(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterSpatialCropRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterSpatialCropRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterSpatialCropRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 Crop owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.Crop ?: error("W6 Crop operation changed after seal.")
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+            frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        val target = frame.physical.resource(actual.target); val source = frame.physical.resource(actual.source)
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.source == pass.inputs().single() &&
+            actual.tileMode == operation.tileMode && actual.copySourceDomainTargetLocalI32() == operation.sampling.copySourceInputTargetLocalI32() &&
+            actual.copyClipTargetLocalF64() == operation.sampling.copyClipOutputTargetLocalF64() &&
+            actual.copyOutputToInputOffsetTargetLocalF64() == operation.sampling.copyOutputToInputOffsetTargetLocalF64() &&
+            target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && target.sampleCountI32 == actual.sampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() &&
+            source.copyExtent() == actual.copySourceExtent() && source.format == PlanTextureFormat.Color(actual.sourceFormat) && source.sampleCountI32 == actual.sourceSampleCountI32 && PlanResourceUsage.Sampled in source.usages() &&
+            render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() &&
+            render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null)
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -414,6 +440,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FullscreenCoverageRetains(frame, framePlan)
             preflightW6FullscreenPictureSourceLayers(frame, framePlan)
             preflightW6FullscreenPictureSourceGraphs(frame, framePlan)
+            preflightW6FilterSpatialCrops(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1126,9 +1153,12 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> {
                                 require(pass.inputs().size == 1)
+                                val recipe = frame.physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(pass.id, 0, 0)) as? W6FilterSpatialCropNativeSiteRecipeV1
+                                    ?: error("Crop pass is missing its frozen native-site recipe.")
+                                require(recipe.host === frame.physical.w6FilterSpatialCropRecipe(pass.id) && recipe.host.target == pass.output && recipe.host.source == pass.inputs().single())
                                 renderOperands += textureRender(stepIndex, views.getValue(pass.output),
                                     views.getValue(pass.inputs().single()), generation,
-                                    W6A_VERTEX_SHADER + GPUW6cSpatialSamplingPass.fragment(operation), BlendPlan.LegacySrcOverV1,
+                                    W6A_VERTEX_SHADER + GPUW6cSpatialSamplingPass.fragment(recipe.host), recipe.host.blend,
                                     0, 0, outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.Offset,

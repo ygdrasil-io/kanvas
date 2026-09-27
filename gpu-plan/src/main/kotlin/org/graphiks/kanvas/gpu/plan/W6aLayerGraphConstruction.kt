@@ -3225,6 +3225,7 @@ internal class W6aLayerGraphConstruction(
         val w6FullscreenCoverageRetainRecipes = freezeW6FullscreenCoverageRetainRecipesV1(passes, resources + source.resources)
         val w6FullscreenPictureSourceLayerRecipes = freezeW6FullscreenPictureSourceLayerRecipesV1(passes, resources + source.resources)
         val w6FullscreenPictureSourceGraphRecipes = freezeW6FullscreenPictureSourceGraphRecipesV1(passes, resources + source.resources)
+        val w6FilterSpatialCropRecipes = freezeW6FilterSpatialCropRecipesV1(passes, resources + source.resources)
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
             passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
             plainLayerCompositeRecipes, clipMaskInitializeRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
@@ -3233,6 +3234,7 @@ internal class W6aLayerGraphConstruction(
             w6FullscreenCoverageRetainRecipes,
             w6FullscreenPictureSourceLayerRecipes,
             w6FullscreenPictureSourceGraphRecipes,
+            w6FilterSpatialCropRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3253,6 +3255,7 @@ internal class W6aLayerGraphConstruction(
             w6FullscreenCoverageRetainRecipes = w6FullscreenCoverageRetainRecipes,
             w6FullscreenPictureSourceLayerRecipes = w6FullscreenPictureSourceLayerRecipes,
             w6FullscreenPictureSourceGraphRecipes = w6FullscreenPictureSourceGraphRecipes,
+            w6FilterSpatialCropRecipes = w6FilterSpatialCropRecipes,
             nativeSiteRecipeCatalogV1 = nativeSiteRecipeCatalog,
         )
         val allResources = resources + finalSource.resources
