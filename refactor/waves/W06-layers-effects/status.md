@@ -832,3 +832,22 @@ Vérification : `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
 rapporte 21 tests JUnit passés (pixels et scopes `Render` + `Readback`), puis
 le worker natif termine 133 : native **UNKNOWN**, non assimilée à un succès
 Gradle. Aucun budget, lease ou authentification 2B n'est revendiqué.
+
+### 2A0b.IIIb2b1 — PictureComposite graph-texture filtré sans snapshot
+
+Le `DrawPicture` muni d'un `colorFilter` est admis sur la route W6 lorsqu'un
+sibling `saveLayer` non vide établit l'ownership de la frame ; le seul test
+top-level suivait la continuation legacy et son refus `unsupported.composite.paint`
+n'était pas une preuve d'inaccessibilité. Un témoin public de cette route fixe
+l'attendu avant `PictureRecorder`/`Surface`, puis vérifie pixels et scopes
+`Render` + `Readback`.
+
+`W6PictureCompositeGraphFilteredRecipeV1` scelle le graph operand, l'identité
+W5f, la fenêtre uniforme, les extents et le draw. La préparation enregistre
+source et uniforme ; le préflight les authentifie avant allocation ; le
+renderer traduit la recette via un helper dédié. La review Sol du commit
+`58cd9e4` a relevé un fallback encore admissible sans recette filtrée ; le
+correctif `88261b4` le réserve au seul destination-read futur, et sa relecture
+est **Approved**. Les trois compilations ciblées sortent 0 ; le XML public
+`W6dPictureFilterSurfacePixelTest` est `22/0/0/0`. Le worker natif sort 133 :
+**UNKNOWN**. IIIb2b2, IIIc, budget/leases et 2B restent ouverts.
