@@ -17,6 +17,8 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dLightingPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dPictureSamplingPass
 import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -167,7 +169,7 @@ private fun preflightW6bCoverageRasters(frame: GPUW6aLayerFramePlan, framePlan: 
 }
 
 /** Checks all and only the planned Empty programs before the first native allocation. */
-private fun preflightW6FullscreenEmpties(frame: GPUW6aLayerFramePlan) {
+private fun preflightW6FullscreenEmpties(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
     val expected = freezeW6FullscreenEmptyRecipesV1(frame.graph.passes(), frame.graph.resources())
     require(frame.physical.w6FullscreenEmptyRecipes().keys == expected.keys)
     expected.forEach { (passId, frozen) ->
@@ -175,6 +177,15 @@ private fun preflightW6FullscreenEmpties(frame: GPUW6aLayerFramePlan) {
         require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1() && actual.inputs().isEmpty()) {
             "W6 Empty native preflight differs from its frozen planner recipe."
         }
+        val row = frame.physical.resource(actual.target)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single {
+            it.w6aPassV1?.id == passId
+        }
+        require(render.target == frame.refs.getValue(actual.target) && render.resourceUses.isEmpty() && render.drawPackets.isEmpty() &&
+            row.copyExtent() == actual.copyExtent() && row.format == PlanTextureFormat.Color(actual.targetFormat) &&
+            row.sampleCountI32 == actual.sampleCountI32 && render.samplePlan is GPUSamplePlan.SingleSampleFrame &&
+            render.loadStore.loadOp == (if (actual.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load") &&
+            render.loadStore.storePlan == GPUStorePlan.Store) { "W6 Empty physical render step differs from its frozen recipe." }
     }
 }
 
@@ -227,7 +238,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         var spatialBinding: GPUW6cSpatialFilterSessionCache.Binding? = null
         try {
             val graph = frame.graph
-            preflightW6FullscreenEmpties(frame)
+            preflightW6FullscreenEmpties(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1919,25 +1930,30 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         recipe: W6FullscreenEmptyRecipeV1,
         owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
-        require(recipe.ownerPassId == pass.id && recipe.inputs().isEmpty())
+        require(recipe.ownerPassId == pass.id && recipe.inputs().isEmpty() &&
+            recipe.topology == W6FullscreenEmptyTopologyV1.FullscreenTriangle &&
+            recipe.groupZeroAbi == W6FullscreenEmptyGroupZeroAbiV1.Empty)
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = emptyList())))
         val pipeline = pipeline(W6A_VERTEX_SHADER + """
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
                 return vec4<f32>(0.0);
             }
-        """, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        """, layout, w6aColorTarget(recipe.blend), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = emptyList())))
         return GPUPreparedNativeScopeOperand.Render(
             stepIndex,
             GPUPreparedNativeRenderPassConfig(
                 GPUPreparedNativeTextureViewOperand(target, generation),
                 loadOperation = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load,
-                clearColor = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null,
+                clearColor = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeClearColor(
+                    recipe.clearColor.redF32.toDouble(), recipe.clearColor.greenF32.toDouble(),
+                    recipe.clearColor.blueF32.toDouble(), recipe.clearColor.alphaF32.toDouble()) else null,
             ),
             listOf(
                 GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
                 GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
-                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32,
+                    recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
             ),
             w6aPassV1 = pass,
         )

@@ -45,21 +45,37 @@ public enum class W6FullscreenEmptyPhaseV1 {
     PictureAggregateBegin, FilterTransparentBlack, CoverageAbsent, PictureAggregateSeal,
     PictureCompositeNoScissor, FilterCompositeNoOp, FilterCompositeNoScissor,
 }
+public enum class W6FullscreenEmptyGroupZeroAbiV1 { Empty }
+public enum class W6FullscreenEmptyTopologyV1 { FullscreenTriangle }
+public data class W6FullscreenEmptyDrawV1(
+    public val vertexCountI32: Int = 3,
+    public val instanceCountI32: Int = 1,
+    public val firstVertexI32: Int = 0,
+    public val firstInstanceI32: Int = 0,
+) { init { require(vertexCountI32 == 3 && instanceCountI32 == 1 && firstVertexI32 == 0 && firstInstanceI32 == 0) } }
 
 /** Planner-owned 2A0b.Ia fullscreen Empty recipe. Group zero is deliberately empty. */
 public class W6FullscreenEmptyRecipeV1 internal constructor(
     public val ownerPassId: PlanPassId,
     public val phase: W6FullscreenEmptyPhaseV1,
     public val target: PlanResourceId,
+    extent: org.graphiks.math.geometry.SizeI32,
     inputs: List<PlanResourceId>,
     public val load: AttachmentLoadPlan,
     public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
     public val targetFormat: PlanLogicalColorFormat,
     public val sampleCountI32: Int,
+    public val clearColor: W6CanonicalColorF32V1 = W6CanonicalColorF32V1.of(0f, 0f, 0f, 0f),
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
+    public val topology: W6FullscreenEmptyTopologyV1 = W6FullscreenEmptyTopologyV1.FullscreenTriangle,
+    public val groupZeroAbi: W6FullscreenEmptyGroupZeroAbiV1 = W6FullscreenEmptyGroupZeroAbiV1.Empty,
+    public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
 ) {
     private val frozenInputs = immutableList(inputs)
+    private val frozenExtent = extent.copy()
     init { require(frozenInputs.isEmpty() && sampleCountI32 == 1 && target !in frozenInputs) }
     public fun inputs(): List<PlanResourceId> = frozenInputs
+    public fun copyExtent(): org.graphiks.math.geometry.SizeI32 = frozenExtent.copy()
     public fun nativeSiteOwnerV1(): NativeSiteOwnerV1 = NativeSiteOwnerV1(ownerPassId, 0, 0)
     public fun canonicalLogicalEncodingV1(): String = W6FullscreenEmptyNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
 }
@@ -71,9 +87,13 @@ public class W6FullscreenEmptyNativeSiteRecipeV1 internal constructor(
     override val owner: NativeSiteOwnerV1 = host.nativeSiteOwnerV1()
     override val family: NativeSiteRecipeFamilyV1 = NativeSiteRecipeFamilyV1.W6FullscreenEmpty
     override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
-        enum("phase", host.phase); text("target", host.target.value); int("inputCount", host.inputs().size)
+        text("owner", host.ownerPassId.value); int("ordinal", owner.drawOrPacketOrdinalI32); int("bundle", owner.bundleOrdinalI32)
+        enum("phase", host.phase); text("target", host.target.value); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("inputCount", host.inputs().size)
         enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat)
-        int("sampleCount", host.sampleCountI32); text("topology", "FullscreenTriangle"); text("groupZeroAbi", "Empty")
+        int("sampleCount", host.sampleCountI32); color("clearColor", host.clearColor); blend("blend", host.blend)
+        enum("topology", host.topology); enum("groupZeroAbi", host.groupZeroAbi)
+        int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32)
+        int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
     }
 }
 
@@ -363,7 +383,7 @@ public fun freezeW6FullscreenEmptyRecipesV1(
         val format = (row.format as? PlanTextureFormat.Color)?.value
             ?: error("W6 Empty requires a color attachment.")
         require(row.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in row.usages())
-        require(put(pass.id, W6FullscreenEmptyRecipeV1(pass.id, phase, target, emptyList(), load,
+        require(put(pass.id, W6FullscreenEmptyRecipeV1(pass.id, phase, target, requireNotNull(row.copyExtent()), emptyList(), load,
             AttachmentStorePlan.Store, format, row.sampleCountI32)) == null)
     }
     passes.forEach { pass -> when (pass) {

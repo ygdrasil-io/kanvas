@@ -23,9 +23,13 @@ import org.junit.jupiter.api.Test
 class W6aLayerSurfacePixelTest {
     @Test
     fun `emptyLayerWithoutAnySourceRemainsTransparent`() {
+        val expected = UByteArray(64)
         val surface = Surface(4, 4)
         surface.canvas { saveLayer(); restore() }
-        assertContentEquals(UByteArray(64), surface.render().pixels)
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test
