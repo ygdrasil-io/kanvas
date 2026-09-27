@@ -52,6 +52,7 @@ internal class SourcePhysicalConstructionV1(
     val w6FilterCompositeLayerFilteredRecipes: Map<PlanPassId, W6FilterCompositeLayerFilteredRecipeV1> = emptyMap(),
     val w6FilterCompositeLayerDestinationRecipes: Map<PlanPassId, W6FilterCompositeLayerDestinationRecipeV1> = emptyMap(),
     val w6FilterCompositeLayerFilteredDestinationRecipes: Map<PlanPassId, W6FilterCompositeLayerFilteredDestinationRecipeV1> = emptyMap(),
+    val w6FilterCompositePicturePlainRecipes: Map<PlanPassId, W6FilterCompositePicturePlainRecipeV1> = emptyMap(),
     /** Final W4e ClipMaskInitialize recipes, limited to the final W4e bindings. */
     val w4eClipMaskInitializeRecipes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1> = emptyMap(),
     /** Final W6b V/I/U coverage-raster bundles; renderer selection remains intentionally open until 2P7b. */
@@ -146,6 +147,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     filterCompositeLayerFilteredRecipes: Map<PlanPassId, W6FilterCompositeLayerFilteredRecipeV1>,
     filterCompositeLayerDestinationRecipes: Map<PlanPassId, W6FilterCompositeLayerDestinationRecipeV1>,
     filterCompositeLayerFilteredDestinationRecipes: Map<PlanPassId, W6FilterCompositeLayerFilteredDestinationRecipeV1>,
+    filterCompositePicturePlainRecipes: Map<PlanPassId, W6FilterCompositePicturePlainRecipeV1>,
     w4eClipMaskInitializeRecipes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
     w6bCoverageRasterGeometry: Map<PlanPassId, W6bCoverageRasterGeometryV1>,
     w6bCoverageRasterHostRecipes: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
@@ -192,6 +194,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val filterCompositeLayerFiltered = java.util.Collections.unmodifiableMap(LinkedHashMap(filterCompositeLayerFilteredRecipes))
     private val filterCompositeLayerDestinations = java.util.Collections.unmodifiableMap(LinkedHashMap(filterCompositeLayerDestinationRecipes))
     private val filterCompositeLayerFilteredDestinations = java.util.Collections.unmodifiableMap(LinkedHashMap(filterCompositeLayerFilteredDestinationRecipes))
+    private val filterCompositePicturePlains = java.util.Collections.unmodifiableMap(LinkedHashMap(filterCompositePicturePlainRecipes))
     private val clipMaskInitializes = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskInitializeRecipes))
     private val coverageRasterGeometry = java.util.Collections.unmodifiableMap(LinkedHashMap(w6bCoverageRasterGeometry))
     private val coverageRasterHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(w6bCoverageRasterHostRecipes))
@@ -297,6 +300,9 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6FilterCompositeLayerFilteredDestinationRecipeOrNull(passId: PlanPassId): W6FilterCompositeLayerFilteredDestinationRecipeV1? =
         (nativeSiteRecipes.recipeOrNull(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterCompositeLayerFilteredDestinationNativeSiteRecipeV1)?.host
     public fun w6FilterCompositeLayerFilteredDestinationRecipes(): Map<PlanPassId, W6FilterCompositeLayerFilteredDestinationRecipeV1> = filterCompositeLayerFilteredDestinations
+    public fun w6FilterCompositePicturePlainRecipeOrNull(passId: PlanPassId): W6FilterCompositePicturePlainRecipeV1? =
+        (nativeSiteRecipes.recipeOrNull(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterCompositePicturePlainNativeSiteRecipeV1)?.host
+    public fun w6FilterCompositePicturePlainRecipes(): Map<PlanPassId, W6FilterCompositePicturePlainRecipeV1> = filterCompositePicturePlains
     /** Exact W4e clip-mask initialize recipe sealed for this final W4e binding pass. */
     public fun w4eClipMaskInitializeRecipe(passId: PlanPassId): W4eClipMaskInitializeRecipeV1 =
         (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, clipMaskInitializes.getValue(passId).packetOrdinalI32, 0)) as? W4eClipMaskInitializeNativeSiteRecipeV1)
@@ -455,6 +461,11 @@ public class PlanPhysicalLayoutV1 private constructor(
             source.w6FilterCompositeLayerFilteredDestinationRecipes.forEach { (id, recipe) ->
                 require(recipe.canonicalLogicalEncodingV1() == expectedFilterCompositeLayerFilteredDestinations.getValue(id).canonicalLogicalEncodingV1())
             }
+            val expectedFilterCompositePicturePlains = freezeW6FilterCompositePicturePlainRecipesV1(graph.passes(), rows)
+            require(source.w6FilterCompositePicturePlainRecipes.keys == expectedFilterCompositePicturePlains.keys)
+            source.w6FilterCompositePicturePlainRecipes.forEach { (id, recipe) ->
+                require(recipe.canonicalLogicalEncodingV1() == expectedFilterCompositePicturePlains.getValue(id).canonicalLogicalEncodingV1())
+            }
             val expectedClipMaskInitializes = freezeW4eClipMaskInitializeRecipesV1(source.w4eGeometry)
             require(source.w4eClipMaskInitializeRecipes.keys == expectedClipMaskInitializes.keys)
             source.w4eClipMaskInitializeRecipes.forEach { (passId, recipe) ->
@@ -568,14 +579,14 @@ public class PlanPhysicalLayoutV1 private constructor(
             source.w6FilterDropShadowCompositeRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedDropShadowComposites.getValue(id).canonicalLogicalEncodingV1()) }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
                 graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
-                expectedPlainLayerComposites, expectedFilteredLayerComposites, expectedPictureCompositeGraphs, expectedPictureCompositeGraphFiltered, expectedPictureCompositeGraphDestinations, expectedFilterCompositeDraws, expectedFilterCompositeLayerPlains, expectedFilterCompositeLayerFiltered, expectedFilterCompositeLayerDestinations, expectedFilterCompositeLayerFilteredDestinations, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals, expectedMaskBlurDualSources, expectedMaskShaders, expectedMaskTables, expectedMaterializedSources, expectedDropShadowColorizes, expectedDropShadowComposites,
+                expectedPlainLayerComposites, expectedFilteredLayerComposites, expectedPictureCompositeGraphs, expectedPictureCompositeGraphFiltered, expectedPictureCompositeGraphDestinations, expectedFilterCompositeDraws, expectedFilterCompositeLayerPlains, expectedFilterCompositeLayerFiltered, expectedFilterCompositeLayerDestinations, expectedFilterCompositeLayerFilteredDestinations, expectedFilterCompositePicturePlains, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals, expectedMaskBlurDualSources, expectedMaskShaders, expectedMaskTables, expectedMaterializedSources, expectedDropShadowColorizes, expectedDropShadowComposites,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
             }
             require(source.nativeSiteRecipeCatalogV1.authenticatesFrozenHosts(
                 source.w6SolidRectHostRecipes, source.w6CorePrimitiveHostRecipes,
-                source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes, source.w6FilteredLayerCompositeRecipes, source.w6PictureCompositeGraphRecipes, source.w6PictureCompositeGraphFilteredRecipes, source.w6PictureCompositeGraphDestinationRecipes, source.w6FilterCompositeDrawRecipes, source.w6FilterCompositeLayerPlainRecipes, source.w6FilterCompositeLayerFilteredRecipes, source.w6FilterCompositeLayerDestinationRecipes, source.w6FilterCompositeLayerFilteredDestinationRecipes,
+                source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes, source.w6FilteredLayerCompositeRecipes, source.w6PictureCompositeGraphRecipes, source.w6PictureCompositeGraphFilteredRecipes, source.w6PictureCompositeGraphDestinationRecipes, source.w6FilterCompositeDrawRecipes, source.w6FilterCompositeLayerPlainRecipes, source.w6FilterCompositeLayerFilteredRecipes, source.w6FilterCompositeLayerDestinationRecipes, source.w6FilterCompositeLayerFilteredDestinationRecipes, source.w6FilterCompositePicturePlainRecipes,
                 source.w4eClipMaskInitializeRecipes, source.w6bCoverageRasterHostRecipes, source.w6FullscreenEmptyRecipes,
                 source.w6FullscreenCoverageAlphaRecipes,
                 source.w6FullscreenCoverageSolidRectRecipes,
@@ -783,7 +794,7 @@ public class PlanPhysicalLayoutV1 private constructor(
             require(spatialCaches.map { it.outputResourceId }.distinct().size == spatialCaches.size)
             val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures, spatialCaches,
                 graph.w6dProgramLeases(), source.w6SolidRectHostRecipes, source.w6CorePrimitiveHostRecipes,
-                source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes, source.w6FilteredLayerCompositeRecipes, source.w6PictureCompositeGraphRecipes, source.w6PictureCompositeGraphFilteredRecipes, source.w6PictureCompositeGraphDestinationRecipes, source.w6FilterCompositeDrawRecipes, source.w6FilterCompositeLayerPlainRecipes, source.w6FilterCompositeLayerFilteredRecipes, source.w6FilterCompositeLayerDestinationRecipes, source.w6FilterCompositeLayerFilteredDestinationRecipes, source.w4eClipMaskInitializeRecipes,
+                source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes, source.w6FilteredLayerCompositeRecipes, source.w6PictureCompositeGraphRecipes, source.w6PictureCompositeGraphFilteredRecipes, source.w6PictureCompositeGraphDestinationRecipes, source.w6FilterCompositeDrawRecipes, source.w6FilterCompositeLayerPlainRecipes, source.w6FilterCompositeLayerFilteredRecipes, source.w6FilterCompositeLayerDestinationRecipes, source.w6FilterCompositeLayerFilteredDestinationRecipes, source.w6FilterCompositePicturePlainRecipes, source.w4eClipMaskInitializeRecipes,
                 source.w6bCoverageRasterGeometry,
                 source.w6bCoverageRasterHostRecipes,
                 source.w6FullscreenEmptyRecipes,

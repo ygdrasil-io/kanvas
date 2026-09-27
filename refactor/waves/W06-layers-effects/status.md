@@ -980,3 +980,28 @@ classes publiques ciblées donnent `13/0/0/0`, `5/0/0/0` et `24/0/0/0`
 dans leurs XML. L'exécuteur natif sort 133 (**UNKNOWN**). Relecture Sol
 **Approved**, aucun Critical/Important. IIIc2 est review-clean ; IIIc3,
 IIIa2 et les gates W4e/W5a, budget/leases et 2B restent ouverts.
+
+### 2A0b.IIIc3a — FilterComposite.Picture direct
+
+La recette typée texture-only, son catalogue/seal, les usages enregistrés,
+le préflight avant allocation et la traduction native catalog-first couvrent
+le terminal Picture direct. La provenance distingue explicitement l'absence de
+`PictureSourcePass` d'un pass présent sans graph operand. Le témoin public
+`filteredInnerPictureRestoresWithoutGraphOperand` fixe les pixels attendus
+avant `PictureRecorder`/`Surface` et vérifie `Render` + `Readback`. Une revue Sol
+a confirmé sa causalité, puis une autre a demandé le scellage complet des
+facts du terminal ; la relecture ciblée de ce correctif ne relève plus de
+défaut Critical/Important.
+
+`:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` réussissent. Les premiers runs W6d échouaient
+avant le plan avec `GPU runtime is unavailable` ; une instrumentation
+temporaire (retirée) a identifié `NoSuchMethodError` sur `TextureDescriptor` :
+le toolkit `wgpu4k` de juillet chargeait des `webgpu-ktypes*` de septembre.
+Le commit `4dcbd9f` verrouille les quatre modules transitifs sur le build
+compatible de juillet ; sa revue Sol est **Approved**. Sans init script,
+le témoin IIIc3a donne `1/0/0/0`, puis W6d `25/0/0/0`, W6a restore
+`13/0/0/0` et W6c compose `5/0/0/0` dans leurs XML ciblés. Chaque exécuteur
+natif sort ensuite 133 (**UNKNOWN**). IIIc3a est review-clean au niveau de
+son témoin et de sa recette, mais IIIc3b/c/d, IIIa2, les budgets et 2B ne
+sont pas clos.
