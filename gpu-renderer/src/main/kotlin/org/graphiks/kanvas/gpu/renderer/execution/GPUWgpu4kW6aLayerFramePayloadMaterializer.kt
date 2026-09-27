@@ -56,7 +56,11 @@ private fun preflightW6PathRenderDirectColors(
         val render = step as? GPUFrameStep.RenderPassStep ?: return@mapNotNull null
         frame.w6PathRenderDirectColorRecipeOrNull(render.drawPackets.singleOrNull() ?: return@mapNotNull null)
             ?.also { recipe ->
-                require(render.w6aPassV1?.id == recipe.passId && render.w6aPassV1?.ordinal == recipe.packetOrdinalI32)
+                val graphOwner = requireNotNull(render.w6aPassV1)
+                val binding = frame.physical.w4eGeometryBindings().singleOrNull { candidate ->
+                    graphOwner.id in candidate.graphPassIds() && candidate.nativePass(graphOwner.id)?.id == recipe.passId
+                }
+                require(binding != null && graphOwner.ordinal == recipe.packetOrdinalI32)
             }?.let { it.passId.value to it }
     }.toMap()
     require(recipes.keys == frame.physical.w6PathRenderDirectColorRecipes().keys.map { it.value }.toSet()) {
@@ -67,9 +71,16 @@ private fun preflightW6PathRenderDirectColors(
             row.copyExtent() == frozen.copyExtentI32() && row.sampleCountI32 == frozen.sampleCountI32 &&
             row.byteSize == frozen.byteSizeI64 && row.lifetime == frozen.lifetime && row.usages() == frozen.usages()
     recipes.forEach { (id, recipe) ->
-        val pass = frame.graph.passes().single { it.id == recipe.passId } as? PlanPass.PathRenderPass
-            ?: error("W6 direct-colour recipe owner is not a path pass.")
-        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == recipe.passId }
+        val binding = frame.physical.w4eGeometryBindings().singleOrNull { candidate ->
+            candidate.graphPassIds().any { id -> candidate.nativePass(id)?.id == recipe.passId }
+        } ?: error("W6 direct-colour recipe owner has no sealed W4e binding.")
+        val graphOwner = binding.graphPassIds().single { id -> binding.nativePass(id)?.id == recipe.passId }
+        val pass = binding.nativePass(graphOwner) as? PlanPass.PathRenderPass
+            ?: error("W6 direct-colour recipe owner is not a bound path pass.")
+        require(frame.graph.passes().any { it.id == graphOwner }) {
+            "W6 direct-colour native owner has no final graph-pass link."
+        }
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == graphOwner }
         val packet = render.drawPackets.single()
         val prepared = requireNotNull(packet.w4ePreparedPath)
         val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(
@@ -88,7 +99,7 @@ private fun preflightW6PathRenderDirectColors(
             prepared.vertexResourceId == recipe.vertex.id.value && prepared.indexResourceId == recipe.index.id.value &&
             prepared.uniformResourceId == recipe.uniform.id.value && prepared.sample == SamplePlan.SingleSample &&
             prepared.load == recipe.load && prepared.store == recipe.store && prepared.blend == recipe.blend &&
-            packet.blendPlan == recipe.blend && render.target == frame.refs.getValue(recipe.target.id) &&
+            packet.blendPlan == org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(recipe.blend) && render.target == frame.refs.getValue(recipe.target.id) &&
             render.samplePlan == GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null &&
             render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store) {
             "W6 direct-colour packet differs from its frozen owner, phase, or attachment recipe."
@@ -114,10 +125,10 @@ private fun preflightW6PathRenderDirectColors(
             "W6 direct-colour prepared geometry/scissor changed after recipe freeze."
         }
         require(exact(frame.physical.resource(recipe.target.id), recipe.target) && exact(frame.physical.resource(recipe.vertex.id), recipe.vertex) &&
-            exact(frame.physical.resource(recipe.index.id), recipe.index) && exact(frame.physical.resource(recipe.uniform.id), recipe.uniform)) {
+            exact(frame.physical.resource(recipe.index.id), recipe.index) && exact(frame.physical.resource(recipe.uniform.id), recipe.uniform) &&
+            (recipe.mask?.let { exact(frame.physical.resource(it.id), it) } != false)) {
             "W6 direct-colour physical U/V/I/target rows changed after recipe freeze."
         }
-        val binding = requireNotNull(frame.physical.w4eGeometryBinding(recipe.passId))
         val slice = requireNotNull(binding.payload.geometrySlice(id, W4eNativePayloadPlan.CONSUMER_DIRECT))
         val uniform = requireNotNull(binding.payload.uniformSlice(id, W4eNativePayloadPlan.CONSUMER_UNIFORM))
         val targetRole = when (recipe.target.role) {

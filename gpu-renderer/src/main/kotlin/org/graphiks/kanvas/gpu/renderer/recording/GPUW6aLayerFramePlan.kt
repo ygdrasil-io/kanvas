@@ -359,8 +359,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                         val recipe = physical.w6PathRenderDirectColorRecipes()[native.id]
                         if (recipe != null) {
                         val recipeMask = recipe.mask
-                        require(prepared != null && recipe.passId == native.id &&
-                            recipe.packetOrdinalI32 == native.ordinal && recipe.target.id == native.target &&
+                        require(prepared != null && recipe.passId == native.id && recipe.packetOrdinalI32 == native.ordinal && recipe.target.id == native.target &&
                             recipe.resolveTarget?.id == native.resolveTarget && recipe.depthStencil == null &&
                             native.depthStencil == null && recipe.sampleCountI32 == 1 &&
                             prepared.targetResourceId == recipe.target.id.value &&
@@ -368,7 +367,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             prepared.vertexResourceId == recipe.vertex.id.value && prepared.indexResourceId == recipe.index.id.value &&
                             prepared.uniformResourceId == recipe.uniform.id.value && prepared.phase == native.phase &&
                             prepared.sample == SamplePlan.SingleSample && prepared.load == recipe.load && prepared.store == recipe.store &&
-                            prepared.blend == recipe.blend && packet.blendPlan == recipe.blend &&
+                            prepared.blend == recipe.blend && packet.blendPlan == W5bBlendPlanLowerer.lower(recipe.blend) &&
                             when (recipeMask) {
                                 null -> consumer == null && recipe.groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eConsumerUniform
                                 else -> consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask &&

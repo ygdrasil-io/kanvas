@@ -84,7 +84,9 @@ public class W6PathRenderDirectColorNativeSiteRecipeV1 internal constructor(
         text("owner", host.passId.value); int("packet", host.packetOrdinalI32); int("bundle", 0)
         operand("target", host.target); text("resolve.present", "false"); text("depth.present", "false")
         operand("vertex", host.vertex); operand("index", host.index); operand("uniform", host.uniform)
-        host.mask?.let { operand("mask", it) } ?: text("mask.present", "false")
+        // Preserve the original plain Fill/Stroke canonical encodings byte-for-byte; only the
+        // new masked arm contributes the sampled-mask operand to the catalog identity.
+        host.mask?.let { operand("mask", it) }
         long("uniform.offset", host.uniformOffsetBytesI64); long("uniform.bytes", host.uniformByteSizeI64)
         val geometry = host.copyGeometryF32()
         // Preserve IIIa1 Fill's version-one encoding byte-for-byte; Stroke is the new tagged arm.

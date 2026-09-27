@@ -732,8 +732,16 @@ public class PlanPhysicalLayoutV1 private constructor(
             val expectedDropShadowComposites = freezeW6FilterDropShadowCompositeRecipesV1(graph.passes(), rows)
             require(source.w6FilterDropShadowCompositeRecipes.keys == expectedDropShadowComposites.keys)
             source.w6FilterDropShadowCompositeRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedDropShadowComposites.getValue(id).canonicalLogicalEncodingV1()) }
+            val finalNativeW4ePasses = source.w4eGeometry.flatMap { binding ->
+                binding.graphPassIds().map { graphId ->
+                    val graphPass = graph.passes().single { it.id == graphId }
+                    require(binding.nativePass(graphId) != null) { "Final W4e binding lost its graph-pass link." }
+                    require(graphPass.id == graphId)
+                    requireNotNull(binding.nativePass(graphId))
+                }
+            }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
-                graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
+                graph.passes() + finalNativeW4ePasses, expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
                 expectedPlainLayerComposites, expectedFilteredLayerComposites, expectedLayerCompositeDestinations, expectedLayerCompositeFilteredDestinations, expectedPictureCompositeGraphs, expectedPictureCompositeGraphFiltered, expectedPictureCompositeGraphDestinations, expectedFilterCompositeDraws, expectedFilterCompositeLayerPlains, expectedFilterCompositeLayerFiltered, expectedFilterCompositeLayerDestinations, expectedFilterCompositeLayerFilteredDestinations, expectedFilterCompositePicturePlains, expectedFilterCompositePictureGraphs, expectedFilterCompositePictureGraphFiltereds, expectedFilterCompositePictureGraphDestinations, expectedFilterCompositePictureGraphFilteredDestinations, expectedFilterCompositePictureDestinations, expectedClipMaskInitializes, expectedClipMaskProducers, expectedDirectTriangles, expectedStencilEdges, expectedClipMaskFolds, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals, expectedMaskBlurDualSources, expectedMaskShaders, expectedMaskTables, expectedMaterializedSources, expectedDropShadowColorizes, expectedDropShadowComposites,
                 pathRenderDirectColors = expectedPathRenderDirectColors,
             )

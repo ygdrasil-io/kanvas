@@ -3263,8 +3263,11 @@ internal class W6aLayerGraphConstruction(
         val w6FilterMaterializedSourceRecipes = freezeW6FilterMaterializedSourceRecipesV1(passes, resources + source.resources)
         val w6FilterDropShadowColorizeRecipes = freezeW6FilterDropShadowColorizeRecipesV1(passes, resources + source.resources)
         val w6FilterDropShadowCompositeRecipes = freezeW6FilterDropShadowCompositeRecipesV1(passes, resources + source.resources)
+        // W4e's terminal masked consumer is physically final even though its PathRenderPass is
+        // carried by the rebased binding rather than the top-level pass list.  Feed that sealed
+        // binding to the catalog so its owner is authenticated before native allocation.
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
-            passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
+            passes + finalW4eBindings.flatMap { it.nativePasses() }, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
             plainLayerCompositeRecipes, filteredLayerCompositeRecipes, layerCompositeDestinationRecipes, layerCompositeFilteredDestinationRecipes, pictureCompositeGraphRecipes, pictureCompositeGraphFilteredRecipes, pictureCompositeGraphDestinationRecipes, filterCompositeDrawRecipes, filterCompositeLayerPlainRecipes, filterCompositeLayerFilteredRecipes, filterCompositeLayerDestinationRecipes, filterCompositeLayerFilteredDestinationRecipes, filterCompositePicturePlainRecipes, filterCompositePictureGraphRecipes, filterCompositePictureGraphFilteredRecipes, filterCompositePictureGraphDestinationRecipes, filterCompositePictureGraphFilteredDestinationRecipes, filterCompositePictureDestinationRecipes, clipMaskInitializeRecipes, clipMaskProducerRecipes, clipMaskProducerDirectTriangleRecipes, clipMaskProducerStencilEdgeRecipes, clipMaskFoldRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
             w6FullscreenCoverageAlphaRecipes,
             w6FullscreenCoverageSolidRectRecipes,
