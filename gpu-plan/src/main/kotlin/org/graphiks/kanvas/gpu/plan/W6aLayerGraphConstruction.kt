@@ -3239,6 +3239,7 @@ internal class W6aLayerGraphConstruction(
         val w6FilterMaskTableRecipes = freezeW6FilterMaskTableRecipesV1(passes, resources + source.resources)
         val w6FilterMaterializedSourceRecipes = freezeW6FilterMaterializedSourceRecipesV1(passes, resources + source.resources)
         val w6FilterDropShadowColorizeRecipes = freezeW6FilterDropShadowColorizeRecipesV1(passes, resources + source.resources)
+        val w6FilterDropShadowCompositeRecipes = freezeW6FilterDropShadowCompositeRecipesV1(passes, resources + source.resources)
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
             passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
             plainLayerCompositeRecipes, clipMaskInitializeRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
@@ -3247,7 +3248,7 @@ internal class W6aLayerGraphConstruction(
             w6FullscreenCoverageRetainRecipes,
             w6FullscreenPictureSourceLayerRecipes,
             w6FullscreenPictureSourceGraphRecipes,
-            w6FilterSpatialCropRecipes, w6FilterSpatialOffsetRecipes, w6FilterSpatialTileRecipes, w6FilterMorphologyRecipes, w6FilterColorFilterRecipes, w6FilterMergeRecipes, w6FilterBlendRecipes, w6FilterSeparableBlurRecipes, w6FilterMaskBlurNormalRecipes, w6FilterMaskBlurDualSourceRecipes, w6FilterMaskShaderRecipes, w6FilterMaskTableRecipes, w6FilterMaterializedSourceRecipes, w6FilterDropShadowColorizeRecipes,
+            w6FilterSpatialCropRecipes, w6FilterSpatialOffsetRecipes, w6FilterSpatialTileRecipes, w6FilterMorphologyRecipes, w6FilterColorFilterRecipes, w6FilterMergeRecipes, w6FilterBlendRecipes, w6FilterSeparableBlurRecipes, w6FilterMaskBlurNormalRecipes, w6FilterMaskBlurDualSourceRecipes, w6FilterMaskShaderRecipes, w6FilterMaskTableRecipes, w6FilterMaterializedSourceRecipes, w6FilterDropShadowColorizeRecipes, w6FilterDropShadowCompositeRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3282,6 +3283,7 @@ internal class W6aLayerGraphConstruction(
             w6FilterMaskTableRecipes = w6FilterMaskTableRecipes,
             w6FilterMaterializedSourceRecipes = w6FilterMaterializedSourceRecipes,
             w6FilterDropShadowColorizeRecipes = w6FilterDropShadowColorizeRecipes,
+            w6FilterDropShadowCompositeRecipes = w6FilterDropShadowCompositeRecipes,
             nativeSiteRecipeCatalogV1 = nativeSiteRecipeCatalog,
         )
         val allResources = resources + finalSource.resources

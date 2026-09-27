@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.TileMode
+import org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1
 
 /**
  * Stable planner owner of one native-program selection.  The ordinal denotes a draw for W6
@@ -49,6 +50,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FilterMaskTable,
     W6FilterMaterializedSource,
     W6FilterDropShadowColorize,
+    W6FilterDropShadowComposite,
 }
 
 /** IIf1's one-coverage plus pre-issued W5 material ABI; neither table nor source materialization belongs here. */
@@ -184,6 +186,42 @@ public class W6FilterDropShadowColorizeNativeSiteRecipeV1 internal constructor(p
     override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterDropShadowColorize
     override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
         text("owner", host.ownerPassId.value); text("target", host.target.value); text("blurredSource", host.blurredSource.value); text("colorArgb", host.colorArgbU32.toString(16)); double("offset.x", host.copyOffsetF64().x); double("offset.y", host.copyOffsetF64().y); double("sourceCoordinateOffset.x", host.copySourceCoordinateOffsetTargetLocalF64().x); double("sourceCoordinateOffset.y", host.copySourceCoordinateOffsetTargetLocalF64().y); rect("sourceFootprint", host.copySourceFootprintTargetLocalI32()); rect("outputFootprint", host.copyOutputFootprintTargetLocalI32()); rect("scissor", host.copyScissorTargetLocalI32()); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("blurredExtentWidth", host.copyBlurredExtent().width); int("blurredExtentHeight", host.copyBlurredExtent().height); enum("targetFormat", host.targetFormat); enum("blurredFormat", host.blurredFormat); int("sampleCount", host.sampleCountI32); int("blurredSampleCount", host.blurredSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
+}
+
+/** IIg2's ordered colorized-shadow/original pair; its SrcOver is internal to the frozen shader. */
+public enum class W6FilterDropShadowCompositeShaderFamilyV1 { ShadowThenOriginalSrcOverTextureLoad }
+public enum class W6FilterDropShadowCompositeGroupZeroAbiV1 { ColorizedShadowThenOriginalTextures }
+public class W6FilterDropShadowCompositeRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId, public val target: PlanResourceId,
+    public val colorizedShadow: PlanResourceId, public val originalSource: PlanResourceId,
+    public val mode: CapturedDropShadowModeV1,
+    shadowOffsetTargetLocalI32: org.graphiks.math.geometry.Point2I32,
+    originalOffsetTargetLocalI32: org.graphiks.math.geometry.Point2I32,
+    shadowFootprintTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    originalFootprintTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    scissorTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    extent: org.graphiks.math.geometry.SizeI32, shadowExtent: org.graphiks.math.geometry.SizeI32,
+    originalExtent: org.graphiks.math.geometry.SizeI32,
+    public val targetFormat: PlanLogicalColorFormat, public val shadowFormat: PlanLogicalColorFormat,
+    public val originalFormat: PlanLogicalColorFormat, public val sampleCountI32: Int,
+    public val shadowSampleCountI32: Int, public val originalSampleCountI32: Int,
+    public val shaderFamily: W6FilterDropShadowCompositeShaderFamilyV1 = W6FilterDropShadowCompositeShaderFamilyV1.ShadowThenOriginalSrcOverTextureLoad,
+    public val groupZeroAbi: W6FilterDropShadowCompositeGroupZeroAbiV1 = W6FilterDropShadowCompositeGroupZeroAbiV1.ColorizedShadowThenOriginalTextures,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val so = org.graphiks.math.geometry.Point2I32(shadowOffsetTargetLocalI32.x, shadowOffsetTargetLocalI32.y); private val oo = org.graphiks.math.geometry.Point2I32(originalOffsetTargetLocalI32.x, originalOffsetTargetLocalI32.y)
+    private val sf = shadowFootprintTargetLocalI32.copy(); private val of = originalFootprintTargetLocalI32.copy(); private val sc = scissorTargetLocalI32.copy(); private val e = extent.copy(); private val se = shadowExtent.copy(); private val oe = originalExtent.copy()
+    init { require(target != colorizedShadow && target != originalSource && colorizedShadow != originalSource && mode == CapturedDropShadowModeV1.COMPOSITE && !sf.isEmpty && !of.isEmpty && !sc.isEmpty && sf.left == 0 && sf.top == 0 && of.left == 0 && of.top == 0 && sc.left >= 0 && sc.top >= 0 && sc.right <= e.width && sc.bottom <= e.height && e.width == sc.width() && e.height == sc.height() && se.width == sf.width() && se.height == sf.height() && oe.width == of.width() && oe.height == of.height() && sampleCountI32 == 1 && shadowSampleCountI32 == 1 && originalSampleCountI32 == 1) }
+    public fun copyShadowOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(so.x, so.y); public fun copyOriginalOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(oo.x, oo.y)
+    public fun copyShadowFootprintTargetLocalI32() = sf.copy(); public fun copyOriginalFootprintTargetLocalI32() = of.copy(); public fun copyScissorTargetLocalI32() = sc.copy(); public fun copyExtent() = e.copy(); public fun copyShadowExtent() = se.copy(); public fun copyOriginalExtent() = oe.copy()
+    public fun canonicalLogicalEncodingV1() = W6FilterDropShadowCompositeNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+public class W6FilterDropShadowCompositeNativeSiteRecipeV1 internal constructor(public val host: W6FilterDropShadowCompositeRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterDropShadowComposite
+    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
+        text("owner", host.ownerPassId.value); text("target", host.target.value); text("input.0", host.colorizedShadow.value); text("input.1", host.originalSource.value); int("inputCount", 2); enum("mode", host.mode); point("shadowOffset", host.copyShadowOffsetTargetLocalI32()); point("originalOffset", host.copyOriginalOffsetTargetLocalI32()); rect("shadowFootprint", host.copyShadowFootprintTargetLocalI32()); rect("originalFootprint", host.copyOriginalFootprintTargetLocalI32()); rect("scissor", host.copyScissorTargetLocalI32()); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("shadowExtentWidth", host.copyShadowExtent().width); int("shadowExtentHeight", host.copyShadowExtent().height); int("originalExtentWidth", host.copyOriginalExtent().width); int("originalExtentHeight", host.copyOriginalExtent().height); enum("targetFormat", host.targetFormat); enum("shadowFormat", host.shadowFormat); enum("originalFormat", host.originalFormat); int("sampleCount", host.sampleCountI32); int("shadowSampleCount", host.shadowSampleCountI32); int("originalSampleCount", host.originalSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
     }
 }
 
@@ -1126,6 +1164,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         maskTables: Map<PlanPassId, W6FilterMaskTableRecipeV1>,
         materializedSources: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1>,
         dropShadowColorizes: Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1>,
+        dropShadowComposites: Map<PlanPassId, W6FilterDropShadowCompositeRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -1154,6 +1193,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FilterMaskTableNativeSiteRecipeV1 -> maskTables[recipe.host.ownerPassId] === recipe.host
             is W6FilterMaterializedSourceNativeSiteRecipeV1 -> materializedSources[recipe.host.ownerPassId] === recipe.host
             is W6FilterDropShadowColorizeNativeSiteRecipeV1 -> dropShadowColorizes[recipe.host.ownerPassId] === recipe.host
+            is W6FilterDropShadowCompositeNativeSiteRecipeV1 -> dropShadowComposites[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -1191,6 +1231,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     maskTables: Map<PlanPassId, W6FilterMaskTableRecipeV1> = emptyMap(),
     materializedSources: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1> = emptyMap(),
     dropShadowColorizes: Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1> = emptyMap(),
+    dropShadowComposites: Map<PlanPassId, W6FilterDropShadowCompositeRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -1218,6 +1259,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     maskTables.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     materializedSources.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     dropShadowColorizes.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    dropShadowComposites.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -1244,6 +1286,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingMaskTables = maskTables.toMutableMap()
     val remainingMaterializedSources = materializedSources.toMutableMap()
     val remainingDropShadowColorizes = dropShadowColorizes.toMutableMap()
+    val remainingDropShadowComposites = dropShadowComposites.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -1284,6 +1327,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingMaskTables.remove(pass.id)?.let { add(W6FilterMaskTableNativeSiteRecipeV1(it)) }
                 remainingMaterializedSources.remove(pass.id)?.let { add(W6FilterMaterializedSourceNativeSiteRecipeV1(it)) }
                 remainingDropShadowColorizes.remove(pass.id)?.let { add(W6FilterDropShadowColorizeNativeSiteRecipeV1(it)) }
+                remainingDropShadowComposites.remove(pass.id)?.let { add(W6FilterDropShadowCompositeNativeSiteRecipeV1(it)) }
             }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
@@ -1293,7 +1337,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty() && remainingMaterializedSources.isEmpty() && remainingDropShadowColorizes.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty() && remainingMaterializedSources.isEmpty() && remainingDropShadowColorizes.isEmpty() && remainingDropShadowComposites.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -1662,6 +1706,32 @@ public fun freezeW6FilterDropShadowColorizeRecipesV1(
             sampling.copyOutputFootprintTargetLocalI32(), sampling.copyOutputFootprintTargetLocalI32(), requireNotNull(target.copyExtent()),
             requireNotNull(blurred.copyExtent()), targetFormat, blurredFormat, target.sampleCountI32,
             blurred.sampleCountI32,
+        )) == null)
+    }
+}
+
+/** Freezes IIg2 only for COMPOSITE; SHADOW_ONLY terminates at IIg1 and owns no second site. */
+public fun freezeW6FilterDropShadowCompositeRecipesV1(
+    passes: List<PlanPass>, resources: List<PlanResource>,
+): Map<PlanPassId, W6FilterDropShadowCompositeRecipeV1> = LinkedHashMap<PlanPassId, W6FilterDropShadowCompositeRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+        val operation = pass.operation as? FilterPassOperationV1.DropShadowComposite ?: return@forEach
+        require(operation.mode == CapturedDropShadowModeV1.COMPOSITE && pass.inputs().size == 2)
+        val shadow = pass.inputs().first(); val original = requireNotNull(operation.originalInput)
+        require(pass.inputs() == listOf(shadow, original))
+        val target = resources.single { it.id == pass.output }; val shadowRow = resources.single { it.id == shadow }
+        val originalRow = resources.single { it.id == original }
+        val targetFormat = (target.format as? PlanTextureFormat.Color)?.value ?: error("DropShadowComposite requires color target.")
+        val shadowFormat = (shadowRow.format as? PlanTextureFormat.Color)?.value ?: error("DropShadowComposite requires color shadow.")
+        val originalFormat = (originalRow.format as? PlanTextureFormat.Color)?.value ?: error("DropShadowComposite requires color original.")
+        val extent = requireNotNull(target.copyExtent()); val shadowExtent = requireNotNull(shadowRow.copyExtent()); val originalExtent = requireNotNull(originalRow.copyExtent())
+        require(PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in shadowRow.usages() && PlanResourceUsage.Sampled in originalRow.usages())
+        require(put(pass.id, W6FilterDropShadowCompositeRecipeV1(
+            pass.id, pass.output, shadow, original, operation.mode,
+            requireNotNull(operation.copyShadowSampleOffsetTargetLocalI32()), requireNotNull(operation.copyOriginalSampleOffsetTargetLocalI32()),
+            org.graphiks.math.geometry.RectI32(0, 0, shadowExtent.width, shadowExtent.height), org.graphiks.math.geometry.RectI32(0, 0, originalExtent.width, originalExtent.height),
+            org.graphiks.math.geometry.RectI32(0, 0, extent.width, extent.height), extent, shadowExtent, originalExtent,
+            targetFormat, shadowFormat, originalFormat, target.sampleCountI32, shadowRow.sampleCountI32, originalRow.sampleCountI32,
         )) == null)
     }
 }

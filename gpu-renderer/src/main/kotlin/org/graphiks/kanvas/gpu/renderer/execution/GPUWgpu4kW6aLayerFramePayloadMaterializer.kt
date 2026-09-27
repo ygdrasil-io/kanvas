@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.W6bMaskCoverageSnippet
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bSeparableBlurSnippet
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 
@@ -674,6 +675,22 @@ private fun preflightW6FilterDropShadowColorizes(frame: GPUW6aLayerFramePlan, fr
     }
 }
 
+/** IIg2 authenticates the ordered shadow/original pair before any native allocation. */
+private fun preflightW6FilterDropShadowComposites(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterDropShadowCompositeRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterDropShadowCompositeRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterDropShadowCompositeRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("DropShadowComposite owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.DropShadowComposite ?: error("DropShadowComposite operation changed after seal.")
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val target = frame.physical.resource(actual.target); val shadow = frame.physical.resource(actual.colorizedShadow); val original = frame.physical.resource(actual.originalSource)
+        val uses = listOf(actual.colorizedShadow, actual.originalSource).map { org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(it), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false) }
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.mode == CapturedDropShadowModeV1.COMPOSITE && operation.mode == actual.mode && operation.originalInput == actual.originalSource && pass.inputs() == listOf(actual.colorizedShadow, actual.originalSource) && actual.copyShadowOffsetTargetLocalI32() == operation.copyShadowSampleOffsetTargetLocalI32() && actual.copyOriginalOffsetTargetLocalI32() == operation.copyOriginalSampleOffsetTargetLocalI32() && actual.copyShadowFootprintTargetLocalI32().width() == actual.copyShadowExtent().width && actual.copyShadowFootprintTargetLocalI32().height() == actual.copyShadowExtent().height && actual.copyOriginalFootprintTargetLocalI32().width() == actual.copyOriginalExtent().width && actual.copyOriginalFootprintTargetLocalI32().height() == actual.copyOriginalExtent().height && actual.copyScissorTargetLocalI32().width() == actual.copyExtent().width && actual.copyScissorTargetLocalI32().height() == actual.copyExtent().height && actual.groupZeroAbi == W6FilterDropShadowCompositeGroupZeroAbiV1.ColorizedShadowThenOriginalTextures && actual.shaderFamily == W6FilterDropShadowCompositeShaderFamilyV1.ShadowThenOriginalSrcOverTextureLoad && actual.load == AttachmentLoadPlan.ClearTransparent && actual.store == AttachmentStorePlan.Store && actual.blend == BlendPlan.LegacySrcOverV1 && actual.draw == W6FullscreenEmptyDrawV1() && target.copyExtent() == actual.copyExtent() && shadow.copyExtent() == actual.copyShadowExtent() && original.copyExtent() == actual.copyOriginalExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && shadow.format == PlanTextureFormat.Color(actual.shadowFormat) && original.format == PlanTextureFormat.Color(actual.originalFormat) && target.sampleCountI32 == actual.sampleCountI32 && shadow.sampleCountI32 == actual.shadowSampleCountI32 && original.sampleCountI32 == actual.originalSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in shadow.usages() && PlanResourceUsage.Sampled in original.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null) { "W6 DropShadowComposite physical or recorded preflight differs from its frozen recipe." }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -743,6 +760,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterMaskTables(frame, framePlan)
             preflightW6FilterMaterializedSources(frame, framePlan)
             preflightW6FilterDropShadowColorizes(frame, framePlan)
+            preflightW6FilterDropShadowComposites(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1505,6 +1523,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterDropShadowColorizeNativeSiteRecipeV1) {
                             val recipe = frame.physical.w6FilterDropShadowColorizeRecipe(pass.id)
                             renderOperands += dropShadowColorizeRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.blurredSource), generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterDropShadowCompositeNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterDropShadowCompositeRecipe(pass.id)
+                            renderOperands += dropShadowCompositeRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.colorizedShadow), views.getValue(recipe.originalSource), generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -1530,15 +1551,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             is FilterPassOperationV1.MaskTable -> error("MaskTable pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaterializedSource -> error("MaterializedSource pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.DropShadowColorize -> error("DropShadowColorize pass is missing its frozen native-site recipe.")
-                            is FilterPassOperationV1.DropShadowComposite -> {
-                                require(pass.inputs().isNotEmpty())
-                                val shadow = pass.inputs().first()
-                                val original = operation.originalInput
-                                require(original != null && pass.inputs().size == 2)
-                                renderOperands += dropShadowCompositeRender(stepIndex, views.getValue(pass.output), views.getValue(shadow),
-                                    views.getValue(original), generation, operation, outputExtent.width, outputExtent.height,
-                                    pass, owned)
-                            }
+                            is FilterPassOperationV1.DropShadowComposite -> error("DropShadowComposite pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MatrixConvolution,
                             is FilterPassOperationV1.DisplacementMap,
                             is FilterPassOperationV1.Magnifier -> {
@@ -2841,25 +2854,25 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         """
     }
 
-    /** COMPOSITE only: combines the two plan-owned lanes without a renderer-created pass. */
+    /** Mechanical IIg2 translation of the planner-owned, ordered shadow/original recipe. */
     private fun dropShadowCompositeRender(
         stepIndex: Int,
         target: GPUTextureView,
         shadow: GPUTextureView,
         original: GPUTextureView,
         generation: GPUDeviceGenerationID,
-        operation: FilterPassOperationV1.DropShadowComposite,
-        widthI32: Int,
-        heightI32: Int,
+        recipe: W6FilterDropShadowCompositeRecipeV1,
         pass: PlanPass.FilterPass,
         owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
-        val shadowOffset = requireNotNull(operation.copyShadowSampleOffsetTargetLocalI32()) {
-            "W6b shadow composite has no sealed shadow coordinate."
-        }
-        val originalOffset = requireNotNull(operation.copyOriginalSampleOffsetTargetLocalI32()) {
-            "W6b shadow composite has no sealed original coordinate."
-        }
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output &&
+            pass.inputs() == listOf(recipe.colorizedShadow, recipe.originalSource) &&
+            recipe.mode == CapturedDropShadowModeV1.COMPOSITE &&
+            recipe.groupZeroAbi == W6FilterDropShadowCompositeGroupZeroAbiV1.ColorizedShadowThenOriginalTextures &&
+            recipe.shaderFamily == W6FilterDropShadowCompositeShaderFamilyV1.ShadowThenOriginalSrcOverTextureLoad &&
+            recipe.store == AttachmentStorePlan.Store)
+        val shadowOffset = recipe.copyShadowOffsetTargetLocalI32()
+        val originalOffset = recipe.copyOriginalOffsetTargetLocalI32()
         val shader = W6A_VERTEX_SHADER + """
             @group(0) @binding(0) var w6b_shadow_color: texture_2d<f32>;
             @group(0) @binding(1) var w6b_shadow_original: texture_2d<f32>;
@@ -2882,7 +2895,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             add(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
             add(BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
         })))
-        val pipeline = pipeline(shader, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val pipeline = pipeline(shader, layout, w6aColorTarget(recipe.blend), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = buildList {
             add(BindGroupEntry(0u, shadow))
             add(BindGroupEntry(1u, original))
@@ -2890,13 +2903,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         return GPUPreparedNativeScopeOperand.Render(
             stepIndex,
             GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
-                loadOperation = GPUPreparedNativeLoadOperation.Clear,
-                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+                loadOperation = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load,
+                clearColor = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null),
             listOf(
                 GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
                 GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
-                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
-                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+                recipe.copyScissorTargetLocalI32().let { scissor -> GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()) },
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
             ),
             w6aPassV1 = pass,
         )
