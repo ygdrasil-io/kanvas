@@ -183,6 +183,19 @@ public class RawMaterialRequirementsV2 private constructor(
             MaterialSourcePackingPermitV4.issue(sources,nonUniformBytesI64,budget,capabilities,legacyCode)
         internal fun packV4(footprint: MaterialSourceFootprintV4, permit: MaterialSourcePackingPermitV4): RawMaterialRequirementsV2 {
             require(permit.permits(footprint)) { W5fPlanDiagnostics.Schema }
+            val bytes = packedV4UniformBytes(footprint)
+            return RawMaterialRequirementsV2(1,footprint.uniformByteCountI64,false,footprint.bindingCountI32,
+                footprint.table.entry(footprint.root).program.structuralId.value,bytes,footprint.canonicalIdentity,
+                footprint.proof.imageExecution != null,footprint.proof.imageLayout,footprint.runtimeStorageBytesI64,
+                footprint.runtimeTextureBytesI64,footprint.runtimeSamplerEntriesI32,footprint.runtimeLeaseCountI32)
+        }
+
+        /** Handle-free identity of the already admitted V4 raw ABI, for a final planner recipe. */
+        internal fun canonicalIdentityV4(footprint: MaterialSourceFootprintV4): String =
+            footprint.table.entry(footprint.root).program.structuralId.value + ":raw-v2:" +
+                packedV4UniformBytes(footprint).joinToString(",") + footprint.canonicalIdentity
+
+        private fun packedV4UniformBytes(footprint: MaterialSourceFootprintV4): ByteArray {
             val bytes = ByteBuffer.allocate(footprint.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
             // Source word gaps are declared zero padding. Only this budget-permitted phase copies values.
             for (wordI64 in 0 until footprint.proof.uniformWordCountI64) {
@@ -195,10 +208,7 @@ public class RawMaterialRequirementsV2 private constructor(
                 bytes.putInt(bitsI32)
             }
             check(bytes.position() == bytes.capacity())
-            return RawMaterialRequirementsV2(1,footprint.uniformByteCountI64,false,footprint.bindingCountI32,
-                footprint.table.entry(footprint.root).program.structuralId.value,bytes.array(),footprint.canonicalIdentity,
-                footprint.proof.imageExecution != null,footprint.proof.imageLayout,footprint.runtimeStorageBytesI64,
-                footprint.runtimeTextureBytesI64,footprint.runtimeSamplerEntriesI32,footprint.runtimeLeaseCountI32)
+            return bytes.array()
         }
         public const val BINDING_STRIDE_BYTES_I64: Long = 16L
 

@@ -49,10 +49,16 @@ public enum class NativeSiteRecipeFamilyV1 {
 /** IIf1's one-coverage plus pre-issued W5 material ABI; neither table nor source materialization belongs here. */
 public enum class W6FilterMaskShaderFamilyV1 { FrozenW5MaterialCoverageAlpha }
 public enum class W6FilterMaskShaderGroupZeroAbiV1 { CoverageThenFrozenW5Material }
+public enum class W6FilterMaskShaderBindingKindV1 { UniformBuffer, StorageBuffer, SampledTexture, Sampler }
+public data class W6FilterMaskShaderBindingAbiV1(public val bindingI32: Int, public val kind: W6FilterMaskShaderBindingKindV1) {
+    init { require(bindingI32 >= 0) }
+}
 public class W6FilterMaskShaderRecipeV1 internal constructor(
     public val ownerPassId: PlanPassId, public val target: PlanResourceId, public val coverageSource: PlanResourceId,
     public val occurrenceIdI32: Int, public val material: MaterialPlanRef, public val uniformResource: PlanResourceId,
     public val uniformOffsetBytesI64: Long, public val uniformCapacityBytesI64: Long,
+    public val materialStructuralId: String, public val materialCanonicalIdentity: String,
+    public val materialUniformByteCountI64: Long, bindingManifest: List<W6FilterMaskShaderBindingAbiV1>,
     materialDeviceOriginI32: org.graphiks.math.geometry.Point2I32,
     extent: org.graphiks.math.geometry.SizeI32, coverageExtent: org.graphiks.math.geometry.SizeI32,
     known: org.graphiks.math.geometry.RectI32, offset: org.graphiks.math.geometry.Point2I32,
@@ -66,16 +72,18 @@ public class W6FilterMaskShaderRecipeV1 internal constructor(
     private val frozenExtent = extent.copy(); private val frozenCoverageExtent = coverageExtent.copy(); private val frozenKnown = known.copy()
     private val frozenOffset = org.graphiks.math.geometry.Point2I32(offset.x, offset.y)
     private val frozenMaterialDeviceOrigin = org.graphiks.math.geometry.Point2I32(materialDeviceOriginI32.x, materialDeviceOriginI32.y)
-    init { require(occurrenceIdI32 >= 0 && uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 >= 16L && uniformOffsetBytesI64 % 4L == 0L && uniformCapacityBytesI64 % 16L == 0L && sampleCountI32 == 1 && coverageSampleCountI32 == 1 && !frozenKnown.isEmpty) }
+    private val frozenBindingManifest = immutableList(bindingManifest)
+    init { require(occurrenceIdI32 >= 0 && materialStructuralId.isNotBlank() && materialCanonicalIdentity.isNotBlank() && materialUniformByteCountI64 >= 16L && uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 >= 16L && uniformOffsetBytesI64 % 4L == 0L && uniformCapacityBytesI64 % 16L == 0L && sampleCountI32 == 1 && coverageSampleCountI32 == 1 && !frozenKnown.isEmpty && frozenBindingManifest.firstOrNull() == W6FilterMaskShaderBindingAbiV1(0, W6FilterMaskShaderBindingKindV1.UniformBuffer) && frozenBindingManifest.map { it.bindingI32 }.distinct().size == frozenBindingManifest.size) }
     public fun copyExtent() = frozenExtent.copy(); public fun copyCoverageExtent() = frozenCoverageExtent.copy(); public fun copyKnownContentTargetLocalI32() = frozenKnown.copy()
     public fun copyOutputToCoverageOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenOffset.x, frozenOffset.y)
     public fun copyMaterialDeviceOriginI32() = org.graphiks.math.geometry.Point2I32(frozenMaterialDeviceOrigin.x, frozenMaterialDeviceOrigin.y)
+    public fun bindingManifest(): List<W6FilterMaskShaderBindingAbiV1> = frozenBindingManifest
     public fun canonicalLogicalEncodingV1() = W6FilterMaskShaderNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
 }
 public class W6FilterMaskShaderNativeSiteRecipeV1 internal constructor(public val host: W6FilterMaskShaderRecipeV1) : NativeSiteRecipeV1 {
     override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterMaskShader
     override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
-        text("owner", host.ownerPassId.value); text("target", host.target.value); text("coverageSource", host.coverageSource.value); int("occurrence", host.occurrenceIdI32); int("material", host.material.indexI32); text("uniformResource", host.uniformResource.value); long("uniformOffset", host.uniformOffsetBytesI64); long("uniformCapacity", host.uniformCapacityBytesI64); point("materialDeviceOrigin", host.copyMaterialDeviceOriginI32())
+        text("owner", host.ownerPassId.value); text("target", host.target.value); text("coverageSource", host.coverageSource.value); int("occurrence", host.occurrenceIdI32); int("material", host.material.indexI32); text("uniformResource", host.uniformResource.value); long("uniformOffset", host.uniformOffsetBytesI64); long("uniformCapacity", host.uniformCapacityBytesI64); text("materialStructuralId", host.materialStructuralId); text("materialCanonicalIdentity", host.materialCanonicalIdentity); long("materialUniformByteCount", host.materialUniformByteCountI64); host.bindingManifest().forEachIndexed { index, abi -> int("binding.$index.index", abi.bindingI32); enum("binding.$index.kind", abi.kind) }; int("bindingCount", host.bindingManifest().size); point("materialDeviceOrigin", host.copyMaterialDeviceOriginI32())
         int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("coverageExtentWidth", host.copyCoverageExtent().width); int("coverageExtentHeight", host.copyCoverageExtent().height); rect("known", host.copyKnownContentTargetLocalI32()); point("offset", host.copyOutputToCoverageOffsetTargetLocalI32())
         enum("targetFormat", host.targetFormat); enum("coverageFormat", host.coverageFormat); int("sampleCount", host.sampleCountI32); int("coverageSampleCount", host.coverageSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
     }
@@ -1454,13 +1462,14 @@ public fun freezeW6FilterMaskBlurDualSourceRecipesV1(passes: List<PlanPass>, res
 }
 
 /** IIf1 freezes the existing W5 material row as an ordered coverage/material group-zero contract. */
-public fun freezeW6FilterMaskShaderRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<PlanPassId, W6FilterMaskShaderRecipeV1> = LinkedHashMap<PlanPassId, W6FilterMaskShaderRecipeV1>().apply {
+public fun freezeW6FilterMaskShaderRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>, materialTable: MaterialPlanTable): Map<PlanPassId, W6FilterMaskShaderRecipeV1> = LinkedHashMap<PlanPassId, W6FilterMaskShaderRecipeV1>().apply {
     passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
         val operation = pass.operation as? FilterPassOperationV1.MaskShader ?: return@forEach
         val binding = operation.materialBinding as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned
             ?: error("W6 MaskShader requires its published W5 material binding.")
         val sampling = requireNotNull(operation.sampling)
         require(pass.frozenSamplingProgram == null && pass.inputs().size == 1 && binding.materialAuthority.materialPlanRef() == binding.material)
+        val materialAbi = w6FilterMaskShaderMaterialAbiV1(materialTable, binding)
         val target = resources.single { it.id == pass.output }; val coverage = resources.single { it.id == pass.inputs().single() }
         val uniform = resources.single { it.id == binding.uniformResource }
         val targetFormat = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 MaskShader requires color target.")
@@ -1468,9 +1477,76 @@ public fun freezeW6FilterMaskShaderRecipesV1(passes: List<PlanPass>, resources: 
         require(target.sampleCountI32 == 1 && coverage.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in coverage.usages() && uniform.role == PlanResourceRole.SourceUniformData && uniform.byteSize == binding.uniformCapacityBytesI64 && Math.addExact(binding.uniformOffsetBytesI64, 16L) <= binding.uniformCapacityBytesI64)
         require(put(pass.id, W6FilterMaskShaderRecipeV1(pass.id, pass.output, pass.inputs().single(), binding.occurrenceIdI32,
             binding.material, binding.uniformResource, binding.uniformOffsetBytesI64, binding.uniformCapacityBytesI64,
+            materialAbi.structuralId, materialAbi.canonicalIdentity, materialAbi.uniformByteCountI64, materialAbi.bindingManifest,
             binding.materialDeviceOriginI32, requireNotNull(target.copyExtent()), requireNotNull(coverage.copyExtent()),
             sampling.copyKnownContentInputTargetLocalI32(), sampling.copyOutputToInputOffsetTargetLocalI32(), targetFormat,
             coverageFormat, target.sampleCountI32, coverage.sampleCountI32)) == null)
+    }
+}
+
+private class W6FilterMaskShaderMaterialAbiV1(
+    val structuralId: String, val canonicalIdentity: String, val uniformByteCountI64: Long,
+    val bindingManifest: List<W6FilterMaskShaderBindingAbiV1>,
+)
+
+/** Planner-side projection of the W5 ABI. It deliberately contains no WGSL or native resource handle. */
+private fun w6FilterMaskShaderMaterialAbiV1(table: MaterialPlanTable,
+    binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned): W6FilterMaskShaderMaterialAbiV1 {
+    val authority = binding.materialAuthority
+    val v4 = authority is PlanDrawMaterialAuthority.MaterialV4 || authority is PlanDrawMaterialAuthority.MaterialV5
+    val structuralId: String
+    val canonicalIdentity: String
+    val uniformByteCountI64: Long
+    val manifest = mutableListOf(W6FilterMaskShaderBindingAbiV1(0, W6FilterMaskShaderBindingKindV1.UniformBuffer))
+    if (v4) {
+        val footprint = RawMaterialRequirementsV2.measureV4(table, binding.material)
+        structuralId = table.entry(binding.material).program.structuralId.value
+        canonicalIdentity = RawMaterialRequirementsV2.canonicalIdentityV4(footprint)
+        uniformByteCountI64 = footprint.uniformByteCountI64
+        val proof = table.colorSourceProofV4(binding.material)
+        proof.composedBindingLayout?.resources?.forEach { resource ->
+            val kind = when (resource.kindTagU32) {
+                1u -> W6FilterMaskShaderBindingKindV1.StorageBuffer
+                2u -> W6FilterMaskShaderBindingKindV1.SampledTexture
+                3u -> W6FilterMaskShaderBindingKindV1.Sampler
+                else -> error("W6 MaskShader has an unsupported composed binding kind.")
+            }
+            manifest += W6FilterMaskShaderBindingAbiV1(resource.bindingI32, kind)
+        }
+        if (proof.composedBindingLayout == null && proof.gradientStopSlab != null)
+            manifest += W6FilterMaskShaderBindingAbiV1(1, W6FilterMaskShaderBindingKindV1.StorageBuffer)
+    } else {
+        val raw = RawMaterialRequirementsV2.measureLegacy(table, binding.material)
+        structuralId = raw.structuralId
+        // W5 lowers MaterialV1/V2 (including ImageSampleV3) through its legacy raw stage.
+        // The published uniform row can be selected by a broader source-layout predicate,
+        // but it is not the stage identity authority.
+        canonicalIdentity = raw.canonicalIdentity
+        uniformByteCountI64 = raw.uniformByteCountI64
+        val image = raw.imageLayoutV3
+        if (image != null) {
+            image.gradientStorageBindingU32?.let { manifest += W6FilterMaskShaderBindingAbiV1(it.toInt(), W6FilterMaskShaderBindingKindV1.StorageBuffer) }
+            manifest += W6FilterMaskShaderBindingAbiV1(image.imageTextureBindingU32.toInt(), W6FilterMaskShaderBindingKindV1.SampledTexture)
+        } else if (w6FilterMaskShaderHasLegacyGradientV1(table, binding.material)) {
+            manifest += W6FilterMaskShaderBindingAbiV1(1, W6FilterMaskShaderBindingKindV1.StorageBuffer)
+        }
+    }
+    require(structuralId.isNotBlank() && uniformByteCountI64 >= 16L && manifest.map { it.bindingI32 }.distinct().size == manifest.size)
+    return W6FilterMaskShaderMaterialAbiV1(structuralId, canonicalIdentity, uniformByteCountI64, manifest)
+}
+
+/** Mirrors W5's lowerer walk: an opacity wrapper retains its child gradient storage ABI. */
+private fun w6FilterMaskShaderHasLegacyGradientV1(table: MaterialPlanTable, material: MaterialPlanRef): Boolean {
+    var ref = material
+    while (true) {
+        when (table.entry(ref).bindings) {
+            is MaterialBindingPlan.GradientV1 -> return true
+            is MaterialBindingPlan.OpacityF32V1 -> {
+                if (ref.indexI32 == 0) return false
+                ref = MaterialPlanRef(ref.indexI32 - 1)
+            }
+            else -> return false
+        }
     }
 }
 

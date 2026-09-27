@@ -3235,7 +3235,7 @@ internal class W6aLayerGraphConstruction(
         val w6FilterSeparableBlurRecipes = freezeW6FilterSeparableBlurRecipesV1(passes, resources + source.resources)
         val w6FilterMaskBlurNormalRecipes = freezeW6FilterMaskBlurNormalRecipesV1(passes, resources + source.resources)
         val w6FilterMaskBlurDualSourceRecipes = freezeW6FilterMaskBlurDualSourceRecipesV1(passes, resources + source.resources)
-        val w6FilterMaskShaderRecipes = freezeW6FilterMaskShaderRecipesV1(passes, resources + source.resources)
+        val w6FilterMaskShaderRecipes = freezeW6FilterMaskShaderRecipesV1(passes, resources + source.resources, requireNotNull(table))
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
             passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
             plainLayerCompositeRecipes, clipMaskInitializeRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,

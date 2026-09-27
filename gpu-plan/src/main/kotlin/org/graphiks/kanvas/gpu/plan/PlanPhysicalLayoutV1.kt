@@ -436,7 +436,7 @@ public class PlanPhysicalLayoutV1 private constructor(
             val expectedMaskBlurDualSources = freezeW6FilterMaskBlurDualSourceRecipesV1(graph.passes(), rows)
             require(source.w6FilterMaskBlurDualSourceRecipes.keys == expectedMaskBlurDualSources.keys)
             source.w6FilterMaskBlurDualSourceRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedMaskBlurDualSources.getValue(id).canonicalLogicalEncodingV1()) }
-            val expectedMaskShaders = freezeW6FilterMaskShaderRecipesV1(graph.passes(), rows)
+            val expectedMaskShaders = freezeW6FilterMaskShaderRecipesV1(graph.passes(), rows, requireNotNull(graph.materialTable))
             require(source.w6FilterMaskShaderRecipes.keys == expectedMaskShaders.keys)
             source.w6FilterMaskShaderRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedMaskShaders.getValue(id).canonicalLogicalEncodingV1()) }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
