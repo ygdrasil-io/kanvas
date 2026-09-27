@@ -92,6 +92,10 @@ private fun preflightW6bCoverageRasters(frame: GPUW6aLayerFramePlan, framePlan: 
         val geometry = frame.physical.w6bCoverageRasterGeometry(pass.id)
         val host = frame.physical.w6bCoverageRasterHostRecipe(pass.id)
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1 === pass }
+        val depthUses = render.resourceUses.filter {
+            it.role == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.PathDepthStencil
+        }
+        recipeDepthAttachmentPreflight(host, depthUses, render, frame)
         require(render.drawPackets.size == geometry.bundles().size && render.drawPackets.size == host.bundles().size)
         render.drawPackets.forEachIndexed { ordinal, packet ->
             val bundle = geometry.bundle(ordinal); val recipe = host.bundle(ordinal)
@@ -139,7 +143,10 @@ private fun preflightW6bCoverageRasters(frame: GPUW6aLayerFramePlan, framePlan: 
                 }
             }
             require(catalogRecipe.host === recipe && recipe.ownerPassId == pass.id &&
-                recipe.siteOrdinalI32 == 0 && recipe.bundleOrdinalI32 == ordinal &&
+                recipe.siteOrdinalI32 == 0 && recipe.bundleOrdinalI32 == ordinal) { "W6b catalog owner mismatch" }
+            require(recipe.output == pass.output && recipe.depthStencil == binding.depthStencil &&
+                render.target == frame.refs.getValue(recipe.output)) { "W6b frozen attachment reference mismatch." }
+            require(
                 packet.role == expectedRole && semantic.scissorBounds == expectedScissor &&
                 packet.clipExecutionPlan == expectedClip &&
                 frame.coverageRasterPipeline(packet) != null &&
@@ -155,6 +162,29 @@ private fun preflightW6bCoverageRasters(frame: GPUW6aLayerFramePlan, framePlan: 
                 Math.addExact(bundle.vertexWindow.offsetBytesI64, bundle.vertexWindow.usefulBytesI64) <= vertexRow.byteSize &&
                 Math.addExact(bundle.indexWindow.offsetBytesI64, bundle.indexWindow.usefulBytesI64) <= indexRow.byteSize &&
                 Math.addExact(bundle.uniformWindow.offsetBytesI64, bundle.uniformWindow.usefulBytesI64) <= uniformRow.byteSize)
+        }
+    }
+}
+
+private fun recipeDepthAttachmentPreflight(
+    host: W6bCoverageRasterHostRecipeV1,
+    depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
+    render: GPUFrameStep.RenderPassStep,
+    frame: GPUW6aLayerFramePlan,
+) {
+    val depth = host.bundles().map { it.depthStencil }.distinct()
+    require(depth.size == 1) { "W6b bundles must retain one shared explicit depth attachment presence." }
+    val depthId = depth.single()
+    if (depthId == null) {
+        require(depthUses.isEmpty() && render.depthStencilLoadStore == null) {
+            "Direct W6b coverage must not record a depth attachment."
+        }
+    } else {
+        val expected = frame.refs.getValue(depthId)
+        require(depthUses.size == 1 && depthUses.single().resource == expected &&
+            depthUses.single().usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment &&
+            depthUses.single().write && render.depthStencilLoadStore != null) {
+            "W6b stencil coverage depth attachment differs from its frozen recipe."
         }
     }
 }

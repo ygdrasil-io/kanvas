@@ -178,6 +178,9 @@ public class W6bCoverageRasterNativeSiteRecipeV1 internal constructor(
         enum("clip", host.clip)
         enum("uniformAbi", host.uniformAbi)
         enum("target", host.target)
+        text("output", host.output.value)
+        text("hasDepthStencil", (host.depthStencil != null).toString())
+        host.depthStencil?.let { text("depthStencil", it.value) }
         blend("blend", host.blend)
         enum("stencil", host.stencil)
         host.fillRule?.let { enum("fillRule", it) }

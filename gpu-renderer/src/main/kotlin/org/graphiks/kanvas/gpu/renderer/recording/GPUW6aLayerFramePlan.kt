@@ -768,7 +768,6 @@ private fun w6bCoverageRasterStructuralKey(
     val topology = when (recipe.topology) {
         W6bCoverageRasterTopologyV1.DirectTriangleList -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
         W6bCoverageRasterTopologyV1.StencilEdgeFan -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StencilEdgeFan
-        W6bCoverageRasterTopologyV1.StrokeStencilEdgeFan -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StrokeStencilEdgeFan
     }
     val depthStencil = when (recipe.stencil) {
         W6bCoverageRasterStencilV1.None -> GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None

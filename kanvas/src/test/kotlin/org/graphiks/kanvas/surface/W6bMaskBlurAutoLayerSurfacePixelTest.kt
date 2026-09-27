@@ -4,16 +4,22 @@ package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.RectI32
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertTrue
@@ -263,6 +269,44 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
             result.nativeEvidenceScopeKinds.toString())
         val causalOffsetI32 = (4 * W6bMaskBlurCpuOracle.widthI32 + 4) * 4
         assertTrue(expected[causalOffsetI32 + 3] > 0u, "Expected stencil coverage at translated interior pixel")
+        W6bMaskBlurCpuOracle.assertNear(expected, result.pixels)
+    }
+
+    @Test
+    fun `even odd stencil donut mask blur retains its frozen hole`() {
+        val expected = W6bMaskBlurCpuOracle.renderEvenOddDonutMaskSourceOver()
+        val path = Path().apply {
+            addRect(RectF32.ofLTRB(2f, 2f, 8f, 6f))
+            addRect(RectF32.ofLTRB(4f, 3f, 6f, 5f))
+            fillType = FillType.EVEN_ODD
+        }
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas { drawPath(path, Paint(ColorARGB.Red,
+                maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f), antiAlias = false)) }
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+        val holeOffsetI32 = (4 * W6bMaskBlurCpuOracle.widthI32 + 5) * 4
+        assertTrue(expected[holeOffsetI32 + 3] < 255u, "Expected blurred EVEN_ODD hole")
+        W6bMaskBlurCpuOracle.assertNear(expected, result.pixels)
+    }
+
+    @Test
+    fun `bevelled elbow path stroke mask blur retains frozen stencil coverage`() {
+        // The non-axis-aligned elbow keeps the CPU pixel centres off the bevel's shared
+        // triangle edge, so the independent hard-edge oracle does not assume a GPU edge rule.
+        val path = Path().apply { moveTo(2.25f, 2.25f); lineTo(7.25f, 2.25f); lineTo(8.25f, 6.25f); lineTo(3.25f, 6.25f) }
+        val paint = Paint(ColorARGB.Red, style = PaintStyle.STROKE, strokeWidth = 2f,
+            strokeJoin = StrokeJoin.BEVEL, strokeCap = StrokeCap.BUTT, antiAlias = false,
+            maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f))
+        val coverage = W4dPathStrokeCpuOracle.render(W6bMaskBlurCpuOracle.widthI32,
+            W6bMaskBlurCpuOracle.heightI32, listOf(W4dPathStrokeCpuOracle.Draw(path.toPathF32(),
+                paint.copy(maskFilter = null), scissorI32 = RectI32(0, 0, W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32))))
+        val expected = W6bMaskBlurCpuOracle.renderStrokeMaskSourceOver(coverage)
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas { drawPath(path, paint) }
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), result.nativeEvidenceScopeKinds.toString())
         W6bMaskBlurCpuOracle.assertNear(expected, result.pixels)
     }
 

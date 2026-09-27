@@ -14,7 +14,7 @@ public enum class W6bCoverageRasterUniformAbiV1 { Coverage32, AnalyticShape80 }
 public enum class W6bCoverageRasterTargetV1 { Rgba8UnormSrgbSingleSample }
 public enum class W6bCoverageRasterStencilV1 { None, WindingProducer, EvenOddProducer, CoverTestNonZero }
 public enum class W6bCoverageRasterRoleV1 { Shading, PathStencilProducer, PathStencilCover }
-public enum class W6bCoverageRasterTopologyV1 { DirectTriangleList, StencilEdgeFan, StrokeStencilEdgeFan }
+public enum class W6bCoverageRasterTopologyV1 { DirectTriangleList, StencilEdgeFan }
 public enum class W6bCoverageRasterClipV1 { None, Scissor }
 
 /**
@@ -65,6 +65,9 @@ public class W6bCoverageRasterBundleHostRecipeV1 internal constructor(
     public val family: W6bCoverageRasterFamilyV1,
     public val uniformAbi: W6bCoverageRasterUniformAbiV1,
     public val target: W6bCoverageRasterTargetV1,
+    public val output: PlanResourceId,
+    /** Explicitly null for direct coverage; retained for both stencil bundles otherwise. */
+    public val depthStencil: PlanResourceId?,
     public val blend: BlendPlan,
     public val stencil: W6bCoverageRasterStencilV1,
     public val fillRule: FillRule?,
@@ -88,9 +91,9 @@ public class W6bCoverageRasterBundleHostRecipeV1 internal constructor(
             (uniformAbi == W6bCoverageRasterUniformAbiV1.AnalyticShape80) == (analytic80 != null))
         require(geometry.uniformWindow.usefulBytesI64 == if (uniformAbi == W6bCoverageRasterUniformAbiV1.Coverage32) 32L else 80L)
         when (phase) {
-            W6bCoverageRasterPhaseV1.Direct -> require(geometry.role == W6bCoverageRasterBundleRoleV1.Direct && role == W6bCoverageRasterRoleV1.Shading && topology == W6bCoverageRasterTopologyV1.DirectTriangleList && stencil == W6bCoverageRasterStencilV1.None)
-            W6bCoverageRasterPhaseV1.StencilProducer -> require(geometry.role == W6bCoverageRasterBundleRoleV1.StencilProducer && role == W6bCoverageRasterRoleV1.PathStencilProducer && topology in setOf(W6bCoverageRasterTopologyV1.StencilEdgeFan, W6bCoverageRasterTopologyV1.StrokeStencilEdgeFan) && clip == W6bCoverageRasterClipV1.None && stencil in setOf(W6bCoverageRasterStencilV1.WindingProducer, W6bCoverageRasterStencilV1.EvenOddProducer) && fillRule != null)
-            W6bCoverageRasterPhaseV1.StencilCover -> require(geometry.role == W6bCoverageRasterBundleRoleV1.StencilCover && role == W6bCoverageRasterRoleV1.PathStencilCover && topology == W6bCoverageRasterTopologyV1.DirectTriangleList && stencil == W6bCoverageRasterStencilV1.CoverTestNonZero && fillRule != null)
+            W6bCoverageRasterPhaseV1.Direct -> require(geometry.role == W6bCoverageRasterBundleRoleV1.Direct && role == W6bCoverageRasterRoleV1.Shading && topology == W6bCoverageRasterTopologyV1.DirectTriangleList && stencil == W6bCoverageRasterStencilV1.None && depthStencil == null)
+            W6bCoverageRasterPhaseV1.StencilProducer -> require(geometry.role == W6bCoverageRasterBundleRoleV1.StencilProducer && role == W6bCoverageRasterRoleV1.PathStencilProducer && topology == W6bCoverageRasterTopologyV1.StencilEdgeFan && clip == W6bCoverageRasterClipV1.None && stencil in setOf(W6bCoverageRasterStencilV1.WindingProducer, W6bCoverageRasterStencilV1.EvenOddProducer) && fillRule != null && depthStencil != null)
+            W6bCoverageRasterPhaseV1.StencilCover -> require(geometry.role == W6bCoverageRasterBundleRoleV1.StencilCover && role == W6bCoverageRasterRoleV1.PathStencilCover && topology == W6bCoverageRasterTopologyV1.DirectTriangleList && stencil == W6bCoverageRasterStencilV1.CoverTestNonZero && fillRule != null && depthStencil != null)
         }
         require((family == W6bCoverageRasterFamilyV1.Point) == (pointMode == PointMode.POINTS)) {
             "W6b Point mode must be POINTS and only Point carries it."
@@ -168,7 +171,11 @@ public fun freezeW6bCoverageRasterHostsV1(
                     W6bCoverageRasterPhaseV1.StencilProducer -> if (fillRule == FillRule.EVEN_ODD) W6bCoverageRasterStencilV1.EvenOddProducer else W6bCoverageRasterStencilV1.WindingProducer
                 }
                 val role = when (phase) { W6bCoverageRasterPhaseV1.Direct -> W6bCoverageRasterRoleV1.Shading; W6bCoverageRasterPhaseV1.StencilProducer -> W6bCoverageRasterRoleV1.PathStencilProducer; W6bCoverageRasterPhaseV1.StencilCover -> W6bCoverageRasterRoleV1.PathStencilCover }
-                val topology = if (phase == W6bCoverageRasterPhaseV1.StencilProducer) if (family == W6bCoverageRasterFamilyV1.PathStroke) W6bCoverageRasterTopologyV1.StrokeStencilEdgeFan else W6bCoverageRasterTopologyV1.StencilEdgeFan else W6bCoverageRasterTopologyV1.DirectTriangleList
+                // W4d lowers retained path-stencil passes, including multi-segment strokes,
+                // as ordinary edge fans; W6b admits no separate stroke-fan route.
+                val topology = if (phase == W6bCoverageRasterPhaseV1.StencilProducer)
+                    W6bCoverageRasterTopologyV1.StencilEdgeFan
+                else W6bCoverageRasterTopologyV1.DirectTriangleList
                 val scissor = path?.copyScissorI32() ?: when (val draw = binding.draw) {
                     is AnalyticRectDraw -> draw.copyScissor(); is AnalyticRRectDraw -> draw.copyScissor(); is W5bPointDraw -> draw.copyScissorI32(); else -> error("Unadmitted W6b scissor") }
                 val clip = if (phase == W6bCoverageRasterPhaseV1.StencilProducer || scissor == RectI32(0, 0, extent.width, extent.height)) W6bCoverageRasterClipV1.None else W6bCoverageRasterClipV1.Scissor
@@ -177,7 +184,7 @@ public fun freezeW6bCoverageRasterHostsV1(
                     is W5bPointDraw -> draw.copyBoundsI32(); is PathDraw -> draw.copyScissorI32(); else -> error("Unadmitted W6b raster bounds")
                 }
                 W6bCoverageRasterBundleHostRecipeV1(coverage.id, 0, bundle.bundleOrdinalI32, phase, role, topology, clip, family, uniformAbi,
-                    W6bCoverageRasterTargetV1.Rgba8UnormSrgbSingleSample, binding.draw.blend, stencil, fillRule, path?.copyScissorI32() ?: when (val draw = binding.draw) {
+                    W6bCoverageRasterTargetV1.Rgba8UnormSrgbSingleSample, coverage.output, binding.depthStencil, binding.draw.blend, stencil, fillRule, path?.copyScissorI32() ?: when (val draw = binding.draw) {
                         is AnalyticRectDraw -> draw.copyScissor(); is AnalyticRRectDraw -> draw.copyScissor(); is W5bPointDraw -> draw.copyScissorI32(); else -> error("Unadmitted W6b scissor") },
                     rasterBounds, (binding.draw as? W5bPointDraw)?.pointMode, path?.strategy,
                     bundle, uniform32, analytic)

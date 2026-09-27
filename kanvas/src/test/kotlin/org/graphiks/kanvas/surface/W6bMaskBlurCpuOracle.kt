@@ -59,6 +59,12 @@ internal object W6bMaskBlurCpuOracle {
     fun renderTranslatedStencilPathMaskSourceOver(): UByteArray =
         opaqueSource(styled(BlurStyle.NORMAL, translatedStencilPathCoverage()))
 
+    fun renderEvenOddDonutMaskSourceOver(): UByteArray =
+        opaqueSource(styled(BlurStyle.NORMAL, evenOddDonutCoverage()))
+
+    fun renderStrokeMaskSourceOver(coverageRgba: UByteArray): UByteArray =
+        opaqueSource(styled(BlurStyle.NORMAL, FloatArray(widthI32 * heightI32) { coverageRgba[it * 4 + 3].toInt() / 255f }))
+
     fun renderLayerOverBlue(): UByteArray = sourceOverBlue(opaqueSourceAlpha(styled(BlurStyle.NORMAL, translatedRectCoverage())))
 
     fun renderMaskedThenImageBlur(): UByteArray = opaqueWhiteSource(blur(styled(BlurStyle.NORMAL, translatedRectCoverage())))
@@ -150,6 +156,11 @@ internal object W6bMaskBlurCpuOracle {
             }
             if (inside) coverage[yI32 * widthI32 + xI32] = 1f
         }
+    }
+
+    private fun evenOddDonutCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        fillRect(coverage, 2, 2, 8, 6, 1f)
+        fillRect(coverage, 4, 3, 6, 5, 0f)
     }
 
     private fun directTriangleCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
