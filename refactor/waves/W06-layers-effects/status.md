@@ -1264,3 +1264,36 @@ global. Review indépendante Sol : **Approved**, aucun finding
 Critical/Important ; la review est statique et ne remplace pas les tests.
 IIb est review-clean ; 2A0c.III/IV, W5a, leases/B/B−1, 2B et le gate W6
 global restent ouverts.
+
+### 2A0c.IIIa1 — PathRenderPass DirectColor Fill triangle non clippé
+
+Le premier site `SingleSampleDirectColor` ordinaire W6 gèle uniquement le
+`drawPath` Fill triangulaire non clippé : owner final pass/packet/bundle 0,
+géométrie et scissor de `:math`, cible et lignes physiques U/V/I, slices,
+blend et axes du pipeline. Le catalogue, le seal, la projection précoce sur
+le packet et le préflight des usages enregistrés ordonnés précèdent la
+création native. L'encodeur W6 choisit ce pipeline depuis la recette ; les
+autres formes DirectColor et la route W4d directe gardent leur chemin
+existant. Ce sous-lot ne clôt donc **pas** IIIa.
+
+Le témoin public `drawPath` triangulaire translaté dans une layer fixe ses
+pixels avant `Surface` et vérifie `Render` + `Readback`. Commit `c878919`.
+Les compilations ciblées passent ; après correction des invariants, la classe
+W6aLayerW4W5 affiche XML `24/0/0/0`, puis son worker sort 133
+(**UNKNOWN** pour le build). Le sélecteur W4e direct Rect/RRect/Path passe
+avec Gradle exit 0 sans build cache. Revue indépendante Sol : **Approved**
+sans finding Critical/Important, statique et limitée à IIIa1. Les DirectColor
+clippés, Stroke ou non triangulaires doivent être audités avant une clôture
+IIIa ; IIIb/c, IV, W5a, leases/B/B−1 et 2B restent ouverts.
+
+### Diagnostic du worker natif 133 sur macOS
+
+Le GPU Metal Apple M2 Max est disponible et le décalage ABI toolkit/ktypes
+déjà corrigé n'explique pas cet exit post-JUnit. Des rapports de crash `java`
+du 27 septembre montrent `EXC_BREAKPOINT`/`SIGTRAP`, avec l'assertion AppKit
+« Must only be used from the main thread » sur `Java: Thread-5` ; la pile
+passe par `-[NSWindow _doOrderWindow:]` puis `libglfw.dylib`. Cela étaye un
+problème de fenêtre/teardown GLFW sur thread secondaire, mais ne symbolise
+pas l'appel Java/JNI exact. Les XML JUnit à zéro échec ne transforment donc
+pas l'exit 133 en gate natif réussi. Aucun GM ni test d'infrastructure n'a
+été lancé pour ce diagnostic.
