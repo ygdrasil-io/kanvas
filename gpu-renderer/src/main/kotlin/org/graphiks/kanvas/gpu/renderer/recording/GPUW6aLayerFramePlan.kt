@@ -412,7 +412,12 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                         GPULoadStorePlan(if (path == null) "clear" else "load", GPUStorePlan.Store), samples,
                         resourceUses = uses, drawPackets = listOf(packet), sourceTaskIds = task,
                         batches = listOf(GPUFrameRenderBatch("w6a.${pass.id.value}", GPUPassBatchKind.Isolated, listOf(packet), task)),
-                        depthStencilLoadStore = path?.let(builder::depthStencilLoadStore), w6aPassV1 = pass))
+                        depthStencilLoadStore = physical.w4eClipMaskProducerDirectTriangleRecipes()[native.id]?.let { recipe ->
+                            GPUDepthStencilLoadStorePlan.WritableStencil(
+                                when (recipe.depthStencilState.stencilLoad) {
+                                    W4eClipMaskProducerDepthStencilLoadV1.Clear -> GPUStencilLoadOperation.Clear
+                                }, GPUStorePlan.Store, recipe.depthStencilState.stencilClearValueU32)
+                        } ?: path?.let(builder::depthStencilLoadStore), w6aPassV1 = pass))
                     return@forEach
                 }
                 when (pass) {

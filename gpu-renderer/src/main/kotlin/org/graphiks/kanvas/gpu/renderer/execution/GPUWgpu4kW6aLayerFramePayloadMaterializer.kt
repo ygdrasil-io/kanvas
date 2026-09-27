@@ -109,14 +109,43 @@ private fun preflightW4eClipMaskInitializes(
             val producer = entry.packet.w4ePreparedClipPass as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Producer
             val payload = binding.payload
             val slice = requireNotNull(payload.geometrySlice(recipe.passId.value, W4eNativePayloadPlan.PRODUCER_PATH))
-            require(producer != null && entry.render.w6aPassV1?.id == recipe.passId && entry.render.w6aPassV1?.ordinal == recipe.packetOrdinalI32 &&
-                producer.targetResourceId == recipe.target.id.value && producer.resolveTargetResourceId == recipe.resolveTarget?.id?.value && producer.depthStencilResourceId == recipe.depthStencil.id.value &&
-                producer.sampleCount == recipe.sampleCountI32 && producer.inverseCoverage == recipe.inverseCoverage && producer.antiAlias == recipe.antiAlias &&
-                slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 && slice.baseVertex == recipe.baseVertexI32 && slice.vertexCount == recipe.vertexCountI32 && slice.maxLocalIndex == recipe.maxLocalIndexI32 &&
-                entry.render.resourceUses.any { it.resource == frame.refs.getValue(recipe.target.id) && it.usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment && it.write } &&
-                entry.render.resourceUses.any { it.resource == frame.refs.getValue(recipe.depthStencil.id) && it.usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment && it.write }) {
-                "W4e direct-triangle recipe differs from its final packet, physical payload, or recorded attachments."
+            require(recipe.shaderFamily == W4eDirectTriangleShaderFamilyV1.PathGeometry &&
+                recipe.topology == W4eDirectTriangleTopologyV1.TriangleList &&
+                recipe.groupZeroAbi == W4eDirectTriangleGroupZeroAbiV1.NoBindGroup &&
+                recipe.stencil == W4eDirectTriangleStencilV1.NoopD24S8 &&
+                recipe.blend == W4eDirectTriangleBlendV1.CoverageReplace &&
+                recipe.load == W4eDirectTriangleLoadV1.Clear && recipe.store == W4eDirectTriangleStoreV1.Store &&
+                recipe.target.format == PlanTextureFormat.CoverageMask &&
+                recipe.resolveTarget?.let { it.format == PlanTextureFormat.CoverageMask } != false &&
+                recipe.depthStencil.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                recipe.indexCountI32 == 3 && recipe.vertexCountI32 == 3) {
+                "W4e direct-triangle native state differs from the admitted frozen recipe."
             }
+            val state = recipe.depthStencilState
+            require(state.depthClearValueF32 == 1f && state.depthLoad == W4eClipMaskProducerDepthStencilLoadV1.Clear &&
+                state.depthStore == W4eClipMaskProducerDepthStencilStoreV1.Store && !state.depthReadOnly &&
+                state.stencilClearValueU32 == 0u && state.stencilLoad == W4eClipMaskProducerDepthStencilLoadV1.Clear &&
+                state.stencilStore == W4eClipMaskProducerDepthStencilStoreV1.Store && !state.stencilReadOnly) {
+                "W4e direct-triangle depth/stencil state differs from the admitted frozen recipe."
+            }
+            fun exact(row: PlanResource, frozen: W4eClipMaskProducerPhysicalOperandV1): Boolean =
+                row.id == frozen.id && row.role == frozen.role && row.format == frozen.format &&
+                    row.copyExtent() == frozen.copyExtentI32() && row.sampleCountI32 == frozen.sampleCountI32 &&
+                    row.byteSize == frozen.byteSizeI64 && row.lifetime == frozen.lifetime && row.usages() == frozen.usages()
+            val expectedUses = listOfNotNull(
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.target.id), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.ClipMask, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, true),
+                recipe.resolveTarget?.let { org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(it.id), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.ClipMask, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, true) },
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.depthStencil.id), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.ClipDepthStencil, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, true),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.vertex.id), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.VertexData, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Vertex, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.index.id), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.IndexData, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Index, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+            )
+            require(producer != null && entry.render.w6aPassV1?.id == recipe.passId && entry.render.w6aPassV1?.ordinal == recipe.packetOrdinalI32 && producer.targetResourceId == recipe.target.id.value && producer.resolveTargetResourceId == recipe.resolveTarget?.id?.value && producer.depthStencilResourceId == recipe.depthStencil.id.value && producer.sampleCount == recipe.sampleCountI32 && producer.inverseCoverage == recipe.inverseCoverage && producer.antiAlias == recipe.antiAlias) { "W4e direct-triangle owner or packet differs from its frozen recipe." }
+            require(slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 && slice.baseVertex == recipe.baseVertexI32 && slice.vertexCount == recipe.vertexCountI32 && slice.maxLocalIndex == recipe.maxLocalIndexI32) { "W4e direct-triangle V/I slice differs from its frozen recipe." }
+            require(exact(frame.physical.resource(recipe.target.id), recipe.target) && recipe.resolveTarget?.let { exact(frame.physical.resource(it.id), it) } != false && exact(frame.physical.resource(recipe.depthStencil.id), recipe.depthStencil) && exact(frame.physical.resource(recipe.vertex.id), recipe.vertex) && exact(frame.physical.resource(recipe.index.id), recipe.index)) { "W4e direct-triangle physical rows differ from its frozen recipe." }
+            require(payload.vertexResourceId == recipe.vertex.id && payload.indexResourceId == recipe.index.id &&
+                entry.render.target == frame.refs.getValue(recipe.target.id) && entry.render.resourceUses == expectedUses &&
+                entry.render.samplePlan == if (recipe.sampleCountI32 == 4) GPUSamplePlan.MultisampleFrame(4) else GPUSamplePlan.SingleSampleFrame) { "W4e direct-triangle recorded resource uses differ from its frozen recipe." }
+            require(entry.render.loadStore.loadOp == "clear" && entry.render.loadStore.storePlan == GPUStorePlan.Store && entry.render.depthStencilLoadStore == GPUDepthStencilLoadStorePlan.WritableStencil(GPUStencilLoadOperation.Clear, GPUStorePlan.Store, 0u)) { "W4e direct-triangle attachment state differs from its frozen recipe: load=${entry.render.loadStore} depth=${entry.render.depthStencilLoadStore}" }
         } }
         val foldRecipes = entries.mapNotNull { entry -> frame.w4eClipMaskFoldRecipeOrNull(entry.packet)?.let { recipe ->
             require(recipe.passId.value == entry.packet.passId)

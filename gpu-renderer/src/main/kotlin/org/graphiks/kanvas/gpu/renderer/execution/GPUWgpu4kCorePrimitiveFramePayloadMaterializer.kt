@@ -59,6 +59,12 @@ import kotlin.math.floor
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
+import org.graphiks.kanvas.gpu.plan.W4eDirectTriangleGroupZeroAbiV1
+import org.graphiks.kanvas.gpu.plan.W4eDirectTriangleLoadV1
+import org.graphiks.kanvas.gpu.plan.W4eDirectTriangleShaderFamilyV1
+import org.graphiks.kanvas.gpu.plan.W4eDirectTriangleStoreV1
+import org.graphiks.kanvas.gpu.plan.W4eDirectTriangleTopologyV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskInitializeRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDirectTriangleRecipeV1
@@ -539,7 +545,7 @@ internal fun encodeW4eNativePasses(
                 val sampleCount = frozenRecipe?.sampleCountI32 ?: frozenDirectTriangleRecipe?.sampleCountI32 ?: pass.sampleCount
                 val inverseCoverage = frozenRecipe?.inverseCoverage ?: frozenDirectTriangleRecipe?.inverseCoverage ?: pass.inverseCoverage
                 val depthTarget = depthStencilResourceId?.let(attachment)
-                val frozenDepthStencilState = frozenRecipe?.depthStencilState
+                val frozenDepthStencilState = frozenRecipe?.depthStencilState ?: frozenDirectTriangleRecipe?.depthStencilState
                 val producerCommands = when {
                     frozenRecipe != null -> {
                         require(frozenRecipe.geometry in setOf(org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerGeometryV1.Rect, org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerGeometryV1.RRect) &&
@@ -559,40 +565,56 @@ internal fun encodeW4eNativePasses(
                             GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(frozenRecipe.fullscreenVertexCountI32)),
                         )
                     }
-                    pass.geometry is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path -> {
-                        val geometry = pass.geometry as org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path
-                        val pathGeometry = geometry.copyPathGeometryF32()
+                    frozenDirectTriangleRecipe != null || pass.geometry is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path -> {
+                        val pathGeometry = frozenDirectTriangleRecipe?.copyGeometryF32()?.copyPathGeometryF32()
+                            ?: (pass.geometry as org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path).copyPathGeometryF32()
                         val scissor = frozenDirectTriangleRecipe?.copyScissorI32() ?: pathGeometry.copyConservativeScissorI32()
                         val direct = pathGeometry.copyDirectTriangleF32OrNull()
                         if (direct != null) {
-                            require(frozenDirectTriangleRecipe == null ||
-                                frozenDirectTriangleRecipe.target.id.value == pass.targetResourceId &&
-                                frozenDirectTriangleRecipe.resolveTarget?.id?.value == pass.resolveTargetResourceId &&
-                                frozenDirectTriangleRecipe.depthStencil.id.value == pass.depthStencilResourceId &&
-                                frozenDirectTriangleRecipe.sampleCountI32 == sampleCount &&
-                                frozenDirectTriangleRecipe.inverseCoverage == inverseCoverage &&
-                                frozenDirectTriangleRecipe.indexCountI32 == 3 && frozenDirectTriangleRecipe.vertexCountI32 == 3) {
-                                "W4e direct triangle packet differs from its frozen planner recipe."
-                            }
-                            frozenDirectTriangleRecipe?.let { recipe ->
+                            if (frozenDirectTriangleRecipe != null) {
+                                val recipe = frozenDirectTriangleRecipe
+                                require(recipe.target.id.value == pass.targetResourceId &&
+                                    recipe.resolveTarget?.id?.value == pass.resolveTargetResourceId &&
+                                    recipe.depthStencil.id.value == pass.depthStencilResourceId &&
+                                    recipe.sampleCountI32 == sampleCount && recipe.inverseCoverage == inverseCoverage &&
+                                    recipe.shaderFamily == W4eDirectTriangleShaderFamilyV1.PathGeometry &&
+                                    recipe.topology == W4eDirectTriangleTopologyV1.TriangleList &&
+                                    recipe.groupZeroAbi == W4eDirectTriangleGroupZeroAbiV1.NoBindGroup &&
+                                    recipe.stencil == org.graphiks.kanvas.gpu.plan.W4eDirectTriangleStencilV1.NoopD24S8 &&
+                                    recipe.blend == org.graphiks.kanvas.gpu.plan.W4eDirectTriangleBlendV1.CoverageReplace &&
+                                    recipe.depthStencil.format == PlanTextureFormat.DepthStencil(org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                                    recipe.load == W4eDirectTriangleLoadV1.Clear && recipe.store == W4eDirectTriangleStoreV1.Store &&
+                                    recipe.indexCountI32 == 3 && recipe.vertexCountI32 == 3) {
+                                    "W6 direct triangle packet differs from its frozen planner recipe."
+                                }
                                 val slice = requireNotNull(nativePayload.geometrySlice(recipe.passId.value, W4eNativePayloadPlan.PRODUCER_PATH))
                                 require(slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 &&
                                     slice.baseVertex == recipe.baseVertexI32 && slice.vertexCount == recipe.vertexCountI32 &&
                                     slice.maxLocalIndex == recipe.maxLocalIndexI32)
-                            }
-                            val pipeline = createW4ePathGeometryPipeline(
-                                device, GPUTextureFormat.RGBA8Unorm, sampleCount,
-                                if (inverseCoverage) 0f else 1f,
-                                stencil = if (depthTarget != null) w4eStencilNoopState() else null,
-                                label = "Kanvas.frame.w4e.pathDirect.pipeline", owned = owned,
-                            )
-                            buildList {
-                                add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generation)))
-                                addAll(indexedGeometryCommands(
-                                    entry.packet.passId,
-                                    W4eNativePayloadPlan.PRODUCER_PATH,
-                                    GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom),
-                                ))
+                                val format = when (recipe.target.format) {
+                                    PlanTextureFormat.CoverageMask -> GPUTextureFormat.RGBA8Unorm
+                                    else -> throw refusal("invalid.native-core-primitive.w6-direct-triangle-format", "Frozen W6 direct triangle requires an RGBA8 coverage attachment.")
+                                }
+                                val pipeline = createW4ePathGeometryPipeline(device, format, recipe.sampleCountI32,
+                                    recipe.fragmentCoverageF32,
+                                    stencil = w4eStencilNoopState(), label = "Kanvas.frame.w6.w4e.pathDirect.pipeline", owned = owned)
+                                buildList {
+                                    add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generation)))
+                                    addAll(indexedGeometryCommands(recipe.passId.value, W4eNativePayloadPlan.PRODUCER_PATH,
+                                        GPUPixelBounds(recipe.copyScissorI32().left, recipe.copyScissorI32().top, recipe.copyScissorI32().right, recipe.copyScissorI32().bottom)))
+                                }
+                            } else {
+                                val pipeline = createW4ePathGeometryPipeline(
+                                    device, GPUTextureFormat.RGBA8Unorm, sampleCount,
+                                    if (inverseCoverage) 0f else 1f,
+                                    stencil = if (depthTarget != null) w4eStencilNoopState() else null,
+                                    label = "Kanvas.frame.w4e.pathDirect.pipeline", owned = owned,
+                                )
+                                buildList {
+                                    add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generation)))
+                                    addAll(indexedGeometryCommands(entry.packet.passId, W4eNativePayloadPlan.PRODUCER_PATH,
+                                        GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)))
+                                }
                             }
                         } else {
                             requireNotNull(pathGeometry.copyStencilEdgeFanF32OrNull())
@@ -635,10 +657,13 @@ internal fun encodeW4eNativePasses(
                         )
                     }
                 }
+                val directClear = frozenDirectTriangleRecipe?.clearCoverageF32?.toDouble()
+                    ?: if (inverseCoverage) 1.0 else 0.0
                 GPUPreparedNativeScopeOperand.Render(entry.index, GPUPreparedNativeRenderPassConfig(
                     attachment(targetResourceId), resolveTargetResourceId?.let(attachment), depthTarget,
-                    GPUPreparedNativeLoadOperation.Clear, GPUPreparedNativeStoreOperation.Store,
-                    GPUPreparedNativeClearColor(if (inverseCoverage) 1.0 else 0.0, if (inverseCoverage) 1.0 else 0.0, if (inverseCoverage) 1.0 else 0.0, if (inverseCoverage) 1.0 else 0.0),
+                    frozenDirectTriangleRecipe?.load?.let { when (it) { W4eDirectTriangleLoadV1.Clear -> GPUPreparedNativeLoadOperation.Clear } } ?: GPUPreparedNativeLoadOperation.Clear,
+                    frozenDirectTriangleRecipe?.store?.let { when (it) { W4eDirectTriangleStoreV1.Store -> GPUPreparedNativeStoreOperation.Store } } ?: GPUPreparedNativeStoreOperation.Store,
+                    GPUPreparedNativeClearColor(directClear, directClear, directClear, directClear),
                     depthClearValue = frozenDepthStencilState?.depthClearValueF32 ?: 1f.takeIf { depthTarget != null },
                     depthLoadOperation = frozenDepthStencilState?.depthLoad?.let(::frozenDepthStencilLoad) ?: GPUPreparedNativeLoadOperation.Clear.takeIf { depthTarget != null },
                     depthStoreOperation = frozenDepthStencilState?.depthStore?.let(::frozenDepthStencilStore) ?: GPUPreparedNativeStoreOperation.Store.takeIf { depthTarget != null },
