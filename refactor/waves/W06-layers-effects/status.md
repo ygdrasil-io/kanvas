@@ -1101,4 +1101,6 @@ fixe le blanc avant `PictureRecorder`/`Surface` : sans W5f, magenta ; sans
 snapshot, jaune ; avec la carrier bleue au lieu du graph source, vert. Les
 trois compilations ciblées réussissent. Le témoin donne XML `1/0/0/0`, W6d
 entière `30/0/0/0`, puis l'exécuteur natif sort 133 (**UNKNOWN**). La revue
-Sol de d2 reste ouverte ; IIIa2, W4e/W5a, budget/leases et 2B ne sont pas clos.
+Sol de d2 est **Approved** à `e51302e`, sans finding Critical/Important/Minor.
+IIIc3 est review-clean pour les six ABI Picture actives et `Empty` ; IIIa2,
+W4e/W5a, budget/leases et 2B ne sont pas clos.
