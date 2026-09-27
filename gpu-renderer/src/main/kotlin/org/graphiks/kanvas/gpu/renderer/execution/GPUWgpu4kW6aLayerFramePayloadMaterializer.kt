@@ -16,6 +16,10 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dDistantDiffusePass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dLightingPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dPictureSamplingPass
 import org.graphiks.kanvas.gpu.renderer.recording.*
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bMaskCoverageSnippet
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bSeparableBlurSnippet
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -72,6 +76,89 @@ private fun preflightW4eClipMaskInitializes(
         binding to W4eClipMaskInitializeNativePreflight(entries, recipes)
     }.toMap()
 
+/** Exhaustively authenticates W6b recipes, packet order, meshes and V/I/U windows before any device.create*. */
+private fun preflightW6bCoverageRasters(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = frame.graph.passes().filterIsInstance<PlanPass.FilterCoverageSourcePass>().mapNotNull { pass ->
+        pass.rasterBinding?.takeUnless { it.draw is SolidRectDraw }?.let { pass }
+    }
+    require(frame.physical.w6bCoverageRasterHostRecipes().keys == expected.map { it.id }.toSet())
+    expected.forEach { pass ->
+        val binding = requireNotNull(pass.rasterBinding)
+        val data = requireNotNull(binding.drawDataResources)
+        require(frame.physical.resource(pass.output).format ==
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)) {
+            "W6b coverage preflight requires its frozen sRGB color attachment."
+        }
+        val geometry = frame.physical.w6bCoverageRasterGeometry(pass.id)
+        val host = frame.physical.w6bCoverageRasterHostRecipe(pass.id)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1 === pass }
+        require(render.drawPackets.size == geometry.bundles().size && render.drawPackets.size == host.bundles().size)
+        render.drawPackets.forEachIndexed { ordinal, packet ->
+            val bundle = geometry.bundle(ordinal); val recipe = host.bundle(ordinal)
+            val catalogRecipe = frame.physical.nativeSiteRecipeCatalogV1().recipe(
+                NativeSiteOwnerV1(pass.id, 0, ordinal),
+            ) as? W6bCoverageRasterNativeSiteRecipeV1
+                ?: error("W6b raster bundle is absent from the frozen native-site catalog.")
+            val vertexRow = frame.physical.resource(bundle.vertexWindow.resourceId)
+            val indexRow = frame.physical.resource(bundle.indexWindow.resourceId)
+            val uniformRow = frame.physical.resource(bundle.uniformWindow.resourceId)
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                ?: error("W6b coverage packet must retain CorePrimitive semantics.")
+            val expectedRole = when (recipe.role) {
+                W6bCoverageRasterRoleV1.Shading -> GPUDrawPacketRole.Shading
+                W6bCoverageRasterRoleV1.PathStencilProducer -> GPUDrawPacketRole.PathStencilProducer
+                W6bCoverageRasterRoleV1.PathStencilCover -> GPUDrawPacketRole.PathStencilCover
+            }
+            val expectedScissor = recipe.copyScissorI32().let {
+                GPUPixelBounds(it.left, it.top, it.right, it.bottom)
+            }
+            val expectedClip = if (recipe.clip == W6bCoverageRasterClipV1.None)
+                GPUClipExecutionPlan.NoClip else GPUClipExecutionPlan.ScissorOnly(expectedScissor)
+            val semanticMesh = semantic.geometry as? org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath
+            val triangulatedCoverage = recipe.family in setOf(
+                W6bCoverageRasterFamilyV1.Point,
+                W6bCoverageRasterFamilyV1.PathFill,
+                W6bCoverageRasterFamilyV1.PathStroke,
+            ) && recipe.role != W6bCoverageRasterRoleV1.PathStencilCover
+            if (triangulatedCoverage) {
+                requireNotNull(semanticMesh) { "W6b frozen direct or stencil-producer coverage requires triangulated packet geometry." }
+                require(semanticMesh.vertices == bundle.mesh.copyPositionsF32().toList() &&
+                    requireNotNull(semanticMesh.indices) == requireNotNull(bundle.mesh.copyIndicesI32()).toList()) {
+                    "W6b frozen coverage mesh differs from its recorded CorePrimitive packet."
+                }
+            } else {
+                require(recipe.role == W6bCoverageRasterRoleV1.PathStencilCover ||
+                    (recipe.family in setOf(W6bCoverageRasterFamilyV1.AnalyticRect, W6bCoverageRasterFamilyV1.AnalyticRRect) &&
+                        recipe.uniformAbi == W6bCoverageRasterUniformAbiV1.AnalyticShape80)) {
+                    "W6b non-triangulated coverage must retain its frozen analytic or stencil-cover authority."
+                }
+                require(recipe.role != W6bCoverageRasterRoleV1.PathStencilCover ||
+                    (recipe.topology == W6bCoverageRasterTopologyV1.DirectTriangleList &&
+                    bundle.vertexCountI32 == 4 && bundle.indexCountI32 == 6)) {
+                    "W6b stencil cover must retain its planner-sealed scissor quad."
+                }
+            }
+            require(catalogRecipe.host === recipe && recipe.ownerPassId == pass.id &&
+                recipe.siteOrdinalI32 == 0 && recipe.bundleOrdinalI32 == ordinal &&
+                packet.role == expectedRole && semantic.scissorBounds == expectedScissor &&
+                packet.clipExecutionPlan == expectedClip &&
+                frame.coverageRasterPipeline(packet) != null &&
+                recipe.geometry === bundle && bundle.vertexWindow.resourceId == data.vertex &&
+                bundle.indexWindow.resourceId == data.index && bundle.uniformWindow.resourceId == data.uniform &&
+                vertexRow.byteSize == bundle.vertexWindow.capacityBytesI64 &&
+                indexRow.byteSize == bundle.indexWindow.capacityBytesI64 &&
+                uniformRow.byteSize == bundle.uniformWindow.capacityBytesI64 &&
+                w6bCoverageUniformBytes(recipe).contentEquals(frame.analyticUniform(packet)) &&
+                recipe.copyScissorI32().width() > 0 && recipe.copyScissorI32().height() > 0 &&
+                bundle.vertexWindow.usefulBytesI64 == bundle.vertexCountI32.toLong() * 8L &&
+                bundle.indexWindow.usefulBytesI64 == bundle.indexCountI32.toLong() * 4L &&
+                Math.addExact(bundle.vertexWindow.offsetBytesI64, bundle.vertexWindow.usefulBytesI64) <= vertexRow.byteSize &&
+                Math.addExact(bundle.indexWindow.offsetBytesI64, bundle.indexWindow.usefulBytesI64) <= indexRow.byteSize &&
+                Math.addExact(bundle.uniformWindow.offsetBytesI64, bundle.uniformWindow.usefulBytesI64) <= uniformRow.byteSize)
+        }
+    }
+}
+
 /** Native translation of exact W6 resources and passes behind one ordinary frame draft. */
 internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
     private val device: GPUDevice,
@@ -98,6 +185,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         var spatialBinding: GPUW6cSpatialFilterSessionCache.Binding? = null
         try {
             val graph = frame.graph
+            preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
             // native boundary.  A warm driver cache may avoid creation work, never this lease.
@@ -1369,14 +1457,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             "W6b coverage raster requires one admitted W4 analytic or path producer."
         }
         val data = requireNotNull(coverageBinding.drawDataResources)
-        val coverBinding = requireNotNull(frame.physical.geometryBinding(pass.id))
+        val frozenGeometry = frame.physical.w6bCoverageRasterGeometry(pass.id)
+        val frozenHost = frame.physical.w6bCoverageRasterHostRecipe(pass.id)
         val packets = render.drawPackets
         val stencil = coverageBinding.depthStencil != null
         require(packets.size == if (stencil) 2 else 1)
         val commands = buildList {
             packets.forEachIndexed { packetIndexI32, packet ->
                 val producer = stencil && packetIndexI32 == 0
-                val mapped = requireNotNull(frame.geometryPipeline(packet)) {
+                val frozenBundle = frozenGeometry.bundle(packetIndexI32)
+                val recipe = frozenHost.bundle(packetIndexI32)
+                require(recipe.geometry === frozenBundle)
+                val mapped = requireNotNull(frame.coverageRasterPipeline(packet)) {
                     "W6b coverage raster requires a mapped frozen W4 pipeline."
                 }
                 val template = frame.template(packet)
@@ -1386,65 +1478,32 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val pipeline = if (producer) geometryPipeline(mapped, layout, owned, template)
                     else coverageGeometryPipeline(mapped, layout, requireNotNull(template), owned)
                 val uniformPayload = frame.analyticUniform(packet)
+                require(uniformPayload.contentEquals(w6bCoverageUniformBytes(recipe)))
                 val nativeUniform = geometryBuffers[data.uniform] ?: fallbackUniform
-                val fill = (draw as? PathDraw)?.copyPathGeometry()?.let { geometry -> when (geometry) {
-                    is PathDrawGeometry.Fill -> geometry.valueF32
-                    is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
-                    else -> error("Unadmitted W6b coverage path geometry")
-                } }
-                val packed: W6bPackedGeometry = when (draw) {
-                    is AnalyticRectDraw -> packW4RasterGeometry(listOf(draw.copyRasterBounds())).let {
-                        W6bPackedGeometry(it.vertices, it.indices)
-                    }
-                    is AnalyticRRectDraw -> packW4RasterGeometry(listOf(draw.copyRasterBounds())).let {
-                        W6bPackedGeometry(it.vertices, it.indices)
-                    }
-                    is W5bPointDraw -> W6bPackedGeometry(draw.copyVerticesF32(), draw.copyIndicesI32())
-                    is PathDraw -> when {
-                        producer -> requireNotNull(fill).copyStencilEdgeFanF32OrNull()?.let { fan ->
-                            W6bPackedGeometry(fan.copyVerticesF32(), fan.copyIndicesI32())
-                        } ?: error("W6b coverage stencil producer lacks its frozen edge fan")
-                        stencil -> packW4RasterGeometry(listOf(draw.copyScissorI32())).let {
-                            W6bPackedGeometry(it.vertices, it.indices)
-                        }
-                        else -> requireNotNull(fill).copyDirectTriangleF32OrNull()?.let { direct ->
-                            W6bPackedGeometry(direct.copyVerticesF32(), direct.copyIndicesI32())
-                        } ?: error("W6b coverage path lacks its frozen direct triangles")
-                    }
-                    else -> error("Unadmitted W6b coverage geometry")
-                }
-                val vertexOffset = if (producer) 0L else coverBinding.vertexOffsetI64
-                val indexOffset = if (producer) 0L else coverBinding.indexOffsetI64
-                val uniformOffset = if (producer) 0L else coverBinding.uniformOffsetI64
-                val vertexBytes = Math.multiplyExact(packed.vertices.size.toLong(), 4L)
-                val indexBytes = Math.multiplyExact(packed.indices.size.toLong(), 4L)
-                require(Math.addExact(vertexOffset, vertexBytes) <= frame.physical.resource(data.vertex).byteSize &&
-                    Math.addExact(indexOffset, indexBytes) <= frame.physical.resource(data.index).byteSize &&
-                    Math.addExact(uniformOffset, uniformPayload.size.toLong()) <= frame.physical.resource(data.uniform).byteSize)
-                queue.writeBuffer(geometryBuffers.getValue(data.vertex), vertexOffset.toULong(), ArrayBuffer.of(packed.vertices))
-                queue.writeBuffer(geometryBuffers.getValue(data.index), indexOffset.toULong(), ArrayBuffer.of(packed.indices))
-                queue.writeBuffer(nativeUniform, uniformOffset.toULong(), ArrayBuffer.of(uniformPayload))
+                val vertex = frozenBundle.vertexWindow
+                val index = frozenBundle.indexWindow
+                val uniform = frozenBundle.uniformWindow
+                require(vertex.resourceId == data.vertex && index.resourceId == data.index && uniform.resourceId == data.uniform &&
+                    uniform.usefulBytesI64 == uniformPayload.size.toLong())
+                queue.writeBuffer(geometryBuffers.getValue(vertex.resourceId), vertex.offsetBytesI64.toULong(), ArrayBuffer.of(frozenBundle.mesh.copyPositionsF32()))
+                queue.writeBuffer(geometryBuffers.getValue(index.resourceId), index.offsetBytesI64.toULong(), ArrayBuffer.of(requireNotNull(frozenBundle.mesh.copyIndicesI32())))
+                queue.writeBuffer(nativeUniform, uniform.offsetBytesI64.toULong(), ArrayBuffer.of(uniformPayload))
                 val bind = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
                     BindGroupEntry(0u, BufferBinding(nativeUniform, 0uL, uniformPayload.size.toULong())),
                 ))))
-                val scissor = when (draw) {
-                    is AnalyticRectDraw -> draw.copyScissor()
-                    is AnalyticRRectDraw -> draw.copyScissor()
-                    is W5bPointDraw -> draw.copyScissorI32()
-                    is PathDraw -> draw.copyScissorI32()
-                }
+                val scissor = recipe.copyScissorI32()
                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)))
                 add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bind, generation),
-                    listOf(uniformOffset)))
+                    listOf(uniform.offsetBytesI64)))
                 add(GPUPreparedNativeRenderCommand.SetVertexBuffer(0,
-                    GPUPreparedNativeBufferOperand(geometryBuffers.getValue(data.vertex), generation), vertexOffset, vertexBytes, 8L))
+                    GPUPreparedNativeBufferOperand(geometryBuffers.getValue(vertex.resourceId), generation), vertex.offsetBytesI64, vertex.usefulBytesI64, 8L))
                 add(GPUPreparedNativeRenderCommand.SetIndexBuffer(
-                    GPUPreparedNativeBufferOperand(geometryBuffers.getValue(data.index), generation),
-                    GPUPreparedNativeIndexFormat.Uint32, indexOffset, indexBytes))
+                    GPUPreparedNativeBufferOperand(geometryBuffers.getValue(index.resourceId), generation),
+                    GPUPreparedNativeIndexFormat.Uint32, index.offsetBytesI64, index.usefulBytesI64))
                 add(GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()))
                 add(GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                    indexCount = packed.indices.size, firstIndex = 0, baseVertex = 0,
-                    vertexCount = packed.vertices.size / 2, maxLocalIndex = packed.indices.max(),
+                    indexCount = frozenBundle.indexCountI32, firstIndex = 0, baseVertex = 0,
+                    vertexCount = frozenBundle.vertexCountI32, maxLocalIndex = frozenBundle.maxIndexI32,
                 )))
             }
         }
@@ -2070,7 +2129,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
     }
 }
 
-private data class W6bPackedGeometry(val vertices: FloatArray, val indices: IntArray)
 
 private class W6aOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
     private val handles = mutableListOf<AutoCloseable>()

@@ -24,6 +24,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6PreparedVertices,
     W6PlainLayerComposite,
     W4eClipMaskInitialize,
+    W6bCoverageRaster,
 }
 
 /**
@@ -162,6 +163,43 @@ public class W4eClipMaskInitializeNativeSiteRecipeV1 internal constructor(
     }
 }
 
+/** Canonical logical recipe for one W6b direct/producer/cover bundle. */
+public class W6bCoverageRasterNativeSiteRecipeV1 internal constructor(
+    public val host: W6bCoverageRasterBundleHostRecipeV1,
+) : NativeSiteRecipeV1 {
+    override val versionI32: Int = 1
+    override val owner: NativeSiteOwnerV1 = NativeSiteOwnerV1(host.ownerPassId, host.siteOrdinalI32, host.bundleOrdinalI32)
+    override val family: NativeSiteRecipeFamilyV1 = NativeSiteRecipeFamilyV1.W6bCoverageRaster
+    override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
+        enum("geometry", host.family)
+        enum("phase", host.phase)
+        enum("role", host.role)
+        enum("topology", host.topology)
+        enum("clip", host.clip)
+        enum("uniformAbi", host.uniformAbi)
+        enum("target", host.target)
+        blend("blend", host.blend)
+        enum("stencil", host.stencil)
+        host.fillRule?.let { enum("fillRule", it) }
+        rect("scissor", host.copyScissorI32())
+        rect("rasterBounds", host.copyRasterBoundsI32())
+        host.pointMode?.let { enum("pointMode", it) }
+        host.pathStrategy?.let { enum("pathStrategy", it) }
+        host.uniform32?.let { uniform ->
+            int("targetWidth", uniform.targetWidthI32); int("targetHeight", uniform.targetHeightI32)
+            color("coverageColor", uniform.color)
+        }
+        host.analytic80?.let { uniform ->
+            int("targetWidth", uniform.targetWidthI32); int("targetHeight", uniform.targetHeightI32)
+            text("antiAlias", uniform.antiAlias.toString())
+            rectF32("deviceBounds", uniform.copyDeviceBounds())
+            uniform.copyRadiiF32().forEachIndexed { index, value -> float("radius.$index", value) }
+            enum("drawOrigin", uniform.drawOrigin)
+            color("coverageColor", uniform.color)
+        }
+    }
+}
+
 /**
  * The closed 2A0a catalog.  It contains only the seven already frozen 2P0–2P6 families;
  * W6a variants still open in 2A0b, remaining W4e packets, W5a, leases, and budget are absent.
@@ -199,6 +237,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         preparedVertices: Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1>,
         plainLayerComposites: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>,
         clipMaskInitializes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
+        coverageRasters: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -206,6 +245,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6PreparedVerticesNativeSiteRecipeV1 -> preparedVertices[recipe.host.site] === recipe.host
             is W6PlainLayerCompositeNativeSiteRecipeV1 -> plainLayerComposites[recipe.host.site] === recipe.host
             is W4eClipMaskInitializeNativeSiteRecipeV1 -> clipMaskInitializes[recipe.host.passId] === recipe.host
+            is W6bCoverageRasterNativeSiteRecipeV1 -> coverageRasters[recipe.host.ownerPassId]?.bundle(recipe.host.bundleOrdinalI32) === recipe.host
         }
     }
 
@@ -222,17 +262,20 @@ public fun freezeNativeSiteRecipeCatalogV1(
     preparedVertices: Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1>,
     plainLayerComposites: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>,
     clipMaskInitializes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
+    coverageRasters: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
     preparedVertices.forEach { (site, recipe) -> require(site == recipe.site) }
     plainLayerComposites.forEach { (site, recipe) -> require(site == recipe.site) }
     clipMaskInitializes.forEach { (passId, recipe) -> require(passId == recipe.passId) }
+    coverageRasters.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
     val remainingPlainComposites = plainLayerComposites.toMutableMap()
     val remainingClipInitializes = clipMaskInitializes.toMutableMap()
+    val remainingCoverageRasters = coverageRasters.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -247,11 +290,14 @@ public fun freezeNativeSiteRecipeCatalogV1(
             is PlanPass.ClipMaskInitialize -> remainingClipInitializes.remove(pass.id)?.let {
                 add(W4eClipMaskInitializeNativeSiteRecipeV1(it))
             }
+            is PlanPass.FilterCoverageSourcePass -> remainingCoverageRasters.remove(pass.id)?.bundles()?.forEach {
+                add(W6bCoverageRasterNativeSiteRecipeV1(it))
+            }
             else -> Unit
         }
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
-        remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty()) {
+        remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -319,6 +365,14 @@ private class NativeSiteEncodingWriterV1(family: NativeSiteRecipeFamilyV1) {
     fun point(name: String, value: org.graphiks.math.geometry.Point2I32) {
         int("$name.x", value.x)
         int("$name.y", value.y)
+    }
+    fun color(name: String, value: W6CanonicalColorF32V1) {
+        float("$name.red", value.redF32); float("$name.green", value.greenF32)
+        float("$name.blue", value.blueF32); float("$name.alpha", value.alphaF32)
+    }
+    fun rectF32(name: String, value: org.graphiks.math.geometry.RectF32) {
+        float("$name.left", value.left); float("$name.top", value.top)
+        float("$name.right", value.right); float("$name.bottom", value.bottom)
     }
     fun rect(name: String, value: org.graphiks.math.geometry.RectI32) {
         int("$name.left", value.left)

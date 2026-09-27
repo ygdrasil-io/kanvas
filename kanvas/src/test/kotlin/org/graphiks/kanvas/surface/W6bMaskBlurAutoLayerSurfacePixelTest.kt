@@ -33,9 +33,17 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
     fun `fractional anti aliased coverage uses Porter Duff mask blur styles`() {
         listOf(BlurStyle.SOLID, BlurStyle.OUTER, BlurStyle.INNER).forEach { style ->
             val expected = W6bMaskBlurCpuOracle.renderFractionalStyle(style)
-            val actual = renderFractionalMaskedRect(style)
+            val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+                surface.canvas {
+                    drawRect(RectF32.ofLTRB(3.25f, 2.25f, 6.75f, 5.75f), Paint(
+                        ColorARGB.Red, maskFilter = MaskFilter.Blur(style, 1f), antiAlias = true,
+                    ))
+                }
+            }.render()
+            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                result.nativeEvidenceScopeKinds.toString())
 
-            W6bMaskBlurCpuOracle.assertNear(expected, actual, toleranceI32 = 18)
+            W6bMaskBlurCpuOracle.assertNear(expected, result.pixels, toleranceI32 = 18)
         }
     }
 
@@ -151,12 +159,13 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
 
     @Test
     fun `convex direct path mask blurs its frozen coverage with red material`() {
+        val expected = W6bMaskBlurCpuOracle.renderDirectTriangleMaskSourceOver()
         val path = Path()
             .moveTo(2f, 2f)
             .lineTo(8f, 2f)
             .lineTo(2f, 7f)
             .close()
-        val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
             surface.canvas {
                 drawPath(path, Paint(
                     ColorARGB.Red,
@@ -164,9 +173,29 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
                     antiAlias = false,
                 ))
             }
-        }.render().pixels
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
 
-        W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderDirectTriangleMaskSourceOver(), actual)
+        W6bMaskBlurCpuOracle.assertNear(expected, result.pixels)
+    }
+
+    @Test
+    fun `point mask blur uses its frozen triangulated coverage`() {
+        val expected = W6bMaskBlurCpuOracle.renderPointMaskSourceOver()
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas {
+                drawPoint(5f, 4f, Paint(
+                    ColorARGB.Red,
+                    strokeWidth = 2f,
+                    maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
+                    antiAlias = false,
+                ))
+            }
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+        W6bMaskBlurCpuOracle.assertNear(expected, result.pixels)
     }
 
     @Test
@@ -213,6 +242,28 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
         }.render().pixels
 
         W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderStencilPathMaskSourceOver(), actual)
+    }
+
+    @Test
+    fun `translated layer stencil path mask blur retains frozen coverage`() {
+        val expected = W6bMaskBlurCpuOracle.renderTranslatedStencilPathMaskSourceOver()
+        val path = Path()
+            .moveTo(1f, 1f).lineTo(7f, 1f).lineTo(7f, 5f)
+            .lineTo(4f, 3f).lineTo(1f, 5f).close()
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas {
+                saveLayer(SaveLayerRec())
+                translate(1f, 1f)
+                drawPath(path, Paint(ColorARGB.Red,
+                    maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f), antiAlias = false))
+                restore()
+            }
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+        val causalOffsetI32 = (4 * W6bMaskBlurCpuOracle.widthI32 + 4) * 4
+        assertTrue(expected[causalOffsetI32 + 3] > 0u, "Expected stencil coverage at translated interior pixel")
+        W6bMaskBlurCpuOracle.assertNear(expected, result.pixels)
     }
 
     private fun renderTranslatedMaskedRect(style: BlurStyle): UByteArray =

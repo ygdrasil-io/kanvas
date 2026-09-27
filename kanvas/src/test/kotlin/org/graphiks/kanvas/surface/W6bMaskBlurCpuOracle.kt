@@ -49,9 +49,15 @@ internal object W6bMaskBlurCpuOracle {
 
     fun renderDirectTriangleMaskSourceOver(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, directTriangleCoverage()))
 
+    /** Square-cap public Point fixture: a 2px point centred at (5,4) freezes [4,6)×[3,5). */
+    fun renderPointMaskSourceOver(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, pointCoverage()))
+
     fun renderStencilPathDstOutOverGreen(): UByteArray = dstOutGreen(styled(BlurStyle.NORMAL, stencilPathCoverage()))
 
     fun renderStencilPathMaskSourceOver(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, stencilPathCoverage()))
+
+    fun renderTranslatedStencilPathMaskSourceOver(): UByteArray =
+        opaqueSource(styled(BlurStyle.NORMAL, translatedStencilPathCoverage()))
 
     fun renderLayerOverBlue(): UByteArray = sourceOverBlue(opaqueSourceAlpha(styled(BlurStyle.NORMAL, translatedRectCoverage())))
 
@@ -131,6 +137,21 @@ internal object W6bMaskBlurCpuOracle {
         }
     }
 
+    private fun translatedStencilPathCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        val vertices = arrayOf(floatArrayOf(2f, 2f), floatArrayOf(8f, 2f), floatArrayOf(8f, 6f),
+            floatArrayOf(5f, 4f), floatArrayOf(2f, 6f))
+        for (yI32 in 0 until heightI32) for (xI32 in 0 until widthI32) {
+            val xF32 = xI32 + .5f; val yF32 = yI32 + .5f
+            var inside = false
+            for (indexI32 in vertices.indices) {
+                val start = vertices[indexI32]; val end = vertices[(indexI32 + 1).rem(vertices.size)]
+                if ((start[1] > yF32) != (end[1] > yF32) &&
+                    xF32 < (end[0] - start[0]) * (yF32 - start[1]) / (end[1] - start[1]) + start[0]) inside = !inside
+            }
+            if (inside) coverage[yI32 * widthI32 + xI32] = 1f
+        }
+    }
+
     private fun directTriangleCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
         val vertices = arrayOf(
             floatArrayOf(2f, 2f),
@@ -149,6 +170,10 @@ internal object W6bMaskBlurCpuOracle {
             if ((cross0 >= 0f && cross1 >= 0f && cross2 >= 0f) ||
                 (cross0 <= 0f && cross1 <= 0f && cross2 <= 0f)) coverage[yI32 * widthI32 + xI32] = 1f
         }
+    }
+
+    private fun pointCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        fillRect(coverage, 4, 3, 6, 5, 1f)
     }
 
     private fun styled(style: BlurStyle, original: FloatArray): FloatArray {

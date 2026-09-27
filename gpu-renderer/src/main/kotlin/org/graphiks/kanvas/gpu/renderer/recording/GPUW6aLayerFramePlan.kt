@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.renderer.recording
 
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.color.*
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.*
 import org.graphiks.kanvas.gpu.renderer.planning.*
@@ -12,6 +14,8 @@ import org.graphiks.math.geometry.Point2I32
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.execution.*
 import org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>): Boolean {
     val w4e = packets.singleOrNull()?.takeIf { it.role == GPUDrawPacketRole.W4ePrepared }
@@ -50,6 +54,45 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
 }
 }
 
+/** Mechanical W6b ABI translation.  Colour is deliberately white because the coverage shader
+ * substitutes every W4 colour slot with opaque white before native execution. */
+internal fun w6bCoverageUniformBytes(recipe: W6bCoverageRasterBundleHostRecipeV1): ByteArray = when (recipe.uniformAbi) {
+    W6bCoverageRasterUniformAbiV1.Coverage32 -> requireNotNull(recipe.uniform32).let { operand ->
+        ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putFloat(operand.targetWidthI32.toFloat()); putFloat(operand.targetHeightI32.toFloat()); putInt(0); putInt(0)
+            putFloat(operand.color.redF32); putFloat(operand.color.greenF32); putFloat(operand.color.blueF32); putFloat(operand.color.alphaF32)
+        }.array()
+    }
+    W6bCoverageRasterUniformAbiV1.AnalyticShape80 -> requireNotNull(recipe.analytic80).let { operand ->
+        ByteBuffer.allocate(80).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putFloat(operand.targetWidthI32.toFloat()); putFloat(operand.targetHeightI32.toFloat()); putInt(if (operand.antiAlias) 1 else 0); putInt(0)
+            putFloat(operand.color.redF32); putFloat(operand.color.greenF32); putFloat(operand.color.blueF32); putFloat(operand.color.alphaF32)
+            operand.copyDeviceBounds().let { putFloat(it.left); putFloat(it.top); putFloat(it.right); putFloat(it.bottom) }
+            operand.copyRadiiF32().forEach(::putFloat)
+        }.array()
+    }
+}
+
+/** Only the white colour window [16,32) is intentionally changed by coverage composition; the
+ * header [0,16) and analytic geometry [32,80) must match the existing W4 lowerer byte-for-byte. */
+internal fun w6bCoverageUniformMatchesLowerer(recipe: W6bCoverageRasterBundleHostRecipeV1, lowererBytes: ByteArray): Boolean {
+    val expected = w6bCoverageUniformBytes(recipe)
+    if (lowererBytes.size != expected.size) return false
+    return if (expected.size == 32) lowererBytes.copyOfRange(0, 16).contentEquals(expected.copyOfRange(0, 16))
+    else lowererBytes.copyOfRange(0, 16).contentEquals(expected.copyOfRange(0, 16)) &&
+        lowererBytes.copyOfRange(32, 80).contentEquals(expected.copyOfRange(32, 80))
+}
+
+internal fun w6bCoverageUniformMismatch(recipe: W6bCoverageRasterBundleHostRecipeV1, lowererBytes: ByteArray): String {
+    val expected = w6bCoverageUniformBytes(recipe)
+    if (lowererBytes.size != expected.size) return "size lowerer=${lowererBytes.size} recipe=${expected.size}"
+    val ranges = if (expected.size == 32) listOf(0 until 16) else listOf(0 until 16, 32 until 80)
+    val offset = ranges.asSequence().flatMap { it.asSequence() }.firstOrNull { lowererBytes[it] != expected[it] }
+        ?: return "size lowerer=${lowererBytes.size} recipe=${expected.size}"
+    fun float(bytes: ByteArray, base: Int): String = if (base + 4 <= bytes.size) ByteBuffer.wrap(bytes, base, 4).order(ByteOrder.LITTLE_ENDIAN).float.toString() else "<none>"
+    val base = offset / 4 * 4
+    return "offset=$offset word=$base lowerer=${float(lowererBytes, base)} recipe=${float(expected, base)} lowererHex=${lowererBytes.copyOfRange(base, base + 4).joinToString("") { "%02x".format(it) }} recipeHex=${expected.copyOfRange(base, base + 4).joinToString("") { "%02x".format(it) }}"
+}
 /** Native-only view of a W5 row already sealed into a `MASK_SHADER` operation. */
 internal data class GPUW6bMaskShaderMaterialV1(
     val binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned,
@@ -151,6 +194,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val clipMaskInitializeRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskInitializeRecipeV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
+    /** W6b owns a distinct recipe-derived projection; it must never alias lowerer mappings. */
+    private val coverageRasterPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     internal fun maskShaderMaterial(binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned):
         GPUW6bMaskShaderMaterialV1 = requireNotNull(maskShaderMaterialsByOccurrenceI32[binding.occurrenceIdI32]) {
             "Missing frozen W6b mask-shader W5 row."
@@ -354,7 +399,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 is SolidRectDraw -> GpuPlanTaskListLowerer().packet(draw, ColorF32.Transparent,
                                     draw.commandIndex, targetBounds, table, null, packed)
                                 is W5bPointDraw -> GpuPlanTaskListLowerer().packet(draw, ColorF32.Transparent,
-                                    draw.commandIndex, targetBounds, requireNotNull(table), null, packed, graph)
+                                    draw.commandIndex, targetBounds, requireNotNull(table), null, packed, graph,
+                                    coveragePassId = (pass as? PlanPass.FilterCoverageSourcePass)?.id)
                                 is AnalyticRectDraw -> W4aAnalyticRectGraphLowerer().packet(draw, ColorF32.Transparent,
                                     draw.commandIndex, targetBounds, requireNotNull(table), w5b = true, packedSourceV4 = packed,
                                     packetSuffix = if (pass is PlanPass.FilterCoverageSourcePass) ".w6b.${pass.id.value}" else "",
@@ -460,6 +506,26 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 if (packet.role != GPUDrawPacketRole.PathStencilProducer)
                                     templates[packet.packetId] = requireNotNull(sealCorePrimitiveGeometryHostTemplateV1(packet, key)).copy(
                                         materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${targetOrigin.x}.0, ${targetOrigin.y}.0)")
+                            }
+                            if (pass is PlanPass.FilterCoverageSourcePass && draw !is SolidRectDraw) {
+                                val recipe = physical.w6bCoverageRasterHostRecipe(pass.id).bundle(drawOrdinalI32)
+                                val lowered = requireNotNull(analyticUniforms[packet.packetId])
+                                require(w6bCoverageUniformMatchesLowerer(recipe, lowered)) {
+                                    "W6b coverage translation changed an ABI field outside its canonical-colour window: ${w6bCoverageUniformMismatch(recipe, lowered)}"
+                                }
+                                analyticUniforms[packet.packetId] = w6bCoverageUniformBytes(recipe)
+                                requireNotNull(geometryPipelines[packet.packetId]) {
+                                    "W6b coverage raster lowerer did not retain its compatibility pipeline."
+                                }
+                                val recipeMapping = w6bCoverageRasterPipelineMapping(recipe, packet)
+                                require(coverageRasterPipelines.put(packet.packetId, recipeMapping) == null) {
+                                    "W6b coverage raster packet has more than one recipe projection."
+                                }
+                                if (recipe.role != W6bCoverageRasterRoleV1.PathStencilProducer) {
+                                    templates[packet.packetId] = requireNotNull(
+                                        sealCorePrimitiveGeometryHostTemplateV1(packet, w6bCoverageRasterStructuralKey(recipe)),
+                                    ).copy(materialDevicePointWgsl = "fragment_position.xy")
+                                }
                             }
                             packet
                         }
@@ -634,4 +700,107 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     }
     internal fun analyticUniform(packet: GPUDrawPacket): ByteArray = requireNotNull(analyticUniforms[packet.packetId]).copyOf()
     internal fun geometryPipeline(packet: GPUDrawPacket): GPUWgpu4kCorePrimitivePipelineMapping.Mapped? = geometryPipelines[packet.packetId]
+    /** W6b may consume only the mapping projected from its frozen raster recipe. */
+    internal fun coverageRasterPipeline(packet: GPUDrawPacket): GPUWgpu4kCorePrimitivePipelineMapping.Mapped? = coverageRasterPipelines[packet.packetId]
+}
+
+/**
+ * Converts the planner selector to the already-closed CorePrimitive mapping domain.  The W4
+ * lowerer mapping is retained only as a compatibility witness; the returned value is stored in
+ * the W6b-owned map, so later native materialization cannot fall back to the lowerer map.
+ */
+private fun w6bCoverageRasterPipelineMapping(
+    recipe: W6bCoverageRasterBundleHostRecipeV1,
+    packet: GPUDrawPacket,
+): GPUWgpu4kCorePrimitivePipelineMapping.Mapped {
+    require(packet.role == when (recipe.role) {
+        W6bCoverageRasterRoleV1.Shading -> GPUDrawPacketRole.Shading
+        W6bCoverageRasterRoleV1.PathStencilProducer -> GPUDrawPacketRole.PathStencilProducer
+        W6bCoverageRasterRoleV1.PathStencilCover -> GPUDrawPacketRole.PathStencilCover
+    }) { "W6b packet role differs from its frozen recipe." }
+    val recipeKey = w6bCoverageRasterStructuralKey(recipe)
+    val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+        ?: error("W6b coverage raster requires CorePrimitive semantics.")
+    val lowererKey = when (recipe.role) {
+        W6bCoverageRasterRoleV1.PathStencilProducer,
+        W6bCoverageRasterRoleV1.PathStencilCover -> corePrimitivePathStencilRenderPipelineStructuralKey(
+            semantic, if (recipe.role == W6bCoverageRasterRoleV1.PathStencilProducer)
+                GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer
+            else GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+            requireNotNull(packet.clipExecutionPlan), requireNotNull(packet.blendPlan), 1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb)
+        W6bCoverageRasterRoleV1.Shading -> corePrimitiveRenderPipelineStructuralKey(
+            semantic, requireNotNull(packet.clipExecutionPlan), requireNotNull(packet.blendPlan), 1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb)
+    }
+    require(recipeKey.copy(colorFormat = lowererKey.colorFormat) == lowererKey) {
+        "W6b recipe selector differs from the W4 lowerer structural key outside its target format."
+    }
+    val recipeMapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(recipeKey)
+        as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
+        ?: error("Frozen W6b recipe has no native CorePrimitive pipeline mapping.")
+    return recipeMapping
+}
+
+/** Complete recipe-only conversion to the pre-existing CorePrimitive structural-key ABI. */
+private fun w6bCoverageRasterStructuralKey(
+    recipe: W6bCoverageRasterBundleHostRecipeV1,
+): GPUCorePrimitiveRenderPipelineStructuralKey {
+    require(recipe.target == W6bCoverageRasterTargetV1.Rgba8UnormSrgbSingleSample) {
+        "W6b coverage raster recipe must target its frozen sRGB color attachment."
+    }
+    val role = when (recipe.role) {
+        W6bCoverageRasterRoleV1.Shading -> GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading
+        W6bCoverageRasterRoleV1.PathStencilProducer -> GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer
+        W6bCoverageRasterRoleV1.PathStencilCover -> GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover
+    }
+    val shader = when (recipe.family) {
+        W6bCoverageRasterFamilyV1.AnalyticRect -> if (requireNotNull(recipe.analytic80).antiAlias)
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape
+        else GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
+        W6bCoverageRasterFamilyV1.AnalyticRRect -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape
+        W6bCoverageRasterFamilyV1.Point -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
+        W6bCoverageRasterFamilyV1.PathFill, W6bCoverageRasterFamilyV1.PathStroke ->
+            if (recipe.role == W6bCoverageRasterRoleV1.Shading)
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
+            else GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil
+    }
+    val topology = when (recipe.topology) {
+        W6bCoverageRasterTopologyV1.DirectTriangleList -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
+        W6bCoverageRasterTopologyV1.StencilEdgeFan -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StencilEdgeFan
+        W6bCoverageRasterTopologyV1.StrokeStencilEdgeFan -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StrokeStencilEdgeFan
+    }
+    val depthStencil = when (recipe.stencil) {
+        W6bCoverageRasterStencilV1.None -> GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None
+        W6bCoverageRasterStencilV1.WindingProducer -> w6bPathStencilState(true, false)
+        W6bCoverageRasterStencilV1.EvenOddProducer -> w6bPathStencilState(true, true)
+        W6bCoverageRasterStencilV1.CoverTestNonZero -> w6bPathStencilState(false, false)
+    }
+    return GPUCorePrimitiveRenderPipelineStructuralKey(
+        shader = shader, topology = topology, role = role,
+        blend = if (role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer)
+            GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone
+        else W5bBlendPlanLowerer.lowerForRecording(recipe.blend).corePrimitiveStructuralBlend(),
+        clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+        colorFormat = GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb,
+        depthStencil = depthStencil, sampleCount = 1,
+    )
+}
+
+private fun w6bPathStencilState(producer: Boolean, evenOdd: Boolean): GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil {
+    fun face(compare: GPUClipStencilCompare, pass: GPUClipStencilOperation,
+        depthFail: GPUClipStencilOperation = GPUClipStencilOperation.Keep) =
+        GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace(compare, pass,
+            GPUClipStencilOperation.Keep, depthFail)
+    val pair = if (producer) when (evenOdd) {
+        true -> face(GPUClipStencilCompare.Always, GPUClipStencilOperation.Invert) to
+            face(GPUClipStencilCompare.Always, GPUClipStencilOperation.Invert)
+        false -> face(GPUClipStencilCompare.Always, GPUClipStencilOperation.IncrementWrap) to
+            face(GPUClipStencilCompare.Always, GPUClipStencilOperation.DecrementWrap)
+    } else face(GPUClipStencilCompare.NotEqual, GPUClipStencilOperation.Zero,
+        GPUClipStencilOperation.Zero) to face(GPUClipStencilCompare.NotEqual,
+        GPUClipStencilOperation.Zero, GPUClipStencilOperation.Zero)
+    return GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil(
+        GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencilFormat.Depth24PlusStencil8,
+        pair.first, pair.second, 0xffu, if (producer && evenOdd) 0x01u else 0xffu)
 }
