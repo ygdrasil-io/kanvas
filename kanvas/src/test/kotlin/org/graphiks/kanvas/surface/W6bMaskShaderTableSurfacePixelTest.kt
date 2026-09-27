@@ -10,12 +10,14 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Test
@@ -75,6 +77,26 @@ class W6bMaskShaderTableSurfacePixelTest {
         }.render()
 
         assertContentEquals(expected, result.pixels)
+        assertMaskShaderRenderAndReadback(result)
+    }
+
+    @Test
+    fun `image color-filter mask shader consumes frozen texture ABI`() {
+        val alphaResource = Image.fromPixels(1, 1, byteArrayOf(-1, -1, -1, -1), alphaType = AlphaType.PREMUL)
+        val result = Surface(1, 1).also { surface ->
+            surface.canvas {
+                drawRect(bounds1x1, Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Shader(Shader.WithColorFilter(
+                        Shader.Image(alphaResource),
+                        ColorFilter.Matrix(ColorMatrixF32.ofIdentity()),
+                    )),
+                    antiAlias = false,
+                ))
+            }
+        }.render()
+
+        assertContentEquals(red1x1, result.pixels)
         assertMaskShaderRenderAndReadback(result)
     }
 

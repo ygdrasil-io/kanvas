@@ -1513,8 +1513,20 @@ private fun w6FilterMaskShaderMaterialAbiV1(table: MaterialPlanTable,
             }
             manifest += W6FilterMaskShaderBindingAbiV1(resource.bindingI32, kind)
         }
-        if (proof.composedBindingLayout == null && proof.gradientStopSlab != null)
-            manifest += W6FilterMaskShaderBindingAbiV1(1, W6FilterMaskShaderBindingKindV1.StorageBuffer)
+        if (proof.composedBindingLayout == null) {
+            proof.gradientStopSlab?.let {
+                manifest += W6FilterMaskShaderBindingAbiV1(
+                    proof.imageLayout?.gradientStorageBindingU32?.toInt() ?: 1,
+                    W6FilterMaskShaderBindingKindV1.StorageBuffer,
+                )
+            }
+            proof.imageLayout?.let { image ->
+                manifest += W6FilterMaskShaderBindingAbiV1(
+                    image.imageTextureBindingU32.toInt(),
+                    W6FilterMaskShaderBindingKindV1.SampledTexture,
+                )
+            }
+        }
     } else {
         val raw = RawMaterialRequirementsV2.measureLegacy(table, binding.material)
         structuralId = raw.structuralId
