@@ -796,3 +796,17 @@ La branche prérequis est `codex/w6e-filter-bounds-recipe`, stackée sur
 aucun test d'infrastructure, GM, dashboard/render/rebaseline,
 `jpg-color-cube`, font ou codec externe n'a été exécuté. Aucun merge ni claim
 ISO n'est déduit de ces résultats.
+
+### Audit 2A0b.IIIb1 — branche directe PictureComposite inatteignable
+
+La tentative de recette pour un `PictureComposite` actif sans
+`graphTextureOperand` a été annulée par le revert `50e271db6` du commit
+`6f95c9c57`. La review Sol a tracé l'unique construction
+`PlanPass.PictureComposite(...)` : elle crée d'abord une
+`GraphTextureSourceRequestV1`, publie le `PictureSourcePass` sur le même
+`source.resourceId`, puis attache l'operand à la publication. Les témoins
+Picture publics parcourent donc la variante graph IIIb2, pas IIIb1 ; leur
+XML vert `21/0/0/0` ne prouvait pas IIIb1. Aucun changement IIIb1 ne demeure
+dans la production ; IIIb2 doit geler la vraie variante active et retirer ou
+refuser le fallback direct tardif. Cette preuve de reachability ne ferme ni
+IIIb2, ni III, ni le budget/lease/2B.
