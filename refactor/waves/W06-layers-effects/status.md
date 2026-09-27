@@ -28,7 +28,7 @@ mesure byte-exacte du driver.
 | W6a sources, filtres et composites | ID de chaque `PictureSourcePass`, `FilterCoverageRetainPass`, `FilterPass`, `PictureComposite` ou `FilterComposite` / ordinal de l'unique render ou de chaque draw | Inputs/outputs et offsets target-local, operation spécialisée (Crop/Offset/Tile/ColorFilter/Merge/Blend/Morphology/blur/mask style ou mask shader), ordre des inputs, uniform/storage/image/runtime bindings, scissor, blend, format/sample, ABI. Les `FilterComposite.Draw` no-op et les branches filtrées/destination-read sont des variantes séparées. | **FROZEN 2A0b.I/II/III** : `FilterCoverageRetainPass`, les deux `PictureSourcePass` (layer/graph), tous les `FilterPass` non-W6d `Crop`/`Offset`/`Tile`/`Morphology`/`ColorFilter`/`Merge`/`Blend`/`SeparableBlur`/`MaskBlurStyle`/`MaskShader`/`MaskTable`/`MaterializedSource`/`DropShadowColorize`/`DropShadowComposite` sont gelés et revus ; les no-op composites relèvent d'`Empty`. Les composites actifs/filtrés/destination-read sont review-clean après IIIa2 ; ce gel ne réserve encore aucune charge. `TextureCopy` et `ReadbackPass` restent sans bundle ; leur destination-read sampler est réservé à Task 3. Aucune nouvelle lease/budget encore. |
 | W6d `FilterPass.frozenSamplingProgram` | `FilterPass.id` / owner déjà unique (ordinal du futur inventaire à adapter, pas une copie de lease) | `W6dFrozenProgramBindingV1`, inputs/output, descriptor RGBA8/1×, usages shader module + render pipeline, génération et lifetime frame completion. | **DÉJÀ LEASÉ W6d** via `W6dProgramLeaseV1` : `max(4096L, descriptorBytes + recipePayloadBytes)`, range `[0, passes.size)`. 2A0/2A1 l'intègre par référence, sans double charge. |
 | W4e `ClipMaskInitialize` dans `encodeW4eNativePasses` | `ClipMaskInitialize.id` / packet ordinal final (un seul bundle) | `W4eClipMaskInitializeRecipeV1`: output, domaine `RectI32`, coverage F32 canonique, fullscreen triangle, clear, RGBA8-unorm/1×, aucun bind group. | **FROZEN 2P6** et préflight de cohérence présent ; pas encore lease/budget 2A0. |
-| W4e `ClipMaskProducer`, `ClipMaskFold` de W6 | `PlanPass.id` / `PlanPass.ordinal` du packet, puis ordinal de bundle créé | Producer : target/resolve/depth, géométrie Rect/RRect/Path/Empty, inverse, AA, sample et slices V/I/U ; Fold : previous/source/output, opération et domaine. | **FROZEN 2A0c.I + IIa direct triangle** : Rect/RRect analytiques, Fold et `Path` triangle direct (un bundle) sont review-clean. **OPEN IIb** stencil-edge fan (deux bundles), puis III/IV. Aucun lease/budget 2A1 ou gate 2B. `PathMaskClear` W4d direct n'est pas publié par W6. |
+| W4e `ClipMaskProducer`, `ClipMaskFold` de W6 | `PlanPass.id` / `PlanPass.ordinal` du packet, puis ordinal de bundle créé | Producer : target/resolve/depth, géométrie Rect/RRect/Path/Empty, inverse, AA, sample et slices V/I/U ; Fold : previous/source/output, opération et domaine. | **FROZEN 2A0c.I + IIa + IIb1** : Rect/RRect analytiques, Fold, `Path` triangle direct et bundle stencil-edge ordinal 0 sont review-clean. **OPEN IIb2** cover ordinal 1, puis III/IV. Aucun lease/budget 2A1 ou gate 2B. `PathMaskClear` W4d direct n'est pas publié par W6. |
 | W4e path packet admis par W6 dans `encodeW4eNativePasses` | `PlanPass.id` / `PlanPass.ordinal` du packet, puis ordinal de bundle dans ce packet | Phases W6 `SingleSampleDirectColor`, `SingleSampleStencilProducer`, `SingleSampleStencilColorCover` seulement ; géométrie/bounds/scissor, fill strategy/rule, target/depth, load/store/stencil/blend, consumer mask/inverse/domain et bindings U/V/I. Les phases `Multisample*`/`HardEdge*` du même encodeur restent sur la route W4d directe, hors inventaire W6. | **OPEN 2A0c.III/IV**. Un stencil-cover à intérieur inverse peut créer `interiorZero` puis `cover`. Un inverse-domain à intérieur Geometry crée **trois pipelines** : `domainStencil` 0, `interiorZero` 1, color `cover` 2. `commonSource` peut omettre le draw domainStencil, mais pas sa création logique ni sa réservation. |
 | Dispatcher `materializeGeometry` | Inventaire de frame entier ; il ne fabrique pas d'owner | Route W6a/W4e/route directe, génération, `FramePlan`/source witness/encoder/resource seals et ensemble fermé des recipes attendues. | **OPEN 2B** : aucun `W6NativeArtifactConsumptionV1.preflight` commun avant allocation ; ne pas annoncer l'authentification native fermée. |
 | W5a post-spécialisation dans `materializeW5aSourcePartitionV2` | `RenderPass.id` ou `StencilCover.id` / ordinal de draw source après `sourceDrawsV2` | Référence à la recette géométrique W6/W4e (jamais handle WebGPU), `MaterialPlanTable` structural id, stage/binding manifest canonique, template hôte, ABI composition, destination snapshot/bounds, flag source masque W6b et les groupes matériau/coverage/destination réellement requis. Pour un packet W4e inverse-domain, `sourceDrawsV2` accepte 2–3 draws : les préfixes no-bindings restent les bundles W4e de leurs propres ordinals ; seule la dernière draw à bind group porte la source W5a. | **OPEN 2A0/2B** ; le renderer compose encore module/layout/pipeline/group après spécialisation. Une source masque W6b et une source ordinaire sont des variantes distinctes. |
@@ -1216,3 +1216,27 @@ relevé deux findings Important — traduction native incomplète et préflight
 AA/ressources inexact — et la relecture ciblée les marque **ADDRESSED**, sans
 nouveau Critical/Important. IIa est review-clean ; IIb stencil-edge fan,
 III/IV, 2A0d W5a, leases/B/B−1, 2B et gate W6 global restent ouverts.
+
+### 2A0c.IIb1 — ClipMaskProducer.Path stencil-edge bundle 0
+
+Le `Path` non triangulaire dont `:math` émet un stencil-edge fan gèle désormais
+le premier des deux sites natifs de son packet : owner/pass/packet/bundle
+ordinal 0, fill rule Winding/EvenOdd, fan/scissor, cible/resolve/depth et V/I,
+AA/sample/inverse, stencil producer sans écriture couleur et paramètres de
+pipeline/attachment. Le catalogue, le seal et la projection W6 précèdent un
+préflight exact avant allocation : géométrie du packet réellement préparé,
+rows physiques, V/I slice, usages enregistrés ordonnés et état D24S8. Le
+pipeline edge est choisi depuis les axes typés ; le pipeline cover ordinal 1
+reste provisoirement sur son chemin existant et n'a **pas** de recette IIb1.
+
+Le témoin public concave en L, dans une layer translatée, fixe les pixels avant
+`Surface`, distingue le fan de sa boîte englobante et vérifie `Render` et
+`Readback`. Commits `e68d2cb`, `ddd534c`, `caf3735`, `6643968`. Compilations
+`:gpu-plan`, `:gpu-renderer`, `:kanvas:compileTestKotlin` : exit 0 rapporté ;
+contrôle indépendant sur `6643968` : classe W6aLayerW4W5 XML `22/0/0/0`,
+Gradle exit 1 après worker natif 133 (**UNKNOWN**) ; sélecteur W4e direct
+Rect/RRect/Path exécuté sans cache, Gradle exit 0. La première review Sol a
+relevé un préflight incomplet et des axes natifs non consommés ; les relectures
+successives marquent ces points **ADDRESSED** et ne relèvent aucun nouveau
+Critical/Important. IIb1 est review-clean, mais IIb2 cover, III/IV, W5a,
+leases/B/B−1, 2B et le gate W6 global restent ouverts.
