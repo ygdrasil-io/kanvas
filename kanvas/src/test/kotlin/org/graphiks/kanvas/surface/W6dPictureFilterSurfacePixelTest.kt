@@ -369,6 +369,35 @@ class W6dPictureFilterSurfacePixelTest {
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
+    /** A fully clipped Picture terminal is an executed null-scissor no-op: precolored siblings remain visible. */
+    @Test
+    fun pictureCompositeNullScissorKeepsPrecoloredSibling() {
+        val expected = ubyteArrayOf(
+            0u, 0u, 255u, 255u,
+            0u, 255u, 0u, 255u,
+        )
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 1f)
+        val right = RectF32.ofLTRB(1f, 0f, 2f, 1f)
+        val outside = RectF32.ofLTRB(2f, 0f, 3f, 1f)
+        val source = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                clipRect(outside, ClipOp.INTERSECT, antiAlias = false)
+                drawColor(ColorARGB.Red, BlendMode.SRC)
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            drawRect(right, Paint(ColorARGB.Green, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Black, imageFilter = ImageFilter.Picture(source), antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /**
      * The inner ColorFilter is deliberately materialized before the outer Picture leaf. Its
      * sealed source then contains a filtered blue child, so a flat/non-reentrant schedule either
