@@ -1,5 +1,10 @@
 # W6 — couverture inverse sous clip mask
 
+Complément de bord non-AA : `2026-09-28-w6-inverse-mask-scan-spans-design.md`
+remplace l'usage des indices du triangle direct par des spans préparés dans
+`:math` pour le seul producer `InverseMask.Geometry` DirectTriangle. Les autres
+décisions de cette spec restent applicables.
+
 ## Intention et périmètre
 
 La route W6 admise doit dessiner un `drawPath` à fill inverse dans une layer
