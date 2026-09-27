@@ -527,14 +527,14 @@ public class W4eClipPlanCompiler internal constructor(
                 sealedInverseDrawsByConstructionSource,
             ).withClipStrategies(strategyByCommand, clippedGeneralBySource)
         }
-        val inverseMaskCommands = selected.inverseMaskGeometryCommands()
+        val inverseMaskCommands = selected.inverseMaskDirectGeometryCommands()
         fun inverseMaskPath(pass: PlanPass): Boolean = (pass as? PlanPass.PathRenderPass)?.let { path ->
             path.phase == PathRenderPhase.SingleSampleDirectColor && path.draw.commandIndex in inverseMaskCommands
         } == true
         val inverseMaskDepth = inverseMaskCommands.takeIf { it.isNotEmpty() }?.let {
             planResourceId(PlanResourceRole.DepthStencil,
                 (baseResources.filter { resource -> resource.role == PlanResourceRole.DepthStencil }
-                    .maxOfOrNull(PlanResource::ordinal) ?: -1) + 1)
+                    .maxOfOrNull(PlanResource::ordinal) ?: -1) + 3)
         }
         var pathOrdinalI32 = 0
         fun pathCopy(source: PlanPass.PathRenderPass, phase: PathRenderPhase, depth: PlanResourceId?, load: AttachmentLoadPlan,
@@ -738,7 +738,7 @@ public class W4eClipPlanCompiler internal constructor(
             firstPassIndex = Math.addExact(firstPassIndex, 1 + stack.emittedEntries.size * 2)
         }
         require(firstPassIndex == prefixPassCount) { "W4e clip prefix accounting drifted" }
-        val inverseMaskCommands = selected.inverseMaskGeometryCommands()
+        val inverseMaskCommands = selected.inverseMaskDirectGeometryCommands()
         fun remap(indexI32: Int): Int = Math.addExact(indexI32, inverseMaskCommands.count { command ->
             requireNotNull(base.colorConsumerPassByCommand[command]) < indexI32
         })
@@ -807,7 +807,7 @@ public class W4eClipPlanCompiler internal constructor(
             val baseConsumerPass = requireNotNull(base.colorConsumerPassByCommand[commandIndex]) {
                 "W4d.2 preflight omitted a clipped consumer"
             }
-            val extra = selected.inverseMaskGeometryCommands().count { command ->
+            val extra = selected.inverseMaskDirectGeometryCommands().count { command ->
                 requireNotNull(base.colorConsumerPassByCommand[command]) <= baseConsumerPass
             }
             use(accumulator, Math.addExact(Math.addExact(prefixPassCount, baseConsumerPass), extra))
@@ -1390,6 +1390,13 @@ public class W4eClipPlanCompiler internal constructor(
         .flatMap { it.consumerIndexes.asSequence() }
         .filter { inverseByCommand[it]?.interiorCoverageF32 is InverseInteriorCoverageF32.Geometry }
         .toSet()
+
+    /** Fan geometry is already published as a stencil pair; only direct triangles add a pass. */
+    private fun Candidate.inverseMaskDirectGeometryCommands(): Set<Int> = inverseMaskGeometryCommands().filter { command ->
+        val interior = inverseByCommand.getValue(command).interiorCoverageF32 as? InverseInteriorCoverageF32.Geometry
+            ?: return@filter false
+        interior.copyGeometryF32().copyDirectTriangleF32OrNull() != null
+    }.toSet()
 
     private fun Boolean.thenId(role: PlanResourceRole, ordinal: Int): PlanResourceId? =
         if (this) planResourceId(role, ordinal) else null

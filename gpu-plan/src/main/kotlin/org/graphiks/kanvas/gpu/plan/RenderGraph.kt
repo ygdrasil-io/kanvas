@@ -2064,12 +2064,13 @@ public class RenderGraph private constructor(
                 ?: throw IllegalArgumentException("Explicit stencil producers require general path draws")
             val inverseMaskGeometry = inverseMask?.geometryF32?.interiorCoverageF32 is
                 org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry
+            val inverseMaskDirectTriangle = inverseMaskGeometry && draw.strategy == PathFillStrategy.DirectTriangle
             require(draw.coverage == coverage && draw.sample == sample &&
                 (draw.strategy == PathFillStrategy.StencilCover ||
-                    inverseMaskGeometry && draw.strategy == PathFillStrategy.DirectTriangle)) {
+                    inverseMaskDirectTriangle)) {
                 "Explicit stencil pairs require a typed stencil path draw"
             }
-            if (!inverseMaskGeometry) {
+            if (!inverseMaskDirectTriangle) {
                 val group = requireNotNull(producer.atomicGroup) {
                     "Explicit stencil pairs require an atomic group"
                 }
