@@ -851,3 +851,28 @@ correctif `88261b4` le réserve au seul destination-read futur, et sa relecture
 est **Approved**. Les trois compilations ciblées sortent 0 ; le XML public
 `W6dPictureFilterSurfacePixelTest` est `22/0/0/0`. Le worker natif sort 133 :
 **UNKNOWN**. IIIb2b2, IIIc, budget/leases et 2B restent ouverts.
+
+### 2A0b.IIIb2b2 — PictureComposite graph-texture avec snapshot destination
+
+Les terminaux `PictureComposite` actifs à graph-texture dont le blend est
+`BlendPlan.DestinationReadV1` sont maintenant catalogués avant toute
+allocation. La forme sans filtre est une recette dédiée
+`W6PictureCompositeGraphDestinationRecipeV1` : source graph scellée et sa
+génération, snapshot/destination versionnés, alpha, formule de blend,
+descriptions source/cible/snapshot, offset, scissor, `Load`/`Store`, ABI
+texture+snapshot et fullscreen draw entrent dans son encodage canonique.
+
+La forme filtrée conserve la recette graph filtrée, mais sélectionne l'ABI
+distincte `SourceTextureThenColorFilterUniformThenDestinationSnapshot`; son
+uniform W5f, son offset et le snapshot sont enregistrés et préflightés dans
+l'ordre source, uniform, snapshot. Le renderer est catalog-first pour ces
+deux formes : une composite active sans recette est refusée, et aucun fallback
+destination-read n'est conservé.
+
+Les témoins publics `layerOwnedDrawPictureDifferenceReadsDestinationSnapshot`
+et `layerOwnedDrawPictureFilteredDifferenceReadsDestinationSnapshot` fixent
+respectivement le parent bleu/source rouge `DIFFERENCE` et la variante W5f
+verte, avant `PictureRecorder`/`Surface`; ils vérifient pixels et scopes
+`Render` + `Readback`. Les deux assertions JUnit passent; le worker natif
+termine 133, donc le statut natif reste **UNKNOWN**. IIIc, leases/budget et
+2B restent ouverts.

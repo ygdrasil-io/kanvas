@@ -24,6 +24,51 @@ import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
+    /** IIIb2b2: the graph Picture terminal reads a snapshot of its colored parent for DIFFERENCE. */
+    @Test
+    fun layerOwnedDrawPictureDifferenceReadsDestinationSnapshot() {
+        val expected = ubyteArrayOf(255u, 0u, 255u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            saveLayer(SaveLayerRec())
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+            drawPicture(picture, Paint(blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** IIIb2b2: the destination-read graph ABI also retains its W5f color-filter uniform. */
+    @Test
+    fun layerOwnedDrawPictureFilteredDifferenceReadsDestinationSnapshot() {
+        val expected = ubyteArrayOf(0u, 255u, 255u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            saveLayer(SaveLayerRec())
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+            drawPicture(picture, Paint(colorFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SRC),
+                blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /** IIIb2b1: a layer-owned W6 frame applies the outer Picture color filter at its graph composite. */
     @Test
     fun layerOwnedDrawPictureWithColorFilterUsesGraphComposite() {
