@@ -1307,6 +1307,20 @@ indépendante Sol : **Approved**, aucun finding Critical/Important, revue
 statique. IIIa1 et IIIa2 sont review-clean ; les DirectColor sous scissor
 ou masque et les phases IIIb/c restent ouverts.
 
+### 2A0c.IIIa3 — audit du Scissor DirectColor public
+
+La première tentative `a97f466` ajoutait une variante typée Scissor et un
+témoin `clipRect` public. La review Sol a montré que ce témoin n'exerçait pas
+la variante : le premier `clipRect(INTERSECT)` devient `DeviceRect` dans le
+Canvas, admis par W4d sans opération W4e ; deux Rect deviennent une pile
+complexe à deux entrées et sélectionnent Mask, tandis qu'une rotation
+transforme le Rect en Path/Mask. Le sous-lot a été retiré par le revert
+récupérable `a83e114` ; `git diff 70e4877..a83e114` est vide. Aucun test
+vert de cette tentative n'est revendiqué comme preuve du site Scissor. Il
+n'y a pas de recette/lease Scissor publique à compter à ce stade ; une
+éventuelle entrée IR non exposée par Canvas demanderait son propre audit.
+Le prochain cas public à examiner est Mask/InverseMask, sans fermer IIIa.
+
 ### Diagnostic du worker natif 133 sur macOS
 
 Le GPU Metal Apple M2 Max est disponible et le décalage ABI toolkit/ktypes
