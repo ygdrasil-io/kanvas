@@ -907,28 +907,21 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             // MASK_TABLE owns both its immutable captured bytes and its physical StorageRead
             // row in the published graph.  Upload that exact snapshot to that exact row; no
             // renderer-local LUT, padding, or generated fallback is permitted.
-            val maskTableBuffers = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
-                (pass.operation as? FilterPassOperationV1.MaskTable)?.let { table -> table.tableResourceId to table }
-            }.groupBy({ it.first }, { it.second }).mapValues { (id, operations) ->
-                val operation = operations.first()
-                require(operations.all { candidate ->
-                    candidate.entryCountI32 == operation.entryCountI32 &&
-                        candidate.generationI64 == operation.generationI64 &&
-                        candidate.ownerMaskOccurrenceI32 == operation.ownerMaskOccurrenceI32 &&
-                        candidate.copyTable().copyToUByteArray().contentEquals(operation.copyTable().copyToUByteArray())
-                })
-                val resource = frame.physical.resource(id)
-                val bytes = operation.copyTable().copyToUByteArray()
-                require(operation.entryCountI32 == 256 && bytes.size == operation.entryCountI32 &&
+            val maskTableBuffers = frame.physical.w6FilterMaskTableRecipes().values.associate { recipe ->
+                val resource = frame.physical.resource(recipe.tableResource)
+                val bytes = recipe.copyTable().copyToUByteArray()
+                require(recipe.tableGenerationI64 >= 0L && recipe.tableOffsetBytesI64 >= 0L &&
+                    bytes.size.toLong() == recipe.tableRangeBytesI64 &&
                     resource.role == PlanResourceRole.MaskTableData && resource.kind == PlanResourceKind.Buffer &&
-                    resource.byteSize == 256L && resource.usages() ==
+                    resource.byteSize == recipe.tableRangeBytesI64 && resource.usages() ==
                     setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination))
-                id to owned.own(device.createBuffer(BufferDescriptor(size = resource.byteSize.toULong(),
+                recipe.tableResource to owned.own(device.createBuffer(BufferDescriptor(size = resource.byteSize.toULong(),
                     usage = GPUBufferUsage.Storage or GPUBufferUsage.CopyDst,
-                    label = "w6b.mask.table.${frame.physical.slot(id).slotI32}"))).also { buffer ->
-                    queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(ByteArray(bytes.size) { index -> bytes[index].toByte() }))
+                    label = "w6b.mask.table.${frame.physical.slot(recipe.tableResource).slotI32}"))).also { buffer ->
+                    queue.writeBuffer(buffer, recipe.tableOffsetBytesI64.toULong(),
+                        ArrayBuffer.of(ByteArray(bytes.size) { index -> bytes[index].toByte() }))
                 }
-            }.mapValues { it.value.second }
+            }
             val graphTextureOperandsBySource = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
                 .mapNotNull { pass -> pass.graphTextureOperand?.let { operand -> pass.output to operand } }
                 .toMap()
@@ -1467,6 +1460,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             renderOperands += maskShaderRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.coverageSource), generation,
                                 recipe, material, sourceUniformBuffers.getValue(recipe.uniformResource),
                                 maskShaderResources.getValue(material), pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMaskTableNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterMaskTableRecipe(pass.id)
+                            renderOperands += maskTableCoverageRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.coverageSource),
+                                maskTableBuffers.getValue(recipe.tableResource), generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -1489,11 +1486,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.MaskShader -> error("MaskShader pass is missing its frozen native-site recipe.")
-                            is FilterPassOperationV1.MaskTable -> {
-                                val recipe = frame.physical.w6FilterMaskTableRecipe(pass.id)
-                                renderOperands += maskTableCoverageRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.coverageSource),
-                                    maskTableBuffers.getValue(recipe.tableResource), generation, recipe, pass, owned)
-                            }
+                            is FilterPassOperationV1.MaskTable -> error("MaskTable pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaterializedSource -> {
                                 require(pass.inputs().size == 2)
                                 val input = pass.inputs().first()

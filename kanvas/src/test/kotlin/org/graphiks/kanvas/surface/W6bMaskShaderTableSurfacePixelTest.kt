@@ -196,7 +196,7 @@ class W6bMaskShaderTableSurfacePixelTest {
             188u, 0u, 0u, 128u,
         )
         val identity = UByteArray(256) { indexI32 -> indexI32.toUByte() }
-        val actual = Surface(2, 1).also { surface ->
+        val result = Surface(2, 1).also { surface ->
             surface.canvas {
                 drawRect(RectF32.ofLTRB(.5f, 0f, 1.5f, 1f), Paint(
                     ColorARGB.Red,
@@ -204,9 +204,10 @@ class W6bMaskShaderTableSurfacePixelTest {
                     antiAlias = true,
                 ))
             }
-        }.render().pixels
+        }.render()
 
-        assertContentEquals(expected, actual)
+        assertContentEquals(expected, result.pixels)
+        assertMaskShaderRenderAndReadback(result)
     }
 
     @Test
