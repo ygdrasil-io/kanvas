@@ -1321,14 +1321,49 @@ n'y a pas de recette/lease Scissor publique à compter à ce stade ; une
 éventuelle entrée IR non exposée par Canvas demanderait son propre audit.
 Le prochain cas public à examiner est Mask/InverseMask, sans fermer IIIa.
 
+### 2A0c.IIIa4a — DirectColor Fill sous Mask
+
+Un témoin `Surface` public combine `saveLayer`, un `clipPath` dur non
+rectangulaire et un `drawPath` Fill triangulaire décalé. Son oracle littéral
+6×6 distingue l'intersection visible du triangle sans masque et des seules
+bounds du clip ; il exige `Render` et `Readback`. La route finale est un
+`ClippedGeneralPathDraw(Mask)` / `SingleSampleDirectColor`, distinct du
+préfixe `ClipMaskInitialize` / `ClipMaskProducer` / `ClipMaskFold`.
+
+La recette IIIa gèle désormais le mask sampled et son ABI group-zero
+texture+uniform avec fenêtre U de 32 octets ; le Fill/Stroke non masqué
+conserve son ABI uniforme de 16 octets et ses clés canoniques à l'identique.
+Le `RenderPass` parent du graphe et son `PathRenderPass` natif W4e ont des
+IDs distincts : catalogue, seal, projection et préflight pré-allocation
+authentifient leur binding final commun, les rows physiques mask/U/V/I,
+la géométrie, le scissor et les usages enregistrés ordonnés. Le pipeline
+masqué est sélectionné depuis la recette ; `InverseMask` et `Stroke` masqué
+restent sur le fallback W4e, sans lease IIIa4a fictive.
+
+Commits locaux `c6b6ca7`, `2d9fa83`, puis `b55d37d`. La review Sol a
+identifié l'admission involontaire du `Stroke` masqué ; la garde Fill l'a
+exclu et la re-review l'a approuvée sans autre finding Critical/Important.
+Trois compilations ciblées passent. Après correction, le témoin exact est
+XML `1/0/0/0`, la classe W6a XML `26/0/0/0` ; les deux ont Gradle exit 1
+uniquement après l'exit natif 133 (**UNKNOWN**). Le sélecteur W4e direct
+hard-ordered est XML `1/0/0/0`, Gradle/native exit 0. IIIa4a est
+review-clean ; IIIa4b `InverseMask`, IIIb/c, IV et les gates suivants
+restent ouverts.
+
 ### Diagnostic du worker natif 133 sur macOS
 
 Le GPU Metal Apple M2 Max est disponible et le décalage ABI toolkit/ktypes
 déjà corrigé n'explique pas cet exit post-JUnit. Des rapports de crash `java`
 du 27 septembre montrent `EXC_BREAKPOINT`/`SIGTRAP`, avec l'assertion AppKit
 « Must only be used from the main thread » sur `Java: Thread-5` ; la pile
-passe par `-[NSWindow _doOrderWindow:]` puis `libglfw.dylib`. Cela étaye un
-problème de fenêtre/teardown GLFW sur thread secondaire, mais ne symbolise
-pas l'appel Java/JNI exact. Les XML JUnit à zéro échec ne transforment donc
-pas l'exit 133 en gate natif réussi. Aucun GM ni test d'infrastructure n'a
-été lancé pour ce diagnostic.
+passe par `-[NSWindow _doOrderWindow:]` puis `libglfw.dylib`. La factory
+enregistre `Thread { created.close() }` comme `shutdownHook` ; la fermeture
+de la session atteint `GLFWContext.close()` via le teardown gate. Cette
+chaîne explique avec forte confiance le crash post-JUnit, sans preuve
+absolue du call-site Java puisque la pile IPS n'est pas symbolisée à ce
+niveau. `dispose()` explicite et la dernière lease peuvent également
+fermer GLFW sur le thread appelant : supprimer seulement le hook ne
+garantirait donc pas la sûreté générale AppKit. Aucun correctif de ce
+lifecycle natif n'est revendiqué dans IIIa4a. Les XML JUnit à zéro échec
+ne transforment donc pas l'exit 133 en gate natif réussi. Aucun GM ni test
+d'infrastructure n'a été lancé pour ce diagnostic.
