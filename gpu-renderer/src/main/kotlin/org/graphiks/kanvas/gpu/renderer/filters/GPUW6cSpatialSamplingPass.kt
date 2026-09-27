@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.filters
 import org.graphiks.kanvas.gpu.plan.FilterPassOperationV1
 import org.graphiks.kanvas.gpu.plan.SpatialSamplingV1
 import org.graphiks.kanvas.gpu.plan.W6FilterSpatialCropRecipeV1
+import org.graphiks.kanvas.gpu.plan.W6FilterSpatialOffsetRecipeV1
 import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.geometry.RectI32
 
@@ -12,6 +13,11 @@ internal object GPUW6cSpatialSamplingPass {
     internal fun fragment(recipe: W6FilterSpatialCropRecipeV1): String = sampler(
         recipe.copySourceDomainTargetLocalI32(), recipe.copyClipTargetLocalF64(),
         recipe.copyOutputToInputOffsetTargetLocalF64(), recipe.tileMode, false,
+    )
+    /** IIa2a consumes the sealed F64 vector and forced DECAL mode, not FilterPass. */
+    internal fun fragment(recipe: W6FilterSpatialOffsetRecipeV1): String = sampler(
+        recipe.copySourceDomainTargetLocalI32(), recipe.copyClipTargetLocalF64(),
+        recipe.copyOutputToInputOffsetTargetLocalF64(), TileMode.DECAL, false,
     )
     internal fun fragment(operation: FilterPassOperationV1): String = when (operation) {
         is FilterPassOperationV1.Crop -> sampler(operation.sampling, operation.sampling.copySourceInputTargetLocalI32(), operation.tileMode, false)
