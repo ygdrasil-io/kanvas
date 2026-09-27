@@ -36,6 +36,38 @@ import org.junit.jupiter.api.Test
  */
 class W6aLayerW4W5SurfacePixelTest {
     @Test
+    fun `direct triangle path clip retains only its translated wedge in a W6 layer`() {
+        // This fixed wedge is deliberately unlike its enclosing 4x4 rectangle.  Keep this
+        // public oracle before Surface construction: it is the W6-layer witness for the
+        // strict direct-triangle Path clip, not an observation of planner or renderer state.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear,
+            clear, blue, blue, blue, clear,
+            clear, blue, blue, clear, clear,
+            clear, blue, clear, clear, clear,
+            clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val triangle = Path().apply {
+            moveTo(0f, 0f); lineTo(4f, 0f); lineTo(0f, 4f); close()
+        }
+
+        val surface = Surface(5, 5)
+        surface.canvas {
+            saveLayer()
+            translate(1f, 1f)
+            clipPath(triangle, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `affine general path retains its native geometry in a translated target`() {
         val expected = rgba(0, 0, 0, 0) + rgba(17, 61, 211) + rgba(17, 61, 211) + rgba(17, 61, 211) + rgba(0, 0, 0, 0)
         val shape = Path().apply {

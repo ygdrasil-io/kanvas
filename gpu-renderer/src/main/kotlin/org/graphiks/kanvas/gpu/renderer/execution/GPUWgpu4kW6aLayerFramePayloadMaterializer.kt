@@ -41,6 +41,7 @@ private data class W4eClipMaskInitializeNativePreflight(
     val entries: List<GPUW4eNativePassEntry>,
     val recipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1>,
     val producerRecipesByPassId: Map<String, W4eClipMaskProducerRecipeV1>,
+    val producerDirectTriangleRecipesByPassId: Map<String, W4eClipMaskProducerDirectTriangleRecipeV1>,
     val foldRecipesByPassId: Map<String, W4eClipMaskFoldRecipeV1>,
 )
 
@@ -99,6 +100,11 @@ private fun preflightW4eClipMaskInitializes(
         }
         requireW4eClipMaskProducerRecipes(entries, producerRecipes,
             frame.graph.resources().associateBy { it.id.value }, frame.refs.mapKeys { it.key.value }) { binding.payload }
+        val directTriangleRecipes = entries.mapNotNull { entry -> frame.w4eClipMaskProducerDirectTriangleRecipeOrNull(entry.packet)?.let { it.passId.value to it } }.toMap()
+        val directTriangles = binding.nativePasses().filterIsInstance<PlanPass.ClipMaskProducer>().filter {
+            (it.copyGeometryF32() as? org.graphiks.math.geometry.ClipGeometryF32.Path)?.copyPathGeometryF32()?.copyDirectTriangleF32OrNull() != null
+        }
+        require(directTriangleRecipes.keys == directTriangles.map { it.id.value }.toSet())
         val foldRecipes = entries.mapNotNull { entry -> frame.w4eClipMaskFoldRecipeOrNull(entry.packet)?.let { recipe ->
             require(recipe.passId.value == entry.packet.passId)
             recipe.passId.value to recipe
@@ -111,7 +117,7 @@ private fun preflightW4eClipMaskInitializes(
                 recipe.source.id == fold.source && recipe.output.id == fold.output && recipe.operation == fold.operation &&
                 recipe.copyDomainI32() == fold.copyDomainI32())
         }
-        binding to W4eClipMaskInitializeNativePreflight(entries, recipes, producerRecipes, foldRecipes)
+        binding to W4eClipMaskInitializeNativePreflight(entries, recipes, producerRecipes, directTriangleRecipes, foldRecipes)
     }.toMap()
 
 /** Exhaustively authenticates W6b recipes, packet order, meshes and V/I/U windows before any device.create*. */
@@ -1665,6 +1671,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val entries = preflight.entries
                 val clipMaskInitializeRecipes = preflight.recipesByPassId
                 val clipMaskProducerRecipes = preflight.producerRecipesByPassId
+                val clipMaskProducerDirectTriangleRecipes = preflight.producerDirectTriangleRecipesByPassId
                 val clipMaskFoldRecipes = preflight.foldRecipesByPassId
                 val extent = binding.copyExtentI32()
                 val childOwned = owned.own(GPUW4eNativeOwnedHandles())
@@ -1677,6 +1684,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     commonSource = true, authority::consumerFor, { code, message -> IllegalArgumentException("$code: $message") },
                     clipMaskInitializeRecipesByPassId = clipMaskInitializeRecipes,
                     clipMaskProducerRecipesByPassId = clipMaskProducerRecipes,
+                    clipMaskProducerDirectTriangleRecipesByPassId = clipMaskProducerDirectTriangleRecipes,
                     clipMaskFoldRecipesByPassId = clipMaskFoldRecipes)
                     .map { native ->
                         val pass = graph.passes()[native.sourceStepIndex - 1]

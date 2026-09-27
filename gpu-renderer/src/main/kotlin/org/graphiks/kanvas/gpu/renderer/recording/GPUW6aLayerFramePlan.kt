@@ -194,6 +194,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val clipMaskInitializeRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskInitializeRecipeV1>()
     /** Each final analytic W4e producer packet retains its planner owner and packet ordinal. */
     private val clipMaskProducerRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerRecipeV1>()
+    private val clipMaskProducerDirectTriangleRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerDirectTriangleRecipeV1>()
     /** I2 folds keep their planner owner/packet through W6 recording into native encoding. */
     private val clipMaskFoldRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskFoldRecipeV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
@@ -372,6 +373,14 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             require(clipMaskProducerRecipesByPacket.put(packet, recipe) == null) {
                                 "W4e ClipMaskProducer recipe projected more than once."
                             }
+                        }
+                        val direct = physical.w4eClipMaskProducerDirectTriangleRecipes()[native.id]
+                        if (direct != null) {
+                            require(direct.passId == native.id && direct.packetOrdinalI32 == native.ordinal &&
+                                direct.target.id == native.target && direct.resolveTarget?.id == native.resolveTarget &&
+                                direct.depthStencil.id == native.depthStencil && direct.sampleCountI32 == native.sampleCountI32 &&
+                                direct.inverseCoverage == native.inverseCoverage && direct.antiAlias == native.antiAlias)
+                            require(clipMaskProducerDirectTriangleRecipesByPacket.put(packet, direct) == null)
                         }
                     }
                     if (native is PlanPass.ClipMaskFold) {
@@ -850,6 +859,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             clipMaskProducerRecipesByPacket.size == physical.w4eClipMaskProducerRecipes().size) {
             "Every frozen W4e analytic ClipMaskProducer recipe must project to exactly one packet."
         }
+        require(clipMaskProducerDirectTriangleRecipesByPacket.values.map { it.passId }.toSet() ==
+            physical.w4eClipMaskProducerDirectTriangleRecipes().keys &&
+            clipMaskProducerDirectTriangleRecipesByPacket.size == physical.w4eClipMaskProducerDirectTriangleRecipes().size)
         require(clipMaskFoldRecipesByPacket.values.map { it.passId }.toSet() ==
             physical.w4eClipMaskFoldRecipes().keys &&
             clipMaskFoldRecipesByPacket.size == physical.w4eClipMaskFoldRecipes().size) {
@@ -867,6 +879,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     /** Returns only the analytic producer recipe attached during W6 recording. */
     internal fun w4eClipMaskProducerRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerRecipeV1? =
         clipMaskProducerRecipesByPacket[packet]
+    internal fun w4eClipMaskProducerDirectTriangleRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerDirectTriangleRecipeV1? =
+        clipMaskProducerDirectTriangleRecipesByPacket[packet]
 
     internal fun w4eClipMaskFoldRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskFoldRecipeV1? =
         clipMaskFoldRecipesByPacket[packet]
