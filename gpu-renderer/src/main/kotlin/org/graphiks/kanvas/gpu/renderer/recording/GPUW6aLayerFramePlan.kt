@@ -192,6 +192,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val plainLayerCompositeSites = linkedSetOf<W6LayerCompositeSiteKeyV1>()
     /** Each bound W4e initialization packet carries the exact planner recipe through native encoding. */
     private val clipMaskInitializeRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskInitializeRecipeV1>()
+    /** Each final analytic W4e producer packet retains its planner owner and packet ordinal. */
+    private val clipMaskProducerRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerRecipeV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     /** W6b owns a distinct recipe-derived projection; it must never alias lowerer mappings. */
@@ -354,6 +356,20 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                         }
                         require(clipMaskInitializeRecipesByPacket.put(packet, recipe) == null) {
                             "W4e ClipMaskInitialize recipe projected more than once."
+                        }
+                    }
+                    if (native is PlanPass.ClipMaskProducer) {
+                        val recipe = physical.w4eClipMaskProducerRecipes()[native.id]
+                        if (recipe != null) {
+                            require(recipe.passId == native.id && recipe.packetOrdinalI32 == native.ordinal &&
+                                recipe.target.id == native.target && recipe.resolveTarget?.id == native.resolveTarget &&
+                                recipe.depthStencil?.id == native.depthStencil && recipe.sampleCountI32 == native.sampleCountI32 &&
+                                recipe.inverseCoverage == native.inverseCoverage && recipe.antiAlias == native.antiAlias) {
+                                "W4e analytic ClipMaskProducer recipe differs from the final bound pass."
+                            }
+                            require(clipMaskProducerRecipesByPacket.put(packet, recipe) == null) {
+                                "W4e ClipMaskProducer recipe projected more than once."
+                            }
                         }
                     }
                     color?.let { draw -> packet.attachW5aSourceStageV2(org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
@@ -816,6 +832,11 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             clipMaskInitializeRecipesByPacket.size == physical.w4eClipMaskInitializeRecipes().size) {
             "Every frozen W4e ClipMaskInitialize recipe must project to exactly one packet."
         }
+        require(clipMaskProducerRecipesByPacket.values.map { it.passId }.toSet() ==
+            physical.w4eClipMaskProducerRecipes().keys &&
+            clipMaskProducerRecipesByPacket.size == physical.w4eClipMaskProducerRecipes().size) {
+            "Every frozen W4e analytic ClipMaskProducer recipe must project to exactly one packet."
+        }
     }
 
     internal fun taskList(): GPUTaskList = GPUTaskList(request.frameId, seal, listOf(recording), graph.id.value,
@@ -824,6 +845,10 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     /** Returns only the recipe attached during W6 recording; native encoding cannot rediscover it. */
     internal fun w4eClipMaskInitializeRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskInitializeRecipeV1? =
         clipMaskInitializeRecipesByPacket[packet]
+
+    /** Returns only the analytic producer recipe attached during W6 recording. */
+    internal fun w4eClipMaskProducerRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerRecipeV1? =
+        clipMaskProducerRecipesByPacket[packet]
 
     /** Exact plan-owned snapshot consumer, with coordinates in its target's local space. */
     internal fun destinationCopy(packet: GPUDrawPacket): PlanPass.TextureCopy? {
