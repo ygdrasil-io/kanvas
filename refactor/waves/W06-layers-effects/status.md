@@ -1009,15 +1009,19 @@ IIIc3b/c/d, IIIa2, les budgets et 2B ne sont pas clos.
 ### 2A0b.IIIc3b — FilterComposite.Picture direct destination-read
 
 Le témoin public direct construit d'abord un parent vert
-dans le `Picture`, puis un draw rouge avec `ImageFilter.ColorFilter(Luma)` et
-`DIFFERENCE`; l'attendu vert opaque est fixé avant `PictureRecorder`/`Surface`
+dans le `Picture`, puis un draw rouge avec `ImageFilter.ColorFilter(Blend bleu SRC)` et
+`DIFFERENCE`; l'attendu cyan opaque, distinct du parent si le composite était
+omis, est fixé avant `PictureRecorder`/`Surface`
 et contrôle pixels, `Render` et `Readback`. La nouvelle recette distincte
 scelle source/snapshot, provenance directe, versions, copie causale,
 descriptions physiques, load/store, ABI b0+b2 et draw. Le renderer la lit
 catalog-first, préflight les uses source/snapshot et la copie avant toute
 allocation, puis utilise une traduction dédiée sans fallback direct.
-Ce témoin préservait déjà les pixels sur le fallback ; la sélection gelée est
-donc vérifiée structurellement, sans prétendre à un RED causal. Les trois
-compilations ciblées réussissent ; W6d donne `26/0/0/0` dans son XML, puis
+Une première version du témoin était non causale : `Luma(red)` puis
+`DIFFERENCE` laissait le même vert que l'absence de composite. L'oracle cyan
+corrigé distingue maintenant l'exécution de son omission ; la sélection
+gelée reste vérifiée structurellement, sans prétendre à un RED de l'ancien
+fallback. Les trois compilations ciblées réussissent ; W6d redonne
+`26/0/0/0` dans son XML après correction, puis
 l'exécuteur natif sort 133 (**UNKNOWN**). IIIc3c/d, IIIa2, budgets et 2B
 restent ouverts.

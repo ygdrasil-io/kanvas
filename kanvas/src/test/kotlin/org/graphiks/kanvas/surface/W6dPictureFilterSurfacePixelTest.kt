@@ -52,14 +52,14 @@ class W6dPictureFilterSurfacePixelTest {
     /** IIIc3b: an inner filtered Picture reads its preceding Picture destination for DIFFERENCE. */
     @Test
     fun filteredInnerPictureDifferenceReadsDestinationSnapshotWithoutGraphOperand() {
-        val expected = ubyteArrayOf(0u, 255u, 0u, 255u)
+        val expected = ubyteArrayOf(0u, 255u, 255u, 255u)
         val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
         val picture = PictureRecorder().also { recorder ->
             recorder.beginRecording(bounds).apply {
                 drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
                 drawRect(bounds, Paint(
                     ColorARGB.Red,
-                    imageFilter = ImageFilter.ColorFilter(ColorFilter.Luma),
+                    imageFilter = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC)),
                     blendMode = BlendMode.DIFFERENCE,
                     antiAlias = false,
                 ))
