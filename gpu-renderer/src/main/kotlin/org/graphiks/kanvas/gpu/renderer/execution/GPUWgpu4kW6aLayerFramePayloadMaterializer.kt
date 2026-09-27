@@ -166,6 +166,18 @@ private fun preflightW6bCoverageRasters(frame: GPUW6aLayerFramePlan, framePlan: 
     }
 }
 
+/** Checks all and only the planned Empty programs before the first native allocation. */
+private fun preflightW6FullscreenEmpties(frame: GPUW6aLayerFramePlan) {
+    val expected = freezeW6FullscreenEmptyRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FullscreenEmptyRecipes().keys == expected.keys)
+    expected.forEach { (passId, frozen) ->
+        val actual = frame.physical.w6FullscreenEmptyRecipe(passId)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1() && actual.inputs().isEmpty()) {
+            "W6 Empty native preflight differs from its frozen planner recipe."
+        }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -215,6 +227,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         var spatialBinding: GPUW6cSpatialFilterSessionCache.Binding? = null
         try {
             val graph = frame.graph
+            preflightW6FullscreenEmpties(frame)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -856,7 +869,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             is PlanPass.PictureAggregateBeginPass -> pass.target
                             is PlanPass.FilterSourceClear -> pass.output
                         }
-                        renderOperands += emptyRender(stepIndex, views.getValue(target), generation, clear = true, pass, owned)
+                        renderOperands += emptyRender(stepIndex, views.getValue(target), generation, pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned)
                     }
                     is PlanPass.FilterCoverageSourcePass -> {
                         val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
@@ -872,7 +885,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             } ?: run {
                                 // Task 3's image-only witness owns no mask producer and remains
                                 // transparent.  This is plan-published absence, not discovery.
-                                renderOperands += emptyRender(stepIndex, views.getValue(pass.output), generation, clear = true, pass, owned)
+                                renderOperands += emptyRender(stepIndex, views.getValue(pass.output), generation, pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned)
                             }
                             else -> when (binding.draw) {
                                 is SolidRectDraw -> {
@@ -895,7 +908,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
                     }
                     is PlanPass.PictureAggregateSealPass -> {
-                        renderOperands += emptyRender(stepIndex, views.getValue(pass.aggregateTarget), generation, clear = false, pass, owned)
+                        renderOperands += emptyRender(stepIndex, views.getValue(pass.aggregateTarget), generation, pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned)
                     }
                     is PlanPass.PictureSourcePass -> {
                         val operand = pass.graphTextureOperand
@@ -1160,7 +1173,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         val sampleOffset = operands.copySourceSampleOffsetTargetLocalI32()
                         val operand = graphTextureOperandsBySource[pass.source]
                         renderOperands += if (scissor == null) emptyRender(stepIndex, views.getValue(pass.destination), generation,
-                            clear = false, pass, owned) else if (operand == null) {
+                            pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned) else if (operand == null) {
                             textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
                                 sampledCompositeShader(sampleOffset.x, sampleOffset.y, 1f), operands.blend,
                                 scissor.left, scissor.top, scissor.width(), scissor.height(), pass, owned)
@@ -1196,7 +1209,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         when (val operation = pass.operation) {
                             is FilterCompositeOperationV1.Draw -> {
                                 renderOperands += if (operation.noOp) emptyRender(stepIndex, views.getValue(pass.destination), generation,
-                                    clear = false, pass, owned) else {
+                                    pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned) else {
                                     val finalScissor = requireNotNull(scissor) { "W6b Draw composite has no sealed scissor." }
                                     textureRender(
                                         stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
@@ -1209,7 +1222,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val restore = operation.restore
                                 val destinationRead = restore.blend as? BlendPlan.DestinationReadV1
                                 renderOperands += if (operation.noOp) emptyRender(stepIndex, views.getValue(pass.destination), generation,
-                                    clear = false, pass, owned) else filteredCompositeRender(
+                                    pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned) else filteredCompositeRender(
                                     stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
                                     sampleOffset, requireNotNull(scissor) { "W6b Layer composite has no sealed scissor." },
                                     restore.alphaF32, restore.colorFilter, uniform, restore.colorFilterUniformOffsetI64,
@@ -1221,7 +1234,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val terminal = requireNotNull(operation.terminal)
                                 val operand = graphTextureOperandsBySource[pass.evaluationKey.boundSourceId]
                                 renderOperands += if (scissor == null) {
-                                    emptyRender(stepIndex, views.getValue(pass.destination), generation, clear = false, pass, owned)
+                                    emptyRender(stepIndex, views.getValue(pass.destination), generation, pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned)
                                 } else if (operand == null) {
                                     // Inner Picture draws already carry their W5 material in the
                                     // filter source.  They have no parent graph-texture operand,
@@ -1902,10 +1915,11 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         stepIndex: Int,
         target: GPUTextureView,
         generation: GPUDeviceGenerationID,
-        clear: Boolean,
         pass: PlanPass,
+        recipe: W6FullscreenEmptyRecipeV1,
         owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.inputs().isEmpty())
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = emptyList())))
         val pipeline = pipeline(W6A_VERTEX_SHADER + """
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
@@ -1917,8 +1931,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             stepIndex,
             GPUPreparedNativeRenderPassConfig(
                 GPUPreparedNativeTextureViewOperand(target, generation),
-                loadOperation = if (clear) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load,
-                clearColor = if (clear) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null,
+                loadOperation = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load,
+                clearColor = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null,
             ),
             listOf(
                 GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),

@@ -25,6 +25,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6PlainLayerComposite,
     W4eClipMaskInitialize,
     W6bCoverageRaster,
+    W6FullscreenEmpty,
 }
 
 /**
@@ -37,6 +38,43 @@ public sealed interface NativeSiteRecipeV1 {
     public val owner: NativeSiteOwnerV1
     public val family: NativeSiteRecipeFamilyV1
     public val canonicalLogicalEncodingV1: String
+}
+
+/** A semantic reason for a program that intentionally renders transparent pixels; never a skip. */
+public enum class W6FullscreenEmptyPhaseV1 {
+    PictureAggregateBegin, FilterTransparentBlack, CoverageAbsent, PictureAggregateSeal,
+    PictureCompositeNoScissor, FilterCompositeNoOp, FilterCompositeNoScissor,
+}
+
+/** Planner-owned 2A0b.Ia fullscreen Empty recipe. Group zero is deliberately empty. */
+public class W6FullscreenEmptyRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId,
+    public val phase: W6FullscreenEmptyPhaseV1,
+    public val target: PlanResourceId,
+    inputs: List<PlanResourceId>,
+    public val load: AttachmentLoadPlan,
+    public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val targetFormat: PlanLogicalColorFormat,
+    public val sampleCountI32: Int,
+) {
+    private val frozenInputs = immutableList(inputs)
+    init { require(frozenInputs.isEmpty() && sampleCountI32 == 1 && target !in frozenInputs) }
+    public fun inputs(): List<PlanResourceId> = frozenInputs
+    public fun nativeSiteOwnerV1(): NativeSiteOwnerV1 = NativeSiteOwnerV1(ownerPassId, 0, 0)
+    public fun canonicalLogicalEncodingV1(): String = W6FullscreenEmptyNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+
+public class W6FullscreenEmptyNativeSiteRecipeV1 internal constructor(
+    public val host: W6FullscreenEmptyRecipeV1,
+) : NativeSiteRecipeV1 {
+    override val versionI32: Int = 1
+    override val owner: NativeSiteOwnerV1 = host.nativeSiteOwnerV1()
+    override val family: NativeSiteRecipeFamilyV1 = NativeSiteRecipeFamilyV1.W6FullscreenEmpty
+    override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
+        enum("phase", host.phase); text("target", host.target.value); int("inputCount", host.inputs().size)
+        enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat)
+        int("sampleCount", host.sampleCountI32); text("topology", "FullscreenTriangle"); text("groupZeroAbi", "Empty")
+    }
 }
 
 public class W6SolidRectNativeSiteRecipeV1 internal constructor(
@@ -241,6 +279,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         plainLayerComposites: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>,
         clipMaskInitializes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
         coverageRasters: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
+        fullscreenEmpties: Map<PlanPassId, W6FullscreenEmptyRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -249,6 +288,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6PlainLayerCompositeNativeSiteRecipeV1 -> plainLayerComposites[recipe.host.site] === recipe.host
             is W4eClipMaskInitializeNativeSiteRecipeV1 -> clipMaskInitializes[recipe.host.passId] === recipe.host
             is W6bCoverageRasterNativeSiteRecipeV1 -> coverageRasters[recipe.host.ownerPassId]?.bundle(recipe.host.bundleOrdinalI32) === recipe.host
+            is W6FullscreenEmptyNativeSiteRecipeV1 -> fullscreenEmpties[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -266,6 +306,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     plainLayerComposites: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>,
     clipMaskInitializes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
     coverageRasters: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
+    fullscreenEmpties: Map<PlanPassId, W6FullscreenEmptyRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -273,12 +314,14 @@ public fun freezeNativeSiteRecipeCatalogV1(
     plainLayerComposites.forEach { (site, recipe) -> require(site == recipe.site) }
     clipMaskInitializes.forEach { (passId, recipe) -> require(passId == recipe.passId) }
     coverageRasters.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    fullscreenEmpties.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
     val remainingPlainComposites = plainLayerComposites.toMutableMap()
     val remainingClipInitializes = clipMaskInitializes.toMutableMap()
     val remainingCoverageRasters = coverageRasters.toMutableMap()
+    val remainingEmpties = fullscreenEmpties.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -293,17 +336,56 @@ public fun freezeNativeSiteRecipeCatalogV1(
             is PlanPass.ClipMaskInitialize -> remainingClipInitializes.remove(pass.id)?.let {
                 add(W4eClipMaskInitializeNativeSiteRecipeV1(it))
             }
-            is PlanPass.FilterCoverageSourcePass -> remainingCoverageRasters.remove(pass.id)?.bundles()?.forEach {
-                add(W6bCoverageRasterNativeSiteRecipeV1(it))
+            is PlanPass.FilterCoverageSourcePass -> {
+                remainingCoverageRasters.remove(pass.id)?.bundles()?.forEach { add(W6bCoverageRasterNativeSiteRecipeV1(it)) }
+                remainingEmpties.remove(pass.id)?.let { add(W6FullscreenEmptyNativeSiteRecipeV1(it)) }
             }
+            is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
+            is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
+            is PlanPass.FilterComposite -> remainingEmpties.remove(pass.id)?.let { add(W6FullscreenEmptyNativeSiteRecipeV1(it)) }
             else -> Unit
         }
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
-        remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty()) {
+        remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
+        remainingEmpties.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
+
+/** Freezes exactly the Empty branches that the W6a renderer executes as fullscreen programs. */
+public fun freezeW6FullscreenEmptyRecipesV1(
+    passes: List<PlanPass>,
+    resources: List<PlanResource>,
+): Map<PlanPassId, W6FullscreenEmptyRecipeV1> = LinkedHashMap<PlanPassId, W6FullscreenEmptyRecipeV1>().apply {
+    fun add(pass: PlanPass, phase: W6FullscreenEmptyPhaseV1, target: PlanResourceId, load: AttachmentLoadPlan) {
+        val row = resources.single { it.id == target }
+        val format = (row.format as? PlanTextureFormat.Color)?.value
+            ?: error("W6 Empty requires a color attachment.")
+        require(row.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in row.usages())
+        require(put(pass.id, W6FullscreenEmptyRecipeV1(pass.id, phase, target, emptyList(), load,
+            AttachmentStorePlan.Store, format, row.sampleCountI32)) == null)
+    }
+    passes.forEach { pass -> when (pass) {
+        is PlanPass.PictureAggregateBeginPass -> add(pass, W6FullscreenEmptyPhaseV1.PictureAggregateBegin, pass.target, AttachmentLoadPlan.ClearTransparent)
+        is PlanPass.FilterSourceClear -> add(pass, W6FullscreenEmptyPhaseV1.FilterTransparentBlack, pass.output, AttachmentLoadPlan.ClearTransparent)
+        is PlanPass.FilterCoverageSourcePass -> if (pass.rasterBinding == null && pass.sealedAlphaSource == null)
+            add(pass, W6FullscreenEmptyPhaseV1.CoverageAbsent, pass.output, AttachmentLoadPlan.ClearTransparent)
+        is PlanPass.PictureAggregateSealPass -> add(pass, W6FullscreenEmptyPhaseV1.PictureAggregateSeal, pass.aggregateTarget, AttachmentLoadPlan.Load)
+        is PlanPass.PictureComposite -> if (pass.operands?.copyCompositeScissorTargetLocalI32() == null)
+            add(pass, W6FullscreenEmptyPhaseV1.PictureCompositeNoScissor, pass.destination, AttachmentLoadPlan.Load)
+        is PlanPass.FilterComposite -> {
+            val phase = when {
+                (pass.operation as? FilterCompositeOperationV1.Draw)?.noOp == true ||
+                    (pass.operation as? FilterCompositeOperationV1.Layer)?.noOp == true -> W6FullscreenEmptyPhaseV1.FilterCompositeNoOp
+                pass.copyCompositeScissorTargetLocalI32() == null -> W6FullscreenEmptyPhaseV1.FilterCompositeNoScissor
+                else -> null
+            }
+            if (phase != null) add(pass, phase, pass.destination, AttachmentLoadPlan.Load)
+        }
+        else -> Unit
+    } }
+}
 
 private fun W6GeometrySiteKeyV1.nativeSiteOwnerV1(): NativeSiteOwnerV1 =
     NativeSiteOwnerV1(ownerPassId, drawOrdinalI32, 0)

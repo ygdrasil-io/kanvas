@@ -49,6 +49,8 @@ internal class SourcePhysicalConstructionV1(
     val w6bCoverageRasterGeometry: Map<PlanPassId, W6bCoverageRasterGeometryV1> = emptyMap(),
     /** Final W6b selector and logical uniform operands for the same frozen bundles. */
     val w6bCoverageRasterHostRecipes: Map<PlanPassId, W6bCoverageRasterHostRecipeV1> = emptyMap(),
+    /** Final planner-owned W6a Empty fullscreen sites. */
+    val w6FullscreenEmptyRecipes: Map<PlanPassId, W6FullscreenEmptyRecipeV1> = emptyMap(),
     /** Versioned catalog derived exclusively from the preceding final planner recipes. */
     val nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1.Empty,
 )
@@ -107,6 +109,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     w4eClipMaskInitializeRecipes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
     w6bCoverageRasterGeometry: Map<PlanPassId, W6bCoverageRasterGeometryV1>,
     w6bCoverageRasterHostRecipes: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
+    fullscreenEmptyRecipes: Map<PlanPassId, W6FullscreenEmptyRecipeV1>,
     nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1,
 ) {
     private val resources = immutableList(resources)
@@ -123,6 +126,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val clipMaskInitializes = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskInitializeRecipes))
     private val coverageRasterGeometry = java.util.Collections.unmodifiableMap(LinkedHashMap(w6bCoverageRasterGeometry))
     private val coverageRasterHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(w6bCoverageRasterHostRecipes))
+    private val fullscreenEmpties = java.util.Collections.unmodifiableMap(LinkedHashMap(fullscreenEmptyRecipes))
     private val nativeSiteRecipes = nativeSiteRecipeCatalogV1
     private val slots = immutableList(buildList {
         resources.forEachIndexed { indexI32, resource ->
@@ -193,6 +197,10 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6bCoverageRasterHostRecipe(passId: PlanPassId): W6bCoverageRasterHostRecipeV1 =
         requireNotNull(coverageRasterHosts[passId]) { "Missing frozen W6b coverage raster host recipe for ${passId.value}." }
     public fun w6bCoverageRasterHostRecipes(): Map<PlanPassId, W6bCoverageRasterHostRecipeV1> = coverageRasterHosts
+    public fun w6FullscreenEmptyRecipe(passId: PlanPassId): W6FullscreenEmptyRecipeV1 =
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, 0, 0)) as? W6FullscreenEmptyNativeSiteRecipeV1)?.host
+            ?: error("Missing frozen W6 Empty native-site recipe for ${passId.value}.")
+    public fun w6FullscreenEmptyRecipes(): Map<PlanPassId, W6FullscreenEmptyRecipeV1> = fullscreenEmpties
     /** Ordered planner catalog consumed by the bounded 2P0–2P6 renderer sites. */
     public fun nativeSiteRecipeCatalogV1(): NativeSiteRecipeCatalogV1 = nativeSiteRecipes
 
@@ -264,9 +272,15 @@ public class PlanPhysicalLayoutV1 private constructor(
                     "W6b coverage raster selector changed after final pass binding."
                 }
             }
+            val expectedFullscreenEmpties = freezeW6FullscreenEmptyRecipesV1(graph.passes(), rows)
+            require(source.w6FullscreenEmptyRecipes.keys == expectedFullscreenEmpties.keys)
+            source.w6FullscreenEmptyRecipes.forEach { (passId, recipe) ->
+                require(W6FullscreenEmptyNativeSiteRecipeV1(recipe).canonicalLogicalEncodingV1 ==
+                    W6FullscreenEmptyNativeSiteRecipeV1(expectedFullscreenEmpties.getValue(passId)).canonicalLogicalEncodingV1)
+            }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
                 graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
-                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts,
+                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -274,7 +288,7 @@ public class PlanPhysicalLayoutV1 private constructor(
             require(source.nativeSiteRecipeCatalogV1.authenticatesFrozenHosts(
                 source.w6SolidRectHostRecipes, source.w6CorePrimitiveHostRecipes,
                 source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes,
-                source.w4eClipMaskInitializeRecipes, source.w6bCoverageRasterHostRecipes,
+                source.w4eClipMaskInitializeRecipes, source.w6bCoverageRasterHostRecipes, source.w6FullscreenEmptyRecipes,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
@@ -464,6 +478,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes, source.w4eClipMaskInitializeRecipes,
                 source.w6bCoverageRasterGeometry,
                 source.w6bCoverageRasterHostRecipes,
+                source.w6FullscreenEmptyRecipes,
                 source.nativeSiteRecipeCatalogV1)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
