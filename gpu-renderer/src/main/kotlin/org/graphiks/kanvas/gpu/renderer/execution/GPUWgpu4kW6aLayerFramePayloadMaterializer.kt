@@ -181,7 +181,22 @@ private fun preflightW6FullscreenEmpties(frame: GPUW6aLayerFramePlan, framePlan:
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single {
             it.w6aPassV1?.id == passId
         }
-        require(render.target == frame.refs.getValue(actual.target) && render.resourceUses.isEmpty() && render.drawPackets.isEmpty() &&
+        val pass = requireNotNull(render.w6aPassV1)
+        val expectedRecordedSource = when (actual.phase) {
+            W6FullscreenEmptyPhaseV1.PictureCompositeNoScissor -> (pass as? PlanPass.PictureComposite)?.source
+            W6FullscreenEmptyPhaseV1.FilterCompositeNoOp,
+            W6FullscreenEmptyPhaseV1.FilterCompositeNoScissor,
+            -> (pass as? PlanPass.FilterComposite)?.source
+            else -> null
+        }
+        val expectedUses = expectedRecordedSource?.let { source -> listOf(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+                frame.refs.getValue(source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false,
+            ))
+        }.orEmpty()
+        require(render.target == frame.refs.getValue(actual.target) && render.resourceUses == expectedUses && render.drawPackets.isEmpty() &&
             row.copyExtent() == actual.copyExtent() && row.format == PlanTextureFormat.Color(actual.targetFormat) &&
             row.sampleCountI32 == actual.sampleCountI32 && render.samplePlan is GPUSamplePlan.SingleSampleFrame &&
             render.loadStore.loadOp == (if (actual.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load") &&
