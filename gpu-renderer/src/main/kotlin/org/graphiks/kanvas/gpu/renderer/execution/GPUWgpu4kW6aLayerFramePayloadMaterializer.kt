@@ -934,28 +934,44 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         renderOperands += emptyRender(stepIndex, views.getValue(target), generation, pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned)
                     }
                     is PlanPass.FilterCoverageSourcePass -> {
-                        val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
-                        when (val binding = pass.rasterBinding) {
-                            null -> pass.sealedAlphaSource?.let { alpha ->
-                                val recipe = frame.physical.w6FullscreenCoverageAlphaRecipe(pass.id)
-                                require(recipe.source == alpha.sealedSourceId)
-                                renderOperands += coverageAlphaRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), generation,
-                                    recipe, pass, owned)
-                            } ?: run {
-                                // Task 3's image-only witness owns no mask producer and remains
-                                // transparent.  This is plan-published absence, not discovery.
-                                renderOperands += emptyRender(stepIndex, views.getValue(pass.output), generation, pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned)
+                        // The frozen catalog, not nullable pass fields, chooses the native site.
+                        // Pass fields below authenticate the selected recipe or serve the explicitly
+                        // still-open SolidRect bridge until Ib2 supplies its frozen variant.
+                        when (val recipe = frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(
+                            NativeSiteOwnerV1(pass.id, 0, 0),
+                        )) {
+                            is W6FullscreenCoverageAlphaNativeSiteRecipeV1 -> {
+                                val host = frame.physical.w6FullscreenCoverageAlphaRecipe(pass.id)
+                                require(recipe.host === host)
+                                renderOperands += coverageAlphaRender(stepIndex, views.getValue(host.target), views.getValue(host.source), generation,
+                                    host, pass, owned)
                             }
-                            else -> when (binding.draw) {
-                                is SolidRectDraw -> {
-                                renderOperands += coverageSolidRectRender(stepIndex, views.getValue(pass.output), generation,
-                                    extent.width, extent.height, pass, owned)
+                            is W6FullscreenEmptyNativeSiteRecipeV1 -> {
+                                // Plan-published coverage absence remains an executed Empty site.
+                                renderOperands += emptyRender(stepIndex, views.getValue(recipe.host.target), generation, pass, recipe.host, owned)
+                            }
+                            is W6bCoverageRasterNativeSiteRecipeV1 -> {
+                                val binding = requireNotNull(pass.rasterBinding) {
+                                    "Frozen W6b coverage raster has no authenticated raster binding."
                                 }
-                                else -> renderOperands += coverageRasterRender(stepIndex, views.getValue(pass.output),
+                                require(binding.draw !is SolidRectDraw)
+                                renderOperands += coverageRasterRender(stepIndex, views.getValue(recipe.host.output),
                                     binding.depthStencil?.let(views::get), generation, frame, step as? GPUFrameStep.RenderPassStep
                                         ?: error("W6b coverage requires its frozen render step"), pass, binding,
                                     geometryBuffers, uniform, owned)
                             }
+                            null -> {
+                                // Ib2 is intentionally not frozen yet.  This is the only allowed
+                                // transient CoverageSource branch; every other missing recipe is an error.
+                                val binding = requireNotNull(pass.rasterBinding) {
+                                    "Unfrozen CoverageSource site is neither the Ib2 SolidRect bridge nor a frozen recipe."
+                                }
+                                require(binding.draw is SolidRectDraw)
+                                val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
+                                renderOperands += coverageSolidRectRender(stepIndex, views.getValue(pass.output), generation,
+                                    extent.width, extent.height, pass, owned)
+                            }
+                            else -> error("CoverageSource pass selected an inadmissible frozen native-site recipe ${recipe.family}.")
                         }
                     }
                     is PlanPass.FilterCoverageRetainPass -> {
