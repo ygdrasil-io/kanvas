@@ -531,6 +531,23 @@ private fun preflightW6FilterBlends(frame: GPUW6aLayerFramePlan, framePlan: GPUF
     }
 }
 
+/** IIe1 authenticates each frozen horizontal/vertical blur pass before device.create*. */
+private fun preflightW6FilterSeparableBlurs(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterSeparableBlurRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterSeparableBlurRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterSeparableBlurRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 SeparableBlur owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.SeparableBlur ?: error("W6 SeparableBlur operation changed after seal.")
+        val sampling = requireNotNull(operation.sampling)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val source = frame.physical.resource(actual.source); val target = frame.physical.resource(actual.target)
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.source == pass.inputs().single() && actual.kind == operation.kind && actual.axis == operation.axis && actual.sigmaF32.toRawBits() == operation.sigmaF32.toRawBits() && actual.tileMode == operation.tileMode && actual.copyKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32() && actual.copyOutputToInputOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32() && target.copyExtent() == actual.copyExtent() && source.copyExtent() == actual.copySourceExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.sourceFormat) && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null)
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -593,6 +610,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterColorFilters(frame, framePlan)
             preflightW6FilterMerges(frame, framePlan)
             preflightW6FilterBlends(frame, framePlan)
+            preflightW6FilterSeparableBlurs(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1332,6 +1350,12 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             renderOperands += blendRender(stepIndex, views.getValue(recipe.target),
                                 listOf(views.getValue(recipe.background().source), views.getValue(recipe.foreground().source)),
                                 generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterSeparableBlurNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterSeparableBlurRecipe(pass.id)
+                            val offset = recipe.copyOutputToInputOffsetTargetLocalI32(); val known = recipe.copyKnownContentTargetLocalI32()
+                            val shader = W6A_VERTEX_SHADER + W6bSeparableBlurSnippet.fragment(recipe.axis, recipe.sigmaF32, recipe.tileMode, offset.x, offset.y, known.left, known.top, known.right, known.bottom, recipe.kind in setOf(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y))
+                            val extent = recipe.copyExtent()
+                            renderOperands += textureRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), generation, shader, recipe.blend, 0, 0, extent.width, extent.height, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -1340,38 +1364,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             is FilterPassOperationV1.Merge -> error("Merge pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Blend -> error("Blend pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Morphology -> error("Morphology pass is missing its frozen native-site recipe.")
-                            is FilterPassOperationV1.SeparableBlur -> {
-                                require(operation.kind in setOf(
-                                    FilterImplementationKindV1.IMAGE_BLUR_X,
-                                    FilterImplementationKindV1.IMAGE_BLUR_Y,
-                                    FilterImplementationKindV1.MASK_COVERAGE_BLUR_X,
-                                    FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y,
-                                )) { "W6b cannot materialize ${operation.kind}." }
-                                require(pass.inputs().size == 1)
-                                val input = pass.inputs().single()
-                                val sampling = requireNotNull(operation.sampling) {
-                                    "W6b blur has no sealed target-local sampling."
-                                }
-                                val offset = sampling.copyOutputToInputOffsetTargetLocalI32()
-                                val known = sampling.copyKnownContentInputTargetLocalI32()
-                                val shader = W6A_VERTEX_SHADER + W6bSeparableBlurSnippet.fragment(
-                                    operation.axis,
-                                    operation.sigmaF32,
-                                    operation.tileMode,
-                                    offset.x,
-                                    offset.y,
-                                    known.left,
-                                    known.top,
-                                    known.right,
-                                    known.bottom,
-                                    transparentOutsideSource = operation.kind in setOf(
-                                        FilterImplementationKindV1.MASK_COVERAGE_BLUR_X,
-                                        FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y,
-                                    ),
-                                )
-                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
-                                    shader, BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
-                            }
+                            is FilterPassOperationV1.SeparableBlur -> error("SeparableBlur pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaskBlurStyle -> {
                                 val blurredOffset = requireNotNull(operation.blurredSampling) {
                                     "W6b mask style has no sealed blurred sampling."
