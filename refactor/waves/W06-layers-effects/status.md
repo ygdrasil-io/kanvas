@@ -920,3 +920,23 @@ compilations ciblées réussissent ; les XML de
 respectivement `11/0/0/0` et `5/0/0/0`. L'exécuteur natif sort 133
 (**UNKNOWN**). Relecture Sol **Approved**, aucun Critical/Important.
 IIIc2a2, IIIc2b, IIIc3, IIIa2, W4e/W5a, budget/leases et 2B restent ouverts.
+
+### 2A0b.IIIc2a2 — FilterComposite.Layer avec W5f, sans snapshot
+
+Le commit `f2330b6` ajoute une recette distincte de IIIc2a1 pour le
+`colorFilter` de restore. L'identité W5f, la ressource `UniformData`, sa
+fenêtre offset/capacité, la description physique, le shader, l'ABI
+texture+uniform et le draw sont gelés et authentifiés. La préparation inclut
+explicitement l'uniform ; le pass enregistre dans l'ordre source puis uniform,
+et le préflight compare cet ordre et la fenêtre avant toute allocation.
+Le renderer sélectionne la variante depuis le catalogue et utilise un helper
+W5f dédié ; le bridge sans recette ne reste autorisé que pour
+`destination-read` de IIIc2b.
+
+Le témoin public avec `saveLayer(imageFilter=..., colorFilter=...)` fixe
+l'attendu avant `Surface`, puis vérifie pixels et `Render` + `Readback`.
+Trois compilations ciblées réussissent ; les deux classes publiques ciblées
+produisent `11/0/0/0` et `5/0/0/0` dans leurs XML. L'exécuteur natif sort
+133 (**UNKNOWN**). La relecture Sol est **Approved**, sans défaut
+Critical/Important. IIIc2a est review-clean ; IIIc2b, IIIc3, IIIa2 et les
+gates W4e/W5a, budget/leases et 2B restent ouverts.
