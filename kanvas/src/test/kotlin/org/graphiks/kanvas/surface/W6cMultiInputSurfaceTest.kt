@@ -32,7 +32,10 @@ class W6cMultiInputSurfaceTest {
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Red, imageFilter = filter, antiAlias = false))
         }
 
-        assertContentEquals(expected, surface.render().pixels)
+        val actual = surface.render()
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+        assertContentEquals(expected, actual.pixels)
     }
 
     @Test

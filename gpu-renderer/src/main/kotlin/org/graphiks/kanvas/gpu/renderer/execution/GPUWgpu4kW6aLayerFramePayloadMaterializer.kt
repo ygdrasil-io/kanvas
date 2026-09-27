@@ -457,6 +457,22 @@ private fun preflightW6FilterColorFilters(frame: GPUW6aLayerFramePlan, framePlan
     }
 }
 
+/** IId1 authenticates every ordered Merge source/sampling row before device.create*. */
+private fun preflightW6FilterMerges(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterMergeRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterMergeRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterMergeRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 Merge owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.Merge ?: error("W6 Merge operation changed after seal.")
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val uses = actual.inputs().map { input -> org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(input.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false) }
+        val target = frame.physical.resource(actual.target)
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.inputs().map { it.source } == pass.inputs() && actual.inputs().size == operation.inputSamplings().size && actual.inputs().zip(operation.inputSamplings()).all { (input, sampling) -> input.copyKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32() && input.copyOutputToInputOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32() } && target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && target.sampleCountI32 == actual.sampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && actual.inputs().all { input -> val source = frame.physical.resource(input.source); source.copyExtent() == input.copyExtent() && source.format == PlanTextureFormat.Color(input.format) && source.sampleCountI32 == input.sampleCountI32 && PlanResourceUsage.Sampled in source.usages() } && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null)
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -517,6 +533,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterSpatialTiles(frame, framePlan)
             preflightW6FilterMorphologies(frame, framePlan)
             preflightW6FilterColorFilters(frame, framePlan)
+            preflightW6FilterMerges(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1248,18 +1265,15 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterColorFilterNativeSiteRecipeV1) {
                             val recipe = frame.physical.w6FilterColorFilterRecipe(pass.id)
                             renderOperands += colorFilterRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), colorFilterUniformBuffers.getValue(recipe.uniformResource), generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMergeNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterMergeRecipe(pass.id)
+                            renderOperands += mergeRender(stepIndex, views.getValue(recipe.target), recipe.inputs().map { views.getValue(it.source) }, generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Tile -> error("Tile pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.ColorFilter -> error("ColorFilter pass is missing its frozen native-site recipe.")
-                            is FilterPassOperationV1.Merge -> {
-                                require(pass.inputs().size == operation.inputSamplings().size)
-                                renderOperands += multiInputRender(stepIndex, views.getValue(pass.output),
-                                    pass.inputs().map(views::getValue), generation,
-                                    W6A_VERTEX_SHADER + GPUW6cMultiInputPass.mergeFragment(operation),
-                                    outputExtent.width, outputExtent.height, pass, owned)
-                            }
+                            is FilterPassOperationV1.Merge -> error("Merge pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Blend -> {
                                 require(pass.inputs().size == 2)
                                 renderOperands += multiInputRender(stepIndex, views.getValue(pass.output),
@@ -2390,7 +2404,25 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32))), w6aPassV1 = pass)
     }
 
-    /** Binds the FilterPass input list positionally; each W6c shader consumes that frozen order. */
+    /** Mechanical IId1 translation: all native choices come from the sealed Merge recipe. */
+    private fun mergeRender(stepIndex: Int, target: GPUTextureView, sources: List<GPUTextureView>, generation: GPUDeviceGenerationID,
+        recipe: W6FilterMergeRecipeV1, pass: PlanPass.FilterPass, owned: W6aOwnedHandles): GPUPreparedNativeScopeOperand.Render {
+        require(sources.size == recipe.inputs().size && recipe.ownerPassId == pass.id &&
+            recipe.groupZeroAbi == W6FilterMergeGroupZeroAbiV1.OrderedTextures &&
+            recipe.shaderFamily == W6FilterMergeShaderFamilyV1.OrderedSourceOverTextureLoad &&
+            recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = sources.indices.map { BindGroupLayoutEntry(it.toUInt(), GPUShaderStage.Fragment, texture = TextureBindingLayout()) })))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + GPUW6cMultiInputPass.mergeFragment(recipe), layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = sources.mapIndexed { index, source -> BindGroupEntry(index.toUInt(), source) })))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex, GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation), loadOperation = GPUPreparedNativeLoadOperation.Clear, clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)), listOf(
+            GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+            GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+            GPUPreparedNativeRenderCommand.SetScissor(0, 0, recipe.copyExtent().width, recipe.copyExtent().height),
+            GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
+        ), w6aPassV1 = pass)
+    }
+
+    /** Binds the FilterPass input list positionally; Blend remains outside IId1. */
     private fun multiInputRender(
         stepIndex: Int,
         target: GPUTextureView,
