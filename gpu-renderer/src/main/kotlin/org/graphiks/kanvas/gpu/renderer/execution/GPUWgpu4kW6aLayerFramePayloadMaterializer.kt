@@ -417,6 +417,27 @@ private fun preflightW6FilterSpatialTiles(frame: GPUW6aLayerFramePlan, framePlan
     }
 }
 
+/** IIb authenticates Morphology's complete separable selection before any device.create*. */
+private fun preflightW6FilterMorphologies(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterMorphologyRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterMorphologyRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterMorphologyRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 Morphology owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.Morphology ?: error("W6 Morphology operation changed after seal.")
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        val target = frame.physical.resource(actual.target); val source = frame.physical.resource(actual.source)
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.source == pass.inputs().single() &&
+            actual.morphologyKind == operation.morphologyKind && actual.axis == operation.axis && actual.radiusXF64 == operation.radiusXF64 && actual.radiusYF64 == operation.radiusYF64 && actual.radiusXTexelsI32 == operation.radiusXTexelsI32 && actual.radiusYTexelsI32 == operation.radiusYTexelsI32 &&
+            actual.copySourceKnownContentTargetLocalI32() == operation.sampling.copyKnownContentInputTargetLocalI32() && actual.copyOutputToInputOffsetTargetLocalI32() == operation.sampling.copyOutputToInputOffsetTargetLocalI32() &&
+            target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && target.sampleCountI32 == actual.sampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() &&
+            source.copyExtent() == actual.copySourceExtent() && source.format == PlanTextureFormat.Color(actual.sourceFormat) && source.sampleCountI32 == actual.sourceSampleCountI32 && PlanResourceUsage.Sampled in source.usages() &&
+            render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null)
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -475,6 +496,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterSpatialCrops(frame, framePlan)
             preflightW6FilterSpatialOffsets(frame, framePlan)
             preflightW6FilterSpatialTiles(frame, framePlan)
+            preflightW6FilterMorphologies(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1196,6 +1218,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterSpatialTileNativeSiteRecipeV1) {
                             val recipe = frame.physical.w6FilterSpatialTileRecipe(pass.id)
                             renderOperands += spatialTileRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMorphologyNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterMorphologyRecipe(pass.id)
+                            renderOperands += morphologyRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -1221,13 +1246,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     W6A_VERTEX_SHADER + GPUW6cMultiInputPass.blendFragment(operation),
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
-                            is FilterPassOperationV1.Morphology -> {
-                                require(pass.inputs().size == 1)
-                                renderOperands += textureRender(stepIndex, views.getValue(pass.output),
-                                    views.getValue(pass.inputs().single()), generation,
-                                    W6A_VERTEX_SHADER + GPUW6cMorphologyPass.fragment(operation), BlendPlan.LegacySrcOverV1,
-                                    0, 0, outputExtent.width, outputExtent.height, pass, owned)
-                            }
+                            is FilterPassOperationV1.Morphology -> error("Morphology pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.SeparableBlur -> {
                                 require(operation.kind in setOf(
                                     FilterImplementationKindV1.IMAGE_BLUR_X,
@@ -2225,6 +2244,23 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         val extent = recipe.copyExtent()
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout())))))
         val pipeline = pipeline(W6A_VERTEX_SHADER + GPUW6cSpatialSamplingPass.fragment(recipe), layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, source)))))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation), loadOperation = GPUPreparedNativeLoadOperation.Clear, clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)), GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)), GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height), GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32))), w6aPassV1 = pass)
+    }
+
+    /** Mechanical IIb translation: native WGSL consumes only the sealed Morphology recipe. */
+    private fun morphologyRender(
+        stepIndex: Int, target: GPUTextureView, source: GPUTextureView, generation: GPUDeviceGenerationID,
+        recipe: W6FilterMorphologyRecipeV1, pass: PlanPass.FilterPass, owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.groupZeroAbi == W6FilterMorphologyGroupZeroAbiV1.Texture &&
+            recipe.shaderFamily == W6FilterMorphologyShaderFamilyV1.TargetLocalSeparableTextureLoad &&
+            recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val extent = recipe.copyExtent()
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout())))))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + GPUW6cMorphologyPass.fragment(recipe), layout, w6aColorTarget(recipe.blend), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, source)))))
         return GPUPreparedNativeScopeOperand.Render(stepIndex,
             GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation), loadOperation = GPUPreparedNativeLoadOperation.Clear, clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
