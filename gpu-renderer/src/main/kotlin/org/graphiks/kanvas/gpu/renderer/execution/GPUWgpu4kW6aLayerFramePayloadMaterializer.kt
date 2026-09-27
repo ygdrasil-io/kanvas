@@ -711,6 +711,53 @@ private fun preflightW6FilteredLayerComposites(frame: GPUW6aLayerFramePlan, fram
     }
 }
 
+/** IIIa2 authenticates the two direct LayerComposite destination snapshot ABIs before allocation. */
+private fun preflightW6LayerCompositeDestinations(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6LayerCompositeDestinationRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6LayerCompositeDestinationRecipes().keys == expected.keys)
+    expected.forEach { (site, frozen) ->
+        val actual = requireNotNull(frame.physical.w6LayerCompositeDestinationRecipeOrNull(site))
+        val passIndex = frame.graph.passes().indexOfFirst { it.id == site.ownerPassId }
+        val pass = frame.graph.passes()[passIndex] as? PlanPass.LayerComposite ?: error("IIIa2 destination owner changed after seal.")
+        val renderIndex = framePlan.steps.indexOfFirst { (it as? GPUFrameStep.RenderPassStep)?.w6aPassV1?.id == pass.id }
+        val copy = frame.graph.passes().take(passIndex).filterIsInstance<PlanPass.TextureCopy>().singleOrNull { it.source == actual.destination && it.destination == actual.destinationSnapshot && it.destinationVersion == actual.requiredDestinationVersion }
+            ?: error("IIIa2 destination LayerComposite lacks its causal frozen TextureCopy.")
+        val copyIndex = framePlan.steps.indexOfFirst { (it as? GPUFrameStep.CopyResourceStep)?.let { step -> step.source == frame.refs.getValue(copy.source) && step.destination == frame.refs.getValue(copy.destination) } == true }
+        val target = frame.physical.resource(actual.destination); val source = frame.physical.resource(actual.source); val snapshot = frame.physical.resource(actual.destinationSnapshot)
+        val uses = listOf(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.LayerTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.destinationSnapshot), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.DestinationSnapshot, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+        )
+        val render = framePlan.steps[renderIndex] as GPUFrameStep.RenderPassStep
+        val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(actual.nativeSiteOwnerV1()) as? W6LayerCompositeDestinationNativeSiteRecipeV1 ?: error("IIIa2 destination recipe is absent from the frozen native-site catalog.")
+        require(catalog.host === actual && actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1() && actual.source == pass.source && actual.destination == pass.destination && pass.restore.colorFilter == null && actual.blend == pass.restore.blend && actual.parentVersionBefore == pass.restore.parentVersionBefore && actual.parentVersionAfter == pass.restore.parentVersionAfter && actual.parentVersionAfter == pass.destinationVersionAfter && actual.destinationSnapshot == actual.blend.snapshotResource && actual.requiredDestinationVersion == actual.blend.requiredDestinationVersion && copyIndex >= 0 && renderIndex > copyIndex && target.copyExtent() == actual.copyTargetExtentI32() && source.copyExtent() == actual.copySourceExtentI32() && snapshot.copyExtent() == actual.copySnapshotExtentI32() && target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.sourceFormat) && snapshot.format == PlanTextureFormat.Color(actual.snapshotFormat) && target.sampleCountI32 == actual.targetSampleCountI32 && source.sampleCountI32 == actual.sourceSampleCountI32 && snapshot.sampleCountI32 == actual.snapshotSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.CopySource in target.usages() && PlanResourceUsage.Sampled in source.usages() && PlanResourceUsage.CopyDestination in snapshot.usages() && PlanResourceUsage.Sampled in snapshot.usages() && render.target == frame.refs.getValue(actual.destination) && render.resourceUses == uses && render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan == GPUSamplePlan.SingleSampleFrame && render.drawPackets.isEmpty() && render.depthStencilLoadStore == null) { "IIIa2 destination LayerComposite preflight differs from its frozen recipe." }
+    }
+}
+
+private fun preflightW6LayerCompositeFilteredDestinations(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6LayerCompositeFilteredDestinationRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6LayerCompositeFilteredDestinationRecipes().keys == expected.keys)
+    expected.forEach { (site, frozen) ->
+        val actual = requireNotNull(frame.physical.w6LayerCompositeFilteredDestinationRecipeOrNull(site))
+        val passIndex = frame.graph.passes().indexOfFirst { it.id == site.ownerPassId }
+        val pass = frame.graph.passes()[passIndex] as? PlanPass.LayerComposite ?: error("IIIa2 filtered destination owner changed after seal.")
+        val filter = requireNotNull(pass.restore.colorFilter)
+        val renderIndex = framePlan.steps.indexOfFirst { (it as? GPUFrameStep.RenderPassStep)?.w6aPassV1?.id == pass.id }
+        val copy = frame.graph.passes().take(passIndex).filterIsInstance<PlanPass.TextureCopy>().singleOrNull { it.source == actual.destination && it.destination == actual.destinationSnapshot && it.destinationVersion == actual.requiredDestinationVersion }
+            ?: error("IIIa2 filtered destination LayerComposite lacks its causal frozen TextureCopy.")
+        val copyIndex = framePlan.steps.indexOfFirst { (it as? GPUFrameStep.CopyResourceStep)?.let { step -> step.source == frame.refs.getValue(copy.source) && step.destination == frame.refs.getValue(copy.destination) } == true }
+        val target = frame.physical.resource(actual.destination); val source = frame.physical.resource(actual.source); val uniform = frame.physical.resource(actual.uniformResource); val snapshot = frame.physical.resource(actual.destinationSnapshot)
+        val uses = listOf(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.LayerTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.uniformResource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.UniformData, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Uniform, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.destinationSnapshot), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.DestinationSnapshot, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+        )
+        val render = framePlan.steps[renderIndex] as GPUFrameStep.RenderPassStep
+        val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(actual.nativeSiteOwnerV1()) as? W6LayerCompositeFilteredDestinationNativeSiteRecipeV1 ?: error("IIIa2 filtered destination recipe is absent from the frozen native-site catalog.")
+        require(catalog.host === actual && actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1() && actual.source == pass.source && actual.destination == pass.destination && actual.execution.structuralIdentity == filter.structuralIdentity && actual.execution.canonicalIdentity == filter.canonicalIdentity && actual.uniformOffsetBytesI64 == pass.restore.colorFilterUniformOffsetI64 && actual.blend == pass.restore.blend && actual.parentVersionBefore == pass.restore.parentVersionBefore && actual.parentVersionAfter == pass.restore.parentVersionAfter && actual.parentVersionAfter == pass.destinationVersionAfter && actual.destinationSnapshot == actual.blend.snapshotResource && actual.requiredDestinationVersion == actual.blend.requiredDestinationVersion && copyIndex >= 0 && renderIndex > copyIndex && target.copyExtent() == actual.copyTargetExtentI32() && source.copyExtent() == actual.copySourceExtentI32() && snapshot.copyExtent() == actual.copySnapshotExtentI32() && target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.sourceFormat) && snapshot.format == PlanTextureFormat.Color(actual.snapshotFormat) && target.sampleCountI32 == actual.targetSampleCountI32 && source.sampleCountI32 == actual.sourceSampleCountI32 && snapshot.sampleCountI32 == actual.snapshotSampleCountI32 && uniform.kind == PlanResourceKind.Buffer && uniform.role == PlanResourceRole.UniformData && uniform.byteSize == actual.uniformCapacityBytesI64 && Math.addExact(actual.uniformOffsetBytesI64, maxOf(16L, actual.execution.dynamicByteCountI64)) <= uniform.byteSize && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.CopySource in target.usages() && PlanResourceUsage.Sampled in source.usages() && PlanResourceUsage.CopyDestination in snapshot.usages() && PlanResourceUsage.Sampled in snapshot.usages() && render.target == frame.refs.getValue(actual.destination) && render.resourceUses == uses && render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan == GPUSamplePlan.SingleSampleFrame && render.drawPackets.isEmpty() && render.depthStencilLoadStore == null) { "IIIa2 filtered destination LayerComposite preflight differs from its frozen recipe." }
+    }
+}
+
 /** IIIb2a validates the graph-texture operand and its recorded texture use before device.create*. */
 private fun preflightW6PictureCompositeGraphs(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
     val expected = freezeW6PictureCompositeGraphRecipesV1(frame.graph.passes(), frame.graph.resources())
@@ -1299,6 +1346,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterDropShadowColorizes(frame, framePlan)
             preflightW6FilterDropShadowComposites(frame, framePlan)
             preflightW6FilteredLayerComposites(frame, framePlan)
+            preflightW6LayerCompositeDestinations(frame, framePlan)
+            preflightW6LayerCompositeFilteredDestinations(frame, framePlan)
             preflightW6PictureCompositeGraphs(frame, framePlan)
             preflightW6PictureCompositeGraphFiltered(frame, framePlan)
             preflightW6PictureCompositeGraphDestinations(frame, framePlan)
@@ -1539,6 +1588,12 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     if (recipe != null) {
                         require(recipe.uniformResource == geometryUniform.id)
                         recipe.execution.copyDynamicBytes().copyInto(uniformBytes, Math.toIntExact(recipe.uniformOffsetBytesI64))
+                        return@forEach
+                    }
+                    val destinationRecipe = frame.physical.w6LayerCompositeFilteredDestinationRecipeOrNull(W6LayerCompositeSiteKeyV1(pass.id, 0))
+                    if (destinationRecipe != null) {
+                        require(destinationRecipe.uniformResource == geometryUniform.id)
+                        destinationRecipe.execution.copyDynamicBytes().copyInto(uniformBytes, Math.toIntExact(destinationRecipe.uniformOffsetBytesI64))
                         return@forEach
                     }
                 }
@@ -1940,8 +1995,78 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 operationKindOverride = GPUEncoderOperationKind.LayerComposite, w6aPassV1 = pass)
                             return@forEachIndexed
                         }
+                        val destinationRecipe = frame.physical.w6LayerCompositeDestinationRecipeOrNull(plainSite)
+                        if (destinationRecipe != null) {
+                            require(destinationRecipe.source == pass.source && destinationRecipe.destination == pass.destination &&
+                                destinationRecipe.blend == pass.restore.blend && pass.restore.colorFilter == null &&
+                                destinationRecipe.parentVersionBefore == pass.restore.parentVersionBefore &&
+                                destinationRecipe.parentVersionAfter == pass.restore.parentVersionAfter) {
+                                "W6 LayerComposite destination-read recipe projection changed before native allocation."
+                            }
+                            val source = destinationRecipe.copySourceBoundsLayerI32(); val destination = destinationRecipe.copyDestinationOriginParentI32(); val scissor = destinationRecipe.copyScissorParentI32()
+                            val formula = requireNotNull(BlendFormulaProgramV1.selectedBlendFunctionWgsl(destinationRecipe.blend.mode.name.lowercase(), "w6_layer_composite_destination_blend"))
+                            val shader = W6A_VERTEX_SHADER + """
+                                @group(0) @binding(0) var layer_source: texture_2d<f32>;
+                                @group(0) @binding(2) var destination_snapshot: texture_2d<f32>;
+                                $formula
+                                @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                                    let layer = textureLoad(layer_source, vec2<i32>(position.xy) - vec2<i32>(${destination.x}, ${destination.y}) + vec2<i32>(${source.left}, ${source.top}), 0) * ${destinationRecipe.alphaF32};
+                                    return w6_layer_composite_destination_blend(layer, textureLoad(destination_snapshot, vec2<i32>(position.xy), 0));
+                                }
+                            """
+                            val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+                                BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+                                BindGroupLayoutEntry(2u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+                            ))))
+                            val pipeline = pipeline(shader, layout, w6aColorTarget(destinationRecipe.blend), owned)
+                            val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+                                BindGroupEntry(0u, views.getValue(destinationRecipe.source)), BindGroupEntry(2u, views.getValue(destinationRecipe.destinationSnapshot)),
+                            ))))
+                            renderOperands += GPUPreparedNativeScopeOperand.Render(stepIndex, GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(views.getValue(destinationRecipe.destination), generation), loadOperation = GPUPreparedNativeLoadOperation.Load, storeOperation = GPUPreparedNativeStoreOperation.Store), listOf(
+                                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)), GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)), GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()), GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(destinationRecipe.draw.vertexCountI32, destinationRecipe.draw.instanceCountI32, destinationRecipe.draw.firstVertexI32, destinationRecipe.draw.firstInstanceI32)),
+                            ), operationKindOverride = GPUEncoderOperationKind.LayerComposite, w6aPassV1 = pass)
+                            return@forEachIndexed
+                        }
+                        val filteredDestinationRecipe = frame.physical.w6LayerCompositeFilteredDestinationRecipeOrNull(plainSite)
+                        if (filteredDestinationRecipe != null) {
+                            require(filteredDestinationRecipe.source == pass.source && filteredDestinationRecipe.destination == pass.destination &&
+                                filteredDestinationRecipe.blend == pass.restore.blend && pass.restore.colorFilter != null &&
+                                filteredDestinationRecipe.uniformOffsetBytesI64 == pass.restore.colorFilterUniformOffsetI64 &&
+                                filteredDestinationRecipe.parentVersionBefore == pass.restore.parentVersionBefore && filteredDestinationRecipe.parentVersionAfter == pass.restore.parentVersionAfter) {
+                                "W6 filtered LayerComposite destination-read recipe projection changed before native allocation."
+                            }
+                            val source = filteredDestinationRecipe.copySourceBoundsLayerI32(); val destination = filteredDestinationRecipe.copyDestinationOriginParentI32(); val scissor = filteredDestinationRecipe.copyScissorParentI32(); val execution = filteredDestinationRecipe.execution
+                            val declaration = "struct W5fMaterialBlock { words: array<vec4<u32>, ${maxOf(1L, (execution.dynamicByteCountI64 + 15L) / 16L)}>, }\n" +
+                                "@group(0) @binding(1) var<uniform> w5fMaterial: W5fMaterialBlock;\n" +
+                                "fn w6_layer_composite_filtered_destination_filter(input: vec4<f32>) -> vec4<f32> {\n" + W5fColorOperationEmitterV1.emit(execution.copyOperationGraph(), "input", 0L) + "}\n"
+                            val formula = requireNotNull(BlendFormulaProgramV1.selectedBlendFunctionWgsl(filteredDestinationRecipe.blend.mode.name.lowercase(), "w6_layer_composite_filtered_destination_blend"))
+                            val shader = W6A_VERTEX_SHADER + """
+                                @group(0) @binding(0) var layer_source: texture_2d<f32>;
+                                @group(0) @binding(2) var destination_snapshot: texture_2d<f32>;
+                                $declaration
+                                $formula
+                                @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                                    let layer = textureLoad(layer_source, vec2<i32>(position.xy) - vec2<i32>(${destination.x}, ${destination.y}) + vec2<i32>(${source.left}, ${source.top}), 0) * ${filteredDestinationRecipe.alphaF32};
+                                    return w6_layer_composite_filtered_destination_blend(w6_layer_composite_filtered_destination_filter(layer), textureLoad(destination_snapshot, vec2<i32>(position.xy), 0));
+                                }
+                            """
+                            val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+                                BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+                                BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform, minBindingSize = maxOf(16L, execution.dynamicByteCountI64).toULong())),
+                                BindGroupLayoutEntry(2u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+                            ))))
+                            val pipeline = pipeline(shader, layout, w6aColorTarget(filteredDestinationRecipe.blend), owned)
+                            val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+                                BindGroupEntry(0u, views.getValue(filteredDestinationRecipe.source)), BindGroupEntry(1u, BufferBinding(uniform, filteredDestinationRecipe.uniformOffsetBytesI64.toULong(), maxOf(16L, execution.dynamicByteCountI64).toULong())), BindGroupEntry(2u, views.getValue(filteredDestinationRecipe.destinationSnapshot)),
+                            ))))
+                            renderOperands += GPUPreparedNativeScopeOperand.Render(stepIndex, GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(views.getValue(filteredDestinationRecipe.destination), generation), loadOperation = GPUPreparedNativeLoadOperation.Load, storeOperation = GPUPreparedNativeStoreOperation.Store), listOf(
+                                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)), GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)), GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()), GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(filteredDestinationRecipe.draw.vertexCountI32, filteredDestinationRecipe.draw.instanceCountI32, filteredDestinationRecipe.draw.firstVertexI32, filteredDestinationRecipe.draw.firstInstanceI32)),
+                            ), operationKindOverride = GPUEncoderOperationKind.LayerComposite, w6aPassV1 = pass)
+                            return@forEachIndexed
+                        }
                         val filter = pass.restore.colorFilter
                         val destinationRead = pass.restore.blend as? BlendPlan.DestinationReadV1
+                        require(destinationRead == null) { "Active LayerComposite destination-read must select a frozen IIIa2 recipe." }
                         val entries = buildList {
                             add(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
                             if (filter != null) add(BindGroupLayoutEntry(1u, GPUShaderStage.Fragment,

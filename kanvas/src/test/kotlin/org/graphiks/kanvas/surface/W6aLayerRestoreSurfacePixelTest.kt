@@ -113,7 +113,27 @@ class W6aLayerRestoreSurfacePixelTest {
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.of(255, 239, 51, 73), antiAlias = false))
             restore()
         }
-        assertContentEquals(expected, surface.render().pixels)
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `color filtered layer difference restore uses fresh parent snapshot`() {
+        // The W5f restore filter turns the red child green before DIFFERENCE reads the fresh
+        // blue parent. This is cyan; absent W5f is magenta, a stale red snapshot is yellow,
+        // and filtering after the blend is green.
+        val expected = rgbaCpu(0, 255, 255, 255)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val restoreFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SRC)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(paint = Paint(colorFilter = restoreFilter, blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test
