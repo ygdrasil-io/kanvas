@@ -1171,3 +1171,24 @@ exit 0. Une invocation plus large de `GPUPlanSurfacePixelTest` a produit
 aucune réussite de classe entière n'est revendiquée. I1 est review-clean ;
 `ClipMaskFold`, producteurs/path phases, W5a, leases/B/B−1 et 2B restent
 ouverts.
+
+### 2A0c.I2 — ClipMaskFold sur la route W6
+
+Chaque `ClipMaskFold` du binding W4e final dans W6 porte désormais une
+recette versionnée : ordre `previous` puis `source`, cible `output`, opération
+de combinaison, domaine I32 de `:math`, descriptions physiques, ABI à deux
+textures, Clear/Store, couleur de clear et draw fullscreen. Le catalogue,
+le seal, la projection packet et le préflight précèdent l'allocation native ;
+la traduction choisit depuis cette recette pour W6, tandis que la route W4d
+directe conserve son comportement. Le premier commit `8f717da` vérifiait
+encore certains choix natifs en les émettant en dur; `ff75afd` traduit aussi
+`load/store/clearColor` depuis la recette. Revue indépendante Sol :
+**Approved**, aucun finding Critical/Important.
+
+Les compilations `:gpu-plan`, `:gpu-renderer` et
+`:kanvas:compileTestKotlin` sortent 0. La classe publique W6aLayerW4W5
+donne XML `20/0/0/0`, et le sélecteur d'ordre Rect/RRect/Path `1/0/0/0`,
+mais leurs exécuteurs natifs sortent 133 (**UNKNOWN**). Les deux sélecteurs
+W4e directs pertinents passent avec Gradle exit 0. I1 et I2 sont
+review-clean; Path producer, phases path, inverse-domain, W5a,
+leases/B/B−1 et 2B restent ouverts.
