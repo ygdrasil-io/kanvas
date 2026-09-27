@@ -263,6 +263,31 @@ private fun preflightW6FullscreenCoverageSolidRects(frame: GPUW6aLayerFramePlan,
     }
 }
 
+private fun preflightW6FullscreenCoverageRetains(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FullscreenCoverageRetainRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FullscreenCoverageRetainRecipes().keys == expected.keys)
+    expected.forEach { (passId, frozen) ->
+        val actual = frame.physical.w6FullscreenCoverageRetainRecipe(passId)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == passId } as? PlanPass.FilterCoverageRetainPass
+            ?: error("W6 CoverageRetain owner is not a retain pass.")
+        val sampling = requireNotNull(pass.sampling)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == passId }
+        val expectedUses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+            frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        val target = frame.physical.resource(actual.target); val source = frame.physical.resource(actual.source)
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.source == pass.source &&
+            actual.copyOutputToInputOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32() &&
+            actual.copySourceKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32() &&
+            target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) &&
+            target.sampleCountI32 == actual.sampleCountI32 && PlanResourceUsage.Sampled in source.usages() &&
+            render.target == frame.refs.getValue(actual.target) && render.resourceUses == expectedUses && render.drawPackets.isEmpty() &&
+            render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame)
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -315,6 +340,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FullscreenEmpties(frame, framePlan)
             preflightW6FullscreenCoverageAlphas(frame, framePlan)
             preflightW6FullscreenCoverageSolidRects(frame, framePlan)
+            preflightW6FullscreenCoverageRetains(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -995,12 +1021,11 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         }
                     }
                     is PlanPass.FilterCoverageRetainPass -> {
-                        val sampling = requireNotNull(pass.sampling) { "W6b retained coverage has no sealed target-local sampling." }
-                        val offset = sampling.copyOutputToInputOffsetTargetLocalI32()
-                        val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
-                        renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(pass.source), generation,
-                            sampledCompositeShader(offset.x, offset.y, 1f),
-                            BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
+                        val recipe = frame.physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(pass.id, 0, 0))
+                            as? W6FullscreenCoverageRetainNativeSiteRecipeV1
+                            ?: error("CoverageRetain pass is missing its frozen native-site recipe.")
+                        renderOperands += coverageRetainRender(stepIndex, views.getValue(recipe.host.target), views.getValue(recipe.host.source), generation,
+                            recipe.host, pass, owned)
                     }
                     is PlanPass.PictureAggregateSealPass -> {
                         renderOperands += emptyRender(stepIndex, views.getValue(pass.aggregateTarget), generation, pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned)
@@ -2017,6 +2042,26 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32,
                     recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
             ), w6aPassV1 = pass)
+    }
+
+    private fun coverageRetainRender(
+        stepIndex: Int, target: GPUTextureView, source: GPUTextureView, generation: GPUDeviceGenerationID,
+        recipe: W6FullscreenCoverageRetainRecipeV1, pass: PlanPass.FilterCoverageRetainPass, owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val sampling = requireNotNull(pass.sampling)
+        val offset = recipe.copyOutputToInputOffsetTargetLocalI32(); val extent = recipe.copyExtent(); val scissor = recipe.copyScissorTargetLocalI32()
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output && recipe.source == pass.source &&
+            recipe.load == AttachmentLoadPlan.Load && recipe.groupZeroAbi == W6FullscreenCoverageRetainGroupZeroAbiV1.Texture &&
+            recipe.shaderFamily == W6FullscreenCoverageRetainShaderFamilyV1.SampledCoverageTextureLoad &&
+            offset == sampling.copyOutputToInputOffsetTargetLocalI32() && recipe.copySourceKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32())
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout())))))
+        val pipeline = pipeline(sampledCompositeShader(offset.x, offset.y, 1f), layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, source)))))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex, GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation), loadOperation = GPUPreparedNativeLoadOperation.Load),
+            listOf(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32))), w6aPassV1 = pass)
     }
 
     /** Binds the FilterPass input list positionally; each W6c shader consumes that frozen order. */

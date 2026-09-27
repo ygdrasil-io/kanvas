@@ -38,6 +38,8 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
     @Test
     fun `fractional anti aliased coverage uses Porter Duff mask blur styles`() {
         listOf(BlurStyle.SOLID, BlurStyle.OUTER, BlurStyle.INNER).forEach { style ->
+            // These style paths retain the original coverage beside its blur; establish the
+            // public oracle before Surface construction for the CoverageRetain fullscreen site.
             val expected = W6bMaskBlurCpuOracle.renderFractionalStyle(style)
             val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
                 surface.canvas {
