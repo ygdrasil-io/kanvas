@@ -3234,6 +3234,7 @@ internal class W6aLayerGraphConstruction(
         val w6FilterBlendRecipes = freezeW6FilterBlendRecipesV1(passes, resources + source.resources)
         val w6FilterSeparableBlurRecipes = freezeW6FilterSeparableBlurRecipesV1(passes, resources + source.resources)
         val w6FilterMaskBlurNormalRecipes = freezeW6FilterMaskBlurNormalRecipesV1(passes, resources + source.resources)
+        val w6FilterMaskBlurDualSourceRecipes = freezeW6FilterMaskBlurDualSourceRecipesV1(passes, resources + source.resources)
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
             passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
             plainLayerCompositeRecipes, clipMaskInitializeRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
@@ -3242,7 +3243,7 @@ internal class W6aLayerGraphConstruction(
             w6FullscreenCoverageRetainRecipes,
             w6FullscreenPictureSourceLayerRecipes,
             w6FullscreenPictureSourceGraphRecipes,
-            w6FilterSpatialCropRecipes, w6FilterSpatialOffsetRecipes, w6FilterSpatialTileRecipes, w6FilterMorphologyRecipes, w6FilterColorFilterRecipes, w6FilterMergeRecipes, w6FilterBlendRecipes, w6FilterSeparableBlurRecipes, w6FilterMaskBlurNormalRecipes,
+            w6FilterSpatialCropRecipes, w6FilterSpatialOffsetRecipes, w6FilterSpatialTileRecipes, w6FilterMorphologyRecipes, w6FilterColorFilterRecipes, w6FilterMergeRecipes, w6FilterBlendRecipes, w6FilterSeparableBlurRecipes, w6FilterMaskBlurNormalRecipes, w6FilterMaskBlurDualSourceRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3272,6 +3273,7 @@ internal class W6aLayerGraphConstruction(
             w6FilterBlendRecipes = w6FilterBlendRecipes,
             w6FilterSeparableBlurRecipes = w6FilterSeparableBlurRecipes,
             w6FilterMaskBlurNormalRecipes = w6FilterMaskBlurNormalRecipes,
+            w6FilterMaskBlurDualSourceRecipes = w6FilterMaskBlurDualSourceRecipes,
             nativeSiteRecipeCatalogV1 = nativeSiteRecipeCatalog,
         )
         val allResources = resources + finalSource.resources

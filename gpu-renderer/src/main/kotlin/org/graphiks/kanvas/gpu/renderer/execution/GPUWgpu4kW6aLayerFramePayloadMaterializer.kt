@@ -565,6 +565,23 @@ private fun preflightW6FilterMaskBlurNormals(frame: GPUW6aLayerFramePlan, frameP
     }
 }
 
+/** IIe2b authenticates the ordered blurred/original pair before any native allocation. */
+private fun preflightW6FilterMaskBlurDualSources(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterMaskBlurDualSourceRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterMaskBlurDualSourceRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterMaskBlurDualSourceRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 dual MaskBlur owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.MaskBlurStyle ?: error("W6 dual MaskBlur operation changed after seal.")
+        val blurredSampling = requireNotNull(operation.blurredSampling); val originalSampling = requireNotNull(operation.originalSampling)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val blurred = frame.physical.resource(actual.blurredSource); val original = frame.physical.resource(actual.originalSource); val target = frame.physical.resource(actual.target)
+        val uses = listOf(actual.blurredSource, actual.originalSource).map { org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(it), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false) }
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && operation.style == actual.style && actual.style in setOf(org.graphiks.kanvas.render.ir.MaskBlurStyle.SOLID, org.graphiks.kanvas.render.ir.MaskBlurStyle.OUTER, org.graphiks.kanvas.render.ir.MaskBlurStyle.INNER) && operation.blurredCoverageSource == actual.blurredSource && operation.originalCoverageSource == actual.originalSource && pass.inputs() == listOf(actual.blurredSource, actual.originalSource) && actual.groupZeroAbi == W6FilterMaskBlurDualSourceGroupZeroAbiV1.BlurredThenOriginalCoverageTextures && actual.shaderFamily == W6FilterMaskBlurDualSourceShaderFamilyV1.BlurredThenOriginalCoverageTextureLoad && actual.copyBlurredKnownContentTargetLocalI32() == blurredSampling.copyKnownContentInputTargetLocalI32() && actual.copyOriginalKnownContentTargetLocalI32() == originalSampling.copyKnownContentInputTargetLocalI32() && actual.copyOutputToBlurredOffsetTargetLocalI32() == blurredSampling.copyOutputToInputOffsetTargetLocalI32() && actual.copyOutputToOriginalOffsetTargetLocalI32() == originalSampling.copyOutputToInputOffsetTargetLocalI32() && target.copyExtent() == actual.copyExtent() && blurred.copyExtent() == actual.copyBlurredExtent() && original.copyExtent() == actual.copyOriginalExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && blurred.format == PlanTextureFormat.Color(actual.blurredFormat) && original.format == PlanTextureFormat.Color(actual.originalFormat) && target.sampleCountI32 == actual.sampleCountI32 && blurred.sampleCountI32 == actual.blurredSampleCountI32 && original.sampleCountI32 == actual.originalSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in blurred.usages() && PlanResourceUsage.Sampled in original.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null) { "W6 dual MaskBlur physical or recorded preflight differs from its frozen recipe." }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -629,6 +646,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterBlends(frame, framePlan)
             preflightW6FilterSeparableBlurs(frame, framePlan)
             preflightW6FilterMaskBlurNormals(frame, framePlan)
+            preflightW6FilterMaskBlurDualSources(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1377,6 +1395,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMaskBlurNormalNativeSiteRecipeV1) {
                             val recipe = frame.physical.w6FilterMaskBlurNormalRecipe(pass.id)
                             renderOperands += maskBlurNormalRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.blurredSource), generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMaskBlurDualSourceNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterMaskBlurDualSourceRecipe(pass.id)
+                            renderOperands += maskBlurDualSourceRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.blurredSource), views.getValue(recipe.originalSource), generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -1387,7 +1408,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             is FilterPassOperationV1.Morphology -> error("Morphology pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.SeparableBlur -> error("SeparableBlur pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaskBlurStyle -> {
-                                if (operation.style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL) error("MaskBlur NORMAL pass is missing its frozen native-site recipe.")
+                                error("MaskBlur ${operation.style} pass is missing its frozen native-site recipe.")
                                 val blurredOffset = requireNotNull(operation.blurredSampling) {
                                     "W6b mask style has no sealed blurred sampling."
                                 }.copyOutputToInputOffsetTargetLocalI32()
@@ -2135,6 +2156,24 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
                 GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32))),
             w6aPassV1 = pass)
+    }
+
+    /** Mechanical IIe2b translation preserves the frozen blurred-first/original-second ABI. */
+    private fun maskBlurDualSourceRender(
+        stepIndex: Int, target: GPUTextureView, blurred: GPUTextureView, original: GPUTextureView, generation: GPUDeviceGenerationID,
+        recipe: W6FilterMaskBlurDualSourceRecipeV1, pass: PlanPass.FilterPass, owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output && pass.inputs() == listOf(recipe.blurredSource, recipe.originalSource) &&
+            recipe.style in setOf(org.graphiks.kanvas.render.ir.MaskBlurStyle.SOLID, org.graphiks.kanvas.render.ir.MaskBlurStyle.OUTER, org.graphiks.kanvas.render.ir.MaskBlurStyle.INNER) &&
+            recipe.groupZeroAbi == W6FilterMaskBlurDualSourceGroupZeroAbiV1.BlurredThenOriginalCoverageTextures && recipe.shaderFamily == W6FilterMaskBlurDualSourceShaderFamilyV1.BlurredThenOriginalCoverageTextureLoad && recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val blurredOffset = recipe.copyOutputToBlurredOffsetTargetLocalI32(); val originalOffset = recipe.copyOutputToOriginalOffsetTargetLocalI32(); val extent = recipe.copyExtent()
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()), BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+        ))))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskStyleFragment(recipe.style, blurredOffset.x, blurredOffset.y, originalOffset.x, originalOffset.y), layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, blurred), BindGroupEntry(1u, original)))))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex, GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation), loadOperation = GPUPreparedNativeLoadOperation.Clear, clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)), listOf(
+            GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)), GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)), GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height), GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32))), w6aPassV1 = pass)
     }
 
     /** Applies exactly one frozen mask to an already materialized source texture. */

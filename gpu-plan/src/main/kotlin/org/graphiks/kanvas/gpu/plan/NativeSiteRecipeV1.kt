@@ -42,6 +42,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FilterBlend,
     W6FilterSeparableBlur,
     W6FilterMaskBlurNormal,
+    W6FilterMaskBlurDualSource,
 }
 
 /** IIe2a's one-texture mask-style site.  The two-texture styles stay outside this slice. */
@@ -76,6 +77,42 @@ public class W6FilterMaskBlurNormalNativeSiteRecipeV1 internal constructor(publi
         rect("known", host.copyKnownContentTargetLocalI32()); point("offset", host.copyOutputToBlurredOffsetTargetLocalI32())
         enum("targetFormat", host.targetFormat); enum("blurredFormat", host.blurredFormat); int("sampleCount", host.sampleCountI32); int("blurredSampleCount", host.blurredSampleCountI32)
         enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend)
+        int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
+}
+
+/** IIe2b's ordered two-texture mask-style site for SOLID, OUTER and INNER. */
+public enum class W6FilterMaskBlurDualSourceShaderFamilyV1 { BlurredThenOriginalCoverageTextureLoad }
+public enum class W6FilterMaskBlurDualSourceGroupZeroAbiV1 { BlurredThenOriginalCoverageTextures }
+public class W6FilterMaskBlurDualSourceRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId, public val target: PlanResourceId, public val blurredSource: PlanResourceId, public val originalSource: PlanResourceId,
+    public val style: org.graphiks.kanvas.render.ir.MaskBlurStyle,
+    extent: org.graphiks.math.geometry.SizeI32, blurredExtent: org.graphiks.math.geometry.SizeI32, originalExtent: org.graphiks.math.geometry.SizeI32,
+    blurredKnown: org.graphiks.math.geometry.RectI32, originalKnown: org.graphiks.math.geometry.RectI32,
+    blurredOffset: org.graphiks.math.geometry.Point2I32, originalOffset: org.graphiks.math.geometry.Point2I32,
+    public val targetFormat: PlanLogicalColorFormat, public val blurredFormat: PlanLogicalColorFormat, public val originalFormat: PlanLogicalColorFormat,
+    public val sampleCountI32: Int, public val blurredSampleCountI32: Int, public val originalSampleCountI32: Int,
+    public val shaderFamily: W6FilterMaskBlurDualSourceShaderFamilyV1 = W6FilterMaskBlurDualSourceShaderFamilyV1.BlurredThenOriginalCoverageTextureLoad,
+    public val groupZeroAbi: W6FilterMaskBlurDualSourceGroupZeroAbiV1 = W6FilterMaskBlurDualSourceGroupZeroAbiV1.BlurredThenOriginalCoverageTextures,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val frozenExtent = extent.copy(); private val frozenBlurredExtent = blurredExtent.copy(); private val frozenOriginalExtent = originalExtent.copy()
+    private val frozenBlurredKnown = blurredKnown.copy(); private val frozenOriginalKnown = originalKnown.copy()
+    private val frozenBlurredOffset = org.graphiks.math.geometry.Point2I32(blurredOffset.x, blurredOffset.y); private val frozenOriginalOffset = org.graphiks.math.geometry.Point2I32(originalOffset.x, originalOffset.y)
+    init { require(style in setOf(org.graphiks.kanvas.render.ir.MaskBlurStyle.SOLID, org.graphiks.kanvas.render.ir.MaskBlurStyle.OUTER, org.graphiks.kanvas.render.ir.MaskBlurStyle.INNER) && sampleCountI32 == 1 && blurredSampleCountI32 == 1 && originalSampleCountI32 == 1 && !frozenBlurredKnown.isEmpty && !frozenOriginalKnown.isEmpty) }
+    public fun copyExtent() = frozenExtent.copy(); public fun copyBlurredExtent() = frozenBlurredExtent.copy(); public fun copyOriginalExtent() = frozenOriginalExtent.copy()
+    public fun copyBlurredKnownContentTargetLocalI32() = frozenBlurredKnown.copy(); public fun copyOriginalKnownContentTargetLocalI32() = frozenOriginalKnown.copy()
+    public fun copyOutputToBlurredOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenBlurredOffset.x, frozenBlurredOffset.y); public fun copyOutputToOriginalOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenOriginalOffset.x, frozenOriginalOffset.y)
+    public fun canonicalLogicalEncodingV1() = W6FilterMaskBlurDualSourceNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+public class W6FilterMaskBlurDualSourceNativeSiteRecipeV1 internal constructor(public val host: W6FilterMaskBlurDualSourceRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterMaskBlurDualSource
+    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
+        text("owner", host.ownerPassId.value); text("target", host.target.value); text("blurredSource", host.blurredSource.value); text("originalSource", host.originalSource.value); enum("style", host.style)
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("blurredExtentWidth", host.copyBlurredExtent().width); int("blurredExtentHeight", host.copyBlurredExtent().height); int("originalExtentWidth", host.copyOriginalExtent().width); int("originalExtentHeight", host.copyOriginalExtent().height)
+        rect("blurredKnown", host.copyBlurredKnownContentTargetLocalI32()); rect("originalKnown", host.copyOriginalKnownContentTargetLocalI32()); point("blurredOffset", host.copyOutputToBlurredOffsetTargetLocalI32()); point("originalOffset", host.copyOutputToOriginalOffsetTargetLocalI32())
+        enum("targetFormat", host.targetFormat); enum("blurredFormat", host.blurredFormat); enum("originalFormat", host.originalFormat); int("sampleCount", host.sampleCountI32); int("blurredSampleCount", host.blurredSampleCountI32); int("originalSampleCount", host.originalSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend)
         int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
     }
 }
@@ -942,6 +979,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         blends: Map<PlanPassId, W6FilterBlendRecipeV1>,
         separableBlurs: Map<PlanPassId, W6FilterSeparableBlurRecipeV1>,
         maskBlurNormals: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1>,
+        maskBlurDualSources: Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -965,6 +1003,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FilterBlendNativeSiteRecipeV1 -> blends[recipe.host.ownerPassId] === recipe.host
             is W6FilterSeparableBlurNativeSiteRecipeV1 -> separableBlurs[recipe.host.ownerPassId] === recipe.host
             is W6FilterMaskBlurNormalNativeSiteRecipeV1 -> maskBlurNormals[recipe.host.ownerPassId] === recipe.host
+            is W6FilterMaskBlurDualSourceNativeSiteRecipeV1 -> maskBlurDualSources[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -997,6 +1036,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     blends: Map<PlanPassId, W6FilterBlendRecipeV1> = emptyMap(),
     separableBlurs: Map<PlanPassId, W6FilterSeparableBlurRecipeV1> = emptyMap(),
     maskBlurNormals: Map<PlanPassId, W6FilterMaskBlurNormalRecipeV1> = emptyMap(),
+    maskBlurDualSources: Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -1019,6 +1059,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     blends.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     separableBlurs.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     maskBlurNormals.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    maskBlurDualSources.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -1040,6 +1081,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingBlends = blends.toMutableMap()
     val remainingSeparableBlurs = separableBlurs.toMutableMap()
     val remainingMaskBlurNormals = maskBlurNormals.toMutableMap()
+    val remainingMaskBlurDualSources = maskBlurDualSources.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -1075,6 +1117,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingBlends.remove(pass.id)?.let { add(W6FilterBlendNativeSiteRecipeV1(it)) }
                 remainingSeparableBlurs.remove(pass.id)?.let { add(W6FilterSeparableBlurNativeSiteRecipeV1(it)) }
                 remainingMaskBlurNormals.remove(pass.id)?.let { add(W6FilterMaskBlurNormalNativeSiteRecipeV1(it)) }
+                remainingMaskBlurDualSources.remove(pass.id)?.let { add(W6FilterMaskBlurDualSourceNativeSiteRecipeV1(it)) }
             }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
@@ -1084,7 +1127,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -1345,6 +1388,26 @@ public fun freezeW6FilterMaskBlurNormalRecipesV1(passes: List<PlanPass>, resourc
         require(put(pass.id, W6FilterMaskBlurNormalRecipeV1(pass.id, pass.output, operation.blurredCoverageSource, operation.style,
             requireNotNull(target.copyExtent()), requireNotNull(blurred.copyExtent()), sampling.copyKnownContentInputTargetLocalI32(),
             sampling.copyOutputToInputOffsetTargetLocalI32(), targetFormat, blurredFormat, target.sampleCountI32, blurred.sampleCountI32)) == null)
+    }
+}
+
+/** Freezes IIe2b only, retaining the explicit blurred-first/original-second ABI order. */
+public fun freezeW6FilterMaskBlurDualSourceRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1> = LinkedHashMap<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+        val operation = pass.operation as? FilterPassOperationV1.MaskBlurStyle ?: return@forEach
+        if (operation.style !in setOf(org.graphiks.kanvas.render.ir.MaskBlurStyle.SOLID, org.graphiks.kanvas.render.ir.MaskBlurStyle.OUTER, org.graphiks.kanvas.render.ir.MaskBlurStyle.INNER)) return@forEach
+        val originalId = requireNotNull(operation.originalCoverageSource); val blurredSampling = requireNotNull(operation.blurredSampling); val originalSampling = requireNotNull(operation.originalSampling)
+        require(pass.frozenSamplingProgram == null && pass.inputs() == listOf(operation.blurredCoverageSource, originalId))
+        val target = resources.single { it.id == pass.output }; val blurred = resources.single { it.id == operation.blurredCoverageSource }; val original = resources.single { it.id == originalId }
+        val targetFormat = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 dual MaskBlur requires color target.")
+        val blurredFormat = (blurred.format as? PlanTextureFormat.Color)?.value ?: error("W6 dual MaskBlur requires blurred color source.")
+        val originalFormat = (original.format as? PlanTextureFormat.Color)?.value ?: error("W6 dual MaskBlur requires original color source.")
+        require(target.sampleCountI32 == 1 && blurred.sampleCountI32 == 1 && original.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in blurred.usages() && PlanResourceUsage.Sampled in original.usages())
+        require(put(pass.id, W6FilterMaskBlurDualSourceRecipeV1(pass.id, pass.output, operation.blurredCoverageSource, originalId, operation.style,
+            requireNotNull(target.copyExtent()), requireNotNull(blurred.copyExtent()), requireNotNull(original.copyExtent()),
+            blurredSampling.copyKnownContentInputTargetLocalI32(), originalSampling.copyKnownContentInputTargetLocalI32(),
+            blurredSampling.copyOutputToInputOffsetTargetLocalI32(), originalSampling.copyOutputToInputOffsetTargetLocalI32(),
+            targetFormat, blurredFormat, originalFormat, target.sampleCountI32, blurred.sampleCountI32, original.sampleCountI32)) == null)
     }
 }
 
