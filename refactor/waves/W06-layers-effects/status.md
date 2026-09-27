@@ -876,3 +876,26 @@ verte, avant `PictureRecorder`/`Surface`; ils vérifient pixels et scopes
 `Render` + `Readback`. Les deux assertions JUnit passent; le worker natif
 termine 133, donc le statut natif reste **UNKNOWN**. IIIc, leases/budget et
 2B restent ouverts.
+
+Le commit `ab7f063` a reçu une relecture Sol **Approved** sans défaut
+Critical/Important. IIIb2 est review-clean ; IIIa2 attend une autorisation
+explicite et IIIc ainsi que les gates ultérieurs restent ouverts.
+
+### 2A0b.IIIc1 — FilterComposite.Draw actif
+
+Le commit `e417bd7` fige le composite `Draw` actif dans
+`W6FilterCompositeDrawRecipeV1` : descriptions physiques source/cible,
+bounds, origine, offset, scissor, blend, `Load`/`Store`, shader, ABI texture et
+draw fullscreen sont encodés canoniquement. Le catalogue choisit la recette
+active ou la recette `Empty` déjà scellée pour un no-op ; la route active sans
+recette est refusée. Le préflight confronte recette, ressources physiques et
+usage enregistré avant toute allocation, puis le renderer traduit la recette
+dans un helper dédié. `Layer` et `Picture` ne sont pas revendiqués ici.
+
+Le témoin public `directImageColorFilterSrcCompositeReplacesOpaqueParent`
+fixe le pixel luma attendu avant `Surface`, puis vérifie pixels et scopes
+`Render` + `Readback` pour un blend `SRC` sur parent vert. Les trois
+compilations ciblées réussissent ; `W6cComposeSurfaceTest` donne `5/0/0/0`
+dans le XML, mais le worker natif sort 133 (**UNKNOWN**). Relecture Sol
+**Approved**, aucun défaut Critical/Important. IIIc2/IIIc3, IIIa2,
+W4e/W5a, leases/budget et 2B restent ouverts.
