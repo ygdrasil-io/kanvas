@@ -35,6 +35,42 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FilterSpatialOffset,
     W6FilterSpatialTile,
     W6FilterMorphology,
+    W6FilterColorFilter,
+}
+
+/** IIc's sole native ABI: one source texture and the W5f-issued uniform row. */
+public enum class W6FilterColorFilterGroupZeroAbiV1 { TextureAndW5fUniform }
+public enum class W6FilterColorFilterShaderFamilyV1 { W5fColorOperationTextureLoad }
+public class W6FilterColorFilterRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId, public val target: PlanResourceId, public val source: PlanResourceId,
+    extent: org.graphiks.math.geometry.SizeI32, sourceExtent: org.graphiks.math.geometry.SizeI32,
+    public val execution: ColorFilterExecutionPlanV1, public val uniformResource: PlanResourceId,
+    public val uniformOffsetBytesI64: Long, public val uniformCapacityBytesI64: Long,
+    outputToInputOffsetTargetLocalI32: org.graphiks.math.geometry.Point2I32,
+    public val targetFormat: PlanLogicalColorFormat, public val sampleCountI32: Int,
+    public val sourceFormat: PlanLogicalColorFormat, public val sourceSampleCountI32: Int,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
+    public val groupZeroAbi: W6FilterColorFilterGroupZeroAbiV1 = W6FilterColorFilterGroupZeroAbiV1.TextureAndW5fUniform,
+    public val shaderFamily: W6FilterColorFilterShaderFamilyV1 = W6FilterColorFilterShaderFamilyV1.W5fColorOperationTextureLoad,
+    public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val frozenExtent = extent.copy(); private val frozenSourceExtent = sourceExtent.copy()
+    private val frozenOffset = org.graphiks.math.geometry.Point2I32(outputToInputOffsetTargetLocalI32.x, outputToInputOffsetTargetLocalI32.y)
+    init { require(target != source && sampleCountI32 == 1 && sourceSampleCountI32 == 1 && uniformResource.value.startsWith("${PlanResourceRole.SourceUniformData.name}:") && uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 >= 16L && Math.addExact(uniformOffsetBytesI64, maxOf(16L, execution.dynamicByteCountI64)) <= uniformCapacityBytesI64) }
+    public fun copyExtent() = frozenExtent.copy(); public fun copySourceExtent() = frozenSourceExtent.copy()
+    public fun copyOutputToInputOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenOffset.x, frozenOffset.y)
+    public fun nativeSiteOwnerV1(): NativeSiteOwnerV1 = NativeSiteOwnerV1(ownerPassId, 0, 0)
+    public fun canonicalLogicalEncodingV1(): String = W6FilterColorFilterNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+public class W6FilterColorFilterNativeSiteRecipeV1 internal constructor(public val host: W6FilterColorFilterRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = host.nativeSiteOwnerV1(); override val family = NativeSiteRecipeFamilyV1.W6FilterColorFilter
+    override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
+        text("owner", host.ownerPassId.value); int("ordinal", owner.drawOrPacketOrdinalI32); int("bundle", owner.bundleOrdinalI32); text("target", host.target.value); text("input.0", host.source.value); int("inputCount", 1)
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("sourceExtentWidth", host.copySourceExtent().width); int("sourceExtentHeight", host.copySourceExtent().height); point("outputToInputOffsetTargetLocal", host.copyOutputToInputOffsetTargetLocalI32())
+        text("execution.structural", host.execution.structuralIdentity); text("execution.canonical", host.execution.canonicalIdentity); long("execution.dynamicBytes", host.execution.dynamicByteCountI64); text("uniform", host.uniformResource.value); long("uniformOffset", host.uniformOffsetBytesI64); long("uniformCapacity", host.uniformCapacityBytesI64)
+        enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat); int("sampleCount", host.sampleCountI32); enum("sourceFormat", host.sourceFormat); int("sourceSampleCount", host.sourceSampleCountI32); blend("blend", host.blend); enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
 }
 
 /** Bounded IIb selection. Morphology is a separable target-local texture-load pass. */
@@ -765,6 +801,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         spatialOffsets: Map<PlanPassId, W6FilterSpatialOffsetRecipeV1>,
         spatialTiles: Map<PlanPassId, W6FilterSpatialTileRecipeV1>,
         morphologies: Map<PlanPassId, W6FilterMorphologyRecipeV1>,
+        colorFilters: Map<PlanPassId, W6FilterColorFilterRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -783,6 +820,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FilterSpatialOffsetNativeSiteRecipeV1 -> spatialOffsets[recipe.host.ownerPassId] === recipe.host
             is W6FilterSpatialTileNativeSiteRecipeV1 -> spatialTiles[recipe.host.ownerPassId] === recipe.host
             is W6FilterMorphologyNativeSiteRecipeV1 -> morphologies[recipe.host.ownerPassId] === recipe.host
+            is W6FilterColorFilterNativeSiteRecipeV1 -> colorFilters[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -810,6 +848,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     spatialOffsets: Map<PlanPassId, W6FilterSpatialOffsetRecipeV1> = emptyMap(),
     spatialTiles: Map<PlanPassId, W6FilterSpatialTileRecipeV1> = emptyMap(),
     morphologies: Map<PlanPassId, W6FilterMorphologyRecipeV1> = emptyMap(),
+    colorFilters: Map<PlanPassId, W6FilterColorFilterRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -827,6 +866,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     spatialOffsets.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     spatialTiles.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     morphologies.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    colorFilters.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -843,6 +883,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingSpatialOffsets = spatialOffsets.toMutableMap()
     val remainingSpatialTiles = spatialTiles.toMutableMap()
     val remainingMorphologies = morphologies.toMutableMap()
+    val remainingColorFilters = colorFilters.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -873,6 +914,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingSpatialOffsets.remove(pass.id)?.let { add(W6FilterSpatialOffsetNativeSiteRecipeV1(it)) }
                 remainingSpatialTiles.remove(pass.id)?.let { add(W6FilterSpatialTileNativeSiteRecipeV1(it)) }
                 remainingMorphologies.remove(pass.id)?.let { add(W6FilterMorphologyNativeSiteRecipeV1(it)) }
+                remainingColorFilters.remove(pass.id)?.let { add(W6FilterColorFilterNativeSiteRecipeV1(it)) }
             }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
@@ -882,7 +924,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -1069,6 +1111,20 @@ public fun freezeW6FilterMorphologyRecipesV1(passes: List<PlanPass>, resources: 
             operation.radiusXF64, operation.radiusYF64, operation.radiusXTexelsI32, operation.radiusYTexelsI32,
             sampling.copyKnownContentInputTargetLocalI32(), sampling.copyOutputToInputOffsetTargetLocalI32(),
             targetFormat, target.sampleCountI32, sourceFormat, source.sampleCountI32)) == null)
+    }
+}
+
+/** Freezes IIc's only materialized ColorFilter mode: source texture plus W5f uniform row. */
+public fun freezeW6FilterColorFilterRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<PlanPassId, W6FilterColorFilterRecipeV1> = LinkedHashMap<PlanPassId, W6FilterColorFilterRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+        val operation = pass.operation as? FilterPassOperationV1.ColorFilter ?: return@forEach
+        require(pass.inputs().size == 1 && pass.frozenSamplingProgram == null)
+        val target = resources.single { it.id == pass.output }; val source = resources.single { it.id == pass.inputs().single() }
+        val uniformId = requireNotNull(operation.uniformResource); val uniform = resources.single { it.id == uniformId }
+        val targetFormat = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 ColorFilter requires color target.")
+        val sourceFormat = (source.format as? PlanTextureFormat.Color)?.value ?: error("W6 ColorFilter requires color source.")
+        require(target.sampleCountI32 == 1 && source.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() && uniform.role == PlanResourceRole.SourceUniformData && uniform.kind == PlanResourceKind.Buffer && uniform.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination))
+        require(put(pass.id, W6FilterColorFilterRecipeV1(pass.id, pass.output, pass.inputs().single(), requireNotNull(target.copyExtent()), requireNotNull(source.copyExtent()), operation.execution, uniformId, requireNotNull(operation.uniformOffsetBytesI64), requireNotNull(operation.uniformCapacityBytesI64), operation.sampling.copyOutputToInputOffsetTargetLocalI32(), targetFormat, target.sampleCountI32, sourceFormat, source.sampleCountI32)) == null)
     }
 }
 

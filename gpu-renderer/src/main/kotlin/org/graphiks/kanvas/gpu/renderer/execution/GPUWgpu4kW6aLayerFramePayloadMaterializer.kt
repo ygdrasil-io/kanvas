@@ -438,6 +438,22 @@ private fun preflightW6FilterMorphologies(frame: GPUW6aLayerFramePlan, framePlan
     }
 }
 
+/** IIc authenticates ColorFilter's W5f uniform ABI and recorded texture pass before create*. */
+private fun preflightW6FilterColorFilters(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterColorFilterRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterColorFilterRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterColorFilterRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 ColorFilter owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.ColorFilter ?: error("W6 ColorFilter operation changed after seal.")
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        val target = frame.physical.resource(actual.target); val source = frame.physical.resource(actual.source); val uniform = frame.physical.resource(actual.uniformResource)
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.source == pass.inputs().single() && actual.execution === operation.execution && actual.uniformResource == operation.uniformResource && actual.uniformOffsetBytesI64 == operation.uniformOffsetBytesI64 && actual.uniformCapacityBytesI64 == operation.uniformCapacityBytesI64 && actual.copyOutputToInputOffsetTargetLocalI32() == operation.sampling.copyOutputToInputOffsetTargetLocalI32() && target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && target.sampleCountI32 == actual.sampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && source.copyExtent() == actual.copySourceExtent() && source.format == PlanTextureFormat.Color(actual.sourceFormat) && source.sampleCountI32 == actual.sourceSampleCountI32 && PlanResourceUsage.Sampled in source.usages() && uniform.role == PlanResourceRole.SourceUniformData && uniform.kind == PlanResourceKind.Buffer && uniform.byteSize == actual.uniformCapacityBytesI64 && uniform.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination) && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null)
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -497,6 +513,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterSpatialOffsets(frame, framePlan)
             preflightW6FilterSpatialTiles(frame, framePlan)
             preflightW6FilterMorphologies(frame, framePlan)
+            preflightW6FilterColorFilters(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1221,17 +1238,14 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMorphologyNativeSiteRecipeV1) {
                             val recipe = frame.physical.w6FilterMorphologyRecipe(pass.id)
                             renderOperands += morphologyRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterColorFilterNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterColorFilterRecipe(pass.id)
+                            renderOperands += colorFilterRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), colorFilterUniformBuffers.getValue(recipe.uniformResource), generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Tile -> error("Tile pass is missing its frozen native-site recipe.")
-                            is FilterPassOperationV1.ColorFilter -> {
-                                require(pass.inputs().size == 1)
-                                val uniform = colorFilterUniformBuffers.getValue(requireNotNull(operation.uniformResource))
-                                renderOperands += colorFilterRender(stepIndex, views.getValue(pass.output),
-                                    views.getValue(pass.inputs().single()), uniform, generation, operation,
-                                    outputExtent.width, outputExtent.height, pass, owned)
-                            }
+                            is FilterPassOperationV1.ColorFilter -> error("ColorFilter pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Merge -> {
                                 require(pass.inputs().size == operation.inputSamplings().size)
                                 renderOperands += multiInputRender(stepIndex, views.getValue(pass.output),
@@ -2045,21 +2059,21 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         )
     }
 
-    /** Emits exactly one frozen source->target fullscreen render; no pass selection occurs here. */
+    /** Mechanical IIc translation: the sealed W5f ColorFilter recipe is the native authority. */
     private fun colorFilterRender(
         stepIndex: Int,
         target: GPUTextureView,
         source: GPUTextureView,
         uniform: GPUBuffer,
         generation: GPUDeviceGenerationID,
-        operation: FilterPassOperationV1.ColorFilter,
-        widthI32: Int,
-        heightI32: Int,
-        pass: PlanPass,
+        recipe: W6FilterColorFilterRecipeV1,
+        pass: PlanPass.FilterPass,
         owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
-        val offset = operation.sampling.copyOutputToInputOffsetTargetLocalI32()
-        val wordsI32 = Math.toIntExact(requireNotNull(operation.uniformCapacityBytesI64) / 16L)
+        require(recipe.ownerPassId == pass.id && recipe.groupZeroAbi == W6FilterColorFilterGroupZeroAbiV1.TextureAndW5fUniform && recipe.shaderFamily == W6FilterColorFilterShaderFamilyV1.W5fColorOperationTextureLoad && recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val offset = recipe.copyOutputToInputOffsetTargetLocalI32()
+        val wordsI32 = Math.toIntExact(recipe.uniformCapacityBytesI64 / 16L)
+        val extent = recipe.copyExtent()
         val shader = W6A_VERTEX_SHADER + """
             @group(0) @binding(0) var w6c_color_source: texture_2d<f32>;
             struct W5fMaterial { words: array<vec4<u32>, $wordsI32>, }
@@ -2071,19 +2085,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     return vec4<f32>(0.0);
                 }
                 let input = textureLoad(w6c_color_source, source_position, 0);
-                ${W5fColorOperationEmitterV1.emit(operation.execution.copyOperationGraph(), "input",
-                    requireNotNull(operation.uniformOffsetBytesI64) / 4L)}
+                ${W5fColorOperationEmitterV1.emit(recipe.execution.copyOperationGraph(), "input", recipe.uniformOffsetBytesI64 / 4L)}
             }
         """
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
             BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
             BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, buffer = BufferBindingLayout(
-                type = GPUBufferBindingType.Uniform, minBindingSize = requireNotNull(operation.uniformCapacityBytesI64).toULong())),
+                type = GPUBufferBindingType.Uniform, minBindingSize = recipe.uniformCapacityBytesI64.toULong())),
         ))))
         val pipeline = pipeline(shader, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
             BindGroupEntry(0u, source), BindGroupEntry(1u, BufferBinding(uniform, 0uL,
-                requireNotNull(operation.uniformCapacityBytesI64).toULong())),
+                recipe.uniformCapacityBytesI64.toULong())),
         ))))
         return GPUPreparedNativeScopeOperand.Render(stepIndex,
             GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
@@ -2092,8 +2105,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             listOf(
                 GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
                 GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
-                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
-                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
             ), w6aPassV1 = pass)
     }
 

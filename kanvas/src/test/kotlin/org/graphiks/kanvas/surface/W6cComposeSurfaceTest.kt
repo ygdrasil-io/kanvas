@@ -49,7 +49,10 @@ class W6cComposeSurfaceTest {
             )
         }
 
-        assertContentEquals(expectedColorFilterBytes, surface.render().pixels)
+        val actual = surface.render()
+        assertContentEquals(expectedColorFilterBytes, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
     }
 
     /** A contextual FilterTarget may feed the outer blur; it is not a mask materialization. */

@@ -62,6 +62,7 @@ internal class SourcePhysicalConstructionV1(
     val w6FilterSpatialOffsetRecipes: Map<PlanPassId, W6FilterSpatialOffsetRecipeV1> = emptyMap(),
     val w6FilterSpatialTileRecipes: Map<PlanPassId, W6FilterSpatialTileRecipeV1> = emptyMap(),
     val w6FilterMorphologyRecipes: Map<PlanPassId, W6FilterMorphologyRecipeV1> = emptyMap(),
+    val w6FilterColorFilterRecipes: Map<PlanPassId, W6FilterColorFilterRecipeV1> = emptyMap(),
     /** Versioned catalog derived exclusively from the preceding final planner recipes. */
     val nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1.Empty,
 )
@@ -130,6 +131,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     filterSpatialOffsetRecipes: Map<PlanPassId, W6FilterSpatialOffsetRecipeV1>,
     filterSpatialTileRecipes: Map<PlanPassId, W6FilterSpatialTileRecipeV1>,
     filterMorphologyRecipes: Map<PlanPassId, W6FilterMorphologyRecipeV1>,
+    filterColorFilterRecipes: Map<PlanPassId, W6FilterColorFilterRecipeV1>,
     nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1,
 ) {
     private val resources = immutableList(resources)
@@ -156,6 +158,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val spatialOffsets = java.util.Collections.unmodifiableMap(LinkedHashMap(filterSpatialOffsetRecipes))
     private val spatialTiles = java.util.Collections.unmodifiableMap(LinkedHashMap(filterSpatialTileRecipes))
     private val morphologies = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMorphologyRecipes))
+    private val colorFilters = java.util.Collections.unmodifiableMap(LinkedHashMap(filterColorFilterRecipes))
     private val nativeSiteRecipes = nativeSiteRecipeCatalogV1
     private val slots = immutableList(buildList {
         resources.forEachIndexed { indexI32, resource ->
@@ -261,6 +264,9 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6FilterMorphologyRecipe(passId: PlanPassId): W6FilterMorphologyRecipeV1 =
         (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterMorphologyNativeSiteRecipeV1)?.host ?: error("Missing frozen W6 Morphology recipe.")
     public fun w6FilterMorphologyRecipes(): Map<PlanPassId, W6FilterMorphologyRecipeV1> = morphologies
+    public fun w6FilterColorFilterRecipe(passId: PlanPassId): W6FilterColorFilterRecipeV1 =
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, 0, 0)) as? W6FilterColorFilterNativeSiteRecipeV1)?.host ?: error("Missing frozen W6 ColorFilter recipe.")
+    public fun w6FilterColorFilterRecipes(): Map<PlanPassId, W6FilterColorFilterRecipeV1> = colorFilters
     /** Ordered planner catalog consumed by the bounded 2P0–2P6 renderer sites. */
     public fun nativeSiteRecipeCatalogV1(): NativeSiteRecipeCatalogV1 = nativeSiteRecipes
 
@@ -373,9 +379,12 @@ public class PlanPhysicalLayoutV1 private constructor(
             val expectedMorphologies = freezeW6FilterMorphologyRecipesV1(graph.passes(), rows)
             require(source.w6FilterMorphologyRecipes.keys == expectedMorphologies.keys)
             source.w6FilterMorphologyRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedMorphologies.getValue(id).canonicalLogicalEncodingV1()) }
+            val expectedColorFilters = freezeW6FilterColorFilterRecipesV1(graph.passes(), rows)
+            require(source.w6FilterColorFilterRecipes.keys == expectedColorFilters.keys)
+            source.w6FilterColorFilterRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedColorFilters.getValue(id).canonicalLogicalEncodingV1()) }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
                 graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
-                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies,
+                expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -393,6 +402,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterSpatialOffsetRecipes,
                 source.w6FilterSpatialTileRecipes,
                 source.w6FilterMorphologyRecipes,
+                source.w6FilterColorFilterRecipes,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
@@ -592,6 +602,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterSpatialOffsetRecipes,
                 source.w6FilterSpatialTileRecipes,
                 source.w6FilterMorphologyRecipes,
+                source.w6FilterColorFilterRecipes,
                 source.nativeSiteRecipeCatalogV1)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
