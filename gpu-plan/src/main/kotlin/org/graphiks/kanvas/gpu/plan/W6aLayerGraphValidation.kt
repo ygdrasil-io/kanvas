@@ -148,10 +148,11 @@ internal fun validateW6aLayerTopology(
                 cover.draw.copyScissorI32() == pass.copyScissorI32())
         }
         is PlanPass.StencilCover -> {
+            val inverseMaskPair = (pass.draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true
             require(passes.getOrNull(indexI32 - 1) is PlanPass.StencilGeometryProducerV3 &&
                 pass.load == AttachmentLoadPlan.Load && pass.store == AttachmentStorePlan.Store &&
                 pass.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset &&
-                pass.draw.strategy == PathFillStrategy.StencilCover && pass.draw.sample == SamplePlan.SingleSample &&
+                (pass.draw.strategy == PathFillStrategy.StencilCover || inverseMaskPair) && pass.draw.sample == SamplePlan.SingleSample &&
                 pass.draw.blend != BlendPlan.NoOpV1)
             if (pass.coverageSource != null) require(pass.draw.blend == BlendPlan.LegacySrcOverV1)
             (pass.draw.blend as? BlendPlan.DestinationReadV1)?.let { blend ->

@@ -837,9 +837,10 @@ public class PlanPhysicalLayoutV1 private constructor(
                 } }
                 val fan = fill?.copyStencilEdgeFanF32OrNull()
                 val direct = fill?.copyDirectTriangleF32OrNull()
+                val inverseMaskPair = (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true
                 val producer = pass is PlanPass.StencilGeometryProducerV3
                 val cover = pass is PlanPass.StencilCover || pass is PlanPass.FilterCoverageSourcePass &&
-                    draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
+                    draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover || inverseMaskPair)
                 val binding = if (draw is W5bVerticesDraw) {
                     val upload = requireNotNull(draw.sealedUploadPayloadOrNull())
                     require(upload.vertexCountI32 == draw.geometryF32.vertexCountI32 &&
@@ -850,12 +851,12 @@ public class PlanPhysicalLayoutV1 private constructor(
                         upload.vertexCountI32, upload.indexCountI32 ?: 0, draw.geometryF32.maxIndexI32 ?: 0,
                         64L, upload.vertexStrideBytesI32, upload.indexElementBytesI32 ?: 0, upload)
                 } else PlanGeometryBufferBindingV1(data,
-                    if (cover) Math.multiplyExact(requireNotNull(fan).vertexCountI32.toLong(), 8L) else 0L,
-                    if (cover) Math.multiplyExact(requireNotNull(fan).indexCountI32.toLong(), 4L) else 0L,
-                    if (cover) maxOf(32L, graph.capabilities.minUniformBufferOffsetAlignment.toLong()) else 0L,
-                    if (producer) requireNotNull(fan).vertexCountI32 else if (draw is W5bPointDraw) draw.copyVerticesF32().size / 2 else direct?.vertexCountI32 ?: 4,
-                    if (producer) requireNotNull(fan).indexCountI32 else if (draw is W5bPointDraw) draw.copyIndicesI32().size else direct?.indexCountI32 ?: 6,
-                    if (producer) requireNotNull(fan).copyIndicesI32().max() else if (draw is W5bPointDraw) draw.copyIndicesI32().max() else direct?.copyIndicesI32()?.max() ?: 3,
+                    if (cover && !inverseMaskPair) Math.multiplyExact(requireNotNull(fan).vertexCountI32.toLong(), 8L) else 0L,
+                    if (cover && !inverseMaskPair) Math.multiplyExact(requireNotNull(fan).indexCountI32.toLong(), 4L) else 0L,
+                    if (cover && !inverseMaskPair) maxOf(32L, graph.capabilities.minUniformBufferOffsetAlignment.toLong()) else 0L,
+                    if (producer && !inverseMaskPair) requireNotNull(fan).vertexCountI32 else if (draw is W5bPointDraw) draw.copyVerticesF32().size / 2 else direct?.vertexCountI32 ?: 4,
+                    if (producer && !inverseMaskPair) requireNotNull(fan).indexCountI32 else if (draw is W5bPointDraw) draw.copyIndicesI32().size else direct?.indexCountI32 ?: 6,
+                    if (producer && !inverseMaskPair) requireNotNull(fan).copyIndicesI32().max() else if (draw is W5bPointDraw) draw.copyIndicesI32().max() else direct?.copyIndicesI32()?.max() ?: 3,
                     if (draw is AnalyticRectDraw || draw is AnalyticRRectDraw) 80L else 32L)
                 require(Math.addExact(binding.vertexOffsetI64, binding.vertexBytesI64) <= rows.single { it.id == data.vertex }.byteSize &&
                     Math.addExact(binding.indexOffsetI64, binding.indexUploadBytesI64) <= rows.single { it.id == data.index }.byteSize &&

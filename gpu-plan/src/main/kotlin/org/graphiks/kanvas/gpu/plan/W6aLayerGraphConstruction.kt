@@ -1639,7 +1639,8 @@ internal class W6aLayerGraphConstruction(
                         ?: error("Picture W6b coverage source is missing its frozen W4 producer.")
                     val coverageDraw = selected.withFinalBlendV1(BlendPlan.LegacySrcOverV1)
                     val coverageDepth = (coverageDraw as? PathDraw)?.takeIf {
-                        it.strategy == PathFillStrategy.StencilCover
+                        it.strategy == PathFillStrategy.StencilCover ||
+                            (it as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true
                     }?.let {
                         planResourceId(PlanResourceRole.DepthStencil, nextCoverageDepthOrdinalI32.also { ordinal ->
                             nextCoverageDepthOrdinalI32 = Math.addExact(ordinal, 1)
@@ -1656,7 +1657,8 @@ internal class W6aLayerGraphConstruction(
                         ),
                     )
                 }
-                val terminal = if (draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover) {
+                val terminal = if (draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                        (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)) {
                     val data = dataByCommand.getValue(draw.commandIndex)
                     val depth = planResourceId(PlanResourceRole.DepthStencil, laneI32 + 1)
                     val group = canonicalPathAtomicGroup(draw)
@@ -2586,7 +2588,8 @@ internal class W6aLayerGraphConstruction(
                         }
                         val selectedDraw = draws.single()
                         val sourceDepth = selectedDraw.takeIf { draw ->
-                            draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
+                            draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                                (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)
                         }?.let { planResourceId(PlanResourceRole.DepthStencil, bindings.indexOf(binding) + 1) }
                         var coverageDepth: PlanResourceId? = null
                         var rasterBinding: PlanPass.W6bRasterCoverageBindingV1? = null
@@ -2596,7 +2599,8 @@ internal class W6aLayerGraphConstruction(
                             rasterBinding = if (occurrence.mask is MaskFilterNode.Blur ||
                                 occurrence.mask is MaskFilterNode.Shader || occurrence.mask is MaskFilterNode.Table) {
                                 coverageDepth = selectedDraw.takeIf { draw ->
-                                    draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
+                                    draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                                        (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)
                                 }?.let {
                                     planResourceId(PlanResourceRole.DepthStencil,
                                         nextCoverageDepthOrdinalI32.also { ordinal ->
@@ -2671,7 +2675,8 @@ internal class W6aLayerGraphConstruction(
                                 copy.copySourceBoundsI32(), copy.copyDestinationOriginI32(), copy.bytesPerRowI64)
                             selectedDraw.withFinalBlendV1(selectedDraw.blend.bindDestinationReadV1(version, snapshot))
                         } else selectedDraw.also { require(selectedCopy == null) }
-                        if (draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover) {
+                        if (draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                                (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)) {
                             val data = dataByCommand.getValue(draw.commandIndex)
                             val depth = requireNotNull(sourceDepth)
                             val group = canonicalPathAtomicGroup(draw)

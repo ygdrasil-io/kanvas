@@ -173,7 +173,8 @@ internal fun nativeCompositeGeometryLayoutV4(inputs: List<NativeGeometryInputV4>
                 draw is PathFillDraw || draw is PathStrokeDraw || draw is GeneralPathDraw)
             colors += draw
             dataByCommand[draw.commandIndex] = data
-            if (draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover)
+            if (draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                    (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true))
                 depthByCommand[draw.commandIndex] = requireNotNull(depth)
         }
     }
@@ -216,9 +217,10 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
         }
         is PlanPass.StencilGeometryProducerV3 -> {
             val cover = passes.getOrNull(indexI32 + 1) as? PlanPass.StencilCover
+            val inverseMaskPair = (cover?.draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true
             require(cover != null && cover.draw.commandIndex == pass.commandIndexI32 &&
                 cover.draw.copyPathGeometry() == pass.copyGeometry() && cover.draw.copyScissorI32() == pass.copyScissorI32() &&
-                cover.draw.strategy == PathFillStrategy.StencilCover && cover.target == pass.target &&
+                (cover.draw.strategy == PathFillStrategy.StencilCover || inverseMaskPair) && cover.target == pass.target &&
                 cover.depthStencil == pass.depthStencil && cover.atomicGroup == pass.atomicGroup &&
                 pass.atomicGroup == canonicalPathAtomicGroup(cover.draw) && cover.drawDataResources == pass.drawDataResources &&
                 cover.load == AttachmentLoadPlan.Load && cover.store == AttachmentStorePlan.Store &&

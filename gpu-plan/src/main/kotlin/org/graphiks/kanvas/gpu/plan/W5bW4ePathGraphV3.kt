@@ -37,9 +37,17 @@ public class W5bW4ePathDraw internal constructor(
     override val coverage get() = source.coverage
     override val sample get() = source.sample
     override fun copyPathGeometry(): PathDrawGeometry = source.copyPathGeometry()
-    override fun copyScissorI32() =
-        ((source as? ClippedGeneralPathDraw)?.clip as? ClipPlanStrategy.InverseDomain)
-            ?.geometryF32?.copyDomainI32() ?: source.copyScissorI32()
+    override fun copyScissorI32() = when (val clip = (source as? ClippedGeneralPathDraw)?.clip) {
+        is ClipPlanStrategy.InverseMask -> clip.geometryF32.copyDomainI32()
+        is ClipPlanStrategy.InverseDomain -> clip.geometryF32.copyDomainI32()
+        else -> source.copyScissorI32()
+    }
+    /** Execution phases, rather than DirectTriangle, prove this sealed inverse-mask pair. */
+    internal fun hasW4eInverseMaskStencilPair(): Boolean =
+        nativeColorPass.phase == PathRenderPhase.SingleSampleStencilColorCover &&
+            nativeColorPass.depthStencil != null &&
+            ((source as? ClippedGeneralPathDraw)?.clip as? ClipPlanStrategy.InverseMask)
+                ?.geometryF32?.interiorCoverageF32 is org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry
     internal fun withBlend(value: BlendPlan): W5bW4ePathDraw = W5bW4ePathDraw(nativeColorPass, value)
 }
 
@@ -59,7 +67,7 @@ internal fun issueW5bW4ePathGraph(source: RenderGraph, blendsByCommandI32: Map<I
         W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, extent, source.capabilities, source.budget, colors,
         source.materialPlanTableOrNull(), source.resources().single { it.role == PlanResourceRole.LogicalTarget }.byteSize,
         source.resources().single { it.role == PlanResourceRole.ReadbackStaging }.byteSize, readback.bytesPerRow,
-        resources, data, depthStencilByCommandI32 = colors.filter { it.strategy == PathFillStrategy.StencilCover }
+        resources, data, depthStencilByCommandI32 = colors.filter { it.strategy == PathFillStrategy.StencilCover || it.hasW4eInverseMaskStencilPair() }
             .associate { it.commandIndex to requireNotNull(it.nativeColorPass.depthStencil) }, w4eSource = W4eGeometryFactsV6.from(source))
     return RenderGraph.issueW5bGeometry(graph, listOf(W5bGeometryLanePlanV3(source, colors.map { it.commandIndex }, data, null)))
 }
@@ -70,7 +78,7 @@ internal fun describeW5bW4ePathSourcesV6(source: SourceDeferredRenderConstructio
     val pathPasses = source.passes().filterIsInstance<PlanPass.PathRenderPass>()
     val colors = w4eColorConsumers(pathPasses,blends)
     val data = pathPasses.first().drawDataResources
-    val depth = colors.filter { it.strategy == PathFillStrategy.StencilCover }
+    val depth = colors.filter { it.strategy == PathFillStrategy.StencilCover || it.hasW4eInverseMaskStencilPair() }
         .associate { it.commandIndex to requireNotNull(it.nativeColorPass.depthStencil) }
     val topology = W5bDestinationGraphSealer.describeSources(W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID,
         source.targetExtent,source.capabilities,source.budget,colors,
