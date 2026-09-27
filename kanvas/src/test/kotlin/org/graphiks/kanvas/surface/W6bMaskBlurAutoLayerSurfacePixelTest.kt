@@ -75,7 +75,10 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
 
     @Test
     fun `masked source is materialized before its frozen image blur`() {
-        val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+        // MaterializedSource owns the filtered source and its separate coverage input.
+        // Establish this causal oracle before creating the Surface native work.
+        val expected = W6bMaskBlurCpuOracle.renderMaskedThenImageBlur()
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
             surface.canvas {
                 translate(1f, 0f)
                 drawRect(localMaskedBounds(), Paint(
@@ -85,9 +88,11 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
                     antiAlias = false,
                 ))
             }
-        }.render().pixels
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
 
-        W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderMaskedThenImageBlur(), actual)
+        W6bMaskBlurCpuOracle.assertNear(expected, result.pixels)
     }
 
     @Test

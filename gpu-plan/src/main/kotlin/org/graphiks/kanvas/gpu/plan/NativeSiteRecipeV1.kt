@@ -47,6 +47,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FilterMaskBlurDualSource,
     W6FilterMaskShader,
     W6FilterMaskTable,
+    W6FilterMaterializedSource,
 }
 
 /** IIf1's one-coverage plus pre-issued W5 material ABI; neither table nor source materialization belongs here. */
@@ -125,6 +126,32 @@ public class W6FilterMaskTableNativeSiteRecipeV1 internal constructor(public val
         int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("coverageExtentWidth", host.copyCoverageExtent().width); int("coverageExtentHeight", host.copyCoverageExtent().height); rect("known", host.copyKnownContentTargetLocalI32()); point("offset", host.copyOutputToCoverageOffsetTargetLocalI32())
         enum("targetFormat", host.targetFormat); enum("coverageFormat", host.coverageFormat); int("sampleCount", host.sampleCountI32); int("coverageSampleCount", host.coverageSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
     }
+}
+
+public enum class W6FilterMaterializedSourceShaderFamilyV1 { SourceAndCoverageTextureLoad }
+public enum class W6FilterMaterializedSourceGroupZeroAbiV1 { SourceThenCoverageTextures }
+public enum class W6FilterMaterializedSourceAlphaModeV1 { ReplaceSourceAlpha, MultiplySourceAlpha }
+public class W6FilterMaterializedSourceRecipeV1 internal constructor(
+    public val ownerPassId: PlanPassId, public val target: PlanResourceId, public val source: PlanResourceId, public val coverage: PlanResourceId,
+    extent: org.graphiks.math.geometry.SizeI32, sourceExtent: org.graphiks.math.geometry.SizeI32, coverageExtent: org.graphiks.math.geometry.SizeI32,
+    sourceKnown: org.graphiks.math.geometry.RectI32, coverageKnown: org.graphiks.math.geometry.RectI32,
+    sourceOffset: org.graphiks.math.geometry.Point2I32, coverageOffset: org.graphiks.math.geometry.Point2I32,
+    targetOriginDeviceI32: org.graphiks.math.geometry.Point2I32, public val alphaMode: W6FilterMaterializedSourceAlphaModeV1,
+    public val targetFormat: PlanLogicalColorFormat, public val sourceFormat: PlanLogicalColorFormat, public val coverageFormat: PlanLogicalColorFormat,
+    public val sampleCountI32: Int, public val sourceSampleCountI32: Int, public val coverageSampleCountI32: Int,
+    public val shaderFamily: W6FilterMaterializedSourceShaderFamilyV1 = W6FilterMaterializedSourceShaderFamilyV1.SourceAndCoverageTextureLoad,
+    public val groupZeroAbi: W6FilterMaterializedSourceGroupZeroAbiV1 = W6FilterMaterializedSourceGroupZeroAbiV1.SourceThenCoverageTextures,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) {
+    private val e = extent.copy(); private val se = sourceExtent.copy(); private val ce = coverageExtent.copy(); private val sk = sourceKnown.copy(); private val ck = coverageKnown.copy(); private val so = org.graphiks.math.geometry.Point2I32(sourceOffset.x, sourceOffset.y); private val co = org.graphiks.math.geometry.Point2I32(coverageOffset.x, coverageOffset.y); private val origin = org.graphiks.math.geometry.Point2I32(targetOriginDeviceI32.x, targetOriginDeviceI32.y)
+    init { require(target != source && target != coverage && source != coverage && sampleCountI32 == 1 && sourceSampleCountI32 == 1 && coverageSampleCountI32 == 1 && !sk.isEmpty && !ck.isEmpty) }
+    public fun copyExtent() = e.copy(); public fun copySourceExtent() = se.copy(); public fun copyCoverageExtent() = ce.copy(); public fun copySourceKnownContentTargetLocalI32() = sk.copy(); public fun copyCoverageKnownContentTargetLocalI32() = ck.copy(); public fun copyOutputToSourceOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(so.x, so.y); public fun copyOutputToCoverageOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(co.x, co.y); public fun copyTargetOriginDeviceI32() = org.graphiks.math.geometry.Point2I32(origin.x, origin.y)
+    public fun canonicalLogicalEncodingV1() = W6FilterMaterializedSourceNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+public class W6FilterMaterializedSourceNativeSiteRecipeV1 internal constructor(public val host: W6FilterMaterializedSourceRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterMaterializedSource
+    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) { text("owner", host.ownerPassId.value); text("target", host.target.value); text("input.0", host.source.value); text("input.1", host.coverage.value); int("inputCount", 2); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("sourceExtentWidth", host.copySourceExtent().width); int("sourceExtentHeight", host.copySourceExtent().height); int("coverageExtentWidth", host.copyCoverageExtent().width); int("coverageExtentHeight", host.copyCoverageExtent().height); rect("sourceKnown", host.copySourceKnownContentTargetLocalI32()); rect("coverageKnown", host.copyCoverageKnownContentTargetLocalI32()); point("sourceOffset", host.copyOutputToSourceOffsetTargetLocalI32()); point("coverageOffset", host.copyOutputToCoverageOffsetTargetLocalI32()); point("targetOriginDevice", host.copyTargetOriginDeviceI32()); enum("alphaMode", host.alphaMode); enum("targetFormat", host.targetFormat); enum("sourceFormat", host.sourceFormat); enum("coverageFormat", host.coverageFormat); int("sampleCount", host.sampleCountI32); int("sourceSampleCount", host.sourceSampleCountI32); int("coverageSampleCount", host.coverageSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32) }
 }
 
 /** IIe2a's one-texture mask-style site.  The two-texture styles stay outside this slice. */
@@ -1064,6 +1091,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         maskBlurDualSources: Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1>,
         maskShaders: Map<PlanPassId, W6FilterMaskShaderRecipeV1>,
         maskTables: Map<PlanPassId, W6FilterMaskTableRecipeV1>,
+        materializedSources: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -1090,6 +1118,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FilterMaskBlurDualSourceNativeSiteRecipeV1 -> maskBlurDualSources[recipe.host.ownerPassId] === recipe.host
             is W6FilterMaskShaderNativeSiteRecipeV1 -> maskShaders[recipe.host.ownerPassId] === recipe.host
             is W6FilterMaskTableNativeSiteRecipeV1 -> maskTables[recipe.host.ownerPassId] === recipe.host
+            is W6FilterMaterializedSourceNativeSiteRecipeV1 -> materializedSources[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -1125,6 +1154,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     maskBlurDualSources: Map<PlanPassId, W6FilterMaskBlurDualSourceRecipeV1> = emptyMap(),
     maskShaders: Map<PlanPassId, W6FilterMaskShaderRecipeV1> = emptyMap(),
     maskTables: Map<PlanPassId, W6FilterMaskTableRecipeV1> = emptyMap(),
+    materializedSources: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -1150,6 +1180,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     maskBlurDualSources.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     maskShaders.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     maskTables.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    materializedSources.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -1174,6 +1205,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingMaskBlurDualSources = maskBlurDualSources.toMutableMap()
     val remainingMaskShaders = maskShaders.toMutableMap()
     val remainingMaskTables = maskTables.toMutableMap()
+    val remainingMaterializedSources = materializedSources.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -1212,6 +1244,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingMaskBlurDualSources.remove(pass.id)?.let { add(W6FilterMaskBlurDualSourceNativeSiteRecipeV1(it)) }
                 remainingMaskShaders.remove(pass.id)?.let { add(W6FilterMaskShaderNativeSiteRecipeV1(it)) }
                 remainingMaskTables.remove(pass.id)?.let { add(W6FilterMaskTableNativeSiteRecipeV1(it)) }
+                remainingMaterializedSources.remove(pass.id)?.let { add(W6FilterMaterializedSourceNativeSiteRecipeV1(it)) }
             }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
@@ -1221,7 +1254,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty() && remainingMaterializedSources.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
@@ -1548,6 +1581,24 @@ public fun freezeW6FilterMaskTableRecipesV1(passes: List<PlanPass>, resources: L
             requireNotNull(target.copyExtent()), requireNotNull(coverage.copyExtent()),
             sampling.copyKnownContentInputTargetLocalI32(), sampling.copyOutputToInputOffsetTargetLocalI32(),
             targetFormat, coverageFormat, target.sampleCountI32, coverage.sampleCountI32)) == null)
+    }
+}
+
+public fun freezeW6FilterMaterializedSourceRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<PlanPassId, W6FilterMaterializedSourceRecipeV1> = LinkedHashMap<PlanPassId, W6FilterMaterializedSourceRecipeV1>().apply {
+    val alphaReplacement = buildMap<PlanResourceId, Boolean> { passes.forEach { pass -> when (pass) {
+        is PlanPass.RenderPass -> pass.coverageSource?.let { put(pass.target, pass.w6bMaskSourceBinding != null) }
+        is PlanPass.StencilCover -> pass.coverageSource?.let { put(pass.target, true) }
+        is PlanPass.PictureSourcePass -> pass.coverageSource?.let { put(pass.output, true) }
+        else -> Unit
+    } } }
+    passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+        val operation = pass.operation as? FilterPassOperationV1.MaterializedSource ?: return@forEach
+        val sourceSampling = requireNotNull(operation.sourceSampling); val coverageSampling = requireNotNull(operation.coverageSampling)
+        require(pass.inputs().size == 2)
+        val target = resources.single { it.id == pass.output }; val source = resources.single { it.id == pass.inputs().first() }; val coverage = resources.single { it.id == pass.inputs().last() }
+        val tf = (target.format as? PlanTextureFormat.Color)?.value ?: error("MaterializedSource requires color target."); val sf = (source.format as? PlanTextureFormat.Color)?.value ?: error("MaterializedSource requires color source."); val cf = (coverage.format as? PlanTextureFormat.Color)?.value ?: error("MaterializedSource requires color coverage.")
+        require(PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() && PlanResourceUsage.Sampled in coverage.usages())
+        require(put(pass.id, W6FilterMaterializedSourceRecipeV1(pass.id, pass.output, pass.inputs().first(), pass.inputs().last(), requireNotNull(target.copyExtent()), requireNotNull(source.copyExtent()), requireNotNull(coverage.copyExtent()), sourceSampling.copyKnownContentInputTargetLocalI32(), coverageSampling.copyKnownContentInputTargetLocalI32(), sourceSampling.copyOutputToInputOffsetTargetLocalI32(), coverageSampling.copyOutputToInputOffsetTargetLocalI32(), operation.bounds.copyTargetOriginDeviceI32(), if (alphaReplacement[pass.inputs().first()] == true) W6FilterMaterializedSourceAlphaModeV1.ReplaceSourceAlpha else W6FilterMaterializedSourceAlphaModeV1.MultiplySourceAlpha, tf, sf, cf, target.sampleCountI32, source.sampleCountI32, coverage.sampleCountI32)) == null)
     }
 }
 

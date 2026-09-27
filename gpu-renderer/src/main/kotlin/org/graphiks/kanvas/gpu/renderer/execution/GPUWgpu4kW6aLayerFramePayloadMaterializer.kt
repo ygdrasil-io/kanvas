@@ -640,6 +640,21 @@ private fun preflightW6FilterMaskTables(frame: GPUW6aLayerFramePlan, framePlan: 
     }
 }
 
+private fun preflightW6FilterMaterializedSources(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FilterMaterializedSourceRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FilterMaterializedSourceRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FilterMaterializedSourceRecipe(id); require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("MaterializedSource owner is not FilterPass.")
+        val operation = pass.operation as? FilterPassOperationV1.MaterializedSource ?: error("MaterializedSource operation changed after seal.")
+        val sourceSampling = requireNotNull(operation.sourceSampling); val coverageSampling = requireNotNull(operation.coverageSampling)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val target = frame.physical.resource(actual.target); val source = frame.physical.resource(actual.source); val coverage = frame.physical.resource(actual.coverage)
+        val uses = listOf(actual.source, actual.coverage).map { org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(it), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false) }
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && pass.inputs() == listOf(actual.source, actual.coverage) && actual.groupZeroAbi == W6FilterMaterializedSourceGroupZeroAbiV1.SourceThenCoverageTextures && actual.shaderFamily == W6FilterMaterializedSourceShaderFamilyV1.SourceAndCoverageTextureLoad && actual.load == AttachmentLoadPlan.ClearTransparent && actual.store == AttachmentStorePlan.Store && actual.blend == BlendPlan.LegacySrcOverV1 && actual.draw == W6FullscreenEmptyDrawV1() && actual.copySourceKnownContentTargetLocalI32() == sourceSampling.copyKnownContentInputTargetLocalI32() && actual.copyCoverageKnownContentTargetLocalI32() == coverageSampling.copyKnownContentInputTargetLocalI32() && actual.copyOutputToSourceOffsetTargetLocalI32() == sourceSampling.copyOutputToInputOffsetTargetLocalI32() && actual.copyOutputToCoverageOffsetTargetLocalI32() == coverageSampling.copyOutputToInputOffsetTargetLocalI32() && actual.copyTargetOriginDeviceI32() == operation.bounds.copyTargetOriginDeviceI32() && target.copyExtent() == actual.copyExtent() && source.copyExtent() == actual.copySourceExtent() && coverage.copyExtent() == actual.copyCoverageExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.sourceFormat) && coverage.format == PlanTextureFormat.Color(actual.coverageFormat) && target.sampleCountI32 == actual.sampleCountI32 && source.sampleCountI32 == actual.sourceSampleCountI32 && coverage.sampleCountI32 == actual.coverageSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() && PlanResourceUsage.Sampled in coverage.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null) { "W6 MaterializedSource physical or recorded preflight differs from its frozen recipe." }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -707,6 +722,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterMaskBlurDualSources(frame, framePlan)
             preflightW6FilterMaskShaders(frame, framePlan)
             preflightW6FilterMaskTables(frame, framePlan)
+            preflightW6FilterMaterializedSources(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -723,7 +739,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             }
             spatialBinding = if (frame.physical.spatialCachePlans().isEmpty()) null else
                 requireNotNull(spatialFilterCache?.consume(framePlan)) { "W6c cache binding was not selected by preflight." }
-            val materialSourceAlphaReplacement = frozenMaterialSourceAlphaReplacement(graph)
             val generation = generationSeal.deviceGeneration
             val root = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.LogicalTarget }.id)
             require(rootTarget.width == root.copyExtent()?.width && rootTarget.height == root.copyExtent()?.height &&
@@ -1464,6 +1479,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             val recipe = frame.physical.w6FilterMaskTableRecipe(pass.id)
                             renderOperands += maskTableCoverageRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.coverageSource),
                                 maskTableBuffers.getValue(recipe.tableResource), generation, recipe, pass, owned)
+                        } else if (frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0)) is W6FilterMaterializedSourceNativeSiteRecipeV1) {
+                            val recipe = frame.physical.w6FilterMaterializedSourceRecipe(pass.id)
+                            renderOperands += maskedMaterialSourceRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), views.getValue(recipe.coverage), generation, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -1487,22 +1505,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             }
                             is FilterPassOperationV1.MaskShader -> error("MaskShader pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.MaskTable -> error("MaskTable pass is missing its frozen native-site recipe.")
-                            is FilterPassOperationV1.MaterializedSource -> {
-                                require(pass.inputs().size == 2)
-                                val input = pass.inputs().first()
-                                val coverage = pass.inputs().last()
-                                val sourceOffset = requireNotNull(operation.sourceSampling) {
-                                    "W6b material source has no sealed target-local source sampling."
-                                }.copyOutputToInputOffsetTargetLocalI32()
-                                val coverageOffset = requireNotNull(operation.coverageSampling) {
-                                    "W6b material source has no sealed target-local coverage sampling."
-                                }.copyOutputToInputOffsetTargetLocalI32()
-                                renderOperands += maskedMaterialSourceRender(stepIndex, views.getValue(pass.output), views.getValue(input),
-                                    views.getValue(coverage), generation, sourceOffset.x, sourceOffset.y, coverageOffset.x,
-                                    coverageOffset.y,
-                                    materialSourceAlphaReplacement.getValue(input),
-                                    outputExtent.width, outputExtent.height, pass, owned)
-                            }
+                            is FilterPassOperationV1.MaterializedSource -> error("MaterializedSource pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.DropShadowColorize -> {
                                 require(pass.inputs().size == 1)
                                 val input = pass.inputs().single()
@@ -2244,24 +2247,17 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         source: GPUTextureView,
         coverage: GPUTextureView,
         generation: GPUDeviceGenerationID,
-        outputToSourceOffsetTargetLocalXI32: Int,
-        outputToSourceOffsetTargetLocalYI32: Int,
-        outputToCoverageOffsetTargetLocalXI32: Int,
-        outputToCoverageOffsetTargetLocalYI32: Int,
-        replacesSourceAlpha: Boolean,
-        widthI32: Int,
-        heightI32: Int,
-        pass: PlanPass,
+        recipe: W6FilterMaterializedSourceRecipeV1,
+        pass: PlanPass.FilterPass,
         owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
             BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
             BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
         ))))
-        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskedMaterialSourceFragment(
-            outputToSourceOffsetTargetLocalXI32, outputToSourceOffsetTargetLocalYI32,
-            outputToCoverageOffsetTargetLocalXI32, outputToCoverageOffsetTargetLocalYI32, replacesSourceAlpha,
-        ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output && pass.inputs() == listOf(recipe.source, recipe.coverage) && recipe.groupZeroAbi == W6FilterMaterializedSourceGroupZeroAbiV1.SourceThenCoverageTextures && recipe.shaderFamily == W6FilterMaterializedSourceShaderFamilyV1.SourceAndCoverageTextureLoad && recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
+        val sourceOffset = recipe.copyOutputToSourceOffsetTargetLocalI32(); val coverageOffset = recipe.copyOutputToCoverageOffsetTargetLocalI32(); val extent = recipe.copyExtent()
+        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskedMaterialSourceFragment(sourceOffset.x, sourceOffset.y, coverageOffset.x, coverageOffset.y, recipe.alphaMode == W6FilterMaterializedSourceAlphaModeV1.ReplaceSourceAlpha), layout, w6aColorTarget(recipe.blend), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
             BindGroupEntry(0u, source), BindGroupEntry(1u, coverage),
         ))))
@@ -2273,8 +2269,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             listOf(
                 GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
                 GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
-                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
-                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
             ),
             w6aPassV1 = pass,
         )
@@ -2989,25 +2985,3 @@ private class W6aOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplatePro
         failure?.let { throw it }
     }
 }
-
-/** Whether the W5 source stage sealed alpha from the graph-texture coverage edge. */
-private fun frozenMaterialSourceAlphaReplacement(graph: RenderGraph): Map<PlanResourceId, Boolean> =
-    buildMap {
-        graph.passes().forEach { pass -> when (pass) {
-            is PlanPass.RenderPass -> pass.coverageSource?.let {
-                // A draw-owned W6b coverage edge is the explicit, frozen replacement
-                // for the source shape alpha.  Retaining the source raster alpha here
-                // would multiply the shape coverage twice before FilterComposite.
-                put(pass.target, pass.w6bMaskSourceBinding != null)
-            }
-            is PlanPass.StencilCover -> pass.coverageSource?.let {
-                // The paired stencil source is the same transparent W6b auto-layer
-                // contract as RenderPass.  Its W4 producer supplies coverage separately.
-                put(pass.target, true)
-            }
-            is PlanPass.PictureSourcePass -> pass.coverageSource?.let {
-                put(pass.output, true)
-            }
-            else -> Unit
-        } }
-    }
