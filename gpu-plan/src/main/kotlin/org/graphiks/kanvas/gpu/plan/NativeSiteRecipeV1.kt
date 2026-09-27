@@ -62,6 +62,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FilterCompositeLayerFilteredDestination,
     W6FilterCompositePicturePlain,
     W6FilterCompositePictureGraph,
+    W6FilterCompositePictureGraphFiltered,
     W6FilterCompositePictureDestination,
 }
 
@@ -1177,6 +1178,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         filterCompositeLayerFilteredDestinations: Map<PlanPassId, W6FilterCompositeLayerFilteredDestinationRecipeV1>,
         filterCompositePicturePlains: Map<PlanPassId, W6FilterCompositePicturePlainRecipeV1>,
         filterCompositePictureGraphs: Map<PlanPassId, W6FilterCompositePictureGraphRecipeV1>,
+        filterCompositePictureGraphFiltered: Map<PlanPassId, W6FilterCompositePictureGraphFilteredRecipeV1>,
         filterCompositePictureDestinations: Map<PlanPassId, W6FilterCompositePictureDestinationRecipeV1>,
         clipMaskInitializes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
         coverageRasters: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
@@ -1218,6 +1220,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FilterCompositeLayerFilteredDestinationNativeSiteRecipeV1 -> filterCompositeLayerFilteredDestinations[recipe.host.ownerPassId] === recipe.host
             is W6FilterCompositePicturePlainNativeSiteRecipeV1 -> filterCompositePicturePlains[recipe.host.ownerPassId] === recipe.host
             is W6FilterCompositePictureGraphNativeSiteRecipeV1 -> filterCompositePictureGraphs[recipe.host.ownerPassId] === recipe.host
+            is W6FilterCompositePictureGraphFilteredNativeSiteRecipeV1 -> filterCompositePictureGraphFiltered[recipe.host.ownerPassId] === recipe.host
             is W6FilterCompositePictureDestinationNativeSiteRecipeV1 -> filterCompositePictureDestinations[recipe.host.ownerPassId] === recipe.host
             is W4eClipMaskInitializeNativeSiteRecipeV1 -> clipMaskInitializes[recipe.host.passId] === recipe.host
             is W6bCoverageRasterNativeSiteRecipeV1 -> coverageRasters[recipe.host.ownerPassId]?.bundle(recipe.host.bundleOrdinalI32) === recipe.host
@@ -1268,6 +1271,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     filterCompositeLayerFilteredDestinations: Map<PlanPassId, W6FilterCompositeLayerFilteredDestinationRecipeV1> = emptyMap(),
     filterCompositePicturePlains: Map<PlanPassId, W6FilterCompositePicturePlainRecipeV1> = emptyMap(),
     filterCompositePictureGraphs: Map<PlanPassId, W6FilterCompositePictureGraphRecipeV1> = emptyMap(),
+    filterCompositePictureGraphFiltered: Map<PlanPassId, W6FilterCompositePictureGraphFilteredRecipeV1> = emptyMap(),
     filterCompositePictureDestinations: Map<PlanPassId, W6FilterCompositePictureDestinationRecipeV1> = emptyMap(),
     clipMaskInitializes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
     coverageRasters: Map<PlanPassId, W6bCoverageRasterHostRecipeV1>,
@@ -1308,6 +1312,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     filterCompositeLayerFilteredDestinations.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     filterCompositePicturePlains.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     filterCompositePictureGraphs.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    filterCompositePictureGraphFiltered.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     filterCompositePictureDestinations.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     clipMaskInitializes.forEach { (passId, recipe) -> require(passId == recipe.passId) }
     coverageRasters.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
@@ -1347,6 +1352,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingFilterCompositeLayerFilteredDestinations = filterCompositeLayerFilteredDestinations.toMutableMap()
     val remainingFilterCompositePicturePlains = filterCompositePicturePlains.toMutableMap()
     val remainingFilterCompositePictureGraphs = filterCompositePictureGraphs.toMutableMap()
+    val remainingFilterCompositePictureGraphFiltered = filterCompositePictureGraphFiltered.toMutableMap()
     val remainingFilterCompositePictureDestinations = filterCompositePictureDestinations.toMutableMap()
     val remainingClipInitializes = clipMaskInitializes.toMutableMap()
     val remainingCoverageRasters = coverageRasters.toMutableMap()
@@ -1425,6 +1431,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 ?: remainingFilterCompositeLayerFilteredDestinations.remove(pass.id)?.let { add(W6FilterCompositeLayerFilteredDestinationNativeSiteRecipeV1(it)) }
                 ?: remainingFilterCompositePicturePlains.remove(pass.id)?.let { add(W6FilterCompositePicturePlainNativeSiteRecipeV1(it)) }
                 ?: remainingFilterCompositePictureGraphs.remove(pass.id)?.let { add(W6FilterCompositePictureGraphNativeSiteRecipeV1(it)) }
+                ?: remainingFilterCompositePictureGraphFiltered.remove(pass.id)?.let { add(W6FilterCompositePictureGraphFilteredNativeSiteRecipeV1(it)) }
                 ?: remainingFilterCompositePictureDestinations.remove(pass.id)?.let { add(W6FilterCompositePictureDestinationNativeSiteRecipeV1(it)) }
                 ?: remainingEmpties.remove(pass.id)?.let { add(W6FullscreenEmptyNativeSiteRecipeV1(it)) }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
@@ -1435,7 +1442,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingFilteredComposites.isEmpty() && remainingPictureCompositeGraphs.isEmpty() && remainingPictureCompositeGraphFiltered.isEmpty() && remainingPictureCompositeGraphDestinations.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingFilterCompositeDraws.isEmpty() && remainingFilterCompositeLayerPlains.isEmpty() && remainingFilterCompositeLayerFiltered.isEmpty() && remainingFilterCompositeLayerDestinations.isEmpty() && remainingFilterCompositeLayerFilteredDestinations.isEmpty() && remainingFilterCompositePicturePlains.isEmpty() && remainingFilterCompositePictureGraphs.isEmpty() && remainingFilterCompositePictureDestinations.isEmpty() && remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty() && remainingMaterializedSources.isEmpty() && remainingDropShadowColorizes.isEmpty() && remainingDropShadowComposites.isEmpty()) {
+        remainingFilterCompositeDraws.isEmpty() && remainingFilterCompositeLayerPlains.isEmpty() && remainingFilterCompositeLayerFiltered.isEmpty() && remainingFilterCompositeLayerDestinations.isEmpty() && remainingFilterCompositeLayerFilteredDestinations.isEmpty() && remainingFilterCompositePicturePlains.isEmpty() && remainingFilterCompositePictureGraphs.isEmpty() && remainingFilterCompositePictureGraphFiltered.isEmpty() && remainingFilterCompositePictureDestinations.isEmpty() && remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty() && remainingMaterializedSources.isEmpty() && remainingDropShadowColorizes.isEmpty() && remainingDropShadowComposites.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })

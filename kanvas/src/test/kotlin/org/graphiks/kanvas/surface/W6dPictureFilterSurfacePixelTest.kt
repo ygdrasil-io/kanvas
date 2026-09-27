@@ -24,6 +24,44 @@ import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
+    /** IIIc3c2: b0 red plus dynamic W5f SCREEN green is yellow; c1 without b1 remains red.
+     * A standalone blue carrier plus SCREEN would be cyan, but that direct Picture topology is
+     * intentionally outside Prepared Surface and is not substituted with PictureComposite. */
+    @Test
+    fun externalPictureFilterWithColorFilterUsesGraphOperandAndW5f() {
+        val expectedCompositeAndW5f = ubyteArrayOf(255u, 255u, 0u, 255u)
+        val expectedWithoutW5f = ubyteArrayOf(255u, 0u, 0u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        fun picture(color: ColorARGB) = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(color, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val source = picture(ColorARGB.Red)
+        val carrier = picture(ColorARGB.Blue)
+
+        fun render(paint: Paint): RenderResult {
+            val surface = Surface(1, 1)
+            surface.canvas { drawPicture(carrier, paint) }
+            return surface.render()
+        }
+
+        val compositeAndW5f = render(Paint(
+            imageFilter = ImageFilter.Picture(source),
+            colorFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SCREEN),
+            blendMode = BlendMode.SRC,
+            antiAlias = false,
+        ))
+        assertContentEquals(expectedCompositeAndW5f, compositeAndW5f.pixels)
+        assertTrue(compositeAndW5f.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+
+        val withoutW5f = render(Paint(
+            imageFilter = ImageFilter.Picture(source),
+            blendMode = BlendMode.SRC,
+            antiAlias = false,
+        ))
+        assertContentEquals(expectedWithoutW5f, withoutW5f.pixels)
+        assertTrue(withoutW5f.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /** IIIc3c1: an external Picture filter supplies the graph operand, not the carrier Picture pixels. */
     @Test
     fun externalPictureFilterOnDrawPictureUsesGraphOperand() {

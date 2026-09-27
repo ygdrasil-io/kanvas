@@ -1045,4 +1045,22 @@ traduisent la recette sans choisir shader/layout depuis l'operand ; le bridge
 temporaire conserve uniquement les variantes graph W5f/snapshot c2/d. Les trois
 compilations ciblées réussissent ; le témoin causal donne `1/0/0/0` XML et la
 classe W6d `27/0/0/0`, puis chaque worker natif sort 133 (**UNKNOWN**).
-IIIc3c1 attend sa revue Sol ; IIIc3c2/d, IIIa2, budgets et 2B restent ouverts.
+IIIc3c1 est revue Sol **Approved** à `8f3d62b`; IIIc3c2/d, IIIa2, budgets et 2B restent ouverts.
+
+### 2A0b.IIIc3c2 — FilterComposite.Picture graph operand b0 + W5f b1
+
+La recette distincte `GraphTextureThenColorFilterUniform`
+porte l'identité d'exécution W5f, les bytes dynamiques, la ressource
+`SourceUniformData` et sa fenêtre/offset; catalogue, seal/publication, usages
+enregistrés, préflight physique et traduction catalog-first restent sur
+`FilterComposite.Picture`, sans snapshot destination. Le témoin public fixe
+avant `PictureRecorder`/`Surface` le jaune opaque de la source graph rouge avec
+`Blend(vert, SCREEN)` et conserve le contrôle IIIc3c1 rouge sans W5f; les deux
+vérifient `Render`+`Readback`. Un contre-factuel carrier bleu + SCREEN serait
+cyan, mais le `drawPicture` direct est refusé par
+`unsupported.surface.prepared.mixed-composite-topology`; il n'est ni présenté
+comme preuve ni remplacé par `PictureComposite`.
+Les trois compilations ciblées réussissent ; le témoin exact donne
+`1/0/0/0` et la classe W6d complète `28/0/0/0` dans les XML. Gradle termine
+sur l'exécuteur natif 133 (**UNKNOWN**), et non sur un échec JUnit.
+IIIc3c2 attend sa revue Sol ; IIIc3d, IIIa2, budgets et 2B restent ouverts.
