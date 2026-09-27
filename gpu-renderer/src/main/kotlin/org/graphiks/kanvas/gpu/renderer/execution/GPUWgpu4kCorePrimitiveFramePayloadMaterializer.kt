@@ -625,18 +625,6 @@ internal fun encodeW4eNativePasses(
                                 "invalid.native-core-primitive.w4e-path-depth", "W4e path stencil producer lacks its sealed D24S8 attachment.",
                             )
                             val edge = frozenStencilEdgeRecipe
-                            val edgeShader = when (edge?.shaderFamily) {
-                                null, org.graphiks.kanvas.gpu.plan.W4eStencilEdgeShaderFamilyV1.PathGeometry -> true
-                            }
-                            val edgeTriangleList = when (edge?.topology) {
-                                null, org.graphiks.kanvas.gpu.plan.W4eStencilEdgeTopologyV1.TriangleList -> true
-                            }
-                            val edgeNoBindings = when (edge?.groupZeroAbi) {
-                                null, org.graphiks.kanvas.gpu.plan.W4eStencilEdgeGroupZeroAbiV1.NoBindGroup -> true
-                            }
-                            val edgeColorWrite = when (edge?.colorWrite) {
-                                null, org.graphiks.kanvas.gpu.plan.W4eStencilEdgeColorWriteV1.Disabled -> false
-                            }
                             if (edge != null) require(edge.passId.value == pass.passId && edge.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
                                 edge.vertexCountI32 == nativePayload.geometrySlice(edge.passId.value, W4eNativePayloadPlan.PRODUCER_PATH)?.vertexCount &&
                                 edge.indexCountI32 == nativePayload.geometrySlice(edge.passId.value, W4eNativePayloadPlan.PRODUCER_PATH)?.indexCount &&
@@ -653,17 +641,27 @@ internal fun encodeW4eNativePasses(
                                 org.graphiks.kanvas.gpu.plan.W4eStencilEdgeStencilModeV1.WindingIncrementDecrement -> false
                                 null -> pathGeometry.fillRule == org.graphiks.math.geometry.FillRule.EVEN_ODD || pathGeometry.fillRule == org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD
                             }
-                            val stencilPipeline = createW4ePathGeometryPipeline(
+                            val stencilPipeline = if (edge == null) createW4ePathGeometryPipeline(
                                 device, GPUTextureFormat.RGBA8Unorm, sampleCount, 0f,
-                                stencil = w4ePathStencilProducerState(evenOdd), colorWrite = edgeColorWrite,
+                                stencil = w4ePathStencilProducerState(evenOdd), colorWrite = false,
                                 label = "Kanvas.frame.w4e.pathStencilProducer.pipeline", owned = owned,
-                            )
+                            ) else when (edge.shaderFamily) {
+                                org.graphiks.kanvas.gpu.plan.W4eStencilEdgeShaderFamilyV1.PathGeometry -> when (edge.topology) {
+                                    org.graphiks.kanvas.gpu.plan.W4eStencilEdgeTopologyV1.TriangleList -> when (edge.groupZeroAbi) {
+                                        org.graphiks.kanvas.gpu.plan.W4eStencilEdgeGroupZeroAbiV1.NoBindGroup -> createW4ePathGeometryPipeline(
+                                            device, GPUTextureFormat.RGBA8Unorm, sampleCount, 0f,
+                                            stencil = w4ePathStencilProducerState(evenOdd), colorWrite = when (edge.colorWrite) {
+                                                org.graphiks.kanvas.gpu.plan.W4eStencilEdgeColorWriteV1.Disabled -> false
+                                            }, label = "Kanvas.frame.w6.w4e.pathStencilProducer.pipeline", owned = owned,
+                                        )
+                                    }
+                                }
+                            }
                             val coverPipeline = createW4ePathCoverPipeline(
                                 device, GPUTextureFormat.RGBA8Unorm, sampleCount,
                                 if (inverseCoverage) 0f else 1f, owned,
                             )
                             buildList {
-                                require(edgeShader && edgeTriangleList && edgeNoBindings)
                                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(stencilPipeline, generation)))
                                 addAll(indexedGeometryCommands(
                                     edge?.passId?.value ?: entry.packet.passId,
