@@ -31,21 +31,11 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
                     recipe.producer.copyScissorsLocalI32() != expected ||
                     recipe.producer.drawCountI32 != spans.spanCountI32 || recipe.producer.hasVertexIndexSlices ||
                     (recipe.producer is W6InverseMaskPathRecipeV1.GeometryProducer.NonEmpty) != (spans.spanCountI32 > 0) ||
-                    native.semanticPayloads.singleOrNull() !is GPUDrawSemanticPayload.PathStencilProducer ||
-                    native.commands.any { it is GPUPreparedNativeRenderCommand.SetVertexBuffer ||
-                        it is GPUPreparedNativeRenderCommand.SetIndexBuffer ||
-                        it is GPUPreparedNativeRenderCommand.DrawIndexed
-                    }
+                    native.semanticPayloads.singleOrNull() !is GPUDrawSemanticPayload.PathStencilProducer
                 ) return false
-                val actual = native.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetScissor>().map {
-                    listOf(it.x, it.y, it.width, it.height)
-                }
-                val expectedRows = expected.map { listOf(it.left, it.top, it.width(), it.height()) }
-                val draws = native.commands.filterIsInstance<GPUPreparedNativeRenderCommand.Draw>()
                 val evidence = runCatching { preparedNativeScanSpanEvidence(native) }.getOrNull() ?: return false
-                if (actual != expectedRows || draws.size != expected.size ||
-                    draws.any { it.drawCall.vertexCount != 3 } ||
-                    evidence.size != expected.size
+                if (!validatesW6InverseMaskScanSpanCommandStream(native, recipe, expected) ||
+                    evidence.size != recipe.producer.drawCountI32
                 ) return false
             }
             val depthId = when (w4e) {
@@ -103,4 +93,50 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
         depthViews[depthId] = view.view
     }
     return payload.pathDepthStencilViewAuthority.keys == expectedPathSteps && payload.clipDepthStencilViewAuthority.isEmpty()
+}
+
+/**
+ * The one semantic scan-span packet expands only into this canonical native stream:
+ *
+ *   NonEmpty: SetStencilReference(1), SetPipeline(NoBindings), (SetScissor(row), Draw(3))*
+ *   Empty:    no commands
+ *
+ * Comparing separately filtered scissor and draw lists loses their pairing, so consume the
+ * ordered stream instead.  Exhausting it also excludes bind groups and vertex/index commands.
+ */
+private fun validatesW6InverseMaskScanSpanCommandStream(
+    native: GPUPreparedNativeScopeOperand.Render,
+    recipe: W6InverseMaskPathRecipeV1,
+    expectedScissors: List<org.graphiks.math.geometry.RectI32>,
+): Boolean {
+    val producer = recipe.producer
+    if (producer.pipeline != W6InverseMaskPathProducerPipelineV1.FullscreenNoBindings ||
+        producer.stencil != W6InverseMaskPathProducerStencilV1.ClearZeroReplaceOne ||
+        producer.fullscreenVertexCountI32 != 3 || producer.hasVertexIndexSlices
+    ) return false
+    if (producer is W6InverseMaskPathRecipeV1.GeometryProducer.Empty) {
+        return expectedScissors.isEmpty() && native.commands.isEmpty()
+    }
+    if (producer !is W6InverseMaskPathRecipeV1.GeometryProducer.NonEmpty || expectedScissors.isEmpty()) return false
+
+    val commands = native.commands
+    var commandIndexI32 = 0
+    val stencilReference = commands.getOrNull(commandIndexI32++) as? GPUPreparedNativeRenderCommand.SetStencilReference
+        ?: return false
+    if (stencilReference.reference != 1u) return false
+    val pipeline = (commands.getOrNull(commandIndexI32++) as? GPUPreparedNativeRenderCommand.SetPipeline)
+        ?.pipeline ?: return false
+    if (pipeline.bindingPolicy != GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings) return false
+
+    expectedScissors.forEach { expected ->
+        val scissor = commands.getOrNull(commandIndexI32++) as? GPUPreparedNativeRenderCommand.SetScissor
+            ?: return false
+        if (scissor.x != expected.left || scissor.y != expected.top ||
+            scissor.width != expected.width() || scissor.height != expected.height()
+        ) return false
+        val draw = commands.getOrNull(commandIndexI32++) as? GPUPreparedNativeRenderCommand.Draw
+            ?: return false
+        if (draw.drawCall != GPUPreparedNativeDrawCall.Draw(producer.fullscreenVertexCountI32)) return false
+    }
+    return commandIndexI32 == commands.size
 }
