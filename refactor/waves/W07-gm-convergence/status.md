@@ -46,6 +46,9 @@ cette machine. Les compiles `:gpu-plan:compileKotlin`,
 `:gpu-renderer:compileKotlin` et `:kanvas:compileTestKotlin` passent. Le
 sélecteur filtre passe avec Gradle 0 ; le sélecteur B passe côté JUnit mais
 Gradle termine 1 car le processus natif quitte 133 après l'assertion.
+Les sept autres sélecteurs publics W7 (triangle, concave/even-odd/stencil,
+ordre, alpha et translation) ont aussi chacun une assertion JUnit passée puis
+ce même exit natif 133 : cette observation ne rend pas la suite Gradle verte.
 
 Un inventaire frais a été produit uniquement dans
 `/private/tmp/w7-task4-gm-inventory.json` par
