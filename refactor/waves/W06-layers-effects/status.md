@@ -1761,3 +1761,16 @@ JUnit et donc statut natif **UNKNOWN** ; les deux sélecteurs W4e donnent
 Gradle 0 et XML `2/0/0/0`. Task 4 et `2A0c.IV` sont review-clean. `2A0d`,
 les leases/budgets `2A1`, l'authentification globale `2B` et la qualification
 native globale restent ouverts ; aucun B/B−1 n'est revendiqué ici.
+
+### Handoff 2A0d — spécialisation source W5a
+
+Le plan `refactor/plans/2026-09-28-w6-w5a-source-native-sites-implementation-plan.md`
+est corrigé et relu Sol sans finding Critical/Important, mais **aucun site
+2A0d n'est encore livré**. Il sépare une recette logique `:gpu-plan` du
+stage/template/WGSL internes au renderer, impose une bijection frame entière
+avant allocation, et ajoute la recette W5a au slot dense qui suit les bundles
+du même owner/draw/packet. Les producers W4e ne reçoivent pas de site source ;
+seul le color consumer terminal en reçoit un. Le Task 1 commence par un
+`RenderPass` W6 ordinaire, sans W6b ni destination-read ; les variantes W4e et
+ABI étendues suivent. Le sampler physique de destination et sa lease restent
+reportés au Task 3 du plan W6 principal, avec re-seal avant B/B−1.
