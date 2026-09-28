@@ -95,8 +95,20 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                     geometry.host.target.sampleCountI32 == recipe.targetSampleCountI32) {
                     "W5a ordinary source recipe does not authenticate its geometry target/site: ${pass.id.value}/$ordinal"
                 }
+                var leaf = authority.ref
+                var opacityCount = 0
+                while (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1) {
+                    require(leaf.indexI32 > 0) { "W5a ordinary source opacity has no captured child" }
+                    leaf = org.graphiks.kanvas.gpu.plan.MaterialPlanRef(leaf.indexI32 - 1)
+                    opacityCount++
+                }
+                var expectedProgram = table.entry(leaf).program
+                repeat(opacityCount) { expectedProgram = org.graphiks.kanvas.gpu.plan.MaterialProgramPlan.OpacityV1(expectedProgram) }
                 require(recipe.commandIndexI32 == packet.commandIdValue && recipe.material == authority.ref &&
                     recipe.materialProgramStructuralId == table.entry(authority.ref).program.structuralId.value &&
+                    recipe.materialProgramStructuralId == expectedProgram.structuralId.value &&
+                    recipe.leafMaterialProgramStructuralId == table.entry(leaf).program.structuralId.value &&
+                    recipe.opacityBindingCountI32 == opacityCount &&
                     recipe.variant == variant && recipe.materialStructuralId == source.stage.structuralId &&
                     recipe.materialCanonicalIdentity == source.stage.canonicalIdentity &&
                     recipe.uniformByteCountI64 == source.stage.uniformByteCountI64 &&
@@ -177,6 +189,16 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                         composeW5aHostSourceV1(template, source, destination, bounds)
                     }
                     org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryRadialGradientMaterialV1 -> {
+                        require(destination == null) { "W5a ordinary source recipe must not compose a destination read" }
+                        composeW5aHostSourceV1(template, source, destination, bounds)
+                    }
+                    org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinarySweepGradientMaterialV1,
+                    org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryConicalGradientMaterialV1,
+                    org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinarySolidOpacityMaterialV1,
+                    org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryLinearGradientOpacityMaterialV1,
+                    org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryRadialGradientOpacityMaterialV1,
+                    org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinarySweepGradientOpacityMaterialV1,
+                    org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryConicalGradientOpacityMaterialV1 -> {
                         require(destination == null) { "W5a ordinary source recipe must not compose a destination read" }
                         composeW5aHostSourceV1(template, source, destination, bounds)
                     }

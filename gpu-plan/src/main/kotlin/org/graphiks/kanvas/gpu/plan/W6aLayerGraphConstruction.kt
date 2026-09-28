@@ -3263,11 +3263,7 @@ internal class W6aLayerGraphConstruction(
         val w5aRecipeResources = (resources + source.resources).let { rows ->
             val needsGradientSource = passes.filterIsInstance<PlanPass.RenderPass>().any { pass ->
                 pass.draws().any { draw ->
-                    when (w5aOrdinarySourceNativeVariantV1OrNull(table, pass, draw)) {
-                        W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1,
-                        W5aSourceNativeVariantV1.OrdinaryRadialGradientMaterialV1 -> true
-                        else -> false
-                    }
+                    w5aOrdinarySourceNativeVariantV1OrNull(table, pass, draw)?.isW5aGradientSourceVariantV1() == true
                 }
             }
             if (!needsGradientSource || rows.any { it.role == PlanResourceRole.GradientStopData }) rows else {

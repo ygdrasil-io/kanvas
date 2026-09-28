@@ -103,6 +103,42 @@ class W6aLayerW4W5SurfacePixelTest {
     }
 
     @Test
+    fun `legacy MaterialV1 opacity chains retain native W6 evidence`() {
+        // Every gradient has two stops, so normalization cannot collapse this witness into a
+        // Solid material. The CPU oracle precedes Surface and never reads a W5/W6 plan.
+        val shaders = listOf(
+            Shader.Opacity(Shader.SolidColor(ColorARGB.Red), .5f),
+            Shader.Opacity(Shader.LinearGradient(Point2F32(1f, 0f), Point2F32(3f, 0f), listOf(
+                GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))), .5f),
+            Shader.Opacity(Shader.RadialGradient(Point2F32(2.5f, .5f), 1f, listOf(
+                GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))), .5f),
+            Shader.Opacity(Shader.SweepGradient(Point2F32(3.5f, .5f), stops = listOf(
+                GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))), .5f),
+            Shader.Opacity(Shader.ConicalGradient(Point2F32(4.5f, .5f), 0f, Point2F32(4.5f, .5f), 1f,
+                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))), .5f),
+        )
+        // Shader opacity plus Paint alpha are intentionally distinct planner stages.
+        val paintAlpha = 128f / 255f
+        val expected = shaders.mapIndexed { index, shader -> W5fColorCpuOracle.expectedShaderTree(shader,
+            paintAlphaF32 = paintAlpha, finalBlend = BlendMode.SRC, devicePointF32 = Point2F32(index + .5f, .5f))
+            .also(W5fSurfacePixelFixtures::requireBounded) }
+        val surface = Surface(5, 1)
+        surface.canvas {
+            saveLayer()
+            shaders.forEachIndexed { index, shader ->
+                drawRect(RectF32.ofLTRB(index.toFloat(), 0f, index + 1f, 1f),
+                    opaque(RED.withAlpha(128)).copy(shader = shader, blendMode = BlendMode.SRC))
+            }
+            restore()
+        }
+        val actual = surface.render()
+        expected.forEachIndexed { index, value -> WgslFloatEnvelopeV1Oracle.assertAdmits(value,
+            actual.pixels.copyOfRange(index * 4, (index + 1) * 4)) }
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `precision collapsed butt stroke remains a public W6 direct path witness`() {
         // The F64 outline has four corners; at 2^24 its two terminal F32 corners coincide,
         // leaving Winding's line-only direct triangle.  The literal oracle precedes Surface.
