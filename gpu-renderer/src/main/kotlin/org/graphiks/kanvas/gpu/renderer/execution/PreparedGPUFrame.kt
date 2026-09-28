@@ -178,6 +178,7 @@ class GPUCommandEncoderScopePlan internal constructor(
         val w6aNative = w6aPass?.let { w6aFrameV1?.physical?.w4eGeometryBinding(it.id)?.nativePass(it.id) }
         val w6aStencil = w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
+            w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass && w6aPass.depthStencil != null ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass &&
                 w6aPass.rasterBinding?.depthStencil != null ||
             w6aNative is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskProducer && w6aNative.depthStencil != null ||
