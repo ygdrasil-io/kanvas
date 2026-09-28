@@ -2419,7 +2419,11 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     val geometry = authority.geometry
                     val mapping = w4dAaMappings.getValue(binding).getValue(phase.id.value)
                     val layout = owned.own(device.createBindGroupLayout(corePrimitiveBindGroupLayoutDescriptor(mapping.componentIdentity)))
-                    val pipeline = geometryPipeline(mapping, layout, owned, requireNotNull(frame.template(built.packet)))
+                    val template = frame.template(built.packet)
+                    require((phase.phase == PathRenderPhase.MultisampleStencilProducer) == (template == null)) {
+                        "W6 AA stencil producer must not carry a color source template, and color phases require one."
+                    }
+                    val pipeline = geometryPipeline(mapping, layout, owned, template)
                     val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
                         BindGroupEntry(binding = 0u, resource = BufferBinding(geometryBuffers.getValue(data.uniform), 0uL, 32uL)),
                     ))))

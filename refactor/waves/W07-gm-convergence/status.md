@@ -1,5 +1,64 @@
 # W07 — diagnostic GM provisoire
 
+## Checkpoint AA W6/W7
+
+Les phases `PathRenderPass` AA W6 sont maintenant reconnues par leur autorité
+`W4dAaSource`, séparément des anciens seals de paire stencil W4c/W4d. Le
+`PreparedGPUFrame` vérifie l'usage du D24S8, le `load/store` producteur/cover
+et l'unique operand emprunté. Le validateur natif garde l'égalité stricte des
+indices de vues stencil, contrôle leur identité entre les deux phases, ainsi
+que le `resolve`, la cible couleur et leurs opérations de charge. L'autorité
+de source AA contrôle désormais l'égalité exacte du `load/store` sémantique,
+et non seulement sa nullité. La phase directe reste sans profondeur.
+
+Sur cet hôte, les **9/9 assertions JUnit W7 AA** passent, dont les quatre
+témoins stencil/alpha auparavant bloqués ; les deux contrôles publics W6
+adjacents passent aussi (**2/2**). `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` passent. **La tâche Gradle `:kanvas:test` reste
+rouge** : l'exécuteur natif quitte avec `133` après les assertions. Aucun
+inventaire GM, score, PNG ni dashboard n'a été régénéré ; ces témoins locaux
+ne ferment pas W7, les gates W6 2A1/2B ni la question de conformité ISO.
+
+## Checkpoint natif sRGB 4×/resolve — historique
+
+Une sonde autonome temporaire, sur la session wgpu4k de cet hôte (Apple M2 Max),
+a exécuté deux fois un rendu `RGBA8UnormSrgb` 4× avec resolve sRGB 1×, lecture
+du pixel rouge `[255, 0, 0, 255]` et aucune erreur de validation. Elle a réussi
+avec et sans attachement `Depth24PlusStencil8` 4×. Cela prouve ce couple
+format/resolve sur cette session, pas tous les adaptateurs ni la sémantique
+stencil complète de W7.
+
+Le worktree courant contient une détection une fois par session GPU : la table
+annonce sRGB 4×/resolve seulement si les deux rendus natifs, la complétion de
+queue, les scopes de validation et les pixels lus réussissent ; sinon elle
+conserve `{1}` sans resolve. La relecture Astra a fait corriger le contrôle du
+`Result` de queue et l'unicité du `popErrorScope`. L'ancien test de table `{1}`
+constante a été retiré ; la preuve de comportement reste dans les tests publics
+`Surface`, sans nouveau test d'infrastructure. Aucun commit, push ou PR n'a été
+fait pour ce checkpoint.
+
+L'activation a révélé et permis de corriger des seals W6/W7 jusque-là masqués
+par le refus de capacité : opérations V/I du `Path` AA, classification de
+`PathAaColorComposite`, comptage d'un draw stencil public une seule fois, et
+absence de template de blend couleur pour le producteur stencil. Le témoin
+`DirectTriangle` a maintenant un budget exact **B = 26 980 octets** : root
+196, readback 1 792, layer 4×4 64, AA 4× 256, resolve 64, pools V/I/U
+16 384/4 096/4 096, uniforme W4d 16 et uniforme de source solide 16. La
+borne B admet et B−1 refuse avant écriture du sentinel ; la même `Surface`
+reste réutilisable après refus.
+
+Rejeu intermédiaire : W7 JUnit **9 tests, 5 passés, 4 échoués** ; les quatre
+échecs stencil/alpha atteignent `invalid.preflight.prepared_frame` sur le seal
+historique `Prepared path seal, unified pair, writable attachment use,
+load/store, and native operand must agree exactly`. Les deux contrôles W6
+adjacents passent (JUnit **2/0/0/0**). La tâche Gradle sort toujours 1, avec
+l'exécuteur natif `133` après les assertions. Les pixels W7 directs, l'ordre
+des enfants, la translation et B/B−1 étaient positifs sur cet hôte. Le
+checkpoint plus récent ci-dessus traite ce gate de seal préparé et celui des
+operands natifs ; **W7 n'est pas terminé ni merge-ready**.
+Fonts, codecs, `jpg-color-cube`, renders/scores/dashboard GM et gates W6
+2A1/2B restent hors de ce checkpoint.
+
 ## Checkpoint des operands W6/W7 après relecture Astra
 
 Le commit `bd5eba11a6fc42c064c8279f2e3b788c77654509` rétablit la clé D24S8
@@ -47,16 +106,16 @@ pour une voie enfant W4d. Cela ne constitue ni une route image-filter
 `ResolvedColor`, ni une implémentation de `ResolvedCoverage` ; ces deux travaux
 restent différés.
 
-Le témoin 7×7 `DirectTriangle` publie son budget indépendant
-`B = 27 756` octets, obtenu sans rabais d'aliasing ou de cache : root RGBA8
-196, staging readback 1 792 (sept lignes alignées à 256), layer RGBA8 196,
-couleur AA 4× 784, `PathAaResolvedColor` 196, pools V/I/U 16 384/4 096/4 096,
-uniforme solide 16. Cette dérivation correspond aux allocations déclarées de
-la fixture (pas de D24S8, car `DirectTriangle` n'emploie pas le stencil) ; le
-budget W6 reste checked-I64 et charge toute ressource déclarée, y compris les
-staging et ressources des autres lanes, sans économie de lifetime.
+L'estimation initiale `B = 27 756` du témoin 7×7 `DirectTriangle` traitait
+à tort la layer et la source AA comme des surfaces 7×7, et omettait le second
+uniforme de 16 octets. Le checkpoint natif ci-dessus corrige ces dimensions
+aux bornes conservatrices 4×4 du triangle et établit **B = 26 980** sans
+rabais d'aliasing ou de cache. `DirectTriangle` ne déclare pas de D24S8 ; le
+budget W6 reste checked-I64 et charge toute ressource déclarée, staging et
+ressources des autres lanes inclus, sans économie de lifetime.
 
-Sur cet hôte, `GPUBackendRuntimeNative` publie sRGB 4× comme `{1}`. Le test
+Lors de ce checkpoint antérieur, `GPUBackendRuntimeNative` publiait sRGB 4×
+comme `{1}`. Le test
 public observe donc d'abord exactement
 `w4d.general.texture-sample-support-unavailable` et ne peut pas atteindre
 l'allocation native ni établir ici que B admet et B−1 refuse. L'oracle

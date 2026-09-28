@@ -423,8 +423,10 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                 if (aa != null) {
                     val phase = pass as PlanPass.PathRenderPass
                     val packet = aa.packets[aa.binding.passes().indexOf(phase)].packet
-                    templates[packet.packetId] = requireNotNull(sealCorePrimitiveGeometryHostTemplateV1(packet,
-                        aa.packets[aa.binding.passes().indexOf(phase)].structuralPipelineKey))
+                    if (phase.phase != PathRenderPhase.MultisampleStencilProducer) {
+                        templates[packet.packetId] = requireNotNull(sealCorePrimitiveGeometryHostTemplateV1(packet,
+                            aa.packets[aa.binding.passes().indexOf(phase)].structuralPipelineKey))
+                    }
                     add(GPUFrameStep.RenderPassStep(refs.getValue(phase.target) as GPUFrameTargetRef,
                         GPULoadStorePlan(if (phase.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load", GPUStorePlan.Store), GPUSamplePlan.MultisampleFrame(4),
                         aa.resourceUses(phase, refs), listOf(packet), task,

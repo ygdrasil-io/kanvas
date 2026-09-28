@@ -1646,6 +1646,49 @@ internal class PreparedGPUFrame(
                 // W4c/W4d scratch route seals, so it must not be reclassified as one of them.
                 val w4dGeneralScope = sealedW4e || plannedPathAuthority
                     ?.w4dGeneralFrameMaterializationAuthority != null
+                val depthStencilKeys = scope.nativeOperandKeys.filter {
+                    it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
+                }
+                // W6 owns AA colour-source stencil phases through its frozen source binding.
+                // They have a real D24S8 attachment, but must not acquire a historical W4
+                // path-pair route or inherit the W4d.2-general exemption.
+                val w6aAaPass = step.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass
+                val w6aAaAuthority = w6aAaPass?.let { pass ->
+                    scope.w6aFrameV1?.w4dAaAuthorities?.entries?.singleOrNull { (binding, _) ->
+                        binding.passes().any { it === pass }
+                    }?.value
+                }
+                val w6aAaDepthId = w6aAaPass?.depthStencil
+                val expectedW6aAaStencilLoadStore = when (w6aAaPass?.depthStencilLoadStore) {
+                    org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore.ClearZeroStore ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                                0u,
+                            )
+                    org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore.LoadStoreTestReset ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load,
+                                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                                null,
+                            )
+                    null -> null
+                }
+                val w6aAaStencilContract = w6aAaAuthority != null &&
+                    w6aAaDepthId != null &&
+                    expectedW6aAaStencilLoadStore != null &&
+                    scope.w6aFrameV1?.validatesW4dAaSources(semanticPlan) == true &&
+                    !pathSealed && !unifiedContainsPath && !clipStencilSealed && !coverageMaskSealed &&
+                    pathUses.size == 1 &&
+                    pathUses.single().resource == scope.w6aFrameV1?.refs?.get(w6aAaDepthId) &&
+                    pathUses.single().usage == GPUFrameResourceUsage.RenderAttachment &&
+                    pathUses.single().write &&
+                    step.depthStencilLoadStore == expectedW6aAaStencilLoadStore &&
+                    depthStencilKeys.size == 1 &&
+                    depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
+                    depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
                 val hasPlannedPathAuthority = w6aPath || plannedPathAuthority?.w4cSessionScratch != null ||
                     plannedPathAuthority?.w4dSessionScratch != null || w5bPathWitness != null
                 val expectedPlannedPathLoadStore = when (plannedPathPacket?.role) {
@@ -1690,16 +1733,13 @@ internal class PreparedGPUFrame(
                             "Prepared planned-path direct scopes must remain color-only shading packets"
                         }
                     }
-                } else if (!w4dGeneralScope &&
+                } else if (!w4dGeneralScope && !w6aAaStencilContract &&
                     unplannedWritablePathLoad?.loadOperation ==
                     org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
                 ) {
                     require(false) {
                         "WritableStencil(Load, Store, null) is reserved for planned path covers"
                     }
-                }
-                val depthStencilKeys = scope.nativeOperandKeys.filter {
-                    it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
                 }
                 val w6bStencilCoverageContract = w6bStencilCoverage &&
                     pathUses.size == 1 &&
@@ -1714,7 +1754,7 @@ internal class PreparedGPUFrame(
                     depthStencilKeys.size == 1 &&
                     depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
                     depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
-                require(w4dGeneralScope || w6bStencilCoverageContract || (
+                require(w4dGeneralScope || w6bStencilCoverageContract || w6aAaStencilContract || (
                     pathSealed == unifiedContainsPath &&
                         pathSealed == (pathUses.size == 1) &&
                         pathSealed == hasPathStencilLoadStore &&
@@ -2192,7 +2232,9 @@ private fun GPUFrameResourceRef.typedLabel(): String = "${this::class.simpleName
 internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEncoderOperationKind():
     GPUEncoderOperationKind = when (this) {
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep ->
-        if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
+        if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite ||
+            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.PathAaColorComposite
+        ) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ComputePassStep -> GPUEncoderOperationKind.Compute
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.UploadResourceStep -> GPUEncoderOperationKind.Upload
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.CopyResourceStep -> GPUEncoderOperationKind.Copy
@@ -2205,13 +2247,23 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEnc
     else -> error("Non-encodable semantic step has no encoder operation kind")
 }
 
+private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep.hasW6aAaSourceBinding(
+    scope: GPUCommandEncoderScopePlan,
+): Boolean {
+    val pass = w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass ?: return false
+    return scope.w6aFrameV1?.physical?.w4dAaSourceBindings()?.singleOrNull { pass in it.passes() } != null
+}
+
 internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFacadeOperations(
     scope: GPUCommandEncoderScopePlan,
 ): List<String> =
     when (this) {
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> buildList {
             add("beginRenderPass")
-            if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite) {
+            val w6aAaSource = hasW6aAaSourceBinding(scope)
+            if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite ||
+                w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.PathAaColorComposite
+            ) {
                 addAll(listOf("setRenderPipeline", "setBindGroup", "draw", "endRenderPass"))
                 return@buildList
             }
@@ -2255,11 +2307,11 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                         ?.rasterBinding?.drawDataResources != null ||
                     w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
                     w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
-                    verticesSemantic != null ||
+                    verticesSemantic != null || w6aAaSource ||
                     directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
                     clipStencilSealed || coverageMaskConsumer || clipStencilPrefix) {
                     add("setVertexBuffer")
-                    if (verticesSemantic == null ||
+                    if (w6aAaSource || verticesSemantic == null ||
                         verticesSemantic.artifact.indexCount != null
                     ) {
                         add("setIndexBuffer")
@@ -2294,6 +2346,7 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
 
 internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep
     .expectedRenderCommandPacketIds(scope: GPUCommandEncoderScopePlan): List<GPUDrawPacketID> = buildList {
+    val w6aAaSource = hasW6aAaSourceBinding(scope)
     val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
         GPUCorePrimitiveDirectNativeRouteSeal.Routes
     val clipStencilSealed =
@@ -2322,11 +2375,11 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassS
                 ?.rasterBinding?.drawDataResources != null ||
             w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
             w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
-            verticesSemantic != null ||
+            verticesSemantic != null || w6aAaSource ||
             directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
             clipStencilSealed || coverageMaskConsumer || clipStencilPrefix) {
             add(packet.packetId)
-            if (verticesSemantic == null || verticesSemantic.artifact.indexCount != null) {
+            if (w6aAaSource || verticesSemantic == null || verticesSemantic.artifact.indexCount != null) {
                 add(packet.packetId)
             }
         }

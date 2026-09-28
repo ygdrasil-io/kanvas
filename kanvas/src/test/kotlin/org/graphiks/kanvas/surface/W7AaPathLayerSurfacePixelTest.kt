@@ -21,12 +21,13 @@ class W7AaPathLayerSurfacePixelTest {
     @Test
     fun `aa layer B minus one refuses`() {
         // B is hand-derived from this fixed 7x7 direct-triangle fixture before either Surface
-        // exists.  It charges every declared physical row: root RGBA8 (196), its seven aligned
-        // 256-byte readback rows (1792), transparent layer RGBA8 (196), AA4 colour (784), the
-        // isolated sampled resolve (196), W4d V/I/U pool floors (16384 + 4096 + 4096), and the
-        // solid material source uniform (16).  Thus B = 27756; no lifetime/cache alias discount
+        // exists. The triangle's conservative bounds are (1,1)..(5,5), so its layer and AA
+        // source are 4x4. Charge every declared physical row: root RGBA8 (196), seven aligned
+        // 256-byte readback rows (1792), layer RGBA8 (64), AA4 colour (256), sampled resolve
+        // (64), W4d V/I/U pool floors (16384 + 4096 + 4096), the W4d uniform (16), and the
+        // solid material source uniform (16). Thus B = 26980; no lifetime/cache alias discount
         // is taken.  The native sRGB-4x capability branch below deliberately does not claim B.
-        val budgetB = listOf(196L, 1792L, 196L, 784L, 196L, 16_384L, 4_096L, 4_096L, 16L)
+        val budgetB = listOf(196L, 1792L, 64L, 256L, 64L, 16_384L, 4_096L, 4_096L, 16L, 16L)
             .fold(0L, Math::addExact)
         val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
         val blue = ColorARGB.of(255, 17, 61, 211)

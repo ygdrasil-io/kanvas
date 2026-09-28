@@ -3,7 +3,9 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.planning.W4dGeneralPathGraphLowerer
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.resources.*
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
@@ -33,7 +35,13 @@ internal class GPUW4dAaSourcePreparedAuthority private constructor(
                 render.w6aPassV1 === pass && render.drawPackets.singleOrNull() === packets[index].packet &&
                     render.target == refs.getValue(pass.target) && render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
                     render.sampleContinuation == null && render.w4eSceneContinuation == null &&
-                    (pass.depthStencilLoadStore == null) == (render.depthStencilLoadStore == null) &&
+                    render.depthStencilLoadStore == when (pass.depthStencilLoadStore) {
+                        PlanDepthStencilLoadStore.ClearZeroStore -> GPUDepthStencilLoadStorePlan.WritableStencil(
+                            GPUStencilLoadOperation.Clear, GPUStorePlan.Store, 0u)
+                        PlanDepthStencilLoadStore.LoadStoreTestReset -> GPUDepthStencilLoadStorePlan.WritableStencil(
+                            GPUStencilLoadOperation.Load, GPUStorePlan.Store, null)
+                        null -> null
+                    } &&
                     render.loadStore.loadOp == (if (pass.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load") &&
                     render.loadStore.storePlan == GPUStorePlan.Store && render.resourceUses == resourceUses(pass, refs)
             }

@@ -271,7 +271,7 @@ internal fun validateW6aLayerTopology(
                     "AA source resources belong to one occurrence"
                 }
             }
-            commands += pass.draw.commandIndex
+            if (!isProducer) commands += pass.draw.commandIndex
         }
         is PlanPass.PathAaColorComposite -> {
             val source = byId.getValue(pass.source)
