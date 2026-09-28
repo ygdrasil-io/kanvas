@@ -1540,3 +1540,41 @@ catalogue par site natif, le contenu Fan et le packet inverse sont authentifiés
 avant allocation, puis consommés par le dispatch fondé sur la recette. Les
 gates `2A0c.IV`, `2A0d`, `2A1` et `2B` demeurent ouverts ; les XML ci-dessus
 n'établissent pas la réussite de la terminaison native GLFW.
+
+### 2A0c.IV Task 1 — inventaire InverseDomain sans mask et témoins publics
+
+L'inventaire W6 porte sur les `finalW4eBindings`, rebinding final des sources
+avant catalogue : les sites sont donc identifiés par le `PathRenderPass` natif
+scellé, jamais par l'index proxy W6 ni par un ID de fixture. Pour
+`InverseDomain.Zero`, quel que soit le support conservé `PathDrawGeometry.Empty`
+ou `PathDrawGeometry.InverseDomainSource`, l'unique site est
+`NativeSiteOwnerV1(path.id, path.ordinal, 0)`. Il est
+`SingleSampleDirectColor`, crée un cover couleur fullscreen (draw 3) et
+consomme uniquement `INVERSE_DOMAIN_ZERO_UNIFORM` U16 : ni V/I, ni D24S8.
+Le compilateur sélectionne `Empty` seulement si `segmentCount == 0`; un Path
+public non vide sans intérieur fini conserve `InverseDomainSource`.
+
+Pour `InverseDomain.Geometry`, `DirectTriangle` et `StencilEdgeFan` partagent
+le même `path.id` et `path.ordinal`, avec les slots ordonnés `0=domainStencil`,
+`1=interiorZero`, `2=colorCover`. Les trois sites restent obligatoires : le
+quad de domaine et l'intérieur ont leurs slices V/I exactes, le cover consomme
+`INVERSE_DOMAIN_UNIFORM` U16, et le D24S8 scene-local n'existe que pour cette
+variante Geometry. `commonSource=true` omet la commande de draw du slot 0,
+mais le pipeline `domainStencil` est toujours créé et authentifié; aucune
+omission de commande ne réduit l'identité, les bundles ou un futur compte 2A1.
+Le domaine et le scissor source demeurent les facts I32/F32 scellés de
+`:math:geometry`; le renderer ne les reconstruit pas.
+
+Les témoins `Surface` ajoutés dans `W6aLayerW4W5SurfacePixelTest` fixent leur
+oracle littéral avant `Surface`, n'emploient aucun `clipPath`, et exigent
+chacun les scopes `Render` et `Readback`: Empty/Zero, non-empty
+`InverseDomainSource`/Zero, Geometry DirectTriangle et Geometry fan
+`INVERSE_EVEN_ODD` à deux contours. Les selectors Zero Empty, Zero non-empty
+et fan donnent chacun XML `1/0/0/0`, puis Gradle exit `1` après GLFW `133`;
+le statut natif est donc **UNKNOWN**. Le selector DirectTriangle donne XML
+`1/1/0/0`, avant pixels et avant submit, avec le RED causal
+`w6a.layer.invalid_native_path: W6 path operands differ from the frozen graph's
+stencil IDs, ordering or load/store`; son Gradle exit est aussi `1` et GLFW
+`133` reste séparé. Aucune production n'a été modifiée dans Task 1, aucun
+test InverseMask/scan-span existant n'a été touché, et 2A0c.IV reste ouvert
+pour la recette Geometry DirectTriangle puis le gate fan.

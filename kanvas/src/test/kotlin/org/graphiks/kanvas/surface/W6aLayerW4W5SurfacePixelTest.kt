@@ -93,6 +93,125 @@ class W6aLayerW4W5SurfacePixelTest {
     }
 
     @Test
+    fun `unmasked empty inverse colors the full W6 layer domain`() {
+        // A path with no segments has no finite interior: its bounded inverse is the full
+        // layer domain.  This literal oracle precedes Surface and has no clip-path mask.
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue,
+            blue, blue, blue, blue,
+            blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val inverseEmpty = Path().apply { fillType = FillType.INVERSE_WINDING }
+
+        val surface = Surface(4, 3)
+        surface.canvas {
+            saveLayer()
+            drawPath(inverseEmpty, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `unmasked nonempty zero inverse retains its full W6 layer domain`() {
+        // This source has a segment but no finite fill interior.  It therefore exercises the
+        // preserved InverseDomainSource form rather than the truly Empty form above; its public
+        // inverse coverage is nevertheless the full domain.  The oracle precedes Surface.
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue,
+            blue, blue, blue, blue,
+            blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val inverseLine = Path().apply {
+            moveTo(1f, 1f); lineTo(3f, 1f)
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(4, 3)
+        surface.canvas {
+            saveLayer()
+            drawPath(inverseLine, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `unmasked inverse direct triangle removes only its finite W6 interior`() {
+        // At unambiguous pixel centres, the inverse complement of this strict triangle leaves
+        // three clear pixels on row 1, two on row 2, and one on row 3.  No clip-path mask is
+        // present, so these pixels causally cover the bounded inverse-domain Geometry route.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue, blue, blue,
+            blue, clear, clear, clear, blue, blue,
+            blue, clear, clear, blue, blue, blue,
+            blue, clear, blue, blue, blue, blue,
+            blue, blue, blue, blue, blue, blue,
+            blue, blue, blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val inverseTriangle = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer()
+            drawPath(inverseTriangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `unmasked inverse even odd donut preserves its fan hole in a W6 layer`() {
+        // The two same-winding contours select EVEN_ODD fan geometry.  The inner square belongs
+        // to the inverse result, unlike the outer finite interior; every expected byte is fixed
+        // before Surface construction and no clip-path mask participates.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue, blue, blue, blue, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, blue, blue, clear, clear, blue,
+            blue, clear, clear, blue, blue, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, blue, blue, blue, blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val inverseEvenOdd = Path().apply {
+            moveTo(1f, 1f); lineTo(7f, 1f); lineTo(7f, 7f); lineTo(1f, 7f); close()
+            moveTo(3f, 3f); lineTo(5f, 3f); lineTo(5f, 5f); lineTo(3f, 5f); close()
+            fillType = FillType.INVERSE_EVEN_ODD
+        }
+
+        val surface = Surface(8, 8)
+        surface.canvas {
+            saveLayer()
+            drawPath(inverseEvenOdd, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `hard path mask clips an offset direct fill triangle in a W6 layer`() {
         // At pixel centres, the L clip keeps its top row and first column; the direct fill
         // triangle otherwise also covers pixels to that column's right.
