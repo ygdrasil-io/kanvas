@@ -1866,3 +1866,24 @@ JUnit : qualification native **UNKNOWN**. `:kanvas:compileTestKotlin` est
 verte, `git show --check` propre, revue Sol sans finding Critical/Important.
 Ce lot ferme les cinq feuilles legacy **sur `SolidRect` seulement**. Task 1b,
 les autres geometry hosts/ABI, puis 2A0d/2A1/2B restent ouverts.
+
+### 2A0d Task 1b — sources solid simples sur `AnalyticRect/AnalyticRRect`
+
+Le commit local `9cee9f3` étend le site W5a ordinaire aux deux hosts
+CorePrimitive analytiques avec `MaterialV1` solid simple U16 uniquement.
+La recette source scelle explicitement la famille géométrique, le canonical
+encoding de `W6CorePrimitiveNativeSiteRecipeV1`, target/sample/blend et
+l'owner/bundle dense `1` après le bundle géométrique `0`. Le seal physique
+et W5h recoupent recettes et packets avant allocation ; les variants
+SolidRect précédents sont préservés. Opacity, gradients, Point/Vertices/Path,
+W4e, W6b, destination-read et V2/V4/V5 restent exclus de cette admission.
+
+Le témoin `Surface` W6 public utilise Rect et RRect AA fractionnaires dans
+une layer. L'expected précède `Surface` : quatre pixels de bord à couverture
+`0,75`, deux centres pleins et un pixel extérieur transparent, avec scopes
+`Render`/`Readback`. La première revue Sol a trouvé un oracle limité aux
+centres ; l'amend l'a corrigé et sa seconde revue ne trouve plus de finding
+Critical/Important. Ma relance indépendante donne XML `40/0/0/0`, suivie
+de Gradle exit 133 après JUnit : natif **UNKNOWN**. Les compilations ciblées
+`gpu-plan`/`gpu-renderer`/`kanvas:compileTestKotlin` sont vertes et
+`git show --check` est propre. Task 1b et tout 2A0d restent ouverts.
