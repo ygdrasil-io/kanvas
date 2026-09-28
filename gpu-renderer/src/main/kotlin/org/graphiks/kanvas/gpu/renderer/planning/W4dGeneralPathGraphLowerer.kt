@@ -430,15 +430,16 @@ internal class W4dGeneralPathGraphLowerer {
                 }
             }
         }
-        val color = if (graph.hasW5aMaterialPathCapabilityV2()) {
+        // Hard-mask phases write binary coverage, independently of the color material.
+        val color = if (pass.phase.isHistoricalHardMaskProducer()) {
+            ColorF32.of(1f, 1f, 1f, 1f)
+        } else if (graph.hasW5aMaterialPathCapabilityV2()) {
             if (pass.phase.isColorProducing()) {
                 resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
                     ?: error("W5 material authority is invalid for a color-writing path phase")
             } else {
                 ColorF32.Transparent
             }
-        } else if (pass.phase.isHistoricalHardMaskProducer()) {
-            ColorF32.of(1f, 1f, 1f, 1f)
         } else {
             resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
                 ?: error("Historical path color authority is invalid")
@@ -478,7 +479,11 @@ internal class W4dGeneralPathGraphLowerer {
             GPUDrawPacketRole.Shading -> corePrimitiveRenderPipelineStructuralKey(
                 semantic, clip.second, blend, sampleCount,
                 targetColorFormat.corePrimitiveStructuralColorFormat(),
-            )
+            ).let { key ->
+                if (pass.phase == PathRenderPhase.MultisampleDirectColor && pass.depthStencil != null)
+                    key.copy(depthStencil = org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState())
+                else key
+            }
             GPUDrawPacketRole.PathStencilProducer ->
                 org.graphiks.kanvas.gpu.renderer.passes.corePrimitivePathStencilRenderPipelineStructuralKey(
                     semantic,

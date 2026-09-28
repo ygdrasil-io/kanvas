@@ -3,6 +3,24 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot standalone rect/path — 29 septembre 2026
+
+PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
+renderer `718445e6e`, empilée sur #2411 : **164/443** rendus (+41),
+**142** comparaisons (+37), **26** cas à ≥99 % de pixels ±2/canal (+6).
+Les 123 anciens rendus restent disponibles, 118 identiques bit à bit.
+Les références, scènes, seuils, exclusions et trois timeouts restent inchangés.
+
+Le [bilan détaillé](pilotage.md#lot-standalone-rectpath--29-septembre-2026)
+documente les cinq anciens rendus modifiés, notamment le recul de
+`circle_sizes`, et les deux nouveaux rendus à 0 % liés à des ports non fidèles.
+La médiane appariée des 105 anciennes comparaisons reste 54,64 %.
+**69 tests ciblés passent**, mais le test historique de pointillé à phase
+négative reste en échec, reproduit avec le routage historique et diagnostiqué.
+Le [plan](stroke-routing-plan.md) et le [snapshot](strokes-718445e6e.json)
+conservent la preuve. W7 reste ouvert, sans revendication de parité globale
+ni de merge readiness.
+
 ## Pilotage et mesure fraîche — 29 septembre 2026
 
 PR draft empilée : [#2411](https://github.com/ygdrasil-io/kanvas/pull/2411)

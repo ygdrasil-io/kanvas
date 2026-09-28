@@ -1522,12 +1522,43 @@ private class WgpuBackendSession(
                         }
                         val target = preparation?.resource as? GPUFrameTargetRef
                         val descriptor = preparation?.descriptor as? GPUFrameTextureDescriptor
+                        val sealedW4dGeneralFrame = target?.let { sceneTarget ->
+                            val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+                            val packets = renders.flatMap(GPUTask.Render::drawPackets)
+                            val authority = packets.firstOrNull()?.corePrimitivePreparedAuthority
+                                ?.w4dGeneralFrameMaterializationAuthority
+                            val readback = taskList.tasks.filterIsInstance<GPUTask.Readback>().singleOrNull()
+                            authority != null &&
+                                packets.isNotEmpty() &&
+                                renders.all { it.drawPackets.size == 1 } &&
+                                packets.all { packet ->
+                                    packet.corePrimitivePreparedAuthority
+                                        ?.w4dGeneralFrameMaterializationAuthority === authority
+                                } &&
+                                authority.deviceGeneration == deviceGeneration &&
+                                authority.capabilitySealHash == taskList.capabilitySeal.sealHash &&
+                                authority.pathPassFacts.size == renders.size &&
+                                authority.pathPassFacts.zip(renders).all { (fact, render) ->
+                                    render.drawPackets.single().passId == fact.pathPassId &&
+                                        render.target == authority.resource(fact.targetResourceId)
+                                } &&
+                                renderTargets == authority.pathPassFacts.mapNotNull { fact ->
+                                    authority.resource(fact.targetResourceId) as? GPUFrameTargetRef
+                                }.distinct() &&
+                                authority.resource(authority.readbackSourceResourceId) == sceneTarget &&
+                                authority.resource(authority.readbackStagingResourceId) == readback?.staging &&
+                                readback?.source == sceneTarget &&
+                                authority.pathPassFacts.lastOrNull()?.let { fact ->
+                                    fact.targetResourceId == authority.readbackSourceResourceId ||
+                                        fact.resolveTargetResourceId == authority.readbackSourceResourceId
+                                } == true
+                        } ?: false
                         when {
-                            target == null || target !in renderTargets -> executionDiagnostic(
+                            target == null || (target !in renderTargets && !sealedW4dGeneralFrame) -> executionDiagnostic(
                                 "unsupported.prepared-scene-session.target-count",
                                 "A prepared scene frame requires exactly one declared scene target used by rendering.",
                             )
-                            renderTargets.any { renderTarget ->
+                            !sealedW4dGeneralFrame && renderTargets.any { renderTarget ->
                                 renderTarget != target &&
                                     renderTarget.value !in declaredLayerTargetLabels &&
                                     !textureDeclared(renderTarget)
@@ -1535,7 +1566,7 @@ private class WgpuBackendSession(
                                 "unsupported.prepared-scene-session.target-count",
                                 "Every prepared render target beyond the scene target must be declared as a layer target or carry one exact texture declaration.",
                             )
-                            renderTargets.any { renderTarget ->
+                            !sealedW4dGeneralFrame && renderTargets.any { renderTarget ->
                                 when {
                                     renderTarget == target -> !textureDeclared(renderTarget)
                                     renderTarget.value in declaredLayerTargetLabels ->

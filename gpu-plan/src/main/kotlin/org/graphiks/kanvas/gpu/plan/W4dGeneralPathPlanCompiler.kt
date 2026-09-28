@@ -32,6 +32,7 @@ import org.graphiks.math.color.ColorF32
 import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathF32
+import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokeCap
 import org.graphiks.math.geometry.PathStrokeDashF64
 import org.graphiks.math.geometry.PathStrokeDrawMode
@@ -78,6 +79,8 @@ internal class W4dGeneralFramePreview(
 public class W4dGeneralPathPlanCompiler internal constructor(
     private val strokePolicyF64: PathStrokePolicyF64,
     private val acceptsNarrowTransforms: Boolean = false,
+    /** Root-only W7 extension: project Rect geometry locally without changing DrawNode provenance. */
+    private val admitsStandaloneRectPathFrames: Boolean = false,
     /** W6-only source contract; the standalone W4d graph keeps its terminal readback. */
     private val allowAaColorSource: Boolean = false,
     /** W4e may promote a mixed clip frame to its AA4 construction branch without rewriting draws. */
@@ -88,9 +91,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private val imageProjection: ImageOriginGeometryProjectionV6? = null,
 ) : GpuPlanCompiler {
     internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, allowAaColorSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection)
+        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection)
     internal fun withImageOriginProjection(projection: ImageOriginGeometryProjectionV6?): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,allowAaColorSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection)
+        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection)
     public constructor() : this(PathStrokePolicyF64())
 
     /**
@@ -163,9 +166,12 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             when (command) {
                 is SceneCommand.Draw -> {
                     val path = (command.node.geometry as? GeometryNode.Path)?.path
+                    val rect = (command.node.geometry as? GeometryNode.Rect)?.copyBounds()
                     val paint = command.node.paint
                     if (!finite(command.node.transform) || !finite(command.node.effects) || !finiteClip(command.node.clip) ||
-                        (path != null && !finite(path)) || (paint != null && !finite(paint))
+                        (path != null && !finite(path)) ||
+                        (admitsStandaloneRectPathFrames && rect != null && !finite(rect)) ||
+                        (paint != null && !finite(paint))
                     ) return "Draw facts are non-finite"
                 }
                 is SceneCommand.SetTransform -> if (!finite(command.matrix)) return "Transform metadata is non-finite"
@@ -183,15 +189,25 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         finiteSceneError(scene)?.let { return Preflight.Invalid(it) }
         var visualDrawCountI32 = 0
         var requiresGeneral = false
+        var requiresStandaloneRectRouting = false
+        var containsRectProjection = false
+        var standaloneFrameFacts = true
         var outside = false
         scene.forEach { command ->
             when (command) {
                 is SceneCommand.Draw -> {
                     visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
                     when (val scope = classifyDrawScope(command.node)) {
-                        is DrawScope.Ready -> requiresGeneral = requiresGeneral ||
-                            scope.transformClass == PathTransformClass.GeneralAffine ||
-                            scope.transformClass == PathTransformClass.Perspective
+                        is DrawScope.Ready -> {
+                            requiresGeneral = requiresGeneral ||
+                                scope.transformClass == PathTransformClass.GeneralAffine ||
+                                scope.transformClass == PathTransformClass.Perspective
+                            requiresStandaloneRectRouting = requiresStandaloneRectRouting ||
+                                (scope.rectProjection && scope.mode != null) || scope.requestsAntiAlias ||
+                                scope.styleF64?.widthF64 == PathStrokeWidthF64.Hairline
+                            containsRectProjection = containsRectProjection || scope.rectProjection
+                            standaloneFrameFacts = standaloneFrameFacts && standaloneFrameDraw(node = command.node)
+                        }
                         is DrawScope.Gap -> outside = true
                         is DrawScope.Invalid -> return Preflight.Invalid(scope.message)
                     }
@@ -203,7 +219,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 else -> outside = true
             }
         }
-        if (outside || (!requiresGeneral && !acceptsNarrowTransforms)) {
+        val historicalMember = !containsRectProjection && (requiresGeneral || acceptsNarrowTransforms)
+        val standaloneMember = admitsStandaloneRectPathFrames && standaloneFrameFacts &&
+            (requiresGeneral || requiresStandaloneRectRouting)
+        if (outside || !(historicalMember || standaloneMember)) {
             return Preflight.Outside
         }
         return if (visualDrawCountI32 > MAX_DRAWS) Preflight.Limit("W4d.2 accepts at most 512 visual path draws") else Preflight.Member
@@ -211,6 +230,13 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
     private fun recognize(scene: SceneSnapshot): Recognition {
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
+        // The standalone AA extension already proves a whole frame of plain solid
+        // SrcOver draws. Normalize those solids directly while retaining their original
+        // draw/source authority; a deferred composed stroke source would select W5b's
+        // single-sample source topology instead of this compiler's closed AA frame.
+        val standaloneAaSolids = admitsStandaloneRectPathFrames &&
+            scene.any { it is SceneCommand.Draw && it.node.coverage == CoverageRequest.ANTIALIASED } &&
+            scene.filterIsInstance<SceneCommand.Draw>().all { standaloneFrameDraw(it.node) }
         val draws = mutableListOf<SealedDraw>()
         val materialEntries = mutableListOf<MaterialPlanEntry>()
         val sources = mutableListOf<MaterialSourceConstructionV4>()
@@ -226,7 +252,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     if (visualDrawCountI32 >= MAX_DRAWS) return Recognition.Limit("W4d.2 accepts at most 512 visual path draws")
                     visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
                     requestedAa = requestedAa || command.node.coverage == CoverageRequest.ANTIALIASED
-                    when (val result = recognizeDraw(command.node, commandIndex, targetBounds, frameWorkUsageI64, materialEntries,sources)) {
+                    when (val result = recognizeDraw(command.node, commandIndex, targetBounds, frameWorkUsageI64, materialEntries,sources,standaloneAaSolids)) {
                         is DrawResult.MaterialRefused -> { materialRefusals += result.refusal; frameWorkUsageI64 = result.frameWorkUsageI64 }
                         is DrawResult.Ready -> {
                             draws += result.draw
@@ -267,6 +293,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         frameWorkUsageI64: PathStrokeWorkUsageI64,
         materialEntries: MutableList<MaterialPlanEntry>,
         sources: MutableList<MaterialSourceConstructionV4>,
+        standaloneAaSolids: Boolean,
     ): DrawResult {
         val scope = when (val classified = classifyDrawScope(node)) {
             is DrawScope.Ready -> classified
@@ -283,9 +310,21 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     prepared.geometry.copyStencilEdgeFanF32OrNull() != null &&
                     prepared.geometry.emittedNonZeroClosedEdgeCountI32 > UByte.MAX_VALUE.toInt()
                 ) return DrawResult.Limit("W4d.2 winding path exceeds the stencil edge limit")
-                val source = when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(
+                val normalizedSource = if (standaloneAaSolids) {
+                    when (val normalized = EffectiveMaterialPlanner.normalize(node, FORMAT.blendTargetClampV1())) {
+                        EffectiveMaterialPlanner.Normalization.NoOp -> EffectiveMaterialPlanner.SourceNormalizationV4.NoOp
+                        is EffectiveMaterialPlanner.Normalization.Refused ->
+                            EffectiveMaterialPlanner.SourceNormalizationV4.Refused(normalized.diagnosticCode)
+                        is EffectiveMaterialPlanner.Normalization.Source -> EffectiveMaterialPlanner.SourceNormalizationV4.Source(
+                            MaterialSourceConstructionV4.retain(node,
+                                EffectiveMaterialPlanner.Result.Ready(normalized.table, normalized.root, normalized.blend),
+                                RectF32.ofLTRB(scissor.left.toFloat(), scissor.top.toFloat(), scissor.right.toFloat(), scissor.bottom.toFloat())),
+                        )
+                    }
+                } else EffectiveMaterialPlanner.normalizeSourcesV4(
                     if (node.paint?.colorFilter == null) node.copy(effects = EffectStack.Empty) else node,
-                    FORMAT.blendTargetClampV1(),scissor,runtimeCatalog=runtimeCatalog)) {
+                    FORMAT.blendTargetClampV1(),scissor,runtimeCatalog=runtimeCatalog)
+                val source = when (val planned = normalizedSource) {
                     is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> return DrawResult.MaterialRefused(
                         EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), prepared.frameWorkUsageI64)
                     EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> return DrawResult.NoOp(prepared.frameWorkUsageI64)
@@ -371,13 +410,19 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
     private fun classifyDrawScope(node: DrawNode): DrawScope {
         val paint = node.paint ?: return DrawScope.Gap("W4d.2 requires paint")
-        val path = (node.geometry as? GeometryNode.Path)?.path
-            ?: return DrawScope.Gap("Draw geometry is outside W4d.2")
+        val rect = (node.geometry as? GeometryNode.Rect)?.copyBounds()
+        // Empty/inverted rectangles stay outside this opt-in projection so their existing
+        // route retains ownership of their observable semantics.
+        val rectProjection = admitsStandaloneRectPathFrames && rect?.isEmpty == false
+        val path = (node.geometry as? GeometryNode.Path)?.path ?: if (rectProjection) {
+            if (!finite(requireNotNull(rect))) return DrawScope.Invalid("Draw facts are non-finite")
+            PathBuilder(FillRule.WINDING).addRect(requireNotNull(rect)).build()
+        } else return DrawScope.Gap("Draw geometry is outside W4d.2")
         val transform = node.transform
         if (!finite(path) || !finite(transform) || !finite(paint) || !finite(node.effects) || !finiteClip(node.clip)) {
             return DrawScope.Invalid("Draw facts are non-finite")
         }
-        if (node.origin != DrawOrigin.PATH ||
+        if ((rectProjection && node.origin != DrawOrigin.RECT) || (!rectProjection && node.origin != DrawOrigin.PATH) ||
             path.fillRule !in setOf(FillRule.WINDING, FillRule.EVEN_ODD)
         ) {
             return DrawScope.Gap("Path provenance or fill rule is outside W4d.2")
@@ -428,6 +473,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             mode = mode,
             styleF64 = style,
             requestsAntiAlias = node.coverage == CoverageRequest.ANTIALIASED,
+            rectProjection = rectProjection,
         )
     }
 
@@ -1290,6 +1336,21 @@ public class W4dGeneralPathPlanCompiler internal constructor(
          (paint.pathEffect == null || paint.pathEffect is PathEffectNode.Dash) &&
         materialMatchesPaintAuthority(node)
 
+    /** Strict W7 root extension; broader historical W4d path admission remains unchanged. */
+    private fun standaloneFrameDraw(node: DrawNode): Boolean {
+        val paint = node.paint ?: return false
+        val srcOver = when (val blend = node.blend) {
+            BlendNode.SrcOver -> true
+            is BlendNode.Mode -> blend.mode == BlendMode.SRC_OVER
+            is BlendNode.Paint -> blend.mode == BlendMode.SRC_OVER && blend.blender == null
+            is BlendNode.Custom -> false
+        }
+        return node.material is MaterialNode.Solid && node.resource == null && node.operationBlendMode == null &&
+            srcOver && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null &&
+            paint.imageFilter == null && paint.pathEffect == null && paint.shader == null && node.effects == EffectStack.Empty &&
+            paint.style in setOf(PaintStyleNode.FILL, PaintStyleNode.STROKE)
+    }
+
     private fun effectsMatchPaintPathEffect(effects: EffectStack, pathEffect: PathEffectNode?): Boolean = when (effects) {
         EffectStack.Empty -> true
         is EffectStack.Entries -> if (effects.effectCount != 1) false else {
@@ -1402,7 +1463,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private sealed interface Preflight { data object Member : Preflight; data object Outside : Preflight; data class Invalid(val message: String) : Preflight; data class Limit(val message: String) : Preflight }
     private sealed interface Recognition { data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition; data class Ready(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable?, val elidedNoOpsI32: Int, val requestedAa: Boolean,val sources: MaterialSourceConstructionTableV4) : Recognition; data class Gap(val message: String) : Recognition; data class Invalid(val message: String) : Recognition; data class Horizon(val message: String) : Recognition; data class Limit(val message: String) : Recognition }
     private sealed interface DrawScope {
-        data class Ready(val path: PathF32, val matrixF64: Matrix3x3F64, val transformClass: PathTransformClass, val clip: RectI32?, val fill: Boolean, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val requestsAntiAlias: Boolean) : DrawScope
+        data class Ready(val path: PathF32, val matrixF64: Matrix3x3F64, val transformClass: PathTransformClass, val clip: RectI32?, val fill: Boolean, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val requestsAntiAlias: Boolean, val rectProjection: Boolean = false) : DrawScope
         data class Gap(val message: String) : DrawScope
         data class Invalid(val message: String) : DrawScope
     }
@@ -1435,6 +1496,12 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         public const val W5A_AA_CAPABILITY_ID: String = "solid-path-geometry-mixed-aa4-general-transform-simple-scissor-src-over-srgb-w5a-material-v2"
         /** W6-only sealed child source; intentionally distinct from W4d's standalone AA graph. */
         public const val W6_AA_COLOR_SOURCE_CAPABILITY_ID: String = "w6-aa-resolved-color-source-v1"
+
+        /** Root-only opt-in; W5/W6 source compilers keep the default path-only contract. */
+        public fun standaloneRectPathFrames(): W4dGeneralPathPlanCompiler = W4dGeneralPathPlanCompiler(
+            PathStrokePolicyF64(),
+            admitsStandaloneRectPathFrames = true,
+        )
 
         internal fun w6AaColorSource(
             catalog: RuntimeEffectSemanticCatalogSnapshot,
