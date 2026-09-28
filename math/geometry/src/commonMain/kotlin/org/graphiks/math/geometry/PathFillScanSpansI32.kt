@@ -156,6 +156,7 @@ public fun preparePathFillScanSpansI32(
     val edges = ArrayList<ScanEdgeI32>(3)
     for ((first, second) in listOf(points[0] to points[1], points[1] to points[2], points[2] to points[0])) {
         if (first.yI32 == second.yI32) continue
+        if (roundFDot6ToI32(first.yI32) == roundFDot6ToI32(second.yI32)) continue
         edges += ScanEdgeI32.fromPointsOrNull(first, second) ?: return scanNumericRangeRefusal()
     }
     if (edges.isEmpty()) return PathFillScanPreparationI32.Ready(PathFillScanSpansI32.Empty(domainI32))
@@ -221,12 +222,12 @@ private class ScanEdgeI32 private constructor(
                 SCAN_FDOT6_HALF_I64,
             ) ?: return null
             val deltaYFDot6I64 = sampleYFDot6I64 - top.yI32.toLong()
-            val deltaYFixedI64 = checkedScanMultiplyI64(deltaYFDot6I64, SCAN_FDOT6_TO_FIXED_I64) ?: return null
-            val slopeProductI64 = checkedScanMultiplyI64(slopeI64, deltaYFixedI64) ?: return null
-            val initialXFixedI64 = checkedScanAddI64(
-                checkedScanMultiplyI64(top.xI32.toLong(), SCAN_FDOT6_TO_FIXED_I64) ?: return null,
-                slopeProductI64 shr SCAN_FIXED_SHIFT_I32,
-            ) ?: return null
+            val slopeProductI64 = checkedScanMultiplyI64(slopeI64, deltaYFDot6I64) ?: return null
+            val initialDeltaXFDot6I64 = slopeProductI64 shr SCAN_FIXED_SHIFT_I32
+            val initialXFDot6I64 = checkedScanAddI64(top.xI32.toLong(), initialDeltaXFDot6I64)
+                ?: return null
+            val initialXFixedI64 = checkedScanMultiplyI64(initialXFDot6I64, SCAN_FDOT6_TO_FIXED_I64)
+                ?: return null
             return ScanEdgeI32(topScanI32, bottomScanI32, initialXFixedI64, slopeI64.toInt())
         }
     }
@@ -251,14 +252,8 @@ private class ScanEdgeWalkerI32 private constructor(
     companion object {
         fun createOrNull(edge: ScanEdgeI32, firstScanI32: Int): ScanEdgeWalkerI32? {
             if (firstScanI32 < edge.topI32) return ScanEdgeWalkerI32(edge, null)
-            var currentXFixedI64 = edge.initialXAtScanlineOrNull(edge.topI32) ?: return null
-            var scanYI32 = edge.topI32
-            while (scanYI32 < firstScanI32) {
-                currentXFixedI64 = checkedScanAddI64(currentXFixedI64, edge.slopeFixedI32.toLong())
-                    ?: return null
-                scanYI32 += 1
-            }
-            return ScanEdgeWalkerI32(edge, currentXFixedI64)
+            if (firstScanI32 >= edge.bottomI32) return ScanEdgeWalkerI32(edge, null)
+            return ScanEdgeWalkerI32(edge, edge.initialXAtScanlineOrNull(firstScanI32))
         }
     }
 }

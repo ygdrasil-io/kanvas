@@ -50,6 +50,45 @@ class PathFillScanSpansI32Test {
     }
 
     @Test
+    fun `rounded zero height edge is ignored while the other edges rasterize`() {
+        val ready = assertIs<PathFillScanPreparationI32.Ready>(prepare(
+            triangle(0f, 0.1f, 4f, 0.2f, 0f, 3f), RectI32(0, 0, 5, 4), 3,
+        ))
+
+        assertEquals(
+            listOf(
+                PathFillScanSpanI32(0, 4, 0),
+                PathFillScanSpanI32(0, 2, 1),
+                PathFillScanSpanI32(0, 1, 2),
+            ),
+            ready.spansI32.copySpansI32(),
+        )
+    }
+
+    @Test
+    fun `edge initial x truncates the slope product to FDot6 before fixed conversion`() {
+        val ready = assertIs<PathFillScanPreparationI32.Ready>(prepare(
+            triangle(0f, 33f / 64f, 4f, 33f / 64f, 38f / 64f, 183f / 64f),
+            RectI32(0, 0, 5, 4),
+            3,
+        ))
+
+        assertEquals(listOf(PathFillScanSpanI32(0, 1, 2)), ready.spansI32.copySpansI32().filter { it.yI32 == 2 })
+    }
+
+    @Test
+    fun `large vertical clip advances fixed x by checked multiplication`() {
+        val ready = assertIs<PathFillScanPreparationI32.Ready>(prepare(
+            triangle(0f, 0f, 30_000_000f, 0f, 0f, 30_000_100f),
+            RectI32(0, 30_000_000, 512, 30_000_004),
+            4,
+        ))
+
+        assertEquals(4, ready.spansI32.spanCountI32)
+        assertEquals(PathFillScanSpanI32(0, 457, 30_000_000), ready.spansI32.copySpansI32().first())
+    }
+
+    @Test
     fun `subpixel nonempty triangle produces Empty scan authority`() {
         val ready = assertIs<PathFillScanPreparationI32.Ready>(prepare(
             triangle(2.1f, 1.1f, 2.2f, 1.1f, 2.1f, 1.2f), RectI32(0, 0, 6, 6), 1,
