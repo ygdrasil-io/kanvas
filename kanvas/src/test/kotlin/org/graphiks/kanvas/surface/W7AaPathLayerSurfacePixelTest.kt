@@ -42,7 +42,19 @@ class W7AaPathLayerSurfacePixelTest {
 
         val admitted = Surface(7, 7, config = RenderConfig(frameLocalBudgetBytes = budgetB))
         record(admitted)
-        val admittedResult = renderOrAcceptExactAaCapabilityRefusal(admitted) ?: return
+        val admittedResult = renderOrAcceptExactAaCapabilityRefusal(admitted)
+        if (admittedResult == null) {
+            // The exact sRGB-4x gate is a refusal before native allocation.  Prove that it does
+            // not poison this same public Surface; this is capability-refusal recovery, not a
+            // claim that the B/B-1 budget path ran on this host.
+            admitted.discardRecordedOperations()
+            admitted.canvas { drawRect(bounds, Paint(blue, antiAlias = false)) }
+            val recovered = admitted.render()
+            assertPixel(recovered.pixels, 7, 3, 3, 17, 61, 211, 255)
+            assertTrue(recovered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                recovered.nativeEvidenceScopeKinds.toString())
+            return
+        }
         assertPixel(admittedResult.pixels, 7, 1, 1, 17, 61, 211, 255)
         assertTrue(admittedResult.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
             admittedResult.nativeEvidenceScopeKinds.toString())

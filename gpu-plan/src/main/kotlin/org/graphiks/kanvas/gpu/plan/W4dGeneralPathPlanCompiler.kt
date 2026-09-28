@@ -111,8 +111,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val anyHard = selected.draws.any { !it.requestsAntiAlias }
         val aaStencil = selected.draws.any { it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
         val hardStencil = selected.draws.any { !it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
-        textureRefusal(capabilities, anyAa, anyHard, hardStencil)?.let { return it }
-        if ((anyAa || hardStencil) && PlanOperationCapability.DepthStencilAttachment !in capabilities.supportedOperations()) {
+        val aaDepthStencil = requiresAaDepthStencil(anyAa, aaStencil)
+        textureRefusal(capabilities, anyAa, anyHard, aaDepthStencil, hardStencil)?.let { return it }
+        if ((aaDepthStencil || hardStencil) && PlanOperationCapability.DepthStencilAttachment !in capabilities.supportedOperations()) {
             return promoted("W4d.2 depth-stencil capability is unavailable")
         }
         if ((aaStencil || hardStencil) && PlanOperationCapability.StencilCover !in capabilities.supportedOperations()) {
@@ -610,8 +611,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val anyHard = selected.draws.any { !it.requestsAntiAlias }
         val aaStencil = selected.draws.any { it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
         val hardStencil = selected.draws.any { !it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
-        textureRefusal(capabilities, anyAa, anyHard, hardStencil)?.let { return it }
-        if ((anyAa || hardStencil) && PlanOperationCapability.DepthStencilAttachment !in capabilities.supportedOperations()) {
+        val aaDepthStencil = requiresAaDepthStencil(anyAa, aaStencil)
+        textureRefusal(capabilities, anyAa, anyHard, aaDepthStencil, hardStencil)?.let { return it }
+        if ((aaDepthStencil || hardStencil) && PlanOperationCapability.DepthStencilAttachment !in capabilities.supportedOperations()) {
             return promoted("W4d.2 depth-stencil capability is unavailable")
         }
         if ((aaStencil || hardStencil) && PlanOperationCapability.StencilCover !in capabilities.supportedOperations()) {
@@ -1105,10 +1107,19 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             FORMAT in capabilities.supportedFormats() && capabilities.maxDynamicUniformBuffersPerPipelineLayout >= 1 &&
             REQUIRED.all { it in capabilities.supportedOperations() } && validAllocationFacts(capabilities)
 
+    /**
+     * The autonomous W4d AA graph still carries its conservative depth contract.  The W6-only
+     * resolved-colour source is narrower: DirectTriangle has no depth attachment, while
+     * StencilCover remains dependent on D24S8 and the stencil operation.
+     */
+    private fun requiresAaDepthStencil(anyAa: Boolean, aaStencil: Boolean): Boolean =
+        anyAa && (!allowAaColorSource || aaStencil)
+
     private fun textureRefusal(
         caps: PlanCapabilitySnapshot,
         anyAa: Boolean,
         anyHard: Boolean,
+        aaDepthStencil: Boolean,
         hardStencil: Boolean,
     ): RenderPlanResult.GapOnPromotedScope? {
         val logical = PlanTextureFormat.Color(FORMAT)
@@ -1125,7 +1136,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         if (!caps.supportsResolve(logical, 4, 1)) {
             return promoted(W4dGeneralPlanDiagnostics.ResolveUnsupported, "W4d.2 four-sample color resolve is unavailable")
         }
-        if (!caps.supportsTexture(PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 4,
+        if (aaDepthStencil && !caps.supportsTexture(PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 4,
                 setOf(PlanResourceUsage.DepthStencilAttachment))) {
             return promoted(W4dGeneralPlanDiagnostics.TextureSampleSupportUnavailable, "W4d.2 four-sample depth-stencil support is unavailable")
         }

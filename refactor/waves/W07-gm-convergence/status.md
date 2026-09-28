@@ -55,11 +55,22 @@ Un inventaire frais a été produit uniquement dans
 `generateSkiaGmInventory -Pgm.inventoryOutput=...` (succès, 4 min 10 s), sans
 PNG, référence, score ni dashboard. Il compte 631 GMs, 443 éligibles, 124
 rendables et 262 échecs de rendu. La sonde antérieure de 44 chemins AA n'a pas
-conservé ses identités, donc aucune comparaison par GM ne serait honnête : les
-44 premiers refus frais `w6a.layer.unsupported_child` restent génériques (52
-au total). Le nouveau diagnostic filtré est prouvé par le témoin `Surface`,
-sans prétendre avoir réparé ces 44 GMs. Les gates W6 2A1 (leases/programmes
-natif) et 2B restent ouverts ; aucune conformité ISO W7 n'est déclarée.
+conservé ses identités, donc aucune comparaison par GM ne serait honnête. Le
+relevé frais contient encore 52 `w6a.layer.unsupported_child`, sans permettre
+d'identifier ces GMs aux 44 historiques, et observe aussi
+`imagefilters_xfermodes` sur le nouveau refus
+`w6a.layer.unsupported_spatial_filter`. Cette observation GM et le témoin
+`Surface` n'autorisent aucune promesse de réparation globale. Les gates W6 2A1
+(leases/programmes natif) et 2B restent ouverts ; aucune conformité ISO W7
+n'est déclarée.
+
+Après la revue Sol, le gate D24S8 est rendu dépendant de la stratégie dans la
+seule source W6 `allowAaColorSource` : `DirectTriangle` n'exige plus une
+capacité D24S8 qu'il ne déclare pas, tandis que `StencilCover` exige toujours
+D24S8 4× et son opération stencil. Le W4d AA autonome conserve son préflight
+et budget depth conservateurs. Le témoin B vérifie aussi désormais la
+récupération de la même `Surface` après le refus sRGB 4×, avec un draw
+hard-edge et ses pixels/scopes ; cela ne transforme pas cette preuve en B−1.
 
 ## Résultats observés
 
