@@ -630,39 +630,7 @@ internal enum class GPUPreparedNativeRenderPipelineBindingPolicy {
     NoBindings,
 }
 
-/**
- * Opaque authority created only alongside the dedicated W6 scan-span stencil pipeline.
- *
- * It stays outside the render-command stream so a different no-bindings pipeline cannot
- * authenticate itself by merely carrying a compatible operand policy.
- */
-internal sealed class GPUW6InverseMaskScanSpanPipelineWitnessV1 {
-    data object Empty : GPUW6InverseMaskScanSpanPipelineWitnessV1()
-
-    class NonEmpty private constructor(
-        internal val pipeline: GPURenderPipeline,
-        internal val deviceGeneration: GPUDeviceGenerationID,
-        internal val colorFormat: GPUTextureFormat,
-    ) : GPUW6InverseMaskScanSpanPipelineWitnessV1() {
-        internal val vertexProgram = VertexProgram.FullscreenTriangle
-        internal val stencil = Stencil.ReplaceOne
-        internal val colorWrite = ColorWrite.None
-        internal val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
-
-        companion object {
-            internal fun fromW4eScanSpanStencilCreator(
-                pipeline: GPURenderPipeline,
-                deviceGeneration: GPUDeviceGenerationID,
-                colorFormat: GPUTextureFormat,
-            ): NonEmpty = NonEmpty(pipeline, deviceGeneration, colorFormat)
-        }
-    }
-
-    internal enum class VertexProgram { FullscreenTriangle }
-    internal enum class Stencil { ReplaceOne }
-    internal enum class ColorWrite { None }
-}
-
+/** One native pipeline operand with a private, typed binding authority. */
 internal class GPUPreparedNativeRenderPipelineOperand private constructor(
     val pipeline: GPURenderPipeline,
     override val deviceGeneration: GPUDeviceGenerationID,

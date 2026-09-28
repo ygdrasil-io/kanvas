@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.*
@@ -122,10 +123,18 @@ private fun validatesW6InverseMaskScanSpanCommandStream(
 
     val expectedPipelineWitness = native.w6InverseMaskScanSpanPipelineWitnessV1
         as? GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty ?: return false
+    val expectedColorFormat = when (val format = recipe.producer.target.format) {
+        PlanTextureFormat.CoverageMask -> GPUTextureFormat.RGBA8Unorm
+        is PlanTextureFormat.Color -> when (format.value) {
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> GPUTextureFormat.RGBA8UnormSrgb
+        }
+        else -> return false
+    }
     if (expectedPipelineWitness.vertexProgram != GPUW6InverseMaskScanSpanPipelineWitnessV1.VertexProgram.FullscreenTriangle ||
         expectedPipelineWitness.stencil != GPUW6InverseMaskScanSpanPipelineWitnessV1.Stencil.ReplaceOne ||
         expectedPipelineWitness.colorWrite != GPUW6InverseMaskScanSpanPipelineWitnessV1.ColorWrite.None ||
-        expectedPipelineWitness.bindingPolicy != GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
+        expectedPipelineWitness.bindingPolicy != GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings ||
+        expectedPipelineWitness.colorFormat != expectedColorFormat
     ) return false
 
     val commands = native.commands

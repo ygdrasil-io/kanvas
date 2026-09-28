@@ -416,7 +416,7 @@ internal fun encodeW4eNativePasses(
     val maskedPathPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val inverseDomainPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val inverseWindingDomainPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
-    val scanSpanStencilPipelines = mutableMapOf<GPUTextureFormat, GPURenderPipeline>()
+    val scanSpanStencilPipelineWitnesses = mutableMapOf<GPUTextureFormat, GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty>()
     fun inverseWindingDomainPipeline(format: GPUTextureFormat, sampleCount: Int, finalBlend: GPUBlendPlan?) =
         inverseWindingDomainPipelines.getOrPut(Triple(format, sampleCount, finalBlend)) {
             createW4eUnmaskedCoverPipeline(device, format, sampleCount, stencil = w4eStencilZeroReadState(),
@@ -428,14 +428,9 @@ internal fun encodeW4eNativePasses(
     fun clearPipeline(coverage: Float) = clearPipelines.getOrPut(coverage) {
         createW4eClearPipeline(device, coverage, owned)
     }
-    fun scanSpanStencilPipelineWitness(format: GPUTextureFormat) =
-        GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty.fromW4eScanSpanStencilCreator(
-            scanSpanStencilPipelines.getOrPut(format) {
-                createW4eScanSpanStencilPipeline(device, format, owned)
-            },
-            generation,
-            format,
-        )
+    fun scanSpanStencilPipelineWitness(format: GPUTextureFormat) = scanSpanStencilPipelineWitnesses.getOrPut(format) {
+        GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty.create(device, generation, format, owned)
+    }
     fun frozenDepthStencilLoad(operation: org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1) = when (operation) {
         org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1.Clear -> GPUPreparedNativeLoadOperation.Clear
     }
@@ -1943,6 +1938,39 @@ private fun createW4ePathGeometryPipeline(
             )),
         ),
     ))
+}
+
+/** Exact, opaque provenance of the W6 scan-span fullscreen stencil writer. */
+internal sealed class GPUW6InverseMaskScanSpanPipelineWitnessV1 {
+    data object Empty : GPUW6InverseMaskScanSpanPipelineWitnessV1()
+
+    class NonEmpty private constructor(
+        internal val pipeline: GPURenderPipeline,
+        internal val deviceGeneration: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID,
+        internal val colorFormat: GPUTextureFormat,
+    ) : GPUW6InverseMaskScanSpanPipelineWitnessV1() {
+        internal val vertexProgram = VertexProgram.FullscreenTriangle
+        internal val stencil = Stencil.ReplaceOne
+        internal val colorWrite = ColorWrite.None
+        internal val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
+
+        companion object {
+            internal fun create(
+                device: GPUDevice,
+                deviceGeneration: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID,
+                colorFormat: GPUTextureFormat,
+                owned: GPUW4eNativeOwnedHandles,
+            ): NonEmpty = NonEmpty(
+                createW4eScanSpanStencilPipeline(device, colorFormat, owned),
+                deviceGeneration,
+                colorFormat,
+            )
+        }
+    }
+
+    internal enum class VertexProgram { FullscreenTriangle }
+    internal enum class Stencil { ReplaceOne }
+    internal enum class ColorWrite { None }
 }
 
 /** Fullscreen stencil writer used by the sealed I32 scan-span producer; it owns no V/I binding. */
