@@ -1169,6 +1169,12 @@ internal class GPUFrameExecutor(
                 "Prepared-frame MSAA authority requires one sealed native payload.",
             )
         }
+        if (frame.hasW4dGeneralMsaaPackets()) {
+            return if (frame.validatesW4dGeneralMsaa(sceneTarget)) null else executionDiagnostic(
+                "invalid.msaa.w4d_general_authority",
+                "W4d.2 MSAA scopes must match their complete sealed physical attachments and final resolve.",
+            )
+        }
         indexedRequests.forEachIndexed { sequenceIndex, (stepIndex, render, request) ->
             val key = request.key
             val expectedResolveBinding = preparedSceneTargetBindingKey(frame, render)
@@ -1270,6 +1276,14 @@ internal class GPUFrameExecutor(
             "unsupported.msaa.prepared_frame_payload_missing",
             "Prepared-frame MSAA authority requires one consumed native payload.",
         )
+        if (frame.hasW4dGeneralMsaaPackets()) {
+            return if (frame.validatesW4dGeneralMsaa(sceneTarget, exactPayload) {
+                backend.isCanonicalSceneTargetView(sceneTarget, it)
+            }) null else executionDiagnostic(
+                "invalid.msaa.w4d_general_native_operands",
+                "W4d.2 native MSAA attachments, continuity, or final resolve differ from the sealed frame.",
+            )
+        }
         val retainedViews = mutableMapOf<String, Any>()
         val canonicalResolveViews = mutableMapOf<String, Any>()
         val retainedDepthStencilViews = mutableMapOf<String, Any>()
@@ -1569,6 +1583,27 @@ internal class GPUFrameExecutor(
                         PlanResourceUsage.DepthStencilAttachment !in resourceFact.usages
                     ) {
                         return false
+                    }
+                    // The standalone AA graph retains its D24S8 attachment on a direct
+                    // color phase, but both aspects are read-only and perform no operations.
+                    if (fact.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleDirectColor &&
+                        fact.depthStencilAccess == null && fact.depthStencilLoadStore == null
+                    ) {
+                        val view = native.pass.depthStencilTarget ?: return false
+                        val use = render.resourceUses.singleOrNull { it.role == GPUFrameResourceRole.PathDepthStencil }
+                        if (fact.sampleCountI32 != 4 || resourceFact.role != PlanResourceRole.DepthStencil ||
+                            use?.resource != resource || use.usage != GPUFrameResourceUsage.RenderAttachment || !use.write ||
+                            render.depthStencilLoadStore != null ||
+                            exactPayload.pathDepthStencilViewAuthority[stepIndex] !== view.view ||
+                            view.deviceGeneration != frame.generationSeal.deviceGeneration ||
+                            view.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                            !native.pass.depthReadOnly || !native.pass.stencilReadOnly ||
+                            native.pass.depthLoadOperation != null || native.pass.depthStoreOperation != null ||
+                            native.pass.depthClearValue != null || native.pass.stencilLoadOperation != null ||
+                            native.pass.stencilStoreOperation != null || native.pass.stencilClearValue != null
+                        ) return false
+                        expectedPathViews[stepIndex] = view.view
+                        return@forEachIndexed
                     }
                     val expectedState = when (fact.depthStencilLoadStore) {
                         PlanDepthStencilLoadStore.ClearZeroStore -> Triple(

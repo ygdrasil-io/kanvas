@@ -115,6 +115,16 @@ sans redimensionner artificiellement les références.
    une scène ne constitue pas un gain du renderer à corpus identique.
    La révision Skia ayant produit les PNG n'est pas établie ici ; les liens
    upstream servent au diagnostic, pas à inventer cette provenance.
+   L'audit du lot strokes relève aussi un piège partagé dans `GmCanvas` :
+   ses transformations affines sont souvent appliquées aux coordonnées des
+   paths avant le draw, sans transmettre la CTM et donc sans transformer
+   simultanément la largeur du stroke. Son `drawColor(color)` passe par un
+   rectangle transformé, contrairement au `clear` de
+   [cliplargerect upstream](https://github.com/google/skia/blob/main/gm/scaledrects.cpp).
+   Le port `nonclosedpaths` remplace aussi ses deux styles par `STROKE`.
+   Ces scènes ne sont pas des oracles suffisants pour une correction du
+   renderer : le lot utilise des témoins `Surface` directs et conserve les
+   ports inchangés pour mesurer un delta à corpus constant.
 2. **Prochain lot : strokes/hairlines et AA de primitives**, à partir d'un
    petit témoin fidèle et d'un test public de pixels. `width_invalid` est
    le premier refus de 15 cas (setup inclus), `rect_anti_alias` de 11 cas,

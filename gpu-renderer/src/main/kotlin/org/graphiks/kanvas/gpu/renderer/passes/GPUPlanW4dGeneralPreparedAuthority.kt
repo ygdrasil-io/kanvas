@@ -597,7 +597,9 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
             }
             val known = resources.associateBy(W4dGeneralNativeResourceFact::resourceId)
             val materialColors = pathPasses.associate { pass ->
-                val materialColor = if (graph.hasW5aMaterialPathCapabilityV2()) {
+                val materialColor = if (pass.phase.isHistoricalHardMaskProducer()) {
+                    org.graphiks.math.color.ColorF32.of(1f, 1f, 1f, 1f)
+                } else if (graph.hasW5aMaterialPathCapabilityV2()) {
                     if (pass.phase in setOf(
                         PathRenderPhase.SingleSampleDirectColor,
                         PathRenderPhase.SingleSampleStencilColorCover,
@@ -627,8 +629,6 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                     } else {
                         org.graphiks.math.color.ColorF32.Transparent
                     }
-                } else if (pass.phase.isHistoricalHardMaskProducer()) {
-                    org.graphiks.math.color.ColorF32.of(1f, 1f, 1f, 1f)
                 } else {
                     when (val authority = pass.draw.materialAuthority) {
                         is PlanDrawMaterialAuthority.MaterialV5 -> error(org.graphiks.kanvas.gpu.plan.W5gPlanDiagnostics.Unpromoted)

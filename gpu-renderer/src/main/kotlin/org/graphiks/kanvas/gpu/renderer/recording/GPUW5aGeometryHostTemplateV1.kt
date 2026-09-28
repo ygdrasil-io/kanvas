@@ -129,14 +129,23 @@ internal fun sealW5aGeometryHostTemplateV1(packet: GPUDrawPacket,
                     blend.toPreparedVerticesWriteMask()).hostTargetV1(), preparedVerticesDrawLayoutV6().hostLayoutV1(),
                 null, MaterialCoordinateSlotV1.InputPosition, vertices.artifact.layout.attributes.contains("color"))
         }
-    val key = packet.corePrimitivePreparedAuthority?.structuralPipelineKey ?: return sealW4eMaterialGeometryHostV1(packet)
-    return sealCorePrimitiveGeometryHostTemplateV1(packet, key)
+    val authority = packet.corePrimitivePreparedAuthority ?: return sealW4eMaterialGeometryHostV1(packet)
+    return sealCorePrimitiveGeometryHostTemplateV1(
+        packet,
+        authority.structuralPipelineKey,
+    )
 }
 
 /** Shared W4 geometry recipe; the caller retains its own whole-frame validation witness. */
 internal fun sealCorePrimitiveGeometryHostTemplateV1(packet: GPUDrawPacket,
-    key: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey): GPUW5aGeometryHostTemplateV1? {
-    val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key) as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
+    key: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey,
+): GPUW5aGeometryHostTemplateV1? {
+    val prepared = packet.corePrimitivePreparedAuthority
+    val native = prepared?.w4dGeneralFrameMaterializationAuthority
+    val sealedW4dGeneralFrame = prepared?.w4dGeneralPreparedAuthority != null && native != null &&
+        native.pathPass(packet.passId) != null && native.structuralPipelineKey(packet.passId) == key
+    val mapped = (if (sealedW4dGeneralFrame) mapW4dGeneralStructuralKeyToWgpu4kPipelineIdentity(key)
+        else mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)) as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
         ?: return null
     val source = corePrimitiveMaterialGeometryWgslV1(mapped.componentIdentity) ?: return null
     return GPUW5aGeometryHostTemplateV1(packet.packetId.value, mapped.identity.toString(), source,

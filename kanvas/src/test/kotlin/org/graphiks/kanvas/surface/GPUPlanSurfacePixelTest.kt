@@ -1446,7 +1446,7 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
-    fun `W4dGeneral mixed hard and AA paths expose the four-sample capability terminal`() {
+    fun `W4dGeneral mixed hard and AA paths preserve fully covered pixels`() {
         val aaPath = Path().apply {
             // Inverse-skewed device rect [1, 1]..[5, 5]: every legal AA sample is
             // either fully covered or fully uncovered, independently of its position.
@@ -1467,6 +1467,12 @@ class GPUPlanSurfacePixelTest {
         val aaPaint = Paint.fill(ColorARGB.of(128, 245, 77, 48)).copy(antiAlias = true)
         val hardPaint = Paint.fill(ColorARGB.of(255, 24, 119, 242)).copy(antiAlias = false)
         val transform = Matrix3x3F32.skewing(0.25f, 0f)
+        // Integral device edges make the independent one-sample oracle exact for all
+        // four samples, including alpha compositing and the later hard rectangle.
+        val expected = W4dGeneralPathCpuOracle.render(9, 9, listOf(
+            W4dGeneralPathCpuOracle.Draw(aaPath.toPathF32(), aaPaint, transform, RectI32(0, 0, 9, 9)),
+            W4dGeneralPathCpuOracle.Draw(hardPath.toPathF32(), hardPaint, transform, RectI32(0, 0, 9, 9)),
+        ))
         val surface = Surface(9, 9)
         surface.canvas {
             concat(transform)
@@ -1474,13 +1480,16 @@ class GPUPlanSurfacePixelTest {
             drawPath(hardPath, hardPaint)
         }
 
-        val failure = assertFailsWith<GPUPlanSurfaceTerminalException> { surface.render() }
-
-        assertEquals("w4d.general.texture-sample-support-unavailable", failure.code)
+        val result = try { surface.render() } catch (failure: GPUPlanSurfaceTerminalException) {
+            assertEquals("w4d.general.texture-sample-support-unavailable", failure.code)
+            return
+        }
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
     }
 
     @Test
-    fun `W4dGeneral AA terminal leaves the next public W4d render usable`() {
+    fun `W4dGeneral AA render leaves the next public W4d render usable`() {
         val rejectedPath = Path().apply {
             moveTo(1.25f, 1.25f)
             lineTo(5.25f, 1.25f)
@@ -1494,8 +1503,16 @@ class GPUPlanSurfacePixelTest {
             drawPath(rejectedPath, Paint.fill(ColorARGB.Red).copy(antiAlias = true))
         }
 
-        val failure = assertFailsWith<GPUPlanSurfaceTerminalException> { rejected.render() }
-        assertEquals("w4d.general.texture-sample-support-unavailable", failure.code)
+        val aaResult = try { rejected.render() } catch (failure: GPUPlanSurfaceTerminalException) {
+            assertEquals("w4d.general.texture-sample-support-unavailable", failure.code)
+            null
+        }
+        aaResult?.let { result ->
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(ubyteArrayOf(255u, 0u, 0u, 255u),
+                result.pixels.copyOfRange((3 * 9 + 3) * 4, (3 * 9 + 3) * 4 + 4))
+            assertPixelsEqual(ubyteArrayOf(0u, 0u, 0u, 0u), result.pixels.copyOfRange(0, 4))
+        }
 
         val path = Path().apply {
             moveTo(2.25f, 3.25f)

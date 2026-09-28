@@ -421,7 +421,7 @@ public class GpuPlanSurfaceExecutor internal constructor(
                     W4bAnalyticRRectPlanCompiler(),
                     W4cPathFillPlanCompiler(),
                     W4dPathStrokePlanCompiler(),
-                    W4dGeneralPathPlanCompiler(),
+                    W4dGeneralPathPlanCompiler.standaloneRectPathFrames(),
                     org.graphiks.kanvas.gpu.plan.W5aCompositePlanCompiler(runtimeCatalog),
                 ),
                 runtimeCatalog,
