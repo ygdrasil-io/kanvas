@@ -165,11 +165,15 @@ public class RenderGraph private constructor(
                     geometry.packedMaterialSourceV4(authority)
                 }
             }
+            // A W5a composite owns its passes in typed lanes, not in the wrapper graph.
+            val constructionPassCountI32 = geometry.w5aCompositePlanOrNull()?.lanes()?.fold(0) { count, lane ->
+                Math.addExact(count, lane.passes().size)
+            } ?: geometry.passes().size
             val cachedImages = bridge.imageDraws().map { it.composedOrigin?.upload?.cacheRequest ?: it.execution.cacheRequest }
                 .distinctBy { it.canonicalPhysicalIdentity }.mapIndexed { ordinalI32, request ->
                     PlanResource.of(PlanResourceRole.DecodedImageV1, ordinalI32, request.kind,
                         PlanTextureFormat.ImageV1(request.format), SizeI32(request.widthI32, request.heightI32),
-                        request.byteSizeI64, request.usages(), request.lifetime, 0, geometry.passes().size)
+                        request.byteSizeI64, request.usages(), request.lifetime, 0, constructionPassCountI32)
                 }
             // Like native composites, standalone topology lives exclusively in the typed
             // construction lane. PathDraw and historical stencil/material witnesses stay closed.

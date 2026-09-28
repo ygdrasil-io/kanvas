@@ -18,16 +18,16 @@ seulement leur cohérence de registre, pas la similarité des pixels actuels.
 
 ## Résultats observés
 
-| Mesure | Inventaire W0–W2 suivi | W7 provisoire |
-| --- | ---: | ---: |
-| GMs enregistrées | 631 | 631 |
-| Éligibles | 450 | 443 |
-| Exclues codec / font / quarantaine | 54 / 126 / 1 | 54 / 133 / 1 |
-| `Surface.render()` tenté | 379 | 386 |
-| Rendu disponible | 83 | 89 |
-| Échec terminal de rendu | 296 | 297 |
-| Setup échoué, tous scopes | 75 | 60 |
-| Éligibles sans tentative | — | 57 |
+| Mesure | Inventaire W0–W2 suivi | W7 initial | W7 après correction lifetime |
+| --- | ---: | ---: | ---: |
+| GMs enregistrées | 631 | 631 | 631 |
+| Éligibles | 450 | 443 | 443 |
+| Exclues codec / font / quarantaine | 54 / 126 / 1 | 54 / 133 / 1 | 54 / 133 / 1 |
+| `Surface.render()` tenté | 379 | 386 | 386 |
+| Rendu disponible | 83 | 89 | 124 |
+| Échec terminal de rendu | 296 | 297 | 262 |
+| Setup échoué, tous scopes | 75 | 60 | 60 |
+| Éligibles sans tentative | — | 57 | 57 |
 
 Sept GMs sont passées d'`eligible` à `excluded-font` ; ce changement de
 dénominateur doit rester visible dans toute comparaison. Par identité de GM,
@@ -38,7 +38,7 @@ de vie des ressources.
 
 ## Premiers groupes de causes
 
-Les nombres ci-dessous comptent les échecs terminaux des GMs éligibles, sauf
+Les nombres ci-dessous décrivent l'inventaire W7 **initial** et comptent les échecs terminaux des GMs éligibles, sauf
 la dernière ligne, qui concerne le setup. Une GM n'est comptée qu'à son premier
 diagnostic ; ce regroupement n'établit pas encore la cause racine.
 
@@ -58,9 +58,8 @@ sur ce relevé. Aucune mesure fraîche de similarité n'a été faite.
 
 ## Ordre de triage proposé
 
-1. Tracer les 31 lifetimes vides jusqu'au producteur du `PlanResource`, puis
-   vérifier les 25 GMs anciennement rendues sur un cas représentatif avant
-   toute généralisation.
+1. ~~Tracer les 31 lifetimes vides jusqu'au producteur du `PlanResource`.~~
+   Corrigé et mesuré ci-dessous ; conserver un test pixel représentatif.
 2. Décomposer les 54 refus `w6a.layer.unsupported_child` par type exact
    d'enfant et contrat W6 ; ne pas élargir l'admission à l'aveugle.
 3. Distinguer les limites explicites de ressources et les stubs des manques
@@ -70,3 +69,35 @@ sur ce relevé. Aucune mesure fraîche de similarité n'a été faite.
    pixel, la colorimétrie, les meshes et les combinaisons rares.
 
 Ces étapes constituent un triage, pas encore un plan d'implémentation approuvé.
+
+## Correction bornée de la durée de vie W5e
+
+Le diagnostic a localisé les lifetimes vides dans `RenderGraph.issueW5e` :
+le wrapper W5a composite ne porte aucune passe, alors que ses lanes en portent.
+La durée de vie des images décodées utilise désormais la somme I32 vérifiée
+des passes de ces lanes (et garde le nombre de passes direct hors composite).
+Dans `FrameSourceLayoutV4.prepareImageFrame`, le pic natif W5a est calculé
+explicitement à partir de sa géométrie, des stops et du bruit ; le budget
+extérieur W5e conserve intégralement images, runtime storage et uniformes.
+Les invariants de `PlanResource.of` et l'égalité de budget du lowerer W5a
+restent stricts.
+
+Un test de pixels public sur `bitmap_premul` a échoué avant le correctif sur
+`Resource lifetime must be non-empty`, puis a rendu les pixels de référence
+après celui-ci, avec cinq dispatches, zéro refus et aucun diagnostic.
+L'inventaire frais, écrit hors dépôt dans
+`/private/tmp/w7-post-lifetime-inventory.json`, mesure 124 rendus disponibles
+contre 89 avant correction : 35 gains, aucune perte. Les 31 refus de lifetime
+ont disparu ; quatre autres GMs auparavant refusées sur
+`invalid.material.image.contract` rendent aussi. Ce relevé ne mesure toujours
+pas la similarité des 35 nouveaux rendus et ne régénère ni scores, ni
+références, ni dashboard. Les gates W6 demeurent ouvertes.
+
+La vérification ciblée `:integration-tests:skia:test` du GM passe. Trois cas
+publics image, noise/gradient/image et runtime passent également leurs
+assertions, mais leur processus `:kanvas:test` quitte avec le code natif 133
+après les tests. Le cas public `sharedImageKeepsClampMatrixOrderAndMixedFrameStorage`
+échoue sur `failed.frame-coordinator.preflight` ; le même diagnostic et la même
+sortie 133 ont été reproduits isolément sur le HEAD W7 avant cette correction.
+Ces résultats ne constituent donc pas une suite Kanvas verte et ce problème
+préexistant reste distinct du correctif de lifetime.

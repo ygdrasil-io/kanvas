@@ -105,7 +105,13 @@ internal class FrameSourceLayoutV4 private constructor(
             val nonUniformAndStops = Math.addExact(nonUniformBytesI64,stopBytesI64)
             val packed = packConstructedFrame(graphs,table,nonUniformAndStops)
             val geometry = if (ordinaryLayout == null) RenderGraph.publishConstruction(graphs.single(),packed)
-                else W5aCompositeConstruction(graphs,table,nonUniformAndStops,ordinaryLayout.rectScratch).publish(packed)
+                else {
+                    // W5a accounts for its own geometry, stops and noise. Image uploads and
+                    // runtime storage belong to W5e's outer frame budget, not this native peak.
+                    val nativeCompositePeakI64 = Math.addExact(
+                        Math.addExact(ordinaryLayout.nonUniformWithoutStopsI64,stopBytesI64),noiseBytesI64)
+                    W5aCompositeConstruction(graphs,table,nativeCompositePeakI64,ordinaryLayout.rectScratch).publish(packed)
+                }
             finish(geometry,table,Math.addExact(nonUniformAndStops,uniformBytesI64))
         }
 
