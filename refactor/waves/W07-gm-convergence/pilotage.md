@@ -1,5 +1,8 @@
 # Pilotage de la convergence Skia
 
+PR draft [#2411](https://github.com/ygdrasil-io/kanvas/pull/2411), empilée
+sur [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410).
+
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
 codecs et `jpg-color-cube` conservent leurs exclusions documentées. Les limites

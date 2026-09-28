@@ -5,6 +5,9 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Pilotage et mesure fraîche — 29 septembre 2026
 
+PR draft empilée : [#2411](https://github.com/ygdrasil-io/kanvas/pull/2411)
+sur #2410.
+
 Le [pilotage](pilotage.md) remplace le comptage de rendus comme indicateur
 unique : **123/443** GMs éligibles produisent une image, **105** peuvent être
 comparées aux références actuelles ; **20** de ces comparaisons atteignent
