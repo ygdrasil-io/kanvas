@@ -1887,3 +1887,24 @@ Critical/Important. Ma relance indépendante donne XML `40/0/0/0`, suivie
 de Gradle exit 133 après JUnit : natif **UNKNOWN**. Les compilations ciblées
 `gpu-plan`/`gpu-renderer`/`kanvas:compileTestKotlin` sont vertes et
 `git show --check` est propre. Task 1b et tout 2A0d restent ouverts.
+
+### 2A0d Task 1b — source solid simple sur `Point` ordinaire
+
+`8f7342668` admet la source W5a `MaterialV1` Solid U16 sur
+`W5bPointDraw` uniquement lorsque `clipOnly == null`. La recette compare
+mode, V/I, bounds, scissor et blend au host `W6PointHostRecipeV1`, puis
+occupe le slot dense suivant la géométrie du même owner. W5h confronte
+packet, recette, canonical geometry, template, uniform bytes et manifest
+avant la préparation native. W6b, destination-read, W4e, gradients/Opacity,
+V2/V4/V5, Vertices/Path et leases restent exclus.
+
+Le témoin public `Surface` sélectionne explicitement `Shader.SolidColor` et
+fixe les pixels avant `Surface`. La première revue Sol a relevé l'absence
+de sa propre assertion `Render`/`Readback` ; `995bde6` l'a ajoutée au cas
+layered, puis la relecture Sol a été clean. Les trois compilations ciblées
+sont sorties 0. La relance des deux classes publiques pertinentes donne
+W6a XML `40/0/0/0`, W5a XML `48/1/0/1` : l'unique échec W5a concerne
+le refus attendu d'un `Vertices` avec filtre couleur sur la route racine,
+sans modification de cette route dans ce lot ; sa baseline n'est pas
+vérifiée. Gradle finit aussi avec GLFW exit 133 : statut natif **UNKNOWN**,
+distinct de l'échec JUnit W5a. Task 1b et 2A0d restent ouverts.
