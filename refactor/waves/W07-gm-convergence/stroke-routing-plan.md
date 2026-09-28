@@ -47,11 +47,13 @@
 - [x] Fix the causally exposed native compatibility guard: W4d AA resolves into the logical scene target without rendering directly to it. Recognize only the exact common sealed W4d authority, ordered pass/target bindings and logical readback/resolve identity. Keep physical target refs, downstream preflight and single-owner native allocations; do not duplicate transient preparations or bypass the general guard.
 - [x] Reuse the W4d-specific mask-consumer mapping in its authenticated material template. Validate W4d's physical MSAA attachment, retained passes and final-only canonical resolve against existing sealed semantic/native facts, preserving the generic contract and D24 validation. Include a public direct-triangle AA witness because its conservative D24 attachment has no stencil access.
 - [x] Run the new suite and relevant legacy refusal/public W6/W7 regressions sequentially on GPU. Expected: literal pixels and native Render/Readback evidence, no process exit 133.
-- [ ] Independent code review, correct findings, rerun affected tests, commit.
+- [x] Independent code review, correct findings, rerun affected tests, commit (`718445e6ef366dbc63ab213b0f4eb301c574af12`).
 
 **Observed RED chain:** The first public witnesses refused `unsupported.stroke.rect_subpixel_first_slice`, `unsupported.stroke.rect_transform` and `unsupported.stroke.rect_anti_alias`. Once admitted, the root AA graph exposed resolve-only target rejection, missing 4x mask-consumer mapping and generic per-pass resolve validation. Actual pixels then exposed transparent hard-mask producers, and direct AA exposed a native D24 attachment/pipeline mismatch. AA PATH strokes also selected the deferred W5b hard-only source topology: only the already-proven standalone AA solid domain now uses direct normalization with retained original source authority. No public pixel oracle was relaxed to accommodate these renderer defects.
 
 **Regression exception:** The expanded 69-test run passed 68 tests and failed the existing `W4d negative dash phase matches an independent source-arclength oracle` with `w5b.geometry.incompatible-plan: Required value was null.` A controlled rerun with the root compiler restored to its historical default constructor produces the identical error before native execution. Dash is excluded from the new standalone domain; the failure remains tracked, not disabled or reclassified as a passing test.
+
+The static diagnosis identifies `PathStrokeStyleF64.snapshot()` recreating an immutable `PathStrokeDashF64` without structural equality; the W5b scratch seal then compares the copied styles using data-class equality. The dash object identity differs, the seal fails, and `requireNotNull` surfaces the observed diagnostic. Those files are unchanged from the parent commit. This A/B is evidence for the historical route, not a claimed full rebuild of the historical commit; a separate public dash repair is needed.
 
 **Final targeted validation:** After restoring the standalone factory, the three complete W6/W7 suites (40 + 9 + 6 tests) plus `GPUPlanSurfacePixelTest.W4dGeneral*` and `GPUPlanSurfacePixelTest.W4e public hard*` (14 tests) pass: **69/69, Gradle exit 0**. This selector set differs from the expanded run above and does not include its failing dash test. Independent Sol review found no confirmed production defect; no global test-suite success is claimed.
 
@@ -61,6 +63,6 @@
 
 **Interfaces:** Same 631 registered identities, 443 current eligible identities, 30-second per-GM timeout; compare against `baseline-d661f10c3.json`.
 
-- [ ] Run the complete checkpoint with a fresh directory and committed renderer SHA. Resume after timed-out GM; no exclusions added.
-- [ ] Compare render/refusal/timeout states and image hashes of all 123 previously rendered GMs; separately report new renders and scores, regressions and known port-fidelity limits.
+- [x] Run the complete checkpoint with a fresh directory and committed renderer SHA. Resume after timed-out GM; no exclusions added.
+- [x] Compare render/refusal/timeout states and image hashes of all 123 previously rendered GMs; separately report new renders and scores, regressions and known port-fidelity limits.
 - [ ] Document results and remaining gap, push branch and create a stacked PR on `codex/w7-parity-pilot`; attach it to the chat.
