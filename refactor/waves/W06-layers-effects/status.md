@@ -1533,3 +1533,10 @@ Les trois compiles ciblées sortent 0. Le lancement groupé des sélecteurs
 publics produit les XML W6a `31/0/0/0`, scan-span `14/0/0/0` et W4e
 `2/0/0/0`; Gradle s'arrête ensuite avec GLFW 133, après JUnit (**UNKNOWN**
 pour la couche native, sans échec JUnit).
+
+La relecture Sol ciblée de `6082d3a68` ne relève aucun finding
+Critical/Important. Le sous-lot Task 3 `2A0c.IIIb/c` est review-clean : le
+catalogue par site natif, le contenu Fan et le packet inverse sont authentifiés
+avant allocation, puis consommés par le dispatch fondé sur la recette. Les
+gates `2A0c.IV`, `2A0d`, `2A1` et `2B` demeurent ouverts ; les XML ci-dessus
+n'établissent pas la réussite de la terminaison native GLFW.
