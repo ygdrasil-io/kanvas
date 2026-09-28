@@ -886,7 +886,8 @@ internal fun encodeW4eNativePasses(
                 ) {
                     val scanSpans = sealedPath.scanSpansDeviceI32
                     val scanScissors = sealedPath.scanScissorsLocalI32
-                    if (scanSpans != null || scanScissors != null) {
+                    val frozenScanRecipe = frozenInverseRecipe as? W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans
+                    if (frozenScanRecipe != null || (frozenInverseRecipe == null && (scanSpans != null || scanScissors != null))) {
                         if (scanSpans == null || scanScissors == null ||
                             phase != org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilProducer
                         ) throw refusal(
@@ -894,8 +895,6 @@ internal fun encodeW4eNativePasses(
                             "W4e scan spans require one single-sample stencil producer.",
                         )
                         val scissors = scanScissors.copyScissorsI32()
-                        val frozenScanRecipe = inverseMaskPathRecipesByPassId[entry.packet.passId]
-                            as? W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans
                         if (inverseMaskPathRecipesByPassId.isNotEmpty() && frozenScanRecipe == null) throw refusal(
                             "invalid.native-core-primitive.w4e-scan-spans",
                             "W4e scan-span producer lacks its frozen native-site recipe.",
@@ -925,9 +924,11 @@ internal fun encodeW4eNativePasses(
                         val semantic = requireNotNull(entry.packet.semanticPayload) {
                             "W4e scan-span producer requires its one frozen semantic packet payload."
                         }
-                        val pipelineWitness = if (scissors.isEmpty()) {
+                        val pipelineWitness = if (frozenScanRecipe is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.Empty ||
+                            frozenScanRecipe == null && scissors.isEmpty()) {
                             GPUW6InverseMaskScanSpanPipelineWitnessV1.Empty
                         } else {
+                            require(frozenScanRecipe == null || frozenScanRecipe is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.NonEmpty)
                             scanSpanStencilPipelineWitness(format)
                         }
                         GPUPreparedNativeScopeOperand.Render(entry.index,
