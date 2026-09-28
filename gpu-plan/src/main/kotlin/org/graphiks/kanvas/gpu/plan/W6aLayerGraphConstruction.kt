@@ -101,6 +101,9 @@ private fun RectF64.toExactI32OrNull(): RectI32? {
 /** Deliberately distinguished from malformed W6 topology so callers can recover before native work. */
 internal class W6aRestoreAdmissionFailure(message: String) : IllegalArgumentException(message)
 
+/** The W4e draw cap is frame-wide after W6 has expanded every final producer occurrence. */
+internal class W6aScanSpanDrawLimitFailure(message: String) : RuntimeException(message)
+
 /**
  * Freezes a complete layer event stack into one physical graph. In particular, this class never
  * groups by depth: each Begin, direct draw segment, and End is emitted in captured command order.
@@ -2880,6 +2883,7 @@ internal class W6aLayerGraphConstruction(
         filterSourceBindings = java.util.Collections.unmodifiableMap(LinkedHashMap(sourceBindingsById))
         passes += PlanPass.ReadbackPass(passes.size, root, staging, readbackRowBytesI64,
             Math.addExact(Math.multiplyExact(readbackRowBytesI64, (extent.height - 1).toLong()), Math.multiplyExact(extent.width.toLong(), 4L)))
+        requireFrameWideScanSpanDrawLimit(passes)
         rawPasses = immutableList(passes)
         val consumedMaskShaderOccurrences = rawPasses.filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
             ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding as?
@@ -2986,6 +2990,28 @@ internal class W6aLayerGraphConstruction(
             w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload, targetOriginDevice(target))
         }
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes, caps, budget)
+    }
+
+    /**
+     * Child W4e lanes can each satisfy their local admission while their final W6 occurrences
+     * exceed the frame-wide command contract. Count the emitted producer passes, never source
+     * identities, before resources, native payloads, or a RenderGraph are published.
+     */
+    private fun requireFrameWideScanSpanDrawLimit(passes: List<PlanPass>) {
+        var drawCountI32 = 0
+        passes.filterIsInstance<PlanPass.StencilGeometryProducerV3>().forEach { producer ->
+            val spans = producer.scanSpansDeviceI32 ?: return@forEach
+            val scissors = requireNotNull(producer.scanScissorsLocalI32)
+            require(scissors.copyScissorsI32().size == spans.spanCountI32) {
+                "W6 scan-span producer scissors diverged before frame-wide admission."
+            }
+            drawCountI32 = Math.addExact(drawCountI32, spans.spanCountI32)
+            if (drawCountI32 > W4eScanSpanAdmissionV1.MAX_PRODUCER_SCAN_SPAN_DRAWS_I32) {
+                throw W6aScanSpanDrawLimitFailure(
+                    "W4e inverse scan-span producers exceed ${W4eScanSpanAdmissionV1.MAX_PRODUCER_SCAN_SPAN_DRAWS_I32} draws",
+                )
+            }
+        }
     }
 
     fun publish(
@@ -3258,6 +3284,7 @@ internal class W6aLayerGraphConstruction(
         val clipMaskProducerDirectTriangleRecipes = freezeW4eClipMaskProducerDirectTriangleRecipesV1(finalW4eBindings, resources + source.resources)
         val clipMaskProducerStencilEdgeRecipes = freezeW4eClipMaskProducerStencilEdgeRecipesV1(finalW4eBindings, resources + source.resources)
         val pathRenderDirectColorRecipes = freezeW6PathRenderDirectColorRecipesV1(finalW4eBindings, resources + source.resources)
+        val inverseMaskPathRecipes = freezeW6InverseMaskPathRecipesV1(passes, resources + source.resources)
         val clipMaskFoldRecipes = freezeW4eClipMaskFoldRecipesV1(finalW4eBindings, resources + source.resources)
         val w6bCoverageRasterGeometry = freezeW6bCoverageRasterGeometryV1(passes, resources + source.resources, caps)
         val w6bCoverageRasterHostRecipes = freezeW6bCoverageRasterHostsV1(passes, resources + source.resources, w6bCoverageRasterGeometry)
@@ -3296,6 +3323,7 @@ internal class W6aLayerGraphConstruction(
             w6FullscreenPictureSourceGraphRecipes,
             w6FilterSpatialCropRecipes, w6FilterSpatialOffsetRecipes, w6FilterSpatialTileRecipes, w6FilterMorphologyRecipes, w6FilterColorFilterRecipes, w6FilterMergeRecipes, w6FilterBlendRecipes, w6FilterSeparableBlurRecipes, w6FilterMaskBlurNormalRecipes, w6FilterMaskBlurDualSourceRecipes, w6FilterMaskShaderRecipes, w6FilterMaskTableRecipes, w6FilterMaterializedSourceRecipes, w6FilterDropShadowColorizeRecipes, w6FilterDropShadowCompositeRecipes,
             pathRenderDirectColors = pathRenderDirectColorRecipes,
+            inverseMaskPaths = inverseMaskPathRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3329,6 +3357,7 @@ internal class W6aLayerGraphConstruction(
             w4eClipMaskProducerDirectTriangleRecipes = clipMaskProducerDirectTriangleRecipes,
             w4eClipMaskProducerStencilEdgeRecipes = clipMaskProducerStencilEdgeRecipes,
             w6PathRenderDirectColorRecipes = pathRenderDirectColorRecipes,
+            w6InverseMaskPathRecipes = inverseMaskPathRecipes,
             w4eClipMaskFoldRecipes = clipMaskFoldRecipes,
             w6bCoverageRasterGeometry = w6bCoverageRasterGeometry,
             w6bCoverageRasterHostRecipes = w6bCoverageRasterHostRecipes,

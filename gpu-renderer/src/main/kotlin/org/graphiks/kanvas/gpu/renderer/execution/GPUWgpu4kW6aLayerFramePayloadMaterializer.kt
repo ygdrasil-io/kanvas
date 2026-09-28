@@ -181,11 +181,30 @@ private fun preflightW4eClipMaskInitializes(
             if (bound is PlanPass.PathRenderPass && bound.scanSpansDeviceI32 != null) {
                 val proxy = requireNotNull(render.w6aPassV1 as? PlanPass.StencilGeometryProducerV3)
                 val sealedPath = requireNotNull(render.drawPackets.single().w4ePreparedPath)
+                val spans = requireNotNull(bound.scanSpansDeviceI32)
+                val recipe = frame.physical.w6InverseMaskPathRecipe(proxy.id)
                 require(proxy.scanSpansDeviceI32 === bound.scanSpansDeviceI32 &&
                     proxy.scanScissorsLocalI32?.copyOriginDeviceI32() == sealedPath.scanScissorsLocalI32?.copyOriginDeviceI32() &&
                     proxy.scanScissorsLocalI32?.copyDomainI32() == sealedPath.scanScissorsLocalI32?.copyDomainI32() &&
-                    proxy.scanScissorsLocalI32?.copyScissorsI32() == sealedPath.scanScissorsLocalI32?.copyScissorsI32()) {
+                    proxy.scanScissorsLocalI32?.copyScissorsI32() == sealedPath.scanScissorsLocalI32?.copyScissorsI32() &&
+                    recipe.producer.ownerPassId == proxy.id && recipe.producer.target.id == proxy.target &&
+                    recipe.producer.depthStencil.id == proxy.depthStencil &&
+                    recipe.producer.copyDomainDeviceI32() == spans.copyDomainI32() &&
+                    recipe.producer.copyOriginDeviceI32() == sealedPath.scanScissorsLocalI32?.copyOriginDeviceI32() &&
+                    recipe.producer.copyDomainLocalI32() == sealedPath.scanScissorsLocalI32?.copyDomainI32() &&
+                    recipe.producer.copyScissorsLocalI32() == sealedPath.scanScissorsLocalI32?.copyScissorsI32() &&
+                    recipe.producer.drawCountI32 == spans.spanCountI32 &&
+                    !recipe.producer.hasVertexIndexSlices &&
+                    (recipe.producer is W6InverseMaskPathRecipeV1.GeometryProducer.NonEmpty) ==
+                        (spans.spanCountI32 > 0)) {
                     "W6 scan-span packet lost the sealed proxy rebase before native allocation."
+                }
+                val coverRender = framePlan.steps.getOrNull(index + 1) as? GPUFrameStep.RenderPassStep
+                val cover = coverRender?.w6aPassV1 as? PlanPass.StencilCover
+                require(cover?.id == recipe.cover.ownerPassId && cover.target == proxy.target &&
+                    cover.depthStencil == proxy.depthStencil &&
+                    recipe.cover.copyScissorLocalI32() == cover.draw.copyScissorI32()) {
+                    "W6 inverse scan-span recipe lost its distinct cover before native allocation."
                 }
             }
             GPUW4eNativePassEntry(index, render, render.drawPackets.single())

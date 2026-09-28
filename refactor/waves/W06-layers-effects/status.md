@@ -1367,3 +1367,39 @@ garantirait donc pas la sûreté générale AppKit. Aucun correctif de ce
 lifecycle natif n'est revendiqué dans IIIa4a. Les XML JUnit à zéro échec
 ne transforment donc pas l'exit 133 en gate natif réussi. Aucun GM ni test
 d'infrastructure n'a été lancé pour ce diagnostic.
+
+### 2A0c — InverseMask.Geometry DirectTriangle : scan spans, occurrences et recette W6
+
+Le producer Geometry hard-edge W6 porte maintenant une recette physique distincte
+`W6InverseMaskPathRecipeV1`. Elle sépare explicitement `GeometryProducer.NonEmpty`
+(domaine device/local, origine, scissors I32 ordonnés, nombre de draws, D24S8,
+fullscreen sans bindings et zéro slice V/I) de `GeometryProducer.Empty` (clear-only,
+zéro draw), ainsi que du `GeometryCover` au owner/scissor distinct. Le freeze final,
+le catalogue native-site, le seal du layout, le packet W4e/W6, le préflight avant
+`device.create*` et la validation native comparent ces faits et les ressources
+physiques. Le renderer ne re-rasterise rien.
+La route dépend du fullscreen primitive W4e déjà publié : elle n'introduit ni
+triangle V/I producer ni pipeline lié à un buffer de géométrie.
+
+Le plafond est maintenant frame-wide : les occurrences finales de
+`StencilGeometryProducerV3` sont additionnées avant `rawPasses`, graphe,
+ressources et allocation. Le 4 097e draw est refusé par le diagnostic typé
+`w4e.clip.scan-span-draw-limit`; deux occurrences du même `Path` (4 098 draws)
+ne sont donc jamais dédupliquées par `commonSource`. Les admissions W4e lane
+restent inchangées. Le B_frame exact est `15_715_808` bytes, y compris le second
+`Uniform16` `SourceUniformData`; B_lane reste un gate enfant susceptible d'un
+refus agrégé W6 aval.
+
+Les témoins Surface publics Task 4 (miroir, winding, frontière `4.98f/5.02f`,
+4 096 admis et 4 098 refusé/sentinel) sont XML `1/0/0/0`. Les sélecteurs
+préservés Task 2/3 (rebase, Empty clear-only, fullscreen 700, B/B−1, B_lane,
+4 097), direct triangle, fan EVEN_ODD et 6×6 restent chacun XML `1/0/0/0`.
+Les compilations `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0. Les succès qui matérialisent le GPU ont
+Gradle exit 1 uniquement après le worker GLFW macOS 133; ce gap demeure
+**UNKNOWN** et séparé des XML. Le refus W4e 4 097 pré-allocation sort Gradle 0.
+
+Commit d'implémentation Task 4 : ce checkpoint est inclus dans le commit local
+Task 4. Cette
+extension ne ferme pas 2A0c, 2A1 ni 2B; ces gates restent ouverts pour la
+revue Sol et les sous-lots ultérieurs.

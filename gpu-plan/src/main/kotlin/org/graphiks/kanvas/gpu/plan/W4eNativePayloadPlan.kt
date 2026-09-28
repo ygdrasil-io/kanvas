@@ -137,7 +137,9 @@ public class W4eNativePayloadPlan private constructor(
             // A scan-span producer owns no V/I slice, but the same published integer rebase must
             // already fit this payload target before resources are materialized.
             if (pathPasses.any { pass -> pass.scanSpansDeviceI32?.let { spans ->
-                    spans.localScissorsI32OrNull(originDeviceI32, targetExtent) == null
+                    val scissors = spans.localScissorsI32OrNull(originDeviceI32, targetExtent)
+                    scissors == null || scissors.copyScissorsI32().size != spans.spanCountI32 ||
+                        (spans.spanCountI32 == 0) != scissors.copyScissorsI32().isEmpty()
                 } == true
             }) return null
 

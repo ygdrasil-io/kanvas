@@ -22,8 +22,15 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
                 val spans = requireNotNull(w4e.scanSpansDeviceI32)
                 val proxy = pass as? PlanPass.StencilGeometryProducerV3 ?: return false
                 val expected = proxy.scanScissorsLocalI32?.copyScissorsI32() ?: return false
+                val recipe = runCatching { physical.w6InverseMaskPathRecipe(proxy.id) }.getOrNull() ?: return false
                 if (proxy.scanSpansDeviceI32 !== spans ||
                     expected.size != spans.spanCountI32 ||
+                    recipe.producer.ownerPassId != proxy.id || recipe.producer.target.id != proxy.target ||
+                    recipe.producer.depthStencil.id != proxy.depthStencil ||
+                    recipe.producer.copyDomainDeviceI32() != spans.copyDomainI32() ||
+                    recipe.producer.copyScissorsLocalI32() != expected ||
+                    recipe.producer.drawCountI32 != spans.spanCountI32 || recipe.producer.hasVertexIndexSlices ||
+                    (recipe.producer is W6InverseMaskPathRecipeV1.GeometryProducer.NonEmpty) != (spans.spanCountI32 > 0) ||
                     native.semanticPayloads.singleOrNull() !is GPUDrawSemanticPayload.PathStencilProducer ||
                     native.commands.any { it is GPUPreparedNativeRenderCommand.SetVertexBuffer ||
                         it is GPUPreparedNativeRenderCommand.SetIndexBuffer ||

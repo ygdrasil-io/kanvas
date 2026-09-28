@@ -250,6 +250,12 @@ public class W6aLayerPlanCompiler public constructor(
                 }
                 is SourceConstructionResultV4.Refused -> layout.failure
             }
+        } catch (failure: W6aScanSpanDrawLimitFailure) {
+            RenderPlanResult.ResourceLimitExceeded(listOf(W4ePlanDiagnostics.diagnostic(
+                W4ePlanDiagnostics.ScanSpanDrawLimit,
+                org.graphiks.kanvas.render.ir.RenderDiagnosticDomain.RESOURCE,
+                failure.message ?: "W4e inverse scan-span producers exceed the frame-wide draw limit.",
+            )))
         } catch (failure: W6aResourceLimitFailure) {
             val message = failure.message ?: "Layer frame budget exceeded."
             if (W6bFilterGraphConstruction.ownsW6dAdvanced(selected.scene)) {

@@ -156,6 +156,8 @@ internal fun validateW6aLayerTopology(
                 ))
                 require(expected.copyDomainI32() == actual.copyDomainI32() &&
                     expected.copyScissorsI32() == actual.copyScissorsI32() &&
+                    actual.copyScissorsI32().size == spans.spanCountI32 &&
+                    (spans.spanCountI32 == 0) == actual.copyScissorsI32().isEmpty() &&
                     cover.draw is W5bW4ePathDraw &&
                     (cover.draw as W5bW4ePathDraw).hasW4eInverseMaskStencilPair())
             }

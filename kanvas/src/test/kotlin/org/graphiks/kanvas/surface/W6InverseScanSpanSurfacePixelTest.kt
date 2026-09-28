@@ -19,6 +19,118 @@ import org.junit.jupiter.api.Test
  */
 class W6InverseScanSpanSurfacePixelTest {
     @Test
+    fun `inverse scan span mirror edge keeps its fixed point boundary`() {
+        // Removing the scan-span fixed-point rounding, or treating the mirror's right boundary
+        // as exclusive at the wrong pixel centre, changes one of these three public pixels.
+        val blue = rgba(17, 61, 211)
+        val transparent = rgba(0, 0, 0, 0)
+        val widthI32 = 6
+        val mirror = inverseTriangle(1f, 1f, 4f, 1f, 4f, 4f)
+        val surface = Surface(widthI32, 6)
+        surface.canvas {
+            saveLayer()
+            clipPath(targetClipPath(5, 4), antiAlias = false)
+            drawPath(mirror, opaqueBlue())
+            restore()
+        }
+
+        val actual = surface.render()
+        assertPixel(blue, actual.pixels, widthI32, 1, 1)
+        assertPixel(transparent, actual.pixels, widthI32, 2, 1)
+        assertPixel(transparent, actual.pixels, widthI32, 5, 1)
+        assertRenderReadback(actual.nativeEvidenceScopeKinds)
+    }
+
+    @Test
+    fun `inverse scan span reversed winding keeps the upper right pixel inside`() {
+        // Losing edge normalization on the reversed direct triangle turns (4,1) blue through
+        // the inverse cover.  The clipped-out pixel separately keeps clip ownership observable.
+        val transparent = rgba(0, 0, 0, 0)
+        val widthI32 = 6
+        val reverse = inverseTriangle(2f, 1f, 5f, 1f, 2f, 4f)
+        val surface = Surface(widthI32, 6)
+        surface.canvas {
+            saveLayer()
+            clipPath(targetClipPath(5, 4), antiAlias = false)
+            drawPath(reverse, opaqueBlue())
+            restore()
+        }
+
+        val actual = surface.render()
+        assertPixel(transparent, actual.pixels, widthI32, 4, 1)
+        assertPixel(transparent, actual.pixels, widthI32, 5, 1)
+        assertRenderReadback(actual.nativeEvidenceScopeKinds)
+    }
+
+    @Test
+    fun `inverse scan span upper right edge distinguishes 4 point 98 from 5 point 02`() {
+        // The two inputs straddle the centre (4.5,1.5).  Replacing Skia's FDot6 recurrence by
+        // an epsilon or a direct GPU triangle makes these public results collapse together.
+        val blue = rgba(17, 61, 211)
+        val transparent = rgba(0, 0, 0, 0)
+        val widthI32 = 6
+        listOf(4.98f to blue, 5.02f to transparent).forEach { (rightF32, expected) ->
+            val surface = Surface(widthI32, 6)
+            surface.canvas {
+                saveLayer()
+                clipPath(targetClipPath(5, 4), antiAlias = false)
+                drawPath(inverseTriangle(2f, 1f, rightF32, 1f, 2f, 4f), opaqueBlue())
+                restore()
+            }
+
+            val actual = surface.render()
+            assertPixel(expected, actual.pixels, widthI32, 4, 1)
+            assertPixel(transparent, actual.pixels, widthI32, 5, 1)
+            assertRenderReadback(actual.nativeEvidenceScopeKinds)
+        }
+    }
+
+    @Test
+    fun `inverse scan span 4096 draws remain admitted in one W6 layer`() {
+        // The limit is inclusive.  A producer span at each target row leaves its inverse cover
+        // transparent, while Render/Readback prove the admitted lane reaches execution.
+        val transparent = rgba(0, 0, 0, 0)
+        val heightI32 = 4_096
+        val surface = Surface(1, heightI32)
+        surface.canvas {
+            saveLayer()
+            clipPath(targetClipPath(1, heightI32), antiAlias = false)
+            drawPath(inverseTriangle(0f, 0f, 10_000f, 0f, 0f, heightI32.toFloat()), opaqueBlue())
+            restore()
+        }
+
+        val actual = surface.render()
+        assertPixel(transparent, actual.pixels, 1, 0, 0)
+        assertPixel(transparent, actual.pixels, 1, 0, heightI32 - 1)
+        assertRenderReadback(actual.nativeEvidenceScopeKinds)
+    }
+
+    @Test
+    fun `inverse scan span two W6 occurrences of one path refuse 4098 draws before readback`() {
+        // Each source lane has 2,049 valid spans.  Reusing the identical Path instance must not
+        // turn two final producer occurrences into one source-level admission count.
+        val heightI32 = 2_049
+        val sentinel = UByteArray(heightI32 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val samePath = inverseTriangle(0f, 0f, 10_000f, 0f, 0f, heightI32.toFloat())
+        val surface = Surface(1, heightI32)
+        surface.canvas {
+            saveLayer()
+            clipPath(targetClipPath(1, heightI32), antiAlias = false)
+            drawPath(samePath, opaqueBlue())
+            drawPath(samePath, opaqueBlue())
+            restore()
+        }
+
+        val failure = assertFailsWith<IllegalStateException> {
+            surface.readPixels(RectF32.ofLTRB(0f, 0f, 1f, heightI32.toFloat()), sentinel)
+        }
+        assertTrue(failure.message?.startsWith("w4e.clip.scan-span-draw-limit:") == true,
+            failure.message ?: "missing diagnostic")
+        assertContentEquals(before, sentinel)
+    }
+
+    @Test
     fun `inverse scan spans rebase once in a translated W6 layer`() {
         // This 8x8 literal is the 6x6 L witness translated once by (1,1).  A second rebase
         // would move the blue vertical arm away from x=2, while no rebase would leave it at x=1.
@@ -112,21 +224,9 @@ class W6InverseScanSpanSurfacePixelTest {
         // is outside the L.  All three values are fixed before Surface construction.
         val widthI32 = 700
         val heightI32 = 700
-        val rgba8Bytes = rgba8Bytes(widthI32, heightI32)
-        val readbackBytes = readbackBytes(widthI32, heightI32)
-        val frameBudgetBytes = checkedAdd(
-            rgba8Bytes,
-            rgba8Bytes,
-            readbackBytes,
-            checkedMultiply(rgba8Bytes, 3L),
-            rgba8Bytes,
-            rgba8Bytes,
-            16L * 1_024L,
-            4L * 1_024L,
-            4L * 1_024L,
-            16L, // legacy solid-color SourceUniformData lease
-            16L, // W6 layer restore uniform
-        )
+        // Exact final parent + layer inventory.  It includes both 16-byte SourceUniformData
+        // rows; this witness intentionally does not relabel the child W4e lane budget as W6.
+        val frameBudgetBytes = 15_715_808L
         val blue = rgba(17, 61, 211)
         val transparent = rgba(0, 0, 0, 0)
         val lClip = Path().apply {
@@ -174,21 +274,9 @@ class W6InverseScanSpanSurfacePixelTest {
         // final W6a aggregate gate rather than relabelling that refusal as W4e.
         val widthI32 = 700
         val heightI32 = 700
-        val rgba8Bytes = rgba8Bytes(widthI32, heightI32)
-        val readbackBytes = readbackBytes(widthI32, heightI32)
-        val finalBudgetBytes = checkedAdd(
-            rgba8Bytes, // root target
-            rgba8Bytes, // live W6 layer
-            readbackBytes,
-            checkedMultiply(rgba8Bytes, 3L), // two mask accumulators and scratch
-            rgba8Bytes, // hard clip D24S8
-            rgba8Bytes, // inverse scan-span producer D24S8
-            16L * 1_024L, // VertexData physical minimum; zero useful bytes for this producer
-            4L * 1_024L, // IndexData physical minimum; zero useful bytes for this producer
-            4L * 1_024L, // W4e UniformData physical minimum
-            16L, // legacy solid-color SourceUniformData lease
-            16L, // W6 layer restore uniform
-        )
+        // Exact same final frame peak as the positive B witness, including the second
+        // 16-byte SourceUniformData row retained by the final W6 occurrence inventory.
+        val finalBudgetBytes = 15_715_808L
         val sentinel = UByteArray(widthI32 * heightI32 * 4) { 0x5au }
         val before = sentinel.copyOf()
         val fullClip = targetClipPath(widthI32, heightI32)
