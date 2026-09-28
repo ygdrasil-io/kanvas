@@ -521,8 +521,10 @@ public class PlanPhysicalLayoutV1 private constructor(
                     "W6 SolidRect host recipe changed after final pass binding."
                 }
             }
+            val expectedCorePrimitiveHosts = freezeW6CorePrimitiveHostsV1(graph.passes())
             val expectedW5aOrdinarySolidSources = freezeW5aSourceNativeSiteRecipesV1(
-                graph.passes(), graph.materialPlanTableOrNull(), rows, source.uniforms, expectedSolidRectHosts)
+                graph.passes(), graph.materialPlanTableOrNull(), rows, source.uniforms, expectedSolidRectHosts,
+                expectedCorePrimitiveHosts)
             require(source.w5aOrdinarySolidSourceRecipes.keys == expectedW5aOrdinarySolidSources.keys) {
                 "W5a ordinary source recipes differ from the final material table/site catalogue"
             }
@@ -531,7 +533,6 @@ public class PlanPhysicalLayoutV1 private constructor(
                     "W5a ordinary source recipe changed after final pass/table/uniform sealing: ${owner.ownerPassId.value}/${owner.drawOrPacketOrdinalI32}/${owner.bundleOrdinalI32}"
                 }
             }
-            val expectedCorePrimitiveHosts = freezeW6CorePrimitiveHostsV1(graph.passes())
             require(source.w6CorePrimitiveHostRecipes.keys == expectedCorePrimitiveHosts.keys)
             source.w6CorePrimitiveHostRecipes.forEach { (site, recipe) ->
                 require(recipe.site == site && recipe == expectedCorePrimitiveHosts.getValue(site)) {

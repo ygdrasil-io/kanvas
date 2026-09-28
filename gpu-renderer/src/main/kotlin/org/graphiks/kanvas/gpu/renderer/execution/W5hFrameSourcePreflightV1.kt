@@ -6,10 +6,14 @@ import org.graphiks.kanvas.gpu.plan.ComposedMaterialProgramV6
 import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
+import org.graphiks.kanvas.gpu.plan.AnalyticRectDraw
+import org.graphiks.kanvas.gpu.plan.AnalyticRRectDraw
 import org.graphiks.kanvas.gpu.plan.W5aSourceNativeSiteRecipeV1
 import org.graphiks.kanvas.gpu.plan.W5aSourceNativeBindingKindV1
 import org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1
 import org.graphiks.kanvas.gpu.plan.W6SolidRectNativeSiteRecipeV1
+import org.graphiks.kanvas.gpu.plan.W6CorePrimitiveNativeSiteRecipeV1
+import org.graphiks.kanvas.gpu.plan.W5aSourceNativeGeometryFamilyV1
 import org.graphiks.kanvas.gpu.plan.isW5aGradientSourceVariantV1
 import org.graphiks.kanvas.gpu.plan.w5aOrdinarySourceNativeVariantV1OrNull
 import org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2
@@ -78,7 +82,9 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                 val render = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { packet in it.drawPackets }
                 val pass = render.w6aPassV1 as? PlanPass.RenderPass ?: return null
                 val ordinal = render.drawPackets.indexOf(packet)
-                val draw = pass.draws().getOrNull(ordinal) as? SolidRectDraw ?: return null
+                val draw = pass.draws().getOrNull(ordinal)?.takeIf {
+                    it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw
+                } ?: return null
                 val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1 ?: return null
                 val w6 = requireNotNull(frame.w6aLayerFrameV1)
                 val variant = w5aOrdinarySourceNativeVariantV1OrNull(w6.graph.materialPlanTableOrNull(), pass, draw) ?: return null
@@ -88,11 +94,19 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                     owner.ownerPassId == pass.id && owner.drawOrPacketOrdinalI32 == ordinal
                 }?.value ?: error("Missing frozen W5a ordinary source recipe for ${pass.id.value}/$ordinal.")
                 val geometry = physical.nativeSiteRecipeCatalogV1().recipe(recipe.geometryOwner)
-                    as? W6SolidRectNativeSiteRecipeV1
-                    ?: error("W5a ordinary source geometry owner is not a sealed SolidRect site: ${recipe.geometryOwner}.")
-                require(geometry.canonicalLogicalEncodingV1 == recipe.geometryCanonicalEncodingV1 &&
-                    geometry.host.target.format == recipe.targetFormat &&
-                    geometry.host.target.sampleCountI32 == recipe.targetSampleCountI32) {
+                val geometryMatches = when (recipe.geometryFamily) {
+                    W5aSourceNativeGeometryFamilyV1.SolidRect -> (geometry as? W6SolidRectNativeSiteRecipeV1)?.let {
+                        it.canonicalLogicalEncodingV1 == recipe.geometryCanonicalEncodingV1 &&
+                            it.host.target.format == recipe.targetFormat && it.host.target.sampleCountI32 == recipe.targetSampleCountI32
+                    }
+                    W5aSourceNativeGeometryFamilyV1.AnalyticRect,
+                    W5aSourceNativeGeometryFamilyV1.AnalyticRRect -> (geometry as? W6CorePrimitiveNativeSiteRecipeV1)?.let {
+                        it.canonicalLogicalEncodingV1 == recipe.geometryCanonicalEncodingV1 &&
+                            it.host.selector.target.format.name == recipe.targetFormat.name &&
+                            it.host.selector.target.sampleCountI32 == recipe.targetSampleCountI32
+                    }
+                } == true
+                require(geometryMatches) {
                     "W5a ordinary source recipe does not authenticate its geometry target/site: ${pass.id.value}/$ordinal"
                 }
                 var leaf = authority.ref

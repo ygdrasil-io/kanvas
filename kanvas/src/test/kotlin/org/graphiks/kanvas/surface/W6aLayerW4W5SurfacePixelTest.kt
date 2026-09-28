@@ -59,6 +59,38 @@ class W6aLayerW4W5SurfacePixelTest {
     }
 
     @Test
+    fun `analytic Rect and RRect use simple MaterialV1 solids in a W6 layer`() {
+        // Full-cover sample centres are intentionally separate from the fractional AA edges.
+        // The literal oracle precedes Surface and the scope assertion requires Render+Readback.
+        val rect = ColorARGB.Red
+        val rrect = ColorARGB.Blue
+        val expectedRect = W5aSolidOpacityCpuOracle.draw(rect, 1f)
+        val expectedRRect = W5aSolidOpacityCpuOracle.draw(rrect, 1f)
+        val expectedRectEdge = W5aSolidOpacityCpuOracle.draw(rect, 1f, coverageF32 = .75f)
+        val expectedRRectEdge = W5aSolidOpacityCpuOracle.draw(rrect, 1f, coverageF32 = .75f)
+
+        val surface = Surface(7, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(.25f, -1f, 2.75f, 2f),
+                opaque(RED).copy(shader = Shader.SolidColor(rect), antiAlias = true))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(3.25f, -1f, 5.75f, 2f), CornerRadiiF32.of(1f)),
+                opaque(RED).copy(shader = Shader.SolidColor(rrect), antiAlias = true))
+            restore()
+        }
+        val actual = surface.render()
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRectEdge, actual.pixels.copyOfRange(0, 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRect, actual.pixels.copyOfRange(4, 8))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRectEdge, actual.pixels.copyOfRange(8, 12))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRRectEdge, actual.pixels.copyOfRange(12, 16))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRRect, actual.pixels.copyOfRange(4 * 4, 5 * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRRectEdge, actual.pixels.copyOfRange(5 * 4, 6 * 4))
+        assertContentEquals(rgba(0, 0, 0, 0), actual.pixels.copyOfRange(6 * 4, 7 * 4))
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `linear gradient material uses the public ordinary W6 source lane`() {
         // The two samples are the sRGB gradient at x=.5 and x=1.5, calculated before Surface.
         // This remains deliberately a Rect in one layer: the admitted route is an ordinary W6

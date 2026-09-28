@@ -2,7 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 /**
  * The bounded 2A0d ordinary W5a source site.  This deliberately admits only a final ordinary
- * SolidRect backed by one explicitly admitted W5 MaterialV1 program: no coverage source,
+ * geometry host backed by one explicitly admitted W5 MaterialV1 program: no coverage source,
  * destination read, W4e packet, image/noise/runtime binding, or renderer-owned handle is present.
  */
 public enum class W5aSourceNativeVariantV1 {
@@ -18,6 +18,7 @@ public enum class W5aSourceNativeVariantV1 {
     OrdinaryConicalGradientOpacityMaterialV1,
 }
 public enum class W5aSourceNativeBindingKindV1 { UniformBuffer, StorageBuffer }
+public enum class W5aSourceNativeGeometryFamilyV1 { SolidRect, AnalyticRect, AnalyticRRect }
 
 /** Closed-world admission for the only W5a source variants that consume the stop slab. */
 public fun W5aSourceNativeVariantV1.isW5aGradientSourceVariantV1(): Boolean = when (this) {
@@ -77,6 +78,7 @@ public class W5aSourceNativeSiteRecipeV1 internal constructor(
     /** V1 coordinates are material ABI, rather than a late renderer choice. */
     public val materialCoordinateCanonicalIdentity: String,
     bindingManifest: List<W5aSourceNativeBindingAbiV1>,
+    public val geometryFamily: W5aSourceNativeGeometryFamilyV1,
     public val geometryOwner: NativeSiteOwnerV1,
     public val geometryCanonicalEncodingV1: String,
     public val targetFormat: W6SolidRectTargetFormatV1,
@@ -121,10 +123,21 @@ public class W5aSourceNativeSiteRecipeV1 internal constructor(
             "W5a ordinary legacy source ABI changed"
         }
         require(geometryCanonicalEncodingV1.isNotBlank() && targetFormat == W6SolidRectTargetFormatV1.RGBA8UnormSrgb && targetSampleCountI32 == 1) {
-            "W5a source geometry target is not the admitted RGBA8UnormSrgb single-sample SolidRect"
+            "W5a source geometry target is not the admitted RGBA8UnormSrgb single-sample host"
         }
         require(geometryOwner.ownerPassId == ownerPassId && geometryOwner.drawOrPacketOrdinalI32 == drawOrdinalI32) {
-            "W5a source geometry owner is not the final SolidRect site"
+            "W5a source geometry owner is not the final RenderPass draw site"
+        }
+        require(geometryOwner.bundleOrdinalI32 < bundleOrdinalI32) {
+            "W5a source bundle must follow its frozen geometry bundle"
+        }
+        if (geometryFamily != W5aSourceNativeGeometryFamilyV1.SolidRect) {
+            require(variant == W5aSourceNativeVariantV1.OrdinarySolidMaterialV1 && opacityBindingCountI32 == 0 &&
+                uniformByteCountI64 == 16L && gradientStopResource == null && gradientStopByteCountI64 == 0L &&
+                gradientStopCanonicalIdentity.isEmpty() && materialCoordinateCanonicalIdentity.isEmpty() &&
+                frozenBindingManifest == listOf(W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer))) {
+                "W5a analytic source admits only the simple SolidLinearPremulV1 U16 ABI"
+            }
         }
     }
     public val owner: NativeSiteOwnerV1 get() = NativeSiteOwnerV1(ownerPassId, drawOrdinalI32, bundleOrdinalI32)
@@ -151,7 +164,7 @@ public class W5aSourceNativeSiteNativeRecipeV1 internal constructor(
         long("gradient.bytes", host.gradientStopByteCountI64); text("gradient.canonical", host.gradientStopCanonicalIdentity)
         text("coordinates.canonical", host.materialCoordinateCanonicalIdentity)
         text("geometry.owner", host.geometryOwner.ownerPassId.value); int("geometry.draw", host.geometryOwner.drawOrPacketOrdinalI32); int("geometry.bundle", host.geometryOwner.bundleOrdinalI32)
-        text("geometry.canonical", host.geometryCanonicalEncodingV1); enum("target.format", host.targetFormat); int("target.samples", host.targetSampleCountI32)
+        enum("geometry.family", host.geometryFamily); text("geometry.canonical", host.geometryCanonicalEncodingV1); enum("target.format", host.targetFormat); int("target.samples", host.targetSampleCountI32)
         blend("blend", host.blend); enum("variant", host.variant)
         host.bindingManifest().forEachIndexed { index, binding -> int("binding.$index.index", binding.bindingI32); enum("binding.$index.kind", binding.kind) }
     }
@@ -163,7 +176,9 @@ public fun w5aOrdinarySourceNativeVariantV1OrNull(
     pass: PlanPass.RenderPass,
     draw: PlanDraw,
 ): W5aSourceNativeVariantV1? {
-    if (pass.w6bMaskSourceBinding != null || draw !is SolidRectDraw || draw.blend is BlendPlan.DestinationReadV1) return null
+    if (pass.w6bMaskSourceBinding != null ||
+        (draw !is SolidRectDraw && draw !is AnalyticRectDraw && draw !is AnalyticRRectDraw) ||
+        draw.blend is BlendPlan.DestinationReadV1) return null
     val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1 ?: return null
     val materialTable = table ?: return null
     var leaf = authority.ref
@@ -174,6 +189,8 @@ public fun w5aOrdinarySourceNativeVariantV1OrNull(
         opacityCount++
     }
     val entry = materialTable.entry(leaf)
+    if (draw !is SolidRectDraw && (opacityCount != 0 || authority.coordinates != null ||
+            entry.program != MaterialProgramPlan.SolidLinearPremulV1 || entry.bindings !is MaterialBindingPlan.SolidRgbaF32V1)) return null
     val base = when {
         entry.program == MaterialProgramPlan.SolidLinearPremulV1 && entry.bindings is MaterialBindingPlan.SolidRgbaF32V1 ->
             W5aSourceNativeVariantV1.OrdinarySolidMaterialV1
@@ -204,14 +221,14 @@ public fun freezeW5aSourceNativeSiteRecipesV1(
     resources: List<PlanResource>,
     uniforms: Map<String, PlanResourceId>,
     solidHosts: Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1>,
+    coreHosts: Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1> = emptyMap(),
 ): Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> {
     val materialTable = table ?: return emptyMap()
     val rows = linkedMapOf<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1>()
     passes.filterIsInstance<PlanPass.RenderPass>().forEach { pass ->
         pass.draws().forEachIndexed { ordinal, draw ->
             val variant = w5aOrdinarySourceNativeVariantV1OrNull(materialTable, pass, draw) ?: return@forEachIndexed
-            val solid = draw as SolidRectDraw
-            val authority = solid.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
+            val authority = draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
             val entry = materialTable.entry(authority.ref)
             val raw = RawMaterialRequirementsV2.of(materialTable, authority.ref)
             var leaf = authority.ref
@@ -238,16 +255,40 @@ public fun freezeW5aSourceNativeSiteRecipesV1(
                     "w5a ordinary gradient stop row changed after source layout"
                 }
             } else null
-            val geometry = solidHosts.getValue(W6GeometrySiteKeyV1(pass.id, ordinal))
-            require(geometry.colorMode is W6SolidRectColorModeV1.UniformColor16 && geometry.blend == solid.blend) { "w5a ordinary source geometry host no longer matches SolidRect" }
-            val baseOwners = solidHosts.keys.asSequence()
+            val site = W6GeometrySiteKeyV1(pass.id, ordinal)
+            val geometry = when (draw) {
+                is SolidRectDraw -> solidHosts.getValue(site).also { require(it.colorMode is W6SolidRectColorModeV1.UniformColor16 && it.blend == draw.blend) }
+                is AnalyticRectDraw -> coreHosts.getValue(site).also { require(it is W6AnalyticRectHostRecipeV1 && it.selector.blend == draw.blend) }
+                is AnalyticRRectDraw -> coreHosts.getValue(site).also { require(it is W6AnalyticRRectHostRecipeV1 && it.selector.blend == draw.blend) }
+                else -> error("Unadmitted W5a ordinary source geometry")
+            }
+            val hostSites = if (draw is SolidRectDraw) solidHosts.keys else coreHosts.keys
+            val baseOwners = hostSites.asSequence()
                 .filter { site -> site.ownerPassId == pass.id && site.drawOrdinalI32 == ordinal }
                 .map { site -> NativeSiteOwnerV1(site.ownerPassId, site.drawOrdinalI32, 0) }
                 .sortedBy(NativeSiteOwnerV1::bundleOrdinalI32)
                 .toList()
             require(baseOwners.map(NativeSiteOwnerV1::bundleOrdinalI32).sorted() == (0 until baseOwners.size).toList()) { "w5a ordinary source geometry catalog is not dense" }
             val geometryOwner = baseOwners.single()
-            val recipe = W5aSourceNativeSiteRecipeV1(pass.id, ordinal, baseOwners.size, solid.commandIndex, authority.ref,
+            val geometryEncoding = when (geometry) {
+                is W6SolidRectHostRecipeV1 -> W6SolidRectNativeSiteRecipeV1(geometry).canonicalLogicalEncodingV1
+                else -> W6CorePrimitiveNativeSiteRecipeV1(geometry as W6CorePrimitiveHostRecipeV1).canonicalLogicalEncodingV1
+            }
+            val geometryTarget = when (geometry) {
+                is W6SolidRectHostRecipeV1 -> geometry.target
+                is W6CorePrimitiveHostRecipeV1 -> W6SolidRectTargetV1(
+                    W6SolidRectTargetFormatV1.valueOf(geometry.selector.target.format.name),
+                    geometry.selector.target.sampleCountI32,
+                )
+                else -> error("Unadmitted W5a ordinary source geometry")
+            }
+            val geometryFamily = when (draw) {
+                is SolidRectDraw -> W5aSourceNativeGeometryFamilyV1.SolidRect
+                is AnalyticRectDraw -> W5aSourceNativeGeometryFamilyV1.AnalyticRect
+                is AnalyticRRectDraw -> W5aSourceNativeGeometryFamilyV1.AnalyticRRect
+                else -> error("Unadmitted W5a ordinary source geometry")
+            }
+            val recipe = W5aSourceNativeSiteRecipeV1(pass.id, ordinal, baseOwners.size, draw.commandIndex, authority.ref,
                 entry.program.structuralId.value, leafEntry.program.structuralId.value, opacityCount, raw.structuralId, raw.canonicalIdentity, uniform, raw.uniformByteCountI64, raw.copyUniformBytes(),
                 stopResource?.id, stopResource?.byteSize ?: 0L,
                 if (variant.isW5aGradientSourceVariantV1()) requireNotNull(slab).canonicalIdentity else "",
@@ -257,8 +298,8 @@ public fun freezeW5aSourceNativeSiteRecipesV1(
                     W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer),
                     W5aSourceNativeBindingAbiV1(1, W5aSourceNativeBindingKindV1.StorageBuffer),
                 ) else listOf(W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer)),
-                geometryOwner, W6SolidRectNativeSiteRecipeV1(geometry).canonicalLogicalEncodingV1,
-                geometry.target.format, geometry.target.sampleCountI32, solid.blend, variant)
+                geometryFamily, geometryOwner, geometryEncoding,
+                geometryTarget.format, geometryTarget.sampleCountI32, draw.blend, variant)
             require(rows.put(recipe.owner, recipe) == null) {
                 "W5a source recipe owner is not unique: ${recipe.ownerPassId.value}/${recipe.drawOrdinalI32}/${recipe.bundleOrdinalI32}"
             }

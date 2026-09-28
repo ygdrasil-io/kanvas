@@ -3274,9 +3274,9 @@ internal class W6aLayerGraphConstruction(
                     PlanResourceLifetime.FrameLocal, 0, passes.size)
             }
         }
-        val w5aOrdinarySolidSourceRecipes = freezeW5aSourceNativeSiteRecipesV1(
-            passes, table, w5aRecipeResources, source.uniforms, solidRectHostRecipes)
         val corePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes)
+        val w5aOrdinarySolidSourceRecipes = freezeW5aSourceNativeSiteRecipesV1(
+            passes, table, w5aRecipeResources, source.uniforms, solidRectHostRecipes, corePrimitiveHostRecipes)
         val preparedVerticesHostRecipes = if (passes.asSequence().filterIsInstance<PlanPass.RenderPass>()
                 .any { render -> render.draws().any { it is W5bVerticesDraw } })
             freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table)) else emptyMap()
