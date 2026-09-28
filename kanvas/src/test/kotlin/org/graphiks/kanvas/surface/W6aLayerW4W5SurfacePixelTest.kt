@@ -971,7 +971,10 @@ class W6aLayerW4W5SurfacePixelTest {
                 drawPoint(3.5f, .5f, opaque(GREEN).copy(shader = Shader.SolidColor(GREEN), strokeWidth = 1f))
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 
