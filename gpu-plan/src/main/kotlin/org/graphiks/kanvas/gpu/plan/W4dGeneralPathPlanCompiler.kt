@@ -146,7 +146,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             )
             is Recognition.Ready -> if (allowAaColorSource && (recognized.elidedNoOpsI32 != 0 ||
                 recognized.draws.size != 1 || recognized.draws.any {
-                    !it.requestsAntiAlias || it.strategy != PathFillStrategy.DirectTriangle || it.blend != BlendPlan.SrcOver
+                    !it.requestsAntiAlias || it.blend != BlendPlan.SrcOver
                 })) gap("W6 AA colour source admits one solid SrcOver direct-triangle child")
             else GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, recognized.draws, recognized.materialPlanTable, recognized.elidedNoOpsI32, recognized.requestedAa,recognized.sources))
             is Recognition.Gap -> gap(recognized.message)
@@ -458,8 +458,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             if (allowAaColorSource && !anyAa) promoted("W6 AA colour source cannot construct a hard path source")
             else if (anyAa && !allowAaColorSource) promoted("W5b final blending requires the admitted single-sample W4d.2 topology")
             else if (anyAa && (selected.draws.any { !it.requestsAntiAlias } || selected.draws.any {
-                    it.strategy != PathFillStrategy.DirectTriangle || it.blend != BlendPlan.SrcOver
-                })) promoted("W6 AA colour source admits only solid SrcOver direct-triangle paths")
+                    it.blend != BlendPlan.SrcOver
+                })) promoted("W6 AA colour source admits only solid SrcOver paths")
             else if (anyAa) sourceAa(selected, capabilities, budget, geometry)
             else if (selected.draws.isEmpty()) SourceDeferredRenderConstructionV4.clearOnly(
                 PlanId(identity(selected,capabilities,budget,W5B_HARD_CAPABILITY_ID)),W5B_HARD_CAPABILITY_ID,
@@ -505,7 +505,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val provisional = when (val result = PathAaPlanBudget.calculate(
             targetExtent = SizeI32(selected.target.extent.width, selected.target.extent.height),
             geometriesF32 = geometries,
-            requiresAa4DepthStencil = false,
+            requiresAa4DepthStencil = selected.draws.any { it.strategy == PathFillStrategy.StencilCover },
             requiresHardMask = false,
             requiresHardEdgeDepthStencil = false,
             capabilities = capabilities,
@@ -556,11 +556,25 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val index = planResourceId(PlanResourceRole.IndexData, 0)
         val uniform = planResourceId(PlanResourceRole.UniformData, 0)
         val data = PlanDrawDataResources(vertex, index, uniform)
-        val passes = selected.draws.mapIndexed { ordinal, sealed ->
+        val usesStencil = selected.draws.any { it.strategy == PathFillStrategy.StencilCover }
+        val depth = if (usesStencil) planResourceId(PlanResourceRole.DepthStencil, 0) else null
+        val passes = buildList {
+            var ordinal = 0
+            selected.draws.forEach { sealed ->
             val draw = generalDraw(sealed, CoveragePlan.StencilAA4, SamplePlan.Multisample4)
-            aaDirectColorPass(ordinal, multisample, draw, data, null,
-                if (ordinal == 0) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
-                if (ordinal == selected.draws.lastIndex) resolved else null)
+                if (sealed.strategy == PathFillStrategy.DirectTriangle) {
+                    add(aaDirectColorPass(ordinal++, multisample, draw, data, null,
+                        if (isEmpty()) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load, resolved))
+                } else {
+                    val group = canonicalGeneralPathAtomicGroup(draw)
+                    add(PlanPass.PathRenderPass(ordinal++, multisample, draw, PathRenderPhase.MultisampleStencilProducer,
+                        data, group, depth, AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
+                        PlanDepthStencilAccess.Write, PlanDepthStencilLoadStore.ClearZeroStore, null))
+                    add(PlanPass.PathRenderPass(ordinal++, multisample, draw, PathRenderPhase.MultisampleStencilColorCover,
+                        data, group, depth, AttachmentLoadPlan.Load, AttachmentStorePlan.Store,
+                        PlanDepthStencilAccess.ReadWrite, PlanDepthStencilLoadStore.LoadStoreTestReset, resolved))
+                }
+            }
         }
         fun texture(role: PlanResourceRole, format: PlanTextureFormat, bytes: Long,
             usages: Set<PlanResourceUsage>, samples: Int) = PlanResource.of(role, 0, PlanResourceKind.Texture2D,
@@ -568,18 +582,21 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         fun buffer(role: PlanResourceRole, bytes: Long, usages: Set<PlanResourceUsage>) =
             PlanResource.of(role, 0, PlanResourceKind.Buffer, null, null, bytes, usages,
                 PlanResourceLifetime.FrameLocal, 0, passes.size)
-        val resources = listOf(
-            texture(PlanResourceRole.MultisampleColorTarget, PlanTextureFormat.Color(FORMAT), aa.multisampleColorBytes,
-                setOf(PlanResourceUsage.RenderAttachment), 4),
-            texture(PlanResourceRole.PathAaResolvedColor, PlanTextureFormat.Color(FORMAT), base.targetBytes,
-                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 1),
-            buffer(PlanResourceRole.VertexData, base.vertexCapacityBytes,
-                setOf(PlanResourceUsage.Vertex, PlanResourceUsage.CopyDestination)),
-            buffer(PlanResourceRole.IndexData, base.indexCapacityBytes,
-                setOf(PlanResourceUsage.Index, PlanResourceUsage.CopyDestination)),
-            buffer(PlanResourceRole.UniformData, base.uniformCapacityBytes,
-                setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination)),
-        )
+        val resources = buildList {
+            add(texture(PlanResourceRole.MultisampleColorTarget, PlanTextureFormat.Color(FORMAT), aa.multisampleColorBytes,
+                setOf(PlanResourceUsage.RenderAttachment), 4))
+            add(texture(PlanResourceRole.PathAaResolvedColor, PlanTextureFormat.Color(FORMAT), base.targetBytes,
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 1))
+            if (depth != null) add(texture(PlanResourceRole.DepthStencil,
+                PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), aa.multisampleDepthStencilBytes,
+                setOf(PlanResourceUsage.DepthStencilAttachment), 4))
+            add(buffer(PlanResourceRole.VertexData, base.vertexCapacityBytes,
+                setOf(PlanResourceUsage.Vertex, PlanResourceUsage.CopyDestination)))
+            add(buffer(PlanResourceRole.IndexData, base.indexCapacityBytes,
+                setOf(PlanResourceUsage.Index, PlanResourceUsage.CopyDestination)))
+            add(buffer(PlanResourceRole.UniformData, base.uniformCapacityBytes,
+                setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination)))
+        }
         return AaResolvedColorTopology(resources, passes, dependencies(passes))
     }
 

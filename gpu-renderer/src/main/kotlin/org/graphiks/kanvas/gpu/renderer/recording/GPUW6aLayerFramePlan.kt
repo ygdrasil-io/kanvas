@@ -28,9 +28,14 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
         else -> false
     }
     return when (pass) {
-    is PlanPass.PathRenderPass -> pass.phase == PathRenderPhase.MultisampleDirectColor &&
+    is PlanPass.PathRenderPass -> pass.phase in setOf(PathRenderPhase.MultisampleDirectColor,
+        PathRenderPhase.MultisampleStencilProducer, PathRenderPhase.MultisampleStencilColorCover) &&
         packets.singleOrNull()?.let { it.passId == pass.id.value && it.commandIdValue == pass.draw.commandIndex &&
-            it.role == GPUDrawPacketRole.Shading } == true
+            it.role == when (pass.phase) {
+                PathRenderPhase.MultisampleStencilProducer -> GPUDrawPacketRole.PathStencilProducer
+                PathRenderPhase.MultisampleStencilColorCover -> GPUDrawPacketRole.PathStencilCover
+                else -> GPUDrawPacketRole.Shading
+            } } == true
     is PlanPass.RenderPass -> packets.map { it.commandIdValue } == pass.draws().map { it.commandIndex } &&
         packets.all { it.role == GPUDrawPacketRole.Shading }
     is PlanPass.StencilGeometryProducerV3 -> packets.singleOrNull()?.let {
@@ -419,10 +424,15 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     val phase = pass as PlanPass.PathRenderPass
                     val packet = aa.packets[aa.binding.passes().indexOf(phase)].packet
                     templates[packet.packetId] = requireNotNull(sealCorePrimitiveGeometryHostTemplateV1(packet,
-                        aa.packets.single().structuralPipelineKey))
+                        aa.packets[aa.binding.passes().indexOf(phase)].structuralPipelineKey))
                     add(GPUFrameStep.RenderPassStep(refs.getValue(phase.target) as GPUFrameTargetRef,
-                        GPULoadStorePlan("clear", GPUStorePlan.Store), GPUSamplePlan.MultisampleFrame(4),
-                        aa.resourceUses(phase, refs), listOf(packet), task, w6aPassV1 = phase))
+                        GPULoadStorePlan(if (phase.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load", GPUStorePlan.Store), GPUSamplePlan.MultisampleFrame(4),
+                        aa.resourceUses(phase, refs), listOf(packet), task,
+                        depthStencilLoadStore = when (phase.depthStencilLoadStore) {
+                            PlanDepthStencilLoadStore.ClearZeroStore -> GPUDepthStencilLoadStorePlan.WritableStencil(GPUStencilLoadOperation.Clear, GPUStorePlan.Store, 0u)
+                            PlanDepthStencilLoadStore.LoadStoreTestReset -> GPUDepthStencilLoadStorePlan.WritableStencil(GPUStencilLoadOperation.Load, GPUStorePlan.Store, null)
+                            null -> null
+                        }, w6aPassV1 = phase))
                     return@forEach
                 }
                 val w4eBinding = physical.w4eGeometryBinding(pass.id)

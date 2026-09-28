@@ -224,24 +224,51 @@ internal fun validateW6aLayerTopology(
             val resolved = pass.resolveTarget?.let(byId::getValue)
             require(target.role == PlanResourceRole.MultisampleColorTarget && target.sampleCountI32 == 4 &&
                 target.format is PlanTextureFormat.Color && PlanResourceUsage.RenderAttachment in target.usages() &&
-                resolved?.role == PlanResourceRole.PathAaResolvedColor && resolved.sampleCountI32 == 1 &&
-                resolved.format == target.format && PlanResourceUsage.RenderAttachment in resolved.usages() &&
-                PlanResourceUsage.Sampled in resolved.usages() && pass.phase == PathRenderPhase.MultisampleDirectColor &&
                 pass.draw is GeneralPathDraw && pass.draw.sample == SamplePlan.Multisample4 &&
-                pass.draw.coverage == CoveragePlan.StencilAA4 && pass.draw.strategy == PathFillStrategy.DirectTriangle &&
-                pass.draw.blend == BlendPlan.SrcOver && pass.load == AttachmentLoadPlan.ClearTransparent &&
-                pass.store == AttachmentStorePlan.Store && pass.atomicGroup == null && pass.depthStencil == null &&
-                pass.depthStencilAccess == null && pass.depthStencilLoadStore == null) {
-                "w6a.layer.unsupported_child"
+                pass.draw.coverage == CoveragePlan.StencilAA4 && pass.draw.blend == BlendPlan.SrcOver &&
+                pass.store == AttachmentStorePlan.Store) { "w6a.layer.unsupported_child" }
+            val isDirect = pass.phase == PathRenderPhase.MultisampleDirectColor
+            val isProducer = pass.phase == PathRenderPhase.MultisampleStencilProducer
+            val isCover = pass.phase == PathRenderPhase.MultisampleStencilColorCover
+            require(isDirect || isProducer || isCover) { "w6a.layer.unsupported_child" }
+            if (isDirect) require(pass.draw.strategy == PathFillStrategy.DirectTriangle &&
+                pass.load == AttachmentLoadPlan.ClearTransparent && pass.atomicGroup == null && pass.depthStencil == null &&
+                pass.depthStencilAccess == null && pass.depthStencilLoadStore == null) { "w6a.layer.unsupported_child" }
+            else {
+                val depth = pass.depthStencil?.let(byId::getValue)
+                require(pass.draw.strategy == PathFillStrategy.StencilCover && depth?.role == PlanResourceRole.DepthStencil &&
+                    depth.sampleCountI32 == 4 && depth.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                    PlanResourceUsage.DepthStencilAttachment in depth.usages() && pass.atomicGroup == canonicalGeneralPathAtomicGroup(pass.draw)) {
+                    "w6a.layer.unsupported_child"
+                }
+                if (isProducer) require(pass.load == AttachmentLoadPlan.ClearTransparent && pass.resolveTarget == null &&
+                    pass.depthStencilAccess == PlanDepthStencilAccess.Write && pass.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore &&
+                    (passes.getOrNull(indexI32 + 1) as? PlanPass.PathRenderPass)?.let { it.phase == PathRenderPhase.MultisampleStencilColorCover &&
+                        it.atomicGroup == pass.atomicGroup && it.target == pass.target && it.depthStencil == pass.depthStencil } == true) {
+                    "w6a.layer.unsupported_child"
+                }
+                if (isCover) require(pass.load == AttachmentLoadPlan.Load && pass.depthStencilAccess == PlanDepthStencilAccess.ReadWrite &&
+                    pass.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset &&
+                    (passes.getOrNull(indexI32 - 1) as? PlanPass.PathRenderPass)?.let { it.phase == PathRenderPhase.MultisampleStencilProducer &&
+                        it.atomicGroup == pass.atomicGroup && it.target == pass.target && it.depthStencil == pass.depthStencil } == true) {
+                    "w6a.layer.unsupported_child"
+                }
             }
+            if (!isProducer) require(resolved?.role == PlanResourceRole.PathAaResolvedColor && resolved.sampleCountI32 == 1 &&
+                resolved.format == target.format && PlanResourceUsage.RenderAttachment in resolved.usages() &&
+                PlanResourceUsage.Sampled in resolved.usages()) { "w6a.layer.unsupported_child" }
             val data = pass.drawDataResources
             require(byId.getValue(data.vertex).role == PlanResourceRole.VertexData &&
                 byId.getValue(data.index).role == PlanResourceRole.IndexData &&
                 byId.getValue(data.uniform).role == PlanResourceRole.UniformData)
-            val composite = passes.getOrNull(indexI32 + 1) as? PlanPass.PathAaColorComposite
-            require(composite?.source == resolved.id) { "AA resolve must be immediately composited" }
-            require(initialized.add(target.id) && initialized.add(resolved.id) && resolvedAaSources.add(resolved.id)) {
-                "AA source resources belong to one occurrence"
+            if (isProducer) require(initialized.add(target.id)) { "AA source resources belong to one occurrence" }
+            else {
+                val composite = passes.getOrNull(indexI32 + 1) as? PlanPass.PathAaColorComposite
+                require(composite?.source == resolved?.id) { "AA resolve must be immediately composited" }
+                require((if (isDirect) initialized.add(target.id) else target.id in initialized) &&
+                    initialized.add(requireNotNull(resolved).id) && resolvedAaSources.add(resolved.id)) {
+                    "AA source resources belong to one occurrence"
+                }
             }
             commands += pass.draw.commandIndex
         }

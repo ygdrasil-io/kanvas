@@ -161,10 +161,13 @@ internal class W6aLayerGraphConstruction(
         require(bindings.all { binding -> binding.scopeI32 == null || binding.scopeI32 in occurrenceById })
         require(bindings.map { it.firstCommandIndexI32 }.distinct().size == bindings.size)
         require(lanes.all { source ->
-            source.topology == DeferredLaneTopologyV4.AaResolvedColor && source.passes().all { pass ->
-                pass is PlanPass.PathRenderPass && pass.phase == PathRenderPhase.MultisampleDirectColor &&
-                    pass.draw is GeneralPathDraw && pass.draw.sample == SamplePlan.Multisample4 &&
-                    pass.draw.strategy == PathFillStrategy.DirectTriangle
+            source.topology == DeferredLaneTopologyV4.AaResolvedColor && source.passes().let { aa ->
+                aa.all { pass -> pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw &&
+                    pass.draw.sample == SamplePlan.Multisample4 && pass.draw.coverage == CoveragePlan.StencilAA4 } &&
+                    (aa.singleOrNull()?.let { (it as PlanPass.PathRenderPass).phase == PathRenderPhase.MultisampleDirectColor &&
+                        (it.draw as GeneralPathDraw).strategy == PathFillStrategy.DirectTriangle } == true ||
+                        aa.size == 2 && (aa[0] as PlanPass.PathRenderPass).phase == PathRenderPhase.MultisampleStencilProducer &&
+                        (aa[1] as PlanPass.PathRenderPass).phase == PathRenderPhase.MultisampleStencilColorCover)
             } || source.passes().all { pass -> pass is PlanPass.RenderPass || pass is PlanPass.ReadbackPass ||
             pass is PlanPass.StencilProducer || pass is PlanPass.StencilGeometryProducerV3 || pass is PlanPass.StencilCover || pass is PlanPass.TextureCopy ||
             pass is PlanPass.ClipMaskInitialize || pass is PlanPass.ClipMaskProducer || pass is PlanPass.ClipMaskFold ||
@@ -3197,7 +3200,8 @@ internal class W6aLayerGraphConstruction(
                     materialDeviceOriginI32 = pass.copyMaterialDeviceOriginI32() ?: targetOriginDevice(pass.target))
             } else when (pass) {
                 is PlanPass.PathRenderPass -> {
-                    require(pass.phase == PathRenderPhase.MultisampleDirectColor)
+                    require(pass.phase in setOf(PathRenderPhase.MultisampleDirectColor,
+                        PathRenderPhase.MultisampleStencilProducer, PathRenderPhase.MultisampleStencilColorCover))
                     val bound = pass.rebindW4eV6(pass.ordinal, { it }, null, null,
                         byCommand.getValue(pass.draw.commandIndex).materialAuthority) as PlanPass.PathRenderPass
                     PlanPass.PathRenderPass(bound.ordinal, bound.target, bound.draw, bound.phase,

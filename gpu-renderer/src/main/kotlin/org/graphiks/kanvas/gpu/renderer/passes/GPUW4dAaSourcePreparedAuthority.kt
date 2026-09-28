@@ -17,13 +17,14 @@ internal class GPUW4dAaSourcePreparedAuthority private constructor(
 ) {
     val facts: List<W4dGeneralNativePathPassFact> = java.util.Collections.unmodifiableList(facts.toList())
     val packets: List<W4dGeneralPathGraphLowerer.BuiltPacket> = java.util.Collections.unmodifiableList(packets.toList())
-    fun resourceUses(pass: PlanPass.PathRenderPass, refs: Map<PlanResourceId, GPUFrameResourceRef>): List<GPUFrameResourceUse> = listOf(
-        GPUFrameResourceUse(refs.getValue(pass.target), GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true),
-        GPUFrameResourceUse(refs.getValue(requireNotNull(pass.resolveTarget)), GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true),
-        GPUFrameResourceUse(refs.getValue(pass.drawDataResources.vertex), GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, GPUFrameResourceLifetime.FrameLocal, false),
-        GPUFrameResourceUse(refs.getValue(pass.drawDataResources.index), GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, GPUFrameResourceLifetime.FrameLocal, false),
-        GPUFrameResourceUse(refs.getValue(pass.drawDataResources.uniform), GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false),
-    )
+    fun resourceUses(pass: PlanPass.PathRenderPass, refs: Map<PlanResourceId, GPUFrameResourceRef>): List<GPUFrameResourceUse> = buildList {
+        add(GPUFrameResourceUse(refs.getValue(pass.target), GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true))
+        pass.resolveTarget?.let { add(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true)) }
+        pass.depthStencil?.let { add(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true)) }
+        add(GPUFrameResourceUse(refs.getValue(pass.drawDataResources.vertex), GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, GPUFrameResourceLifetime.FrameLocal, false))
+        add(GPUFrameResourceUse(refs.getValue(pass.drawDataResources.index), GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, GPUFrameResourceLifetime.FrameLocal, false))
+        add(GPUFrameResourceUse(refs.getValue(pass.drawDataResources.uniform), GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false))
+    }
 
     fun validates(renders: List<GPUFrameStep.RenderPassStep>, refs: Map<PlanResourceId, GPUFrameResourceRef>): Boolean =
         continuation.revalidates(binding.passes()) && renders.size == packets.size &&
@@ -32,7 +33,8 @@ internal class GPUW4dAaSourcePreparedAuthority private constructor(
                 render.w6aPassV1 === pass && render.drawPackets.singleOrNull() === packets[index].packet &&
                     render.target == refs.getValue(pass.target) && render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
                     render.sampleContinuation == null && render.w4eSceneContinuation == null &&
-                    render.depthStencilLoadStore == null && render.loadStore.loadOp == "clear" &&
+                    (pass.depthStencilLoadStore == null) == (render.depthStencilLoadStore == null) &&
+                    render.loadStore.loadOp == (if (pass.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load") &&
                     render.loadStore.storePlan == GPUStorePlan.Store && render.resourceUses == resourceUses(pass, refs)
             }
 
