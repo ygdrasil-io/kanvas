@@ -88,7 +88,7 @@
 
 ### Task 4: Occurrences, égalités, recettes et clôture de l'extension
 
-**Files:** Modify `W6aLayerGraphConstruction.kt`, `W6aLayerGraphValidation.kt`, `W4dGeneralRenderGraphCanonicalSeal.kt`, `NativeSiteRecipeV1.kt`, `W4eNativePayloadPlan.kt`, `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`, `GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`, `GPUW6aNativePathValidation.kt`, `W6InverseScanSpanSurfacePixelTest.kt`, `refactor/waves/W06-layers-effects/status.md` ; Create `W6InverseMaskPathRecipeV1.kt` si absent.
+**Files:** Modify `W6aLayerGraphConstruction.kt`, `W6aLayerGraphValidation.kt`, `W6aLayerPlanCompiler.kt` (mapping du refus cap typé), `W4dGeneralRenderGraphCanonicalSeal.kt`, `NativeSiteRecipeV1.kt`, `W4eNativePayloadPlan.kt`, `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`, `GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`, `GPUW6aNativePathValidation.kt`, `W6InverseScanSpanSurfacePixelTest.kt`, `refactor/waves/W06-layers-effects/status.md` ; Create `W6InverseMaskPathRecipeV1.kt` si absent.
 
 **Interfaces:** `W6InverseMaskPathRecipeV1` distingue `GeometryProducer.NonEmpty` (domaine device/local, origine, liste ordonnée de scissors, drawCount, D24S8, pipeline fullscreen sans bindings) et `GeometryProducer.Empty` (mêmes owner/clear/cover, drawCount=0), distincts du `GeometryCover`. Le seal/catalogue/préflight comparent ce discriminant et les ressources physiques avant `device.create*`. Le compteur de frame somme les occurrences de passes finales, non les sources uniques.
 
