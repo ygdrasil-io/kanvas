@@ -788,8 +788,6 @@ internal fun encodeW4eNativePasses(
             recipe.stencil(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.ColorCover) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectStencilV1.TestZeroKeep) {
             "W6 InverseDomain.Geometry Direct recipe selected unsupported shader, topology, ABI, or stencil state."
         }
-        val domainStencil = createW4ePathGeometryPipeline(device, format, 1, 0f, stencil = w4eStencilReplaceState(), colorWrite = false,
-            label = "Kanvas.frame.w6.inverseDomain.domainStencil", owned = owned)
         val interiorStencil = recipe.stencil(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero)
         require(recipe.shader(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectShaderV1.PathGeometry &&
             recipe.topology(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectTopologyV1.TriangleList &&
@@ -797,6 +795,8 @@ internal fun encodeW4eNativePasses(
             interiorStencil == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectStencilV1.ClearReplaceOne) {
             "W6 InverseDomain.Geometry Direct interior recipe selected unsupported shader, topology, ABI, or stencil state."
         }
+        val domainStencil = createW4ePathGeometryPipeline(device, format, 1, 0f, stencil = w4eStencilReplaceState(), colorWrite = false,
+            label = "Kanvas.frame.w6.inverseDomain.domainStencil", owned = owned)
         val interiorZero = createW4ePathGeometryPipeline(device, format, 1, 0f,
             stencil = w4eStencilReplaceState(), colorWrite = false,
             label = "Kanvas.frame.w6.inverseDomain.interiorZero", owned = owned)

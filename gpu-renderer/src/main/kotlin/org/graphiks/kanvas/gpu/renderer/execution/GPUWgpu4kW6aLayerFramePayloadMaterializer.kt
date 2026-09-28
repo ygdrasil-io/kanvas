@@ -345,7 +345,8 @@ private fun preflightW4eClipMaskInitializes(
                 frame.physical.nativeSiteRecipeCatalogV1().recipe(recipe.owner(bundle.ordinal)) as? W6InverseDomainDirectNativeSiteRecipeV1
             }
             val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().singleOrNull { step ->
-                step.w6aPassV1?.id in binding.graphPassIds() && step.drawPackets.singleOrNull()?.passId == pass.id.value
+                step.w6aPassV1 is PlanPass.RenderPass && binding.nativePass(step.w6aPassV1.id)?.id == pass.id &&
+                    step.drawPackets.singleOrNull()?.passId == pass.id.value
             }
             val rows = frame.graph.resources().associateBy { it.id }
             val target = rows.getValue(recipe.target.id); val depth = rows.getValue(recipe.depthStencil.id)
@@ -374,6 +375,14 @@ private fun preflightW4eClipMaskInitializes(
             fun vertexSlice(slice: W4eNativeGeometrySlice): FloatArray = payload.copyVertexData().copyOfRange(slice.baseVertex * 2, (slice.baseVertex + slice.vertexCount) * 2)
             fun indexSlice(slice: W4eNativeGeometrySlice): IntArray = payload.copyIndexData().copyOfRange(slice.firstIndex, slice.firstIndex + slice.indexCount)
             val domain = recipe.copyDomainI32(); val scissor = recipe.copySourceScissorI32()
+            fun bounds(rect: RectI32) = GPUPixelBounds(rect.left, rect.top, rect.right, rect.bottom)
+            require(render?.w6aPassV1 is PlanPass.RenderPass && binding.nativePass(render.w6aPassV1.id)?.id == pass.id) {
+                "W6 InverseDomain.Geometry Direct render proxy diverged from its PathRenderPass owner before allocation."
+            }
+            require(packet?.passId == pass.id.value && path?.passId == pass.id.value &&
+                path.scissor == bounds(recipe.copySourceScissorI32())) {
+                "W6 InverseDomain.Geometry Direct packet or prepared path diverged from its owner or source scissor before allocation."
+            }
             require(catalogs.all { it?.host === recipe } && recipe.ownerPassId == pass.id && recipe.packetOrdinalI32 == pass.ordinal &&
                 pass.phase == PathRenderPhase.SingleSampleDirectColor && pass.target == recipe.target.id && pass.depthStencil == recipe.depthStencil.id &&
                 pass.draw.sample == SamplePlan.SingleSample && pass.resolveTarget == null && pass.load == recipe.load && pass.store == recipe.store &&
@@ -386,7 +395,8 @@ private fun preflightW4eClipMaskInitializes(
                 interior != null && interiorGeometry?.fillRule == recipe.fillRule && retained?.domain == GPUPixelBounds(domain.left, domain.top, domain.right, domain.bottom) &&
                 preparedInteriorNdc!!.contentEquals(recipe.copyInteriorVerticesF32()) && interior.copyIndicesI32().contentEquals(recipe.copyInteriorIndicesI32()) &&
                 pass.draw.copyScissorI32() == scissor && packet?.role == GPUDrawPacketRole.W4ePrepared && packet.passId == pass.id.value &&
-                path?.commandIdValue == pass.draw.commandIndex && path.phase == PathRenderPhase.SingleSampleDirectColor && path.targetResourceId == recipe.target.id.value &&
+                path?.passId == pass.id.value && path.commandIdValue == pass.draw.commandIndex && path.phase == PathRenderPhase.SingleSampleDirectColor &&
+                path.scissor == bounds(recipe.copySourceScissorI32()) && path.targetResourceId == recipe.target.id.value &&
                 path.vertexResourceId == recipe.vertex.id.value && path.indexResourceId == recipe.index.id.value && path.sample == SamplePlan.SingleSample && path.resolveTargetResourceId == null &&
                 path.depthStencilResourceId == recipe.depthStencil.id.value && path.uniformResourceId == recipe.uniform.id.value &&
                 path.depthStencilAccess == null && path.depthStencilLoadStore == null && path.load == recipe.load && path.store == recipe.store && path.blend == recipe.blend &&

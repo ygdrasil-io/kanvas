@@ -1674,3 +1674,9 @@ packet/consumer/domaine, puis scissor, operands, V/I, sample/resolve/pass,
 blend, target, D24S8, load/store et `resourceUses`. Les trois témoins Surface
 Direct/Zero/Fan donnent XML `3/0/0/0`; le même GLFW macOS 133 post-JUnit reste
 **UNKNOWN**.
+
+Le dernier garde de re-revue lie chaque step au owner Direct par la projection
+scellée `RenderPass` W6 → `binding.nativePass(proxy.id)` W4e, au lieu d'une
+appartenance large au binding. Il confronte aussi les `passId` packet/path et
+le scissor source préparé avant allocation. La recette slot 1 est validée
+avant toute création de pipeline (y compris slot 0).
