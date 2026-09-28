@@ -3257,8 +3257,26 @@ internal class W6aLayerGraphConstruction(
             binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
         }
         val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes)
+        // RenderGraph.construct publishes this same frame-local row later, after all final
+        // recipes have been assembled.  The W5a recipe needs its typed logical descriptor now;
+        // this creates no resource or lease and cannot duplicate the later physical allocation.
+        val w5aRecipeResources = (resources + source.resources).let { rows ->
+            val needsLinearGradientSource = passes.filterIsInstance<PlanPass.RenderPass>().any { pass ->
+                pass.draws().any { draw ->
+                    w5aOrdinarySourceNativeVariantV1OrNull(table, pass, draw) ==
+                        W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1
+                }
+            }
+            if (!needsLinearGradientSource || rows.any { it.role == PlanResourceRole.GradientStopData }) rows else {
+                val slab = requireNotNull(table).gradientStopSlab
+                requireNotNull(slab) { "W5a ordinary linear-gradient source lost its planner stop slab." }
+                rows + PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer, null, null,
+                    slab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
+                    PlanResourceLifetime.FrameLocal, 0, passes.size)
+            }
+        }
         val w5aOrdinarySolidSourceRecipes = freezeW5aSourceNativeSiteRecipesV1(
-            passes, table, resources + source.resources, source.uniforms, solidRectHostRecipes)
+            passes, table, w5aRecipeResources, source.uniforms, solidRectHostRecipes)
         val corePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes)
         val preparedVerticesHostRecipes = if (passes.asSequence().filterIsInstance<PlanPass.RenderPass>()
                 .any { render -> render.draws().any { it is W5bVerticesDraw } })

@@ -423,6 +423,18 @@ internal fun materializeW5aSourcePartitionV2(
                 recipe.copyUniformBytes().contentEquals(source.stage.uniformBytes)) {
                 "W5a ordinary source native provider received a packet different from its preflight-sealed recipe"
             }
+            if (recipe.variant == org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) {
+                val frame = requireNotNull(framePlan.w6aLayerFrameV1)
+                val slab = requireNotNull(source.stage.gradientStopSlab)
+                val resource = frame.physical.resource(requireNotNull(recipe.gradientStopResource))
+                require(recipe.gradientStopByteCountI64 == slab.byteSizeI64 &&
+                    recipe.gradientStopCanonicalIdentity == slab.canonicalIdentity &&
+                    requireNotNull(requireNotNull(frame.graph.materialPlanTableOrNull()).gradientStopSlab).canonicalIdentity == slab.canonicalIdentity &&
+                    resource.role == PlanResourceRole.GradientStopData && resource.byteSize == slab.byteSizeI64 &&
+                    resource.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination)) {
+                    "W5a ordinary linear-gradient provider received a stop resource different from its preflight-sealed recipe"
+                }
+            }
         }
     }
     // Resolve the native template for every admitted W5a site while this remains a read-only

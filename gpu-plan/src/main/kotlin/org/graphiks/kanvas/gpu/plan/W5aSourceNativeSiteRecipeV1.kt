@@ -2,11 +2,11 @@ package org.graphiks.kanvas.gpu.plan
 
 /**
  * The bounded 2A0d ordinary W5a source site.  This deliberately admits only a final ordinary
- * SolidRect backed by the simple W5 MaterialV1 solid program: no coverage source, destination
- * read, W4e packet, image/gradient/noise/runtime binding, or renderer-owned handle is present.
+ * SolidRect backed by one explicitly admitted W5 MaterialV1 program: no coverage source,
+ * destination read, W4e packet, image/noise/runtime binding, or renderer-owned handle is present.
  */
-public enum class W5aSourceNativeVariantV1 { OrdinarySolidMaterialV1 }
-public enum class W5aSourceNativeBindingKindV1 { UniformBuffer }
+public enum class W5aSourceNativeVariantV1 { OrdinarySolidMaterialV1, OrdinaryLinearGradientMaterialV1 }
+public enum class W5aSourceNativeBindingKindV1 { UniformBuffer, StorageBuffer }
 
 public data class W5aSourceNativeBindingAbiV1(
     public val bindingI32: Int,
@@ -26,6 +26,12 @@ public class W5aSourceNativeSiteRecipeV1 internal constructor(
     public val uniformResource: PlanResourceId,
     public val uniformByteCountI64: Long,
     uniformBytes: ByteArray,
+    /** The V1 gradient slab is one already-published frame resource, never a new allocation. */
+    public val gradientStopResource: PlanResourceId?,
+    public val gradientStopByteCountI64: Long,
+    public val gradientStopCanonicalIdentity: String,
+    /** V1 coordinates are material ABI, rather than a late renderer choice. */
+    public val materialCoordinateCanonicalIdentity: String,
     bindingManifest: List<W5aSourceNativeBindingAbiV1>,
     public val geometryOwner: NativeSiteOwnerV1,
     public val geometryCanonicalEncodingV1: String,
@@ -40,21 +46,31 @@ public class W5aSourceNativeSiteRecipeV1 internal constructor(
         require(drawOrdinalI32 >= 0 && bundleOrdinalI32 >= 1 && commandIndexI32 >= 0) {
             "W5a source owner is invalid: pass=${ownerPassId.value}, draw=$drawOrdinalI32, bundle=$bundleOrdinalI32, command=$commandIndexI32"
         }
-        require(materialProgramStructuralId == MaterialProgramPlan.SolidLinearPremulV1.structuralId.value) {
-            "W5a source table program is not SolidLinearPremulV1: $materialProgramStructuralId"
-        }
         // Raw requirements own the structural ID, including their endpoint ABI suffix.
         require(materialStructuralId.isNotBlank()) {
             "W5a source structural ID from raw material requirements is blank"
         }
-        require(materialCanonicalIdentity.isNotBlank() && uniformByteCountI64 == 16L) {
-            "W5a source must freeze a non-empty canonical identity and exactly 16 uniform bytes"
-        }
+        require(materialCanonicalIdentity.isNotBlank()) { "W5a source canonical identity is blank" }
         require(frozenUniformBytes.size.toLong() == uniformByteCountI64) {
             "W5a source uniform bytes disagree with its frozen byte count"
         }
-        require(frozenBindingManifest == listOf(W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer))) {
-            "W5a source binding manifest is not the single group-1 uniform binding"
+        when (variant) {
+            W5aSourceNativeVariantV1.OrdinarySolidMaterialV1 -> require(
+                materialProgramStructuralId == MaterialProgramPlan.SolidLinearPremulV1.structuralId.value &&
+                    uniformByteCountI64 == 16L && gradientStopResource == null && gradientStopByteCountI64 == 0L &&
+                    gradientStopCanonicalIdentity.isEmpty() && materialCoordinateCanonicalIdentity.isEmpty() &&
+                    frozenBindingManifest == listOf(W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer)),
+            ) { "W5a ordinary solid source ABI changed" }
+            W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1 -> require(
+                materialProgramStructuralId == MaterialProgramPlan.LinearGradientClampSrgbV1.structuralId.value &&
+                    // binding0 is the 16-byte material vec4; the legacy linear-gradient tail is 112 bytes.
+                    uniformByteCountI64 == 128L && gradientStopResource != null && gradientStopByteCountI64 > 0L &&
+                    gradientStopCanonicalIdentity.isNotBlank() && materialCoordinateCanonicalIdentity.isNotBlank() &&
+                    frozenBindingManifest == listOf(
+                        W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer),
+                        W5aSourceNativeBindingAbiV1(1, W5aSourceNativeBindingKindV1.StorageBuffer),
+                    ),
+            ) { "W5a ordinary linear-gradient source ABI changed" }
         }
         require(geometryCanonicalEncodingV1.isNotBlank() && targetFormat == W6SolidRectTargetFormatV1.RGBA8UnormSrgb && targetSampleCountI32 == 1) {
             "W5a source geometry target is not the admitted RGBA8UnormSrgb single-sample SolidRect"
@@ -82,6 +98,9 @@ public class W5aSourceNativeSiteNativeRecipeV1 internal constructor(
         text("raw.structural", host.materialStructuralId); text("canonical", host.materialCanonicalIdentity)
         text("uniform.resource", host.uniformResource.value); long("uniform.bytes", host.uniformByteCountI64)
         text("uniform.data", host.copyUniformBytes().joinToString("") { "%02x".format(it.toInt() and 0xff) })
+        host.gradientStopResource?.let { text("gradient.resource", it.value) }
+        long("gradient.bytes", host.gradientStopByteCountI64); text("gradient.canonical", host.gradientStopCanonicalIdentity)
+        text("coordinates.canonical", host.materialCoordinateCanonicalIdentity)
         text("geometry.owner", host.geometryOwner.ownerPassId.value); int("geometry.draw", host.geometryOwner.drawOrPacketOrdinalI32); int("geometry.bundle", host.geometryOwner.bundleOrdinalI32)
         text("geometry.canonical", host.geometryCanonicalEncodingV1); enum("target.format", host.targetFormat); int("target.samples", host.targetSampleCountI32)
         blend("blend", host.blend); enum("variant", host.variant)
@@ -104,6 +123,22 @@ public fun isW5aOrdinarySolidSourceDrawV1(
         entry.bindings is MaterialBindingPlan.SolidRgbaF32V1
 }
 
+/** The next source-native form is deliberately one legacy linear-gradient ABI, not all gradients. */
+public fun w5aOrdinarySourceNativeVariantV1OrNull(
+    table: MaterialPlanTable?,
+    pass: PlanPass.RenderPass,
+    draw: PlanDraw,
+): W5aSourceNativeVariantV1? {
+    if (isW5aOrdinarySolidSourceDrawV1(table, pass, draw)) return W5aSourceNativeVariantV1.OrdinarySolidMaterialV1
+    if (pass.w6bMaskSourceBinding != null || draw !is SolidRectDraw || draw.blend is BlendPlan.DestinationReadV1) return null
+    val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1 ?: return null
+    val entry = table?.entry(authority.ref) ?: return null
+    return if (entry.program == MaterialProgramPlan.LinearGradientClampSrgbV1 &&
+        entry.bindings is MaterialBindingPlan.LinearGradientV1 && authority.coordinates != null) {
+        W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1
+    } else null
+}
+
 public fun freezeW5aSourceNativeSiteRecipesV1(
     passes: List<PlanPass>,
     table: MaterialPlanTable?,
@@ -115,16 +150,30 @@ public fun freezeW5aSourceNativeSiteRecipesV1(
     val rows = linkedMapOf<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1>()
     passes.filterIsInstance<PlanPass.RenderPass>().forEach { pass ->
         pass.draws().forEachIndexed { ordinal, draw ->
-            if (!isW5aOrdinarySolidSourceDrawV1(materialTable, pass, draw)) return@forEachIndexed
+            val variant = w5aOrdinarySourceNativeVariantV1OrNull(materialTable, pass, draw) ?: return@forEachIndexed
             val solid = draw as SolidRectDraw
             val authority = solid.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
             val entry = materialTable.entry(authority.ref)
             val raw = RawMaterialRequirementsV2.of(materialTable, authority.ref)
-            require(raw.bindingCountI32 == 1 && raw.uniformByteCountI64 == 16L && !raw.hasCoordinatesV2) { "w5a ordinary source must be one 16-byte raw MaterialV1 binding" }
+            val gradient = (entry.bindings as? MaterialBindingPlan.LinearGradientV1)
+            val slab = materialTable.gradientStopSlab
+            require(when (variant) {
+                W5aSourceNativeVariantV1.OrdinarySolidMaterialV1 -> raw.bindingCountI32 == 1 && raw.uniformByteCountI64 == 16L && !raw.hasCoordinatesV2
+                W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1 -> raw.bindingCountI32 == 1 && raw.uniformByteCountI64 == 128L &&
+                    !raw.hasCoordinatesV2 && gradient != null && slab != null && authority.coordinates != null
+            }) { "w5a ordinary source raw MaterialV1 ABI is not admitted" }
             val uniform = uniforms.getValue(raw.canonicalIdentity)
             val row = resources.single { it.id == uniform }
             require(row.role == PlanResourceRole.SourceUniformData && row.byteSize == raw.uniformByteCountI64 &&
                 row.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination)) { "w5a ordinary source uniform row changed after source layout" }
+            val stopResource = if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) resources.single {
+                it.role == PlanResourceRole.GradientStopData
+            }.also { stop ->
+                require(stop.byteSize == requireNotNull(slab).byteSizeI64 &&
+                    stop.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination)) {
+                    "w5a ordinary linear-gradient stop row changed after source layout"
+                }
+            } else null
             val geometry = solidHosts.getValue(W6GeometrySiteKeyV1(pass.id, ordinal))
             require(geometry.colorMode is W6SolidRectColorModeV1.UniformColor16 && geometry.blend == solid.blend) { "w5a ordinary source geometry host no longer matches SolidRect" }
             val baseOwners = solidHosts.keys.asSequence()
@@ -136,9 +185,16 @@ public fun freezeW5aSourceNativeSiteRecipesV1(
             val geometryOwner = baseOwners.single()
             val recipe = W5aSourceNativeSiteRecipeV1(pass.id, ordinal, baseOwners.size, solid.commandIndex, authority.ref,
                 entry.program.structuralId.value, raw.structuralId, raw.canonicalIdentity, uniform, raw.uniformByteCountI64, raw.copyUniformBytes(),
-                listOf(W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer)),
+                stopResource?.id, stopResource?.byteSize ?: 0L,
+                if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) requireNotNull(slab).canonicalIdentity else "",
+                if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1)
+                    authority.coordinates?.canonicalIdentity.orEmpty() else "",
+                if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) listOf(
+                    W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer),
+                    W5aSourceNativeBindingAbiV1(1, W5aSourceNativeBindingKindV1.StorageBuffer),
+                ) else listOf(W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer)),
                 geometryOwner, W6SolidRectNativeSiteRecipeV1(geometry).canonicalLogicalEncodingV1,
-                geometry.target.format, geometry.target.sampleCountI32, solid.blend)
+                geometry.target.format, geometry.target.sampleCountI32, solid.blend, variant)
             require(rows.put(recipe.owner, recipe) == null) {
                 "W5a source recipe owner is not unique: ${recipe.ownerPassId.value}/${recipe.drawOrdinalI32}/${recipe.bundleOrdinalI32}"
             }

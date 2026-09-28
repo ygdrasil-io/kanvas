@@ -7,8 +7,10 @@ import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
 import org.graphiks.kanvas.gpu.plan.W5aSourceNativeSiteRecipeV1
+import org.graphiks.kanvas.gpu.plan.W5aSourceNativeBindingKindV1
+import org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1
 import org.graphiks.kanvas.gpu.plan.W6SolidRectNativeSiteRecipeV1
-import org.graphiks.kanvas.gpu.plan.isW5aOrdinarySolidSourceDrawV1
+import org.graphiks.kanvas.gpu.plan.w5aOrdinarySourceNativeVariantV1OrNull
 import org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
@@ -71,14 +73,14 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
             val noise = stages.mapNotNull { it.noiseTableSlab }.distinct()
             require(stops.size <= 1 && noise.size <= 1)
             GPUW5eImageNativeV1.validate(frame)
-            fun ordinarySolidRecipe(packet: GPUDrawPacket, source: W5aPacketMaterialSourceV2): W5aSourceNativeSiteRecipeV1? {
+            fun ordinaryRecipe(packet: GPUDrawPacket, source: W5aPacketMaterialSourceV2): W5aSourceNativeSiteRecipeV1? {
                 val render = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { packet in it.drawPackets }
                 val pass = render.w6aPassV1 as? PlanPass.RenderPass ?: return null
                 val ordinal = render.drawPackets.indexOf(packet)
                 val draw = pass.draws().getOrNull(ordinal) as? SolidRectDraw ?: return null
                 val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1 ?: return null
                 val w6 = requireNotNull(frame.w6aLayerFrameV1)
-                if (!isW5aOrdinarySolidSourceDrawV1(w6.graph.materialPlanTableOrNull(), pass, draw)) return null
+                val variant = w5aOrdinarySourceNativeVariantV1OrNull(w6.graph.materialPlanTableOrNull(), pass, draw) ?: return null
                 val physical = w6.physical
                 val table = requireNotNull(w6.graph.materialPlanTableOrNull())
                 val recipe = physical.w5aOrdinarySolidSourceRecipes().entries.singleOrNull { (owner, _) ->
@@ -94,13 +96,33 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                 }
                 require(recipe.commandIndexI32 == packet.commandIdValue && recipe.material == authority.ref &&
                     recipe.materialProgramStructuralId == table.entry(authority.ref).program.structuralId.value &&
-                    recipe.materialStructuralId == source.stage.structuralId &&
+                    recipe.variant == variant && recipe.materialStructuralId == source.stage.structuralId &&
                     recipe.materialCanonicalIdentity == source.stage.canonicalIdentity &&
                     recipe.uniformByteCountI64 == source.stage.uniformByteCountI64 &&
                     recipe.copyUniformBytes().contentEquals(source.stage.uniformBytes) &&
-                    recipe.bindingManifest().map { it.bindingI32 to it.kind.name } ==
-                        source.stage.bindingManifest.map { it.bindingI32 to if (it.resourceKind == "uniformBuffer") "UniformBuffer" else it.resourceKind }) {
+                    recipe.materialCoordinateCanonicalIdentity == (if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1)
+                        authority.coordinates?.canonicalIdentity.orEmpty() else "") &&
+                    recipe.bindingManifest().map { it.bindingI32 to it.kind } == source.stage.bindingManifest.map { binding ->
+                        binding.bindingI32 to when (binding.resourceKind) {
+                            "uniformBuffer" -> W5aSourceNativeBindingKindV1.UniformBuffer
+                            "storageBuffer" -> W5aSourceNativeBindingKindV1.StorageBuffer
+                            else -> error("W5a ordinary source has a non-admitted binding ${binding.resourceKind}")
+                        }
+                    }) {
                     "W5a ordinary source packet does not match its sealed logical recipe: pass=${pass.id.value}, ordinal=$ordinal, command=${packet.commandIdValue}"
+                }
+                if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) {
+                    val slab = requireNotNull(source.stage.gradientStopSlab)
+                    val resource = physical.resource(requireNotNull(recipe.gradientStopResource))
+                    require(recipe.gradientStopByteCountI64 == slab.byteSizeI64 &&
+                        recipe.gradientStopCanonicalIdentity == slab.canonicalIdentity &&
+                        requireNotNull(table.gradientStopSlab).canonicalIdentity == slab.canonicalIdentity &&
+                        resource.byteSize == slab.byteSizeI64 &&
+                        resource.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.GradientStopData &&
+                        resource.usages() == setOf(org.graphiks.kanvas.gpu.plan.PlanResourceUsage.StorageRead,
+                            org.graphiks.kanvas.gpu.plan.PlanResourceUsage.CopyDestination)) {
+                        "W5a ordinary linear-gradient packet lost its sealed stop storage resource"
+                    }
                 }
                 return recipe
             }
@@ -109,7 +131,7 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                 val source = requireNotNull(packet.materialSourcePartitionV3())
                 val stage = source.stage
                 val template = requireNotNull(frame.w5hSourceAuthorityRootV1.template(packet))
-                val nativeRecipe = ordinarySolidRecipe(packet, source)
+                val nativeRecipe = ordinaryRecipe(packet, source)
                 nativeRecipe?.let { recipe ->
                     require(template.target.format == GPUTextureFormat.RGBA8UnormSrgb &&
                         template.target == w6aColorTarget(recipe.blend).hostTargetV1()) {
@@ -149,12 +171,20 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                         require(destination == null) { "W5a ordinary source recipe must not compose a destination read" }
                         composeW5aHostSourceV1(template, source, destination, bounds)
                     }
+                    org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1 -> {
+                        require(destination == null) { "W5a ordinary source recipe must not compose a destination read" }
+                        composeW5aHostSourceV1(template, source, destination, bounds)
+                    }
                     null -> composeW5aHostSourceV1(template, source, destination, bounds)
                 }
                 val layout = nativeRecipe?.let { recipe ->
                     GPUW5aHostBindGroupLayoutV1.of(recipe.bindingManifest().map { binding ->
-                        GPUW5aHostBindGroupEntryV1(binding.bindingI32, 2u,
-                            GPUW5aHostBindingLayoutV1.Buffer(GPUBufferBindingType.Uniform, false, recipe.uniformByteCountI64))
+                        GPUW5aHostBindGroupEntryV1(binding.bindingI32, 2u, when (binding.kind) {
+                            W5aSourceNativeBindingKindV1.UniformBuffer ->
+                                GPUW5aHostBindingLayoutV1.Buffer(GPUBufferBindingType.Uniform, false, recipe.uniformByteCountI64)
+                            W5aSourceNativeBindingKindV1.StorageBuffer ->
+                                GPUW5aHostBindingLayoutV1.Buffer(GPUBufferBindingType.ReadOnlyStorage, false, recipe.gradientStopByteCountI64)
+                        })
                     })
                 } ?: GPUW5aHostBindGroupLayoutV1.of(stage.bindingManifest.map { binding ->
                     val entry = when (binding.resourceKind) {
