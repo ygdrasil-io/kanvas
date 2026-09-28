@@ -1,0 +1,72 @@
+# W07 — diagnostic GM provisoire
+
+## Portée et preuve
+
+Ce relevé ouvre le diagnostic W7 sur le commit `b99e321c6bf6b7776fefd69a56fbe7439cc7a9cb`, empilé sur W6 `fc6e57209a69de43f57854886853714ccb1cad58`.
+Le commit W7 adapte seulement trois fixtures de lighting à l'API 3D déjà publiée ;
+`:integration-tests:skia:compileTestKotlin` passe et la revue Sol du diff ne relève
+aucun problème. L'inventaire a été généré par
+`generateSkiaGmInventory` avec une sortie non suivie dans
+`/private/tmp/w7-provisional-source-inventory-b99e321c6b.json`.
+Ni rendu de référence, ni score, ni dashboard n'ont été régénérés.
+
+Le relevé reste **provisoire** : les gates W6 2A1/2B ne sont pas closes et
+`jpg-color-cube` reste en quarantaine `quarantined-resource-limit`, filtrée
+avant setup et rendu. Fonts et codecs sont exclus du périmètre. Les scores
+enregistrés sont historiques ; l'audit `strict=true`, `orphanCount=0` vérifie
+seulement leur cohérence de registre, pas la similarité des pixels actuels.
+
+## Résultats observés
+
+| Mesure | Inventaire W0–W2 suivi | W7 provisoire |
+| --- | ---: | ---: |
+| GMs enregistrées | 631 | 631 |
+| Éligibles | 450 | 443 |
+| Exclues codec / font / quarantaine | 54 / 126 / 1 | 54 / 133 / 1 |
+| `Surface.render()` tenté | 379 | 386 |
+| Rendu disponible | 83 | 89 |
+| Échec terminal de rendu | 296 | 297 |
+| Setup échoué, tous scopes | 75 | 60 |
+| Éligibles sans tentative | — | 57 |
+
+Sept GMs sont passées d'`eligible` à `excluded-font` ; ce changement de
+dénominateur doit rester visible dans toute comparaison. Par identité de GM,
+46 GMs auparavant non rendues rendent désormais, mais 40 auparavant rendues
+ne rendent plus. Ce n'est donc pas une progression monotone, malgré le gain
+net de six rendus. Parmi les 40 pertes, 25 échouent sur l'invariant de durée
+de vie des ressources.
+
+## Premiers groupes de causes
+
+Les nombres ci-dessous comptent les échecs terminaux des GMs éligibles, sauf
+la dernière ligne, qui concerne le setup. Une GM n'est comptée qu'à son premier
+diagnostic ; ce regroupement n'établit pas encore la cause racine.
+
+| Diagnostic initial | GMs | Lecture provisoire |
+| --- | ---: | --- |
+| `w6a.layer.unsupported_child` | 54 | Admission des enfants layer/source/geometry à étudier comme axe transversal. |
+| `Resource lifetime must be non-empty` | 31 | Invariant `PlanResource.of` ; 25 anciennes réussites perdues, priorité de diagnostic. |
+| `geometry.path.fan_budget_exceeded` | 23 | Limite de topologie path, à distinguer d'une erreur de géométrie. |
+| `scalar_aa_not_promoted` | 18 | Promotion de couverture AA non admise. |
+| `runtime_effect.unregistered_semantics` | 12 | Contrat d'enregistrement des effets runtime à classifier. |
+| `unsupported.pipeline.capability_missing` en setup | 14 | Capacité GPU et taille de ressource à distinguer d'un manque de route. |
+
+Les 57 éligibles sans tentative sont des échecs de setup, dont des stubs
+explicites et des contraintes de taille GPU. Aucune gate « 100 % exécutées »,
+« 95 % conformes » ou « zéro refus non classifié » ne peut être revendiquée
+sur ce relevé. Aucune mesure fraîche de similarité n'a été faite.
+
+## Ordre de triage proposé
+
+1. Tracer les 31 lifetimes vides jusqu'au producteur du `PlanResource`, puis
+   vérifier les 25 GMs anciennement rendues sur un cas représentatif avant
+   toute généralisation.
+2. Décomposer les 54 refus `w6a.layer.unsupported_child` par type exact
+   d'enfant et contrat W6 ; ne pas élargir l'admission à l'aveugle.
+3. Distinguer les limites explicites de ressources et les stubs des manques
+   sémantiques réutilisables (path, AA, materials, runtime effects).
+4. Après fermeture des gates W6 et stabilisation du périmètre, produire une
+   nouvelle baseline de rendus/scores et seulement alors mesurer la conformité
+   pixel, la colorimétrie, les meshes et les combinaisons rares.
+
+Ces étapes constituent un triage, pas encore un plan d'implémentation approuvé.
