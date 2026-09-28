@@ -1753,4 +1753,11 @@ Gradle termine néanmoins après JUnit sur GLFW macOS 133 : statut process/natif
 il a révélé que le freezer parcourait aussi la cover comme candidate. Le filtre
 strict producer corrige ce problème sans normaliser la paire; un RED catalogue
 subséquent a été fermé en incluant la map Fan dans la reconstruction attendue.
-Task 4 attend encore la revue Sol, puis les gates 2A1/2B restent ouverts.
+La revue Sol transversale de `c7a7286be` ne trouve aucun finding
+Critical/Important sur Zero/Direct/Fan, le provider W5a ou les routes de
+contournement packet/cache. La vérification indépendante après commit donne
+W6a XML `35/0/0/0` et scan-span XML `14/0/0/0`, chacun avec GLFW 133 après
+JUnit et donc statut natif **UNKNOWN** ; les deux sélecteurs W4e donnent
+Gradle 0 et XML `2/0/0/0`. Task 4 et `2A0c.IV` sont review-clean. `2A0d`,
+les leases/budgets `2A1`, l'authentification globale `2B` et la qualification
+native globale restent ouverts ; aucun B/B−1 n'est revendiqué ici.

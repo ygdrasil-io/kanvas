@@ -1,7 +1,7 @@
 # W6 2A0c.IV — InverseDomain Native Sites Implementation Plan
 
-**Status:** Tasks 1–3 review-clean ; contrat Fan Task 4 corrigé après audit architectural Astra en lecture seule, relecture Sol de l'amendement requise avant implémentation.
-**Base:** `codex/w6-final-gates` à `5d5cf5c88`, Draft PR #2409 empilée sur #2408.
+**Status:** Tasks 1–4 review-clean à `c7a7286be` ; revue Sol transversale sans finding Critical/Important. `2A0d`, `2A1`, `2B` et la qualification native globale restent ouverts.
+**Base initiale:** `codex/w6-final-gates` à `5d5cf5c88`, Draft PR #2409 empilée sur #2408.
 **Spec:** `refactor/specs/2026-09-26-w6-final-gates-design.md` §4 et `refactor/plans/2026-09-26-w6-final-gates-implementation-plan.md` 2A0c.IV.
 
 ## But et frontière
