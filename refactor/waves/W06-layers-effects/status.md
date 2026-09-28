@@ -1554,14 +1554,16 @@ consomme uniquement `INVERSE_DOMAIN_ZERO_UNIFORM` U16 : ni V/I, ni D24S8.
 Le compilateur sélectionne `Empty` seulement si `segmentCount == 0`; un Path
 public non vide sans intérieur fini conserve `InverseDomainSource`.
 
-Pour `InverseDomain.Geometry`, `DirectTriangle` et `StencilEdgeFan` partagent
-le même `path.id` et `path.ordinal`, avec les slots ordonnés `0=domainStencil`,
-`1=interiorZero`, `2=colorCover`. Les trois sites restent obligatoires : le
-quad de domaine et l'intérieur ont leurs slices V/I exactes, le cover consomme
-`INVERSE_DOMAIN_UNIFORM` U16, et le D24S8 scene-local n'existe que pour cette
-variante Geometry. `commonSource=true` omet la commande de draw du slot 0,
-mais le pipeline `domainStencil` est toujours créé et authentifié; aucune
-omission de commande ne réduit l'identité, les bundles ou un futur compte 2A1.
+Pour `InverseDomain.Geometry.DirectTriangle`, un même `path.id` et
+`path.ordinal` porte les slots ordonnés `0=domainStencil`, `1=interiorZero`,
+`2=colorCover`. Le quad de domaine et l'intérieur ont leurs slices V/I
+exactes, le cover consomme `INVERSE_DOMAIN_UNIFORM` U16, et le D24S8 est
+scene-local. `commonSource=true` omet la commande de draw du slot 0 Direct,
+mais le pipeline `domainStencil` est toujours créé et authentifié.
+L'inventaire initial avait attribué à tort ce triplet à `StencilEdgeFan` :
+ses deux passes natives adjacentes conservent chacun leur owner slot 0,
+`fanStencil` producer puis `colorCover` TestZero, avec D24S8 partagé. Le
+témoin pixel Fan initial était valide, mais ne prouvait pas trois créations.
 Le domaine et le scissor source demeurent les facts I32/F32 scellés de
 `:math:geometry`; le renderer ne les reconstruit pas.
 
@@ -1688,3 +1690,28 @@ Gradle sort 1 uniquement après GLFW 133 post-JUnit : terminaison native
 **UNKNOWN**, pas PASS. La re-review Sol indépendante de `d572f2ab4..6c6cda2`
 ne relève aucun finding Critical/Important. Task 3 est review-clean ; la
 variante Fan, 2A1 et 2B ne le sont pas.
+
+### Amendement 2A0c.IV Task 4 — topologie Fan après audit architectural
+
+Le témoin Fan `INVERSE_EVEN_ODD` était vert avant recette. La première
+tentative locale de lui imposer le triplet Direct a révélé que W4d/W4e garde
+un producer `SingleSampleStencilProducer` et un cover
+`SingleSampleStencilColorCover` adjacents, non un `SingleSampleDirectColor`.
+La normalisation exploratoire a ensuite échoué sur le contrat RenderGraph
+`Single-sample direct color passes require a direct hard draw and logical
+target` : changer seulement la phase laisserait `StencilCover` et
+`atomicGroup` incompatibles, tout en exposant W4e autonome et les routes AA.
+Le prototype non commité est conservé de façon récupérable dans le stash
+nommé `w6 inverse-domain fan single-pass prototype rejected after architecture
+audit` ; la branche publiée n'a pas reçu cette normalisation.
+
+L'audit Astra en lecture seule confirme deux bundles réellement créés par la
+route W6 Fan : pipeline `fanStencil` sur le producer et pipeline+bind group
+`colorCover` sur le cover. La spec finale §4 exige l'inventaire exact de ces
+créations et leurs owners/ordinals, pas la fusion des passes. Le plan IV est
+amendé pour sceller deux sites Fan `(producer.id, producer.ordinal, 0)` et
+`(cover.id, cover.ordinal, 0)`, leur identité commune, leur D24S8 et leurs
+payloads distincts avant allocation. Le plan global 2A0c est corrigé aussi,
+pour que les futures leases 2A1 n'utilisent pas l'ancien compte de trois
+bundles pour Fan. Le triplet Direct reste review-clean ;
+Task 4 Fan, 2A1 et 2B restent ouverts, sans nouveau B/B−1 revendiqué.
