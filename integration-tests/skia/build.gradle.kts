@@ -147,6 +147,26 @@ tasks.register<JavaExec>("generateSkiaGmInventory") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<JavaExec>("measureSkiaParity") {
+    group = "verification"
+    description = "Records fresh public-Surface pixels, failures and timings without changing references or historical scores."
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.skia.SkiaGmParityCheckpointKt")
+    val output = project.findProperty("gm.parityOutput")?.toString()?.let(::File)
+        ?: layout.buildDirectory.dir("reports/skia-parity").get().asFile
+    args(output.absolutePath,
+        project.findProperty("gm.parityFrom")?.toString() ?: "0",
+        project.findProperty("gm.parityTo")?.toString() ?: Int.MAX_VALUE.toString(),
+        project.findProperty("gm.parityTimeout")?.toString() ?: "30",
+        project.findProperty("gm.rendererCommit")?.toString() ?: "missing-renderer-commit",
+        project.findProperty("gm.parityImages")?.toString() ?: "false")
+    jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", "--enable-native-access=ALL-UNNAMED")
+    if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) jvmArgs("-XstartOnFirstThread")
+    outputs.dir(output)
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<JavaExec>("generateSkiaDashboard") {
     group = "verification"
     description = "Generates Skia GM visual comparison dashboard."

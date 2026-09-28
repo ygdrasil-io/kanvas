@@ -5,6 +5,7 @@ package org.graphiks.kanvas.surface
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
@@ -15,9 +16,19 @@ import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.surface.gpu.GPUPlanSurfaceTerminalException
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.AfterAll
 
 /** Public W7 witness for a resolved AA path colour source inside a W6 layer. */
 class W7AaPathLayerSurfacePixelTest {
+    companion object {
+        @AfterAll
+        @JvmStatic
+        fun cleanupGpu() {
+            // GLFW/AppKit teardown must run on the test's first thread, not a JVM shutdown hook.
+            GPUBackendRuntimeFactory.dispose()
+        }
+    }
+
     @Test
     fun `aa layer B minus one refuses`() {
         // B is hand-derived from this fixed 7x7 direct-triangle fixture before either Surface

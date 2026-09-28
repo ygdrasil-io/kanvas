@@ -8,6 +8,7 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
@@ -29,6 +30,7 @@ import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.AfterAll
 
 /**
  * Small public covering of the W4/W5 lanes that are applicable inside a W6a scope.  Every
@@ -1165,6 +1167,13 @@ class W6aLayerW4W5SurfacePixelTest {
         ubyteArrayOf(red.toUByte(), green.toUByte(), blue.toUByte(), alpha.toUByte())
 
     private companion object {
+        @AfterAll
+        @JvmStatic
+        fun cleanupGpu() {
+            // GLFW/AppKit teardown must run on the test's first thread, not a JVM shutdown hook.
+            GPUBackendRuntimeFactory.dispose()
+        }
+
         val RED: ColorARGB = ColorARGB.of(255, 239, 51, 73)
         val BLUE: ColorARGB = ColorARGB.of(255, 17, 61, 211)
         val GREEN: ColorARGB = ColorARGB.of(255, 43, 181, 93)
