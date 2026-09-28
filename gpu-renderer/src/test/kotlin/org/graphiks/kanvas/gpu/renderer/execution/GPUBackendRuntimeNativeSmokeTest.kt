@@ -179,25 +179,6 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
-    fun `native session advertises exact sRGB prepared scene attachment support`() {
-        val session = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(session != null, "GPU backend unavailable in current environment")
-
-        val capabilities = assertNotNull(session!!.capabilities)
-        assertContains(capabilities.supportedTextureFormats, GPUTextureFormat.RGBA8UnormSrgb)
-        assertEquals(
-            setOf(1),
-            capabilities.textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
-                ?.renderAttachmentSampleCounts,
-        )
-        assertEquals(
-            emptySet(),
-            capabilities.textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
-                ?.resolveSourceSampleCounts,
-        )
-    }
-
-    @Test
     fun `fullscreen uniform alignment requires device limits and preserves stricter alignment`() {
         val capabilities = GPUCapabilities(
             implementation = GPUImplementationIdentity("GPU", "unit", "unit", "unit"),

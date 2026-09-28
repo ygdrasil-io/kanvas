@@ -41,6 +41,7 @@ public enum class PlanPassRole {
     ClipMaskProducer,
     ClipMaskFold,
     LayerComposite,
+    PathAaColorComposite,
     FilterSourceClear,
     FilterCoverageSource,
     FilterCoverageRetain,
@@ -1136,6 +1137,27 @@ public sealed interface PlanPass {
             destinationOriginParentSnapshotI32.y,
         )
         override val role: PlanPassRole = PlanPassRole.LayerComposite
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /** Composes one isolated resolved W4d AA colour source into the current W6 child target. */
+    public class PathAaColorComposite(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val destination: PlanResourceId,
+        sourceBoundsLayerI32: RectI32,
+        destinationOriginLayerI32: Point2I32,
+        public val destinationVersionAfter: DestinationVersionI64,
+    ) : PlanPass {
+        private val sourceBoundsSnapshotI32 = sourceBoundsLayerI32.copy()
+        private val destinationOriginSnapshotI32 = Point2I32(destinationOriginLayerI32.x, destinationOriginLayerI32.y)
+        init { require(!sourceBoundsSnapshotI32.isEmpty) { "AA colour composite source bounds must be non-empty" } }
+        public fun copySourceBoundsLayerI32(): RectI32 = sourceBoundsSnapshotI32.copy()
+        public fun copyDestinationOriginLayerI32(): Point2I32 = Point2I32(
+            destinationOriginSnapshotI32.x,
+            destinationOriginSnapshotI32.y,
+        )
+        override val role: PlanPassRole = PlanPassRole.PathAaColorComposite
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 

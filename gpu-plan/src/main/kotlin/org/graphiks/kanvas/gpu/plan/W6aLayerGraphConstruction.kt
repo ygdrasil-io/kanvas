@@ -119,7 +119,11 @@ internal class W6aLayerGraphConstruction(
     private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot = RuntimeEffectSemanticCatalogSnapshot.Unbound,
 ) {
     private val occurrences = immutableList(occurrences)
-    private val bindings = sourceBindings.toMutableList()
+    /**
+     * One binding represents one recorded child occurrence.  W6 owns their publication order;
+     * do not inherit an incidental compiler/map iteration order into the resolved-colour stream.
+     */
+    private val bindings = sourceBindings.sortedBy(W6aLayerSourceBinding::firstCommandIndexI32).toMutableList()
     val lanes: List<SourceDeferredRenderConstructionV4> get() = immutableList(bindings.map { it.source })
     private val root = planResourceId(PlanResourceRole.LogicalTarget, 0)
     private val staging = planResourceId(PlanResourceRole.ReadbackStaging, 0)
@@ -142,6 +146,7 @@ internal class W6aLayerGraphConstruction(
     /** One W5 row per isolated Picture paint; it samples a sealed graph texture, never a SceneSnapshot. */
     private val graphTextureMaterialSourcesByAggregate: Map<PictureStreamAggregateIdI32, MaterialSourceConstructionV4>
     private val w4eBindings = mutableListOf<PlanW4eGeometryBindingV1>()
+    private val w4dAaBindings = mutableListOf<PlanW4dAaSourceBindingV1>()
     private val childSnapshots = mutableSetOf<PlanResourceId>()
     val nonUniformBytesI64: Long
     val passCountI32: Int get() = rawPasses.size
@@ -159,7 +164,18 @@ internal class W6aLayerGraphConstruction(
         require(occurrences.indices.all { indexI32 -> occurrences[indexI32].idI32 == indexI32 })
         require(bindings.all { binding -> binding.scopeI32 == null || binding.scopeI32 in occurrenceById })
         require(bindings.map { it.firstCommandIndexI32 }.distinct().size == bindings.size)
-        require(lanes.all { source -> source.passes().all { pass -> pass is PlanPass.RenderPass || pass is PlanPass.ReadbackPass ||
+        require(bindings.zipWithNext().all { (before, after) ->
+            before.firstCommandIndexI32 < after.firstCommandIndexI32
+        }) { "W6 child occurrences must be published in recorded command order." }
+        require(lanes.all { source ->
+            source.topology == DeferredLaneTopologyV4.AaResolvedColor && source.passes().let { aa ->
+                aa.all { pass -> pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw &&
+                    pass.draw.sample == SamplePlan.Multisample4 && pass.draw.coverage == CoveragePlan.StencilAA4 } &&
+                    (aa.singleOrNull()?.let { (it as PlanPass.PathRenderPass).phase == PathRenderPhase.MultisampleDirectColor &&
+                        (it.draw as GeneralPathDraw).strategy == PathFillStrategy.DirectTriangle } == true ||
+                        aa.size == 2 && (aa[0] as PlanPass.PathRenderPass).phase == PathRenderPhase.MultisampleStencilProducer &&
+                        (aa[1] as PlanPass.PathRenderPass).phase == PathRenderPhase.MultisampleStencilColorCover)
+            } || source.passes().all { pass -> pass is PlanPass.RenderPass || pass is PlanPass.ReadbackPass ||
             pass is PlanPass.StencilProducer || pass is PlanPass.StencilGeometryProducerV3 || pass is PlanPass.StencilCover || pass is PlanPass.TextureCopy ||
             pass is PlanPass.ClipMaskInitialize || pass is PlanPass.ClipMaskProducer || pass is PlanPass.ClipMaskFold ||
             pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw && pass.draw.sample == SamplePlan.SingleSample &&
@@ -2583,7 +2599,7 @@ internal class W6aLayerGraphConstruction(
                     steps += LayerExecutionStepV1.Initialize(scopeId, copy.id)
                 }
             }
-            bindingsByCommand[commandIndexI32]?.let { binding ->
+            bindingsByCommand[commandIndexI32]?.let bindingLoop@ { binding ->
                 if (binding.scopeI32 == null || binding.scopeI32 in activeByScope) {
                     val draws = RenderGraph.visualDraws(binding.source.passes())
                     if (draws.isNotEmpty()) {
@@ -2642,6 +2658,57 @@ internal class W6aLayerGraphConstruction(
                         val maskCoverage = materialCoverage?.resourceId
                         if (target != parentTarget) appendRender(target, emptyList(), true)
                         val laneI32 = bindings.indexOf(binding)
+                        if (binding.source.topology == DeferredLaneTopologyV4.AaResolvedColor) {
+                            require(!directFilter && directFilterSource == null && maskCoverage == null &&
+                                binding.scopeI32 != null && binding.scopeI32 in activeByScope) {
+                                "w6a.layer.unsupported_child"
+                            }
+                            val geometry = activeByScope.getValue(requireNotNull(binding.scopeI32))
+                            val remapped = laneResourceIds[laneI32]
+                            val native = nativeByLane.getOrPut(laneI32, ::linkedMapOf)
+                            binding.source.passes().forEach { original ->
+                                val sealed = original as? PlanPass.PathRenderPass
+                                    ?: error("w6a.layer.unsupported_child")
+                                val rebound = sealed.rebindW4eV6(
+                                    passes.size,
+                                    { originalId -> remapped.getValue(originalId) },
+                                    requireNotNull(geometry.mapping),
+                                    requireNotNull(geometry.compositeDomainDeviceI32),
+                                ) as? PlanPass.PathRenderPass ?: error("w6a.layer.unsupported_child")
+                                val local = PlanPass.PathRenderPass(rebound.ordinal, rebound.target, rebound.draw,
+                                    rebound.phase, rebound.drawDataResources, rebound.atomicGroup, rebound.depthStencil,
+                                    sealed.load, rebound.store, rebound.depthStencilAccess, rebound.depthStencilLoadStore, rebound.resolveTarget)
+                                passes += local
+                                native[local.id] = local
+                                steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(requireNotNull(binding.scopeI32)), local.id)
+                            }
+                            val source = remapped.entries.single { (original, _) ->
+                                binding.source.resources().single { it.id == original }.role == PlanResourceRole.PathAaResolvedColor
+                            }.value
+                            val scopeI32 = requireNotNull(binding.scopeI32)
+                            val destination = targetFor(scopeI32)
+                            val aaGeometry = activeByScope.getValue(scopeI32)
+                            val sourceBounds = requireNotNull(requireNotNull(aaGeometry.mapping)
+                                .mapDeviceRectToLayerI32OrNull(requireNotNull(aaGeometry.compositeDomainDeviceI32)))
+                            val destinationExtent = targetExtent(destination)
+                            require(sourceBounds == RectI32(0, 0, destinationExtent.width, destinationExtent.height)) {
+                                "W6 AA source/domain mapping must publish the exact local target extent."
+                            }
+                            val destinationOrigin = Point2I32(sourceBounds.left, sourceBounds.top)
+                            val after = DestinationVersionI64(Math.addExact(versions.getValue(destination), 1L))
+                            versions[destination] = after.valueI64
+                            val composite = PlanPass.PathAaColorComposite(
+                                passes.size,
+                                source,
+                                destination,
+                                sourceBounds,
+                                destinationOrigin,
+                                after,
+                            )
+                            passes += composite
+                            steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(scopeI32), composite.id)
+                            return@bindingLoop
+                        }
                         if (directFilterSource != null) physicalTargetByLane[laneI32] = target
                         val w4e = binding.source.geometrySource?.takeIf { it.w4ePayload != null }
                         // General W4d paths retain the same already-issued native PathRenderPass
@@ -2983,11 +3050,24 @@ internal class W6aLayerGraphConstruction(
             }
         })
         nativeByLane.forEach { (laneI32, native) ->
-            val target = physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)
-            val targetExtent = targetExtents.getValue(target)
+            val target = native.values.filterIsInstance<PlanPass.PathRenderPass>().firstOrNull()?.target
+                ?: physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)
+            val targetExtent = resources.single { it.id == target }.copyExtent()
+                ?: targetExtents.getValue(target)
+            val origin = bindings[laneI32].scopeI32?.let { activeByScope[it]?.mapping?.copyLayerOriginDeviceI32() }
+                ?: targetOriginDevice(target)
+            if (lanes[laneI32].topology == DeferredLaneTopologyV4.AaResolvedColor) {
+                val lane = lanes[laneI32]
+                val remapping = laneResourceIds[laneI32]
+                w4dAaBindings += PlanW4dAaSourceBindingV1(lane.capabilityId,
+                    native.values.filterIsInstance<PlanPass.PathRenderPass>().first().draw.commandIndex,
+                    lane.passes().map { it.id }, native.values.filterIsInstance<PlanPass.PathRenderPass>(),
+                    remapping, resources.filter { it.id in remapping.values }, targetExtent, origin)
+                return@forEach
+            }
             val payload = requireNotNull(W4eNativePayloadPlan.fromDeferred(native.values.toList(), resources, targetExtent,
-                caps, lanes[laneI32].sourceTable(), targetOriginDevice(target))) { "w6a.layer.w4e_payload" }
-            w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload, targetOriginDevice(target))
+                caps, lanes[laneI32].sourceTable(), origin)) { "w6a.layer.w4e_payload" }
+            w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload, origin)
         }
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes, caps, budget)
     }
@@ -3134,6 +3214,15 @@ internal class W6aLayerGraphConstruction(
                     plannedCommandId = pass.plannedCommandId,
                     materialDeviceOriginI32 = pass.copyMaterialDeviceOriginI32() ?: targetOriginDevice(pass.target))
             } else when (pass) {
+                is PlanPass.PathRenderPass -> {
+                    require(pass.phase in setOf(PathRenderPhase.MultisampleDirectColor,
+                        PathRenderPhase.MultisampleStencilProducer, PathRenderPhase.MultisampleStencilColorCover))
+                    val bound = pass.rebindW4eV6(pass.ordinal, { it }, null, null,
+                        byCommand.getValue(pass.draw.commandIndex).materialAuthority) as PlanPass.PathRenderPass
+                    PlanPass.PathRenderPass(bound.ordinal, bound.target, bound.draw, bound.phase,
+                        bound.drawDataResources, bound.atomicGroup, bound.depthStencil, pass.load, bound.store,
+                        bound.depthStencilAccess, bound.depthStencilLoadStore, bound.resolveTarget)
+                }
                 is PlanPass.FilterPass -> {
                     val operation: FilterPassOperationV1 = when (val original = pass.operation) {
                         is FilterPassOperationV1.MaskShader -> when (val binding = original.materialBinding) {
@@ -3256,6 +3345,11 @@ internal class W6aLayerGraphConstruction(
         val finalW4eBindings = w4eBindings.map { binding ->
             binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
         }
+        val finalW4dAaBindings = w4dAaBindings.map { binding ->
+            PlanW4dAaSourceBindingV1(binding.sourceCapabilityId, binding.commandIndexI32, binding.sourcePassIds(),
+                binding.passes().map { phase -> passes.single { it.id == phase.id } as PlanPass.PathRenderPass },
+                binding.resourceRemapping(), binding.resources(), binding.copyExtentI32(), binding.copyOriginDeviceI32())
+        }
         val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes)
         // RenderGraph.construct publishes this same frame-local row later, after all final
         // recipes have been assembled.  The W5a recipe needs its typed logical descriptor now;
@@ -3350,6 +3444,7 @@ internal class W6aLayerGraphConstruction(
             inverseDomainDirects = inverseDomainDirectRecipes,
             inverseDomainFans = inverseDomainFanRecipes,
             w5aOrdinarySolidSources = w5aOrdinarySolidSourceRecipes,
+            w4dAaSources = finalW4dAaBindings,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3357,6 +3452,7 @@ internal class W6aLayerGraphConstruction(
             caches = source.caches,
             w6cColorUniformBindings = source.w6cColorUniformBindings,
             w4eGeometry = finalW4eBindings,
+            w4dAaSources = finalW4dAaBindings,
             w6SolidRectHostRecipes = solidRectHostRecipes,
             w6CorePrimitiveHostRecipes = corePrimitiveHostRecipes,
             w6PreparedVerticesHostRecipes = preparedVerticesHostRecipes,

@@ -9,9 +9,11 @@ import org.graphiks.kanvas.gpu.renderer.recording.*
 internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
     prepared: PreparedGPUFrame, payload: GPUPreparedNativeFramePayload?,
 ): Boolean {
-    if (!validatesW4eFragments(prepared.semanticPlan) || payload == null) return false
+    if (!validatesW4eFragments(prepared.semanticPlan) ||
+        !validatesW4dAaSources(prepared.semanticPlan) || payload == null) return false
     val byStep = payload.scopeOperands.associateBy { it.sourceStepIndex }
     val depthViews = mutableMapOf<PlanResourceId, Any>()
+    val aaColorViews = mutableMapOf<PlanResourceId, Any>()
     val expectedPathSteps = mutableSetOf<Int>()
     graph.passes().forEachIndexed { ordinalI32, pass ->
         val w4e = physical.w4eGeometryBinding(pass.id)?.nativePass(pass.id)
@@ -86,6 +88,59 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
                 } else if (native.pass.stencilLoadOperation != GPUPreparedNativeLoadOperation.Load ||
                     native.pass.stencilStoreOperation != GPUPreparedNativeStoreOperation.Store) return false
             }
+            depthViews[depthId] = view.view
+            return@forEachIndexed
+        }
+        val aa = w4dAaAuthorities.keys.singleOrNull { binding ->
+            binding.passes().any { it === pass }
+        }
+        if (aa != null) {
+            val phase = pass as? PlanPass.PathRenderPass ?: return false
+            val stepI32 = ordinalI32 + 1
+            val native = byStep[stepI32] as? GPUPreparedNativeScopeOperand.Render ?: return false
+            if (native.w6aPassV1 !== phase) return false
+            val color = native.pass.colorTarget
+            val resolve = native.pass.resolveTarget
+            if (color.deviceGeneration != prepared.generationSeal.deviceGeneration ||
+                color.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                native.pass.loadOperation != (if (phase.load == AttachmentLoadPlan.ClearTransparent)
+                    GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load) ||
+                native.pass.storeOperation != GPUPreparedNativeStoreOperation.Store ||
+                native.pass.clearColor != (if (phase.load == AttachmentLoadPlan.ClearTransparent)
+                    GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null) ||
+                (resolve == null) != (phase.resolveTarget == null) ||
+                resolve != null && (resolve.view === color.view ||
+                    resolve.deviceGeneration != prepared.generationSeal.deviceGeneration ||
+                    resolve.ownership != GPUPreparedNativeOperandOwnership.Borrowed)
+            ) return false
+            val priorColor = aaColorViews[phase.target]
+            if (priorColor != null && priorColor !== color.view) return false
+            aaColorViews[phase.target] = color.view
+            val depthId = phase.depthStencil
+            if (depthId == null) {
+                if (native.pass.depthStencilTarget != null || stepI32 in payload.pathDepthStencilViewAuthority)
+                    return false
+                return@forEachIndexed
+            }
+            expectedPathSteps += stepI32
+            val view = native.pass.depthStencilTarget ?: return false
+            if (payload.pathDepthStencilViewAuthority[stepI32] !== view.view ||
+                view.deviceGeneration != prepared.generationSeal.deviceGeneration ||
+                view.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                view.view === color.view || view.view === resolve?.view ||
+                !native.pass.depthReadOnly || native.pass.stencilReadOnly ||
+                native.pass.stencilLoadOperation != when (phase.depthStencilLoadStore) {
+                    PlanDepthStencilLoadStore.ClearZeroStore -> GPUPreparedNativeLoadOperation.Clear
+                    PlanDepthStencilLoadStore.LoadStoreTestReset -> GPUPreparedNativeLoadOperation.Load
+                    null -> return false
+                } || native.pass.stencilStoreOperation != GPUPreparedNativeStoreOperation.Store ||
+                native.pass.stencilClearValue !=
+                    (if (phase.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore) 0u else null)
+            ) return false
+            val priorView = depthViews[depthId]
+            val producer = phase.phase == PathRenderPhase.MultisampleStencilProducer
+            if ((priorView == null) != producer || priorView != null && priorView !== view.view ||
+                depthViews.any { (id, other) -> id != depthId && other === view.view }) return false
             depthViews[depthId] = view.view
             return@forEachIndexed
         }

@@ -5180,10 +5180,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     "W4d.2 render scope is absent from the prepared encoder plan.",
                 )
                 val structural = packet.corePrimitivePreparedAuthority?.structuralPipelineKey
-                if (packet.commandIdValue != fact.commandIdValue ||
-                    authority.structuralPipelineKey(fact.pathPassId) != structural ||
-                    structural?.sampleCount != fact.sampleCountI32
-                ) {
+                if (!w4dGeneralEntryMatches(packet, fact, structural, authority.structuralPipelineKey(fact.pathPassId))) {
                     return refused(
                         "invalid.native-core-primitive.w4d-general-authority",
                         "W4d.2 packet contradicts its sealed native path-pass facts.",
@@ -5537,9 +5534,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     requireNotNull(regularBindGroups[mapping.componentIdentity])
                 }
                 val slice = requireNotNull(slices[entry.sourceStepIndex])
-                GPUPreparedNativeScopeOperand.Render(
+                w4dGeneralRenderOperand(
                     sourceStepIndex = entry.sourceStepIndex,
-                    pass = GPUPreparedNativeRenderPassConfig(
+                    semantic = entry.semantic,
+                    config = GPUPreparedNativeRenderPassConfig(
                         colorTarget = colorTarget,
                         resolveTarget = canonicalTarget.takeIf {
                             entry.fact.resolveTargetResourceId != null &&
@@ -5557,37 +5555,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         stencilStoreOperation = depthLoad?.let { GPUPreparedNativeStoreOperation.Store },
                         stencilReadOnly = depthLoad == null,
                     ),
-                    commands = listOf(
-                        GPUPreparedNativeRenderCommand.SetPipeline(requireNotNull(pipelineOperands[structural])),
-                        GPUPreparedNativeRenderCommand.SetBindGroup(
-                            0,
-                            bindGroup,
-                            listOf(uniformPlan.slots[entryIndex].alignedOffset),
-                        ),
-                        GPUPreparedNativeRenderCommand.SetVertexBuffer(
-                            0, vertexOperand, 0L, vertexBytes, 8L,
-                        ),
-                        GPUPreparedNativeRenderCommand.SetIndexBuffer(
-                            indexOperand, GPUPreparedNativeIndexFormat.Uint32, 0L, indexBytes,
-                        ),
-                        GPUPreparedNativeRenderCommand.SetScissor(
-                            entry.semantic.scissorBounds.left,
-                            entry.semantic.scissorBounds.top,
-                            entry.semantic.scissorBounds.width,
-                            entry.semantic.scissorBounds.height,
-                        ),
-                        GPUPreparedNativeRenderCommand.DrawIndexed(
-                            GPUPreparedNativeDrawCall.DrawIndexed(
-                                indexCount = slice.indexCount,
-                                firstIndex = slice.firstIndex,
-                                baseVertex = slice.baseVertex,
-                                vertexCount = slice.vertexCount,
-                                maxLocalIndex = slice.maxLocalIndex,
-                            ),
-                        ),
-                    ),
-                    semanticPayloads = listOf(entry.semantic),
-                    operandLayout = GPUPreparedNativeRenderOperandLayout.CommandOrder,
+                    pipeline = requireNotNull(pipelineOperands[structural]), bindGroup = bindGroup,
+                    uniformOffset = uniformPlan.slots[entryIndex].alignedOffset,
+                    vertex = vertexOperand, vertexBytes = vertexBytes,
+                    index = indexOperand, indexBytes = indexBytes, slice = slice,
                 )
             }
             if (consumedMaskClears != authority.maskClearFacts.map { clear -> clear.passId }.toSet()) {

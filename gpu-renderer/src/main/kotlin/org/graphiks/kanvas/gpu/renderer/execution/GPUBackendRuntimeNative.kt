@@ -1294,6 +1294,7 @@ private class WgpuBackendSession(
         glfw.wgpuContext.device,glfw.wgpuContext.device.queue,deviceGeneration.value,
     )
     private val spatialFilterCache = GPUW6cSpatialFilterSessionCache(glfw.wgpuContext.device, deviceGeneration.value)
+    private val srgb4xResolveSupported = probeSrgb4xResolveSupport(glfw.wgpuContext.device)
 
     override val adapterInfo: GPUBackendAdapterSummary? = adapterSummary(glfw.wgpuContext.adapter.info)
 
@@ -1329,7 +1330,8 @@ private class WgpuBackendSession(
                         resolveSourceSampleCounts = setOf(4),
                     ),
                     GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
-                        renderAttachmentSampleCounts = setOf(1),
+                        renderAttachmentSampleCounts = if (srgb4xResolveSupported) setOf(1, 4) else setOf(1),
+                        resolveSourceSampleCounts = if (srgb4xResolveSupported) setOf(4) else emptySet(),
                     ),
                     GPUTextureFormat.BGRA8Unorm to GPUTextureSampleCountSupport(
                         renderAttachmentSampleCounts = setOf(1, 4),

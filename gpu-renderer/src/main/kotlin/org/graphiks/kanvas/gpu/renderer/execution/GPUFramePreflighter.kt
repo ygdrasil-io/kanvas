@@ -257,6 +257,8 @@ internal class GPUFramePreflighter(
             return GPUFramePreflightResult.Refused(diagnostic("w6a.layer.invalid_plan", "Layer operands require complete frame authority."))
         if (w6a != null && !w6a.validates(framePlan)) return GPUFramePreflightResult.Refused(
             diagnostic("w6a.layer.invalid_plan", "The layer frame differs from its frozen graph projection."))
+        if (w6a != null && !w6a.validatesW4dAaSources(framePlan)) return GPUFramePreflightResult.Refused(
+            diagnostic("w6a.layer.invalid_aa_source", "The W4d source occurrence differs from its frozen phases and resolve operands."))
         val mixedW5b = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
             .mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()
         if (mixedW5b != null) {

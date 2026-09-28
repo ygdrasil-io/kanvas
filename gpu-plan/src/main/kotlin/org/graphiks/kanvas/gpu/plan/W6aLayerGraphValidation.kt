@@ -25,6 +25,9 @@ internal fun validateW6aLayerTopology(
     val versions = mutableMapOf<PlanResourceId, Long>()
     val preparedMasks = mutableSetOf<PlanResourceId>()
     val sealedPictureSources = mutableSetOf<PlanResourceId>()
+    val resolvedAaSources = mutableSetOf<PlanResourceId>()
+    val consumedAaSources = mutableSetOf<PlanResourceId>()
+    var lastAaCompositeCommandI32: Int? = null
     fun validatePictureTerminal(operand: PictureCompositeOperandsV1, source: PlanResourceId,
         destination: PlanResourceId, indexI32: Int): Long {
         require(operand.source == source && operand.sourceGenerationI64 == versions[source] &&
@@ -216,6 +219,86 @@ internal fun validateW6aLayerTopology(
             require(pass.restore.parentVersionBefore.valueI64 == versions[target.id])
             if (pass.restore.writesParentDevice) versions[target.id] = Math.addExact(requireNotNull(versions[target.id]), 1L)
             require(pass.destinationVersionAfter == pass.restore.parentVersionAfter && pass.destinationVersionAfter.valueI64 == versions[target.id])
+        }
+        is PlanPass.PathRenderPass -> {
+            val target = byId.getValue(pass.target)
+            val resolved = pass.resolveTarget?.let(byId::getValue)
+            require(target.role == PlanResourceRole.MultisampleColorTarget && target.sampleCountI32 == 4 &&
+                target.format is PlanTextureFormat.Color && PlanResourceUsage.RenderAttachment in target.usages() &&
+                pass.draw is GeneralPathDraw && pass.draw.sample == SamplePlan.Multisample4 &&
+                pass.draw.coverage == CoveragePlan.StencilAA4 && pass.draw.blend == BlendPlan.SrcOver &&
+                pass.store == AttachmentStorePlan.Store) { "w6a.layer.unsupported_child" }
+            val isDirect = pass.phase == PathRenderPhase.MultisampleDirectColor
+            val isProducer = pass.phase == PathRenderPhase.MultisampleStencilProducer
+            val isCover = pass.phase == PathRenderPhase.MultisampleStencilColorCover
+            require(isDirect || isProducer || isCover) { "w6a.layer.unsupported_child" }
+            if (isDirect) require(pass.draw.strategy == PathFillStrategy.DirectTriangle &&
+                pass.load == AttachmentLoadPlan.ClearTransparent && pass.atomicGroup == null && pass.depthStencil == null &&
+                pass.depthStencilAccess == null && pass.depthStencilLoadStore == null) { "w6a.layer.unsupported_child" }
+            else {
+                val depth = pass.depthStencil?.let(byId::getValue)
+                require(pass.draw.strategy == PathFillStrategy.StencilCover && depth?.role == PlanResourceRole.DepthStencil &&
+                    depth.sampleCountI32 == 4 && depth.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                    PlanResourceUsage.DepthStencilAttachment in depth.usages() && pass.atomicGroup == canonicalGeneralPathAtomicGroup(pass.draw)) {
+                    "w6a.layer.unsupported_child"
+                }
+                if (isProducer) require(pass.load == AttachmentLoadPlan.ClearTransparent && pass.resolveTarget == null &&
+                    pass.depthStencilAccess == PlanDepthStencilAccess.Write && pass.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore &&
+                    (passes.getOrNull(indexI32 + 1) as? PlanPass.PathRenderPass)?.let { it.phase == PathRenderPhase.MultisampleStencilColorCover &&
+                        it.atomicGroup == pass.atomicGroup && it.target == pass.target && it.depthStencil == pass.depthStencil } == true) {
+                    "w6a.layer.unsupported_child"
+                }
+                if (isCover) require(pass.load == AttachmentLoadPlan.Load && pass.depthStencilAccess == PlanDepthStencilAccess.ReadWrite &&
+                    pass.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset &&
+                    (passes.getOrNull(indexI32 - 1) as? PlanPass.PathRenderPass)?.let { it.phase == PathRenderPhase.MultisampleStencilProducer &&
+                        it.atomicGroup == pass.atomicGroup && it.target == pass.target && it.depthStencil == pass.depthStencil } == true) {
+                    "w6a.layer.unsupported_child"
+                }
+            }
+            if (!isProducer) require(resolved?.role == PlanResourceRole.PathAaResolvedColor && resolved.sampleCountI32 == 1 &&
+                resolved.format == target.format && PlanResourceUsage.RenderAttachment in resolved.usages() &&
+                PlanResourceUsage.Sampled in resolved.usages()) { "w6a.layer.unsupported_child" }
+            val data = pass.drawDataResources
+            require(byId.getValue(data.vertex).role == PlanResourceRole.VertexData &&
+                byId.getValue(data.index).role == PlanResourceRole.IndexData &&
+                byId.getValue(data.uniform).role == PlanResourceRole.UniformData)
+            if (isProducer) require(initialized.add(target.id)) { "AA source resources belong to one occurrence" }
+            else {
+                val composite = passes.getOrNull(indexI32 + 1) as? PlanPass.PathAaColorComposite
+                require(composite?.source == resolved?.id) { "AA resolve must be immediately composited" }
+                require((if (isDirect) initialized.add(target.id) else target.id in initialized) &&
+                    initialized.add(requireNotNull(resolved).id) && resolvedAaSources.add(resolved.id)) {
+                    "AA source resources belong to one occurrence"
+                }
+            }
+            if (!isProducer) commands += pass.draw.commandIndex
+        }
+        is PlanPass.PathAaColorComposite -> {
+            val source = byId.getValue(pass.source)
+            val destination = byId.getValue(pass.destination)
+            val producer = passes.getOrNull(indexI32 - 1) as? PlanPass.PathRenderPass
+            require(producer?.resolveTarget == source.id && source.id in resolvedAaSources &&
+                consumedAaSources.add(source.id)) { "AA composite must consume its adjacent resolve exactly once" }
+            require(source.role == PlanResourceRole.PathAaResolvedColor && source.id in initialized &&
+                destination.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
+                    PlanResourceRole.PictureAggregateSource) && destination.id in initialized &&
+                destination.id !in restored && destination.id !in sealedPictureSources &&
+                PlanResourceUsage.Sampled in source.usages() && pass.source != pass.destination)
+            val bounds = pass.copySourceBoundsLayerI32()
+            val origin = pass.copyDestinationOriginLayerI32()
+            val sourceExtent = requireNotNull(source.copyExtent())
+            val destinationExtent = requireNotNull(destination.copyExtent())
+            require(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= sourceExtent.width && bounds.bottom <= sourceExtent.height &&
+                origin.x >= 0 && origin.y >= 0 && origin.x.toLong() + bounds.width() <= destinationExtent.width &&
+                origin.y.toLong() + bounds.height() <= destinationExtent.height)
+            val after = Math.addExact(versions.getValue(destination.id), 1L)
+            versions[destination.id] = after
+            require(pass.destinationVersionAfter.valueI64 == after)
+            val commandIndexI32 = requireNotNull(producer).draw.commandIndex
+            require(lastAaCompositeCommandI32 == null || requireNotNull(lastAaCompositeCommandI32) < commandIndexI32) {
+                "AA resolved-colour composites must preserve recorded child order."
+            }
+            lastAaCompositeCommandI32 = commandIndexI32
         }
         is PlanPass.FilterSourceClear -> {
             val output = byId.getValue(pass.output)
@@ -579,6 +662,7 @@ internal fun validateW6aLayerTopology(
         else -> error("w6a.layer.unsupported_child")
     } }
     if (passes.any { it is PlanPass.FilterPass }) W6bFilterGraphWitnessV1.seal(resources, passes)
+    require(resolvedAaSources == consumedAaSources)
     require(restored == layers.map { it.id }.toSet())
     require(commands.size == visualCountI32 && commands.distinct().size == commands.size)
     // Picture streams prove source order and occurrence ownership independently. Their W4/W5

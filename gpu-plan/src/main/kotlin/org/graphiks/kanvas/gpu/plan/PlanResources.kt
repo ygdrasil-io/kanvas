@@ -19,6 +19,8 @@ public enum class PlanResourceRole {
     FilterTransparentBlack,
     /** Single-sample RGBA8 target owned only by a frozen W6 FilterPass. */
     FilterTarget,
+    /** Isolated one-sample premultiplied colour resolved from a W4d AA path for one W6 child. */
+    PathAaResolvedColor,
     MultisampleColorTarget,
     PathHardEdgeMask,
     PathHardEdgeDepthStencil,
@@ -207,6 +209,14 @@ public class PlanResource private constructor(
                             usages.all { it in setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled,
                                 PlanResourceUsage.CopySource, PlanResourceUsage.CopyDestination) }) {
                             "W6b source and filter targets require the frozen single-sample RGBA8 usage subset"
+                        }
+                        if (role == PlanResourceRole.PathAaResolvedColor) {
+                            require(format is PlanTextureFormat.Color &&
+                                format.value == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL &&
+                                sampleCountI32 == 1 && lifetime == PlanResourceLifetime.FrameLocal &&
+                                usages == setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled)) {
+                                "W6 AA resolved colour sources require the frozen single-sample sampled attachment usage"
+                            }
                         }
                     }
                 }

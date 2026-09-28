@@ -197,6 +197,11 @@ public class GPUPlanW4dGeneralPreparedAuthority private constructor(
         const val VERSION: String = "w4d.2-general-prepared-authority-v1"
         const val W5A_VERSION: String = "w4d.2-general-prepared-authority-w5a-material-v2"
 
+        internal fun issueAaSource(
+            graph: RenderGraph,
+            binding: org.graphiks.kanvas.gpu.plan.PlanW4dAaSourceBindingV1,
+        ): GPUW4dAaSourcePreparedAuthority = GPUW4dAaSourcePreparedAuthority.capture(graph, binding)
+
         fun issueAfterFullGraphValidation(
             graph: RenderGraph,
             pathPasses: List<PlanPass.PathRenderPass>,
@@ -498,6 +503,68 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
         pathPassFacts.singleOrNull { fact -> fact.pathPassId == pathPassId }
 
     internal companion object {
+
+        fun capturePathFacts(
+            pathPasses: List<PlanPass.PathRenderPass>,
+            known: Map<String, W4dGeneralNativeResourceFact>,
+            targetBounds: GPUPixelBounds,
+            materialColors: Map<String, org.graphiks.math.color.ColorF32>,
+        ): List<W4dGeneralNativePathPassFact> {
+            return pathPasses.map { pass ->
+                val maskResourceId = (pass.draw as? BinaryMaskedPathDraw)?.mask?.value
+                val materialColor = materialColors.getValue(pass.id.value)
+                val consumerUniform64 = (pass.draw as? BinaryMaskedPathDraw)?.let { binary ->
+                    val mask = requireNotNull(known[maskResourceId]) {
+                        "W4d.2 binary mask has no sealed resource fact"
+                    }
+                    w4dGeneralCoverageMaskConsumerUniform64(
+                        targetBounds = GPUPixelBounds(
+                            0,
+                            0,
+                            targetBounds.width,
+                            targetBounds.height,
+                        ),
+                        maskWidth = requireNotNull(mask.width),
+                        maskHeight = requireNotNull(mask.height),
+                        premultipliedRgba = listOf(
+                            materialColor.red,
+                            materialColor.green,
+                            materialColor.blue,
+                            materialColor.alpha,
+                        ),
+                    )
+                }
+                val uniformPayload = consumerUniform64 ?: corePrimitiveUniformBytes(
+                    GPUPixelBounds(0, 0, targetBounds.width, targetBounds.height),
+                    listOf(
+                        materialColor.red,
+                        materialColor.green,
+                        materialColor.blue,
+                        materialColor.alpha,
+                    ),
+                ).map(Int::toByte)
+                W4dGeneralNativePathPassFact(
+                    pathPassId = pass.id.value,
+                    commandIdValue = pass.draw.commandIndex,
+                    phase = pass.phase,
+                    targetResourceId = pass.target.value,
+                    vertexResourceId = pass.drawDataResources.vertex.value,
+                    indexResourceId = pass.drawDataResources.index.value,
+                    uniformResourceId = pass.drawDataResources.uniform.value,
+                    depthStencilResourceId = pass.depthStencil?.value,
+                    resolveTargetResourceId = pass.resolveTarget?.value,
+                    maskResourceId = maskResourceId,
+                    atomicGroupId = pass.atomicGroup?.value,
+                    sampleCountI32 = if (pass.draw.sample == SamplePlan.Multisample4) 4 else 1,
+                    load = pass.load,
+                    store = pass.store,
+                    depthStencilAccess = pass.depthStencilAccess,
+                    depthStencilLoadStore = pass.depthStencilLoadStore,
+                    coverageMaskConsumerUniform64 = consumerUniform64,
+                    uniformPayloadBytes = Collections.unmodifiableList(uniformPayload.toList()),
+                )
+            }
+        }
         fun from(
             graph: RenderGraph,
             pathPasses: List<PlanPass.PathRenderPass>,
@@ -529,8 +596,7 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                 )
             }
             val known = resources.associateBy(W4dGeneralNativeResourceFact::resourceId)
-            val pathFacts = pathPasses.map { pass ->
-                val maskResourceId = (pass.draw as? BinaryMaskedPathDraw)?.mask?.value
+            val materialColors = pathPasses.associate { pass ->
                 val materialColor = if (graph.hasW5aMaterialPathCapabilityV2()) {
                     if (pass.phase in setOf(
                         PathRenderPhase.SingleSampleDirectColor,
@@ -573,57 +639,10 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                         is PlanDrawMaterialAuthority.MaterialV1 -> return null
                     }
                 }
-                val consumerUniform64 = (pass.draw as? BinaryMaskedPathDraw)?.let { binary ->
-                    val mask = requireNotNull(known[maskResourceId]) {
-                        "W4d.2 binary mask has no sealed resource fact"
-                    }
-                    w4dGeneralCoverageMaskConsumerUniform64(
-                        targetBounds = GPUPixelBounds(
-                            0,
-                            0,
-                            graph.targetExtent.width,
-                            graph.targetExtent.height,
-                        ),
-                        maskWidth = requireNotNull(mask.width),
-                        maskHeight = requireNotNull(mask.height),
-                        premultipliedRgba = listOf(
-                            materialColor.red,
-                            materialColor.green,
-                            materialColor.blue,
-                            materialColor.alpha,
-                        ),
-                    )
-                }
-                val uniformPayload = consumerUniform64 ?: corePrimitiveUniformBytes(
-                    GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height),
-                    listOf(
-                        materialColor.red,
-                        materialColor.green,
-                        materialColor.blue,
-                        materialColor.alpha,
-                    ),
-                ).map(Int::toByte)
-                W4dGeneralNativePathPassFact(
-                    pathPassId = pass.id.value,
-                    commandIdValue = pass.draw.commandIndex,
-                    phase = pass.phase,
-                    targetResourceId = pass.target.value,
-                    vertexResourceId = pass.drawDataResources.vertex.value,
-                    indexResourceId = pass.drawDataResources.index.value,
-                    uniformResourceId = pass.drawDataResources.uniform.value,
-                    depthStencilResourceId = pass.depthStencil?.value,
-                    resolveTargetResourceId = pass.resolveTarget?.value,
-                    maskResourceId = maskResourceId,
-                    atomicGroupId = pass.atomicGroup?.value,
-                    sampleCountI32 = if (pass.draw.sample == SamplePlan.Multisample4) 4 else 1,
-                    load = pass.load,
-                    store = pass.store,
-                    depthStencilAccess = pass.depthStencilAccess,
-                    depthStencilLoadStore = pass.depthStencilLoadStore,
-                    coverageMaskConsumerUniform64 = consumerUniform64,
-                    uniformPayloadBytes = Collections.unmodifiableList(uniformPayload.toList()),
-                )
+                pass.id.value to materialColor
             }
+            val pathFacts = capturePathFacts(pathPasses, known,
+                GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height), materialColors)
             val clearFacts = buildList {
                 graphPasses.forEachIndexed { index, pass ->
                     val clear = pass as? PlanPass.PathMaskClearPass ?: return@forEachIndexed
@@ -643,7 +662,9 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                 }
             }
             val frameResources = W4dGeneralNativeFrameResourceSeal.from(
-                graph = graph,
+                capabilities = graph.capabilities,
+                expectedPeakBytes = graph.peakFrameLocalBytes,
+                materialBytesI64 = graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L,
                 graphPasses = graphPasses,
                 resourceFacts = resources,
                 pathPassFacts = pathFacts,
@@ -819,7 +840,9 @@ internal class W4dGeneralNativeFrameResourceSeal private constructor(
 
     internal companion object {
         fun from(
-            graph: RenderGraph,
+            capabilities: org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot,
+            expectedPeakBytes: Long?,
+            materialBytesI64: Long,
             graphPasses: List<PlanPass>,
             resourceFacts: List<W4dGeneralNativeResourceFact>,
             pathPassFacts: List<W4dGeneralNativePathPassFact>,
@@ -869,14 +892,14 @@ internal class W4dGeneralNativeFrameResourceSeal private constructor(
                 val indexData = indices.toIntArray()
                 val vertexUsefulBytes = Math.multiplyExact(vertexData.size.toLong(), Float.SIZE_BYTES.toLong())
                 val indexUsefulBytes = Math.multiplyExact(indexData.size.toLong(), Int.SIZE_BYTES.toLong())
-                val alignment = graph.capabilities.minUniformBufferOffsetAlignment.toLong()
+                val alignment = capabilities.minUniformBufferOffsetAlignment.toLong()
                 val uniformUsefulBytes = pathPassFacts.fold(0L) { total, fact ->
                     Math.addExact(total, fact.uniformPayloadBytes.size.toLong())
                 }
                 val uniformReservedBytes = pathPassFacts.fold(0L) { total, fact ->
                     Math.addExact(total, alignUp(fact.uniformPayloadBytes.size.toLong(), alignment))
                 }
-                val policy = graph.capabilities.bufferAllocationPolicy
+                val policy = capabilities.bufferAllocationPolicy
                 val expectedVertexCapacity = policy.reserve(
                     org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Vertex,
                     vertexUsefulBytes,
@@ -899,8 +922,7 @@ internal class W4dGeneralNativeFrameResourceSeal private constructor(
                             passIndex in fact.firstPassIndex until fact.lastPassIndexExclusive
                     }.fold(0L) { total, fact -> Math.addExact(total, fact.byteSize) }
                 }
-                val materialBytesI64 = graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L
-                if (Math.addExact(computedPeak, materialBytesI64) != graph.peakFrameLocalBytes) return null
+                if (expectedPeakBytes != null && Math.addExact(computedPeak, materialBytesI64) != expectedPeakBytes) return null
                 W4dGeneralNativeFrameResourceSeal(
                     pathPassIds = pathPassFacts.map(W4dGeneralNativePathPassFact::pathPassId),
                     vertexData = vertexData,

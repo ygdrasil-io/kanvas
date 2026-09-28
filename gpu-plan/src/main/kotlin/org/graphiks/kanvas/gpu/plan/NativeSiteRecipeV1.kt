@@ -35,6 +35,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W4eClipMaskProducerStencilEdge,
     W4eClipMaskProducerStencilCover,
     W6PathRenderDirectColor,
+    W4dAaSource,
     W6InverseMaskGeometryProducer,
     W6InverseMaskGeometryCover,
     W6InverseMaskZeroCover,
@@ -1268,8 +1269,10 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         inverseDomainDirects: Map<PlanPassId, W6InverseDomainDirectRecipeV1> = emptyMap(),
         inverseDomainFans: Map<PlanPassId, W6InverseDomainFanRecipeV1> = emptyMap(),
         w5aOrdinarySolidSources: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = emptyMap(),
+        w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
+            is W4dAaSourceNativeSiteRecipeV1 -> w4dAaSources.any { it === recipe.binding && it.recipe === recipe }
             is W5aSourceNativeSiteNativeRecipeV1 -> w5aOrdinarySolidSources[recipe.owner] === recipe.host
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
             is W6CorePrimitiveNativeSiteRecipeV1 -> corePrimitives[recipe.host.site] === recipe.host
@@ -1391,7 +1394,12 @@ public fun freezeNativeSiteRecipeCatalogV1(
     inverseDomainDirects: Map<PlanPassId, W6InverseDomainDirectRecipeV1> = emptyMap(),
     inverseDomainFans: Map<PlanPassId, W6InverseDomainFanRecipeV1> = emptyMap(),
     w5aOrdinarySolidSources: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = emptyMap(),
+    w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
+    w4dAaSources.forEach { binding ->
+        require(binding.passes().all { pass -> passes.any { it === pass } })
+        add(binding.recipe)
+    }
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
     preparedVertices.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -1518,7 +1526,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                     add(W5aSourceNativeSiteNativeRecipeV1(recipe))
                 }
             }
-            is PlanPass.LayerComposite -> W6LayerCompositeSiteKeyV1(pass.id, 0).let { site ->
+            is PlanPass.LayerComposite, is PlanPass.PathAaColorComposite -> W6LayerCompositeSiteKeyV1(pass.id, 0).let { site ->
                 remainingPlainComposites.remove(site)?.let { add(W6PlainLayerCompositeNativeSiteRecipeV1(it)) }
                 remainingFilteredComposites.remove(site)?.let { add(W6FilteredLayerCompositeNativeSiteRecipeV1(it)) }
                 remainingLayerCompositeDestinations.remove(site)?.let { add(W6LayerCompositeDestinationNativeSiteRecipeV1(it)) }
