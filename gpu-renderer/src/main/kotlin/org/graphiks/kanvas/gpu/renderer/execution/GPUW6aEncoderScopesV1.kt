@@ -95,10 +95,14 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             key(GPUPreparedNativeOperandRole.ReadbackDestination, GPUPreparedNativeOperandKind.Buffer, "w6a.$index.readback", GPUPreparedNativeOperandOwnership.OutputOwnedReadback))
         else buildList {
             add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.target"))
-            if (aa != null) add(key(GPUPreparedNativeOperandRole.RenderResolveTarget,
-                GPUPreparedNativeOperandKind.TextureView, "w6a.$index.resolve"))
-            if (pass is PlanPass.StencilGeometryProducerV3 || pass is PlanPass.StencilCover)
-                add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.depth-stencil"))
+            (pass as? PlanPass.PathRenderPass)?.resolveTarget?.let {
+                add(key(GPUPreparedNativeOperandRole.RenderResolveTarget,
+                    GPUPreparedNativeOperandKind.TextureView, "w6a.$index.resolve"))
+            }
+            (pass as? PlanPass.PathRenderPass)?.depthStencil?.let {
+                add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                    GPUPreparedNativeOperandKind.TextureView, "w6a.$index.depth-stencil"))
+            }
             repeat(if (composite || fullscreen) 1 else render.drawPackets.size) { draw ->
                 add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w6a.$index.pipeline.$draw"))
                 add(key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, "w6a.$index.bind.$draw"))
