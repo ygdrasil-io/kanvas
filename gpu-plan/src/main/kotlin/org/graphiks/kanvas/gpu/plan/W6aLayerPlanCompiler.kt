@@ -193,7 +193,8 @@ public class W6aLayerPlanCompiler public constructor(
             }, graphLimits)
             val child = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
                 W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
-                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler()), runtimeCatalog)
+                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(),
+                W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)), runtimeCatalog)
             when (val selection = child.select(segment, target)) {
                 is GpuPlanSelection.Candidate -> segments += Segment(scopeI32, drawIndexI32, child, selection.candidate)
                 // A source lane that is admissible except for its W5 material must retain that

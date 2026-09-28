@@ -81,24 +81,30 @@ public class W6PlainLayerCompositeRecipeV1 internal constructor(
     }
 }
 
-/** Freezes exactly one restore site for each final plain LayerComposite pass, in planner order. */
+/**
+ * Freezes the one-texture SrcOver site for each final plain layer restore and for the sealed
+ * W4d AA resolved-colour source.  Both sites deliberately use the same fully specified
+ * fullscreen ABI; the latter is not allowed to inherit the mutable layer-restore state.
+ */
 public fun freezeW6PlainLayerCompositeRecipesV1(
     passes: List<PlanPass>,
 ): Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1> {
     val recipes = linkedMapOf<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>()
     passes.forEach { pass ->
-        val composite = pass as? PlanPass.LayerComposite ?: return@forEach
-        if (composite.restore.colorFilter != null || composite.restore.blend is BlendPlan.DestinationReadV1) return@forEach
-        val site = W6LayerCompositeSiteKeyV1(composite.id, 0)
+        val composite = pass as? PlanPass.LayerComposite
+        val aa = pass as? PlanPass.PathAaColorComposite
+        if (composite == null && aa == null) return@forEach
+        if (composite != null && (composite.restore.colorFilter != null || composite.restore.blend is BlendPlan.DestinationReadV1)) return@forEach
+        val site = W6LayerCompositeSiteKeyV1(pass.id, 0)
         val recipe = W6PlainLayerCompositeRecipeV1(
             site = site,
             family = W6PlainLayerCompositeFamilyV1.FullscreenRestore,
-            source = composite.source,
-            destination = composite.destination,
-            sourceBoundsLayerI32 = composite.copySourceBoundsLayerI32(),
-            destinationOriginParentI32 = composite.copyDestinationOriginParentI32(),
-            alphaF32 = composite.restore.alphaF32,
-            blend = composite.restore.blend,
+            source = composite?.source ?: requireNotNull(aa).source,
+            destination = composite?.destination ?: requireNotNull(aa).destination,
+            sourceBoundsLayerI32 = composite?.copySourceBoundsLayerI32() ?: requireNotNull(aa).copySourceBoundsLayerI32(),
+            destinationOriginParentI32 = composite?.copyDestinationOriginParentI32() ?: requireNotNull(aa).copyDestinationOriginLayerI32(),
+            alphaF32 = composite?.restore?.alphaF32 ?: 1f,
+            blend = composite?.restore?.blend ?: BlendPlan.LegacySrcOverV1,
             target = W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample,
             groupZeroAbi = W6PlainLayerCompositeGroupZeroAbiV1.OneTexture,
         )

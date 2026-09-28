@@ -102,6 +102,12 @@ import org.graphiks.math.color.ColorF32
 
 /** Lowers one fully validated W4d.2 path graph into handle-free prepared task facts. */
 internal class W4dGeneralPathGraphLowerer {
+    /** Phase preparation is shared; only the caller assembles frame/readback ownership. */
+    internal fun preparePhases(
+        passes: List<PlanPass.PathRenderPass>, bounds: GPUPixelBounds, graph: RenderGraph,
+    ): List<BuiltPacket> = passes.mapIndexed { index, pass ->
+        packet(pass, index, bounds, targetColorFormat(pass, graph), graph)
+    }
     /** Shared mechanical packet translation for already-sealed W4e color passes. */
     internal fun packetForSealedW4e(
         pass: PlanPass.PathRenderPass,
@@ -132,9 +138,7 @@ internal class W4dGeneralPathGraphLowerer {
         if (!preparedAuthority.preflightRevalidates(request.graph, graph.pathPasses)) {
             return invalid("The W4d.2 prepared authority did not revalidate the graph.")
         }
-        val packets = graph.pathPasses.mapIndexed { index, pass ->
-            packet(pass, index, bounds, targetColorFormat(pass, request.graph), request.graph)
-        }
+        val packets = preparePhases(graph.pathPasses, bounds, request.graph)
         val limits = request.capabilities.limits
             ?: return invalid("The W4d.2 native uniform slab requires observed device limits.")
         val maxBufferSize = limits.maxBufferSize

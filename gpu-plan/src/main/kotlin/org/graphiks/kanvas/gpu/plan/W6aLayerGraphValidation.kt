@@ -217,6 +217,47 @@ internal fun validateW6aLayerTopology(
             if (pass.restore.writesParentDevice) versions[target.id] = Math.addExact(requireNotNull(versions[target.id]), 1L)
             require(pass.destinationVersionAfter == pass.restore.parentVersionAfter && pass.destinationVersionAfter.valueI64 == versions[target.id])
         }
+        is PlanPass.PathRenderPass -> {
+            val target = byId.getValue(pass.target)
+            val resolved = pass.resolveTarget?.let(byId::getValue)
+            require(target.role == PlanResourceRole.MultisampleColorTarget && target.sampleCountI32 == 4 &&
+                target.format is PlanTextureFormat.Color && PlanResourceUsage.RenderAttachment in target.usages() &&
+                resolved?.role == PlanResourceRole.PathAaResolvedColor && resolved.sampleCountI32 == 1 &&
+                resolved.format == target.format && PlanResourceUsage.RenderAttachment in resolved.usages() &&
+                PlanResourceUsage.Sampled in resolved.usages() && pass.phase == PathRenderPhase.MultisampleDirectColor &&
+                pass.draw is GeneralPathDraw && pass.draw.sample == SamplePlan.Multisample4 &&
+                pass.draw.coverage == CoveragePlan.StencilAA4 && pass.draw.strategy == PathFillStrategy.DirectTriangle &&
+                pass.draw.blend == BlendPlan.SrcOver && pass.load == AttachmentLoadPlan.ClearTransparent &&
+                pass.store == AttachmentStorePlan.Store && pass.atomicGroup == null && pass.depthStencil == null &&
+                pass.depthStencilAccess == null && pass.depthStencilLoadStore == null) {
+                "w6a.layer.unsupported_child"
+            }
+            val data = pass.drawDataResources
+            require(byId.getValue(data.vertex).role == PlanResourceRole.VertexData &&
+                byId.getValue(data.index).role == PlanResourceRole.IndexData &&
+                byId.getValue(data.uniform).role == PlanResourceRole.UniformData)
+            initialized += target.id
+            initialized += resolved.id
+            commands += pass.draw.commandIndex
+        }
+        is PlanPass.PathAaColorComposite -> {
+            val source = byId.getValue(pass.source)
+            val destination = byId.getValue(pass.destination)
+            require(source.role == PlanResourceRole.PathAaResolvedColor && source.id in initialized &&
+                destination.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
+                    PlanResourceRole.PictureAggregateSource) && destination.id in initialized &&
+                PlanResourceUsage.Sampled in source.usages() && pass.source != pass.destination)
+            val bounds = pass.copySourceBoundsLayerI32()
+            val origin = pass.copyDestinationOriginLayerI32()
+            val sourceExtent = requireNotNull(source.copyExtent())
+            val destinationExtent = requireNotNull(destination.copyExtent())
+            require(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= sourceExtent.width && bounds.bottom <= sourceExtent.height &&
+                origin.x >= 0 && origin.y >= 0 && origin.x.toLong() + bounds.width() <= destinationExtent.width &&
+                origin.y.toLong() + bounds.height() <= destinationExtent.height)
+            val after = Math.addExact(versions[destination.id] ?: 0L, 1L)
+            versions[destination.id] = after
+            require(pass.destinationVersionAfter.valueI64 == after)
+        }
         is PlanPass.FilterSourceClear -> {
             val output = byId.getValue(pass.output)
             val boundSource = byId.getValue(pass.boundSourceId)

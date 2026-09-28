@@ -28,6 +28,9 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
         else -> false
     }
     return when (pass) {
+    is PlanPass.PathRenderPass -> pass.phase == PathRenderPhase.MultisampleDirectColor &&
+        packets.singleOrNull()?.let { it.passId == pass.id.value && it.commandIdValue == pass.draw.commandIndex &&
+            it.role == GPUDrawPacketRole.Shading } == true
     is PlanPass.RenderPass -> packets.map { it.commandIdValue } == pass.draws().map { it.commandIndex } &&
         packets.all { it.role == GPUDrawPacketRole.Shading }
     is PlanPass.StencilGeometryProducerV3 -> packets.singleOrNull()?.let {
@@ -35,6 +38,7 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
     is PlanPass.StencilCover -> packets.singleOrNull()?.let {
         it.commandIdValue == pass.draw.commandIndex && it.role == GPUDrawPacketRole.PathStencilCover } == true
     is PlanPass.LayerComposite,
+    is PlanPass.PathAaColorComposite,
     is PlanPass.PictureAggregateBeginPass,
     is PlanPass.PictureAggregateSealPass,
     is PlanPass.PictureSourcePass,
@@ -208,6 +212,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             })
         }
     internal val w4eAuthorities = physical.w4eGeometryBindings().associateWith { GPUPlanW4ePreparedAuthority.issueLayered(graph, it) }
+    internal val w4dAaAuthorities = physical.w4dAaSourceBindings().associateWith { GPUPlanW4dGeneralPreparedAuthority.issueAaSource(graph, it) }
     private val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
     private val recording = GPURecordingSeal(request.recordingId, 0L, graph.id.value, graph.id.value, seal.sealHash)
     internal val refs: Map<PlanResourceId, GPUFrameResourceRef> = graph.resources().associate { resource ->
@@ -369,7 +374,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         }.toSet()
         val preparations = graph.resources().filter { it.kind == PlanResourceKind.Texture2D && it.lifetime == PlanResourceLifetime.FrameLocal ||
             it.role in setOf(PlanResourceRole.ReadbackStaging, PlanResourceRole.MaskTableData) || physical.w4eGeometryBindings().any { binding ->
-                it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } || it.id in colorFilterUniformIds || it.id in maskShaderUniformIds || it.id in filteredLayerCompositeUniformIds || it.id in filteredDestinationLayerCompositeUniformIds || it.id in filteredFilterCompositeLayerUniformIds || it.id in filteredDestinationFilterCompositeLayerUniformIds || it.id in filteredPictureCompositeUniformIds || it.id in filteredFilterCompositePictureGraphUniformIds || it.id in filteredDestinationFilterCompositePictureGraphUniformIds }
+                it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } || physical.w4dAaSourceBindings().any { binding -> it.id in binding.resources().map { row -> row.id } } || it.id in colorFilterUniformIds || it.id in maskShaderUniformIds || it.id in filteredLayerCompositeUniformIds || it.id in filteredDestinationLayerCompositeUniformIds || it.id in filteredFilterCompositeLayerUniformIds || it.id in filteredDestinationFilterCompositeLayerUniformIds || it.id in filteredPictureCompositeUniformIds || it.id in filteredFilterCompositePictureGraphUniformIds || it.id in filteredDestinationFilterCompositePictureGraphUniformIds }
             .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
                 resource.copyExtent()?.let { GPUFrameTextureDescriptor(GPUPixelBounds(0, 0, it.width, it.height),
                     when (resource.format) {
@@ -380,7 +385,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     ?: GPUFrameBufferDescriptor(resource.byteSize, graph.capabilities.copyBytesPerRowAlignment.toLong()),
                 when (resource.role) {
                     PlanResourceRole.LogicalTarget -> GPUFrameResourceRole.SceneTarget
-                    PlanResourceRole.LayerTarget, PlanResourceRole.PictureAggregateSource,
+                    PlanResourceRole.LayerTarget, PlanResourceRole.MultisampleColorTarget, PlanResourceRole.PathAaResolvedColor,
+                    PlanResourceRole.PictureAggregateSource,
                     PlanResourceRole.FilterSource, PlanResourceRole.FilterTransparentBlack,
                     PlanResourceRole.CoverageSource, PlanResourceRole.CoverageOriginal -> GPUFrameResourceRole.FilterTarget
                     PlanResourceRole.FilterTarget -> GPUFrameResourceRole.FilterTarget
@@ -408,6 +414,17 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             add(GPUFrameStep.PrepareResourcesStep(preparations, listOf(GPUTaskID("w6a.prepare"))))
             scheduledPasses.forEach { pass ->
                 val task = listOf(GPUTaskID("w6a.${pass.id.value}"))
+                val aa = w4dAaAuthorities.entries.singleOrNull { pass in it.key.passes() }?.value
+                if (aa != null) {
+                    val phase = pass as PlanPass.PathRenderPass
+                    val packet = aa.packets[aa.binding.passes().indexOf(phase)].packet
+                    templates[packet.packetId] = requireNotNull(sealCorePrimitiveGeometryHostTemplateV1(packet,
+                        aa.packets.single().structuralPipelineKey))
+                    add(GPUFrameStep.RenderPassStep(refs.getValue(phase.target) as GPUFrameTargetRef,
+                        GPULoadStorePlan("clear", GPUStorePlan.Store), GPUSamplePlan.MultisampleFrame(4),
+                        aa.resourceUses(phase, refs), listOf(packet), task, w6aPassV1 = phase))
+                    return@forEach
+                }
                 val w4eBinding = physical.w4eGeometryBinding(pass.id)
                 if (w4eBinding != null) {
                     val authority = w4eAuthorities.getValue(w4eBinding)
@@ -550,7 +567,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     return@forEach
                 }
                 when (pass) {
-                    is PlanPass.RenderPass, is PlanPass.LayerComposite, is PlanPass.StencilGeometryProducerV3, is PlanPass.StencilCover,
+                    is PlanPass.RenderPass, is PlanPass.LayerComposite, is PlanPass.PathAaColorComposite, is PlanPass.StencilGeometryProducerV3, is PlanPass.StencilCover,
                     is PlanPass.PictureAggregateBeginPass, is PlanPass.PictureAggregateSealPass,
                     is PlanPass.PictureSourcePass, is PlanPass.PictureComposite,
                     is PlanPass.FilterPass, is PlanPass.FilterComposite, is PlanPass.FilterSourceClear,
@@ -561,6 +578,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             is PlanPass.StencilGeometryProducerV3 -> pass.target
                             is PlanPass.StencilCover -> pass.target
                             is PlanPass.LayerComposite -> pass.destination
+                            is PlanPass.PathAaColorComposite -> pass.destination
                             is PlanPass.PictureAggregateBeginPass -> pass.target
                             is PlanPass.PictureAggregateSealPass -> pass.aggregateTarget
                             is PlanPass.PictureSourcePass -> pass.output
@@ -761,21 +779,29 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             else -> false
                         }
                         val sampled = when (pass) {
-                            is PlanPass.LayerComposite -> buildList {
-                                add(GPUFrameResourceUse(refs.getValue(pass.source),
+                            is PlanPass.LayerComposite, is PlanPass.PathAaColorComposite -> buildList {
+                                val source = when (pass) {
+                                    is PlanPass.LayerComposite -> pass.source
+                                    is PlanPass.PathAaColorComposite -> pass.source
+                                }
+                                val destination = when (pass) {
+                                    is PlanPass.LayerComposite -> pass.destination
+                                    is PlanPass.PathAaColorComposite -> pass.destination
+                                }
+                                add(GPUFrameResourceUse(refs.getValue(source),
                                     GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
                                 physical.w6FilteredLayerCompositeRecipeOrNull(W6LayerCompositeSiteKeyV1(pass.id, 0))?.let { recipe ->
-                                    require(recipe.source == pass.source && recipe.destination == pass.destination)
+                                    require(recipe.source == source && recipe.destination == destination)
                                     add(GPUFrameResourceUse(refs.getValue(recipe.uniformResource),
                                         GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false))
                                 }
                                 physical.w6LayerCompositeDestinationRecipeOrNull(W6LayerCompositeSiteKeyV1(pass.id, 0))?.let { recipe ->
-                                    require(recipe.source == pass.source && recipe.destination == pass.destination)
+                                    require(recipe.source == source && recipe.destination == destination)
                                     add(GPUFrameResourceUse(refs.getValue(recipe.destinationSnapshot),
                                         GPUFrameResourceRole.DestinationSnapshot, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
                                 }
                                 physical.w6LayerCompositeFilteredDestinationRecipeOrNull(W6LayerCompositeSiteKeyV1(pass.id, 0))?.let { recipe ->
-                                    require(recipe.source == pass.source && recipe.destination == pass.destination)
+                                    require(recipe.source == source && recipe.destination == destination)
                                     add(GPUFrameResourceUse(refs.getValue(recipe.uniformResource),
                                         GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false))
                                     add(GPUFrameResourceUse(refs.getValue(recipe.destinationSnapshot),
@@ -894,22 +920,30 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             else -> depthId?.let { listOf(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.PathDepthStencil,
                                 GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true)) }.orEmpty()
                         }
-                        if (pass is PlanPass.LayerComposite) {
+                        if (pass is PlanPass.LayerComposite || pass is PlanPass.PathAaColorComposite) {
                             val site = W6LayerCompositeSiteKeyV1(pass.id, 0)
+                            val source = when (pass) {
+                                is PlanPass.LayerComposite -> pass.source
+                                is PlanPass.PathAaColorComposite -> pass.source
+                            }
+                            val destination = when (pass) {
+                                is PlanPass.LayerComposite -> pass.destination
+                                is PlanPass.PathAaColorComposite -> pass.destination
+                            }
                             physical.w6PlainLayerCompositeRecipeOrNull(site)?.let { recipe ->
-                                require(recipe.site == site && recipe.source == pass.source && recipe.destination == pass.destination)
+                                require(recipe.site == site && recipe.source == source && recipe.destination == destination)
                                 require(plainLayerCompositeSites.add(site)) {
                                     "W6 plain layer-composite recipe projected more than once."
                                 }
                             }
                             physical.w6FilteredLayerCompositeRecipeOrNull(site)?.let { recipe ->
-                                require(recipe.site == site && recipe.source == pass.source && recipe.destination == pass.destination)
+                                require(recipe.site == site && recipe.source == source && recipe.destination == destination)
                             }
                             physical.w6LayerCompositeDestinationRecipeOrNull(site)?.let { recipe ->
-                                require(recipe.site == site && recipe.source == pass.source && recipe.destination == pass.destination && recipe.destinationSnapshot == recipe.blend.snapshotResource)
+                                require(recipe.site == site && recipe.source == source && recipe.destination == destination && recipe.destinationSnapshot == recipe.blend.snapshotResource)
                             }
                             physical.w6LayerCompositeFilteredDestinationRecipeOrNull(site)?.let { recipe ->
-                                require(recipe.site == site && recipe.source == pass.source && recipe.destination == pass.destination && recipe.destinationSnapshot == recipe.blend.snapshotResource)
+                                require(recipe.site == site && recipe.source == source && recipe.destination == destination && recipe.destinationSnapshot == recipe.blend.snapshotResource)
                             }
                         }
                         add(GPUFrameStep.RenderPassStep(refs.getValue(targetId) as GPUFrameTargetRef,
@@ -1084,6 +1118,10 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         val authority = renders.firstOrNull()?.drawPackets?.singleOrNull()?.w4ePreparedFrameAuthority
         renders.size == binding.graphPassIds().size && authority?.nativePayload === binding.payload &&
             authority.validatesRenderSteps(frame.frameId.value, frame.capabilitySeal.sealHash, renders)
+    }
+    internal fun validatesW4dAaSources(frame: GPUFramePlan): Boolean = validates(frame) && w4dAaAuthorities.all { (binding, authority) ->
+        authority.validates(frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .filter { it.w6aPassV1 in binding.passes() }, refs)
     }
     internal fun analyticUniform(packet: GPUDrawPacket): ByteArray = requireNotNull(analyticUniforms[packet.packetId]).copyOf()
     internal fun geometryPipeline(packet: GPUDrawPacket): GPUWgpu4kCorePrimitivePipelineMapping.Mapped? = geometryPipelines[packet.packetId]

@@ -292,6 +292,10 @@ public class RenderGraph private constructor(
                         val exactChild = when (val pass = passesById[step.passId]) {
                             is PlanPass.RenderPass -> pass.target == scope.targetResource &&
                                 pass.load == AttachmentLoadPlan.Load && pass.draws().isNotEmpty()
+                            is PlanPass.PathRenderPass -> pass.resolveTarget?.let { resolved ->
+                                construction.resources().singleOrNull { it.id == resolved }?.role == PlanResourceRole.PathAaResolvedColor
+                            } == true
+                            is PlanPass.PathAaColorComposite -> pass.destination == scope.targetResource
                             is PlanPass.StencilGeometryProducerV3 -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
                             is PlanPass.StencilCover -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
                             is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
@@ -604,6 +608,17 @@ public class RenderGraph private constructor(
             }
             require(dependencies.distinct().size == dependencies.size) { "Dependencies must be unique" }
             validatePassCapabilities(passes, capabilities)
+            if (capabilityId == W4dGeneralPathPlanCompiler.W6_AA_COLOR_SOURCE_CAPABILITY_ID) {
+                validateAaResolvedColorSource(
+                    resources, passes, dependencies, resourcesById, capabilities, targetExtent, colorFormat,
+                    visualCommandCount,
+                )
+                validateVisualCommandOrder(passes)
+                val calculatedPeak = peak(resources, passes.size)
+                require(calculatedPeak == peakFrameLocalBytes) { "AA resolved-colour source peak memory does not match resource lifetimes" }
+                require(calculatedPeak <= budget.maxFrameLocalBytes) { "AA resolved-colour source exceeds its local budget" }
+                return
+            }
             if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) {
                 validateW6aLayerTopology(resources, passes, dependencies, targetExtent, visualCommandCount, capabilities.copyBytesPerRowAlignment)
                 require(W6aLayerPlanBudget.peak(resources, passes, capabilities, budget) == peakFrameLocalBytes)
@@ -658,6 +673,80 @@ public class RenderGraph private constructor(
             val calculatedPeak = peak(resources, passes.size)
             require(calculatedPeak == peakFrameLocalBytes) { "Peak memory does not match resource lifetimes" }
             require(calculatedPeak <= budget.maxFrameLocalBytes) { "Peak memory exceeds budget" }
+        }
+
+        /**
+         * W4d's W6-only source has no root target and no terminal readback.  It can only render
+         * its sealed 4x path sequence into a transparent MSAA attachment and resolve once into
+         * a distinct sampled colour texture; W6 owns the only later composite.
+         */
+        private fun validateAaResolvedColorSource(
+            resources: List<PlanResource>,
+            passes: List<PlanPass>,
+            dependencies: List<PlanPassDependency>,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            capabilities: PlanCapabilitySnapshot,
+            targetExtent: SizeI32,
+            colorFormat: PlanLogicalColorFormat,
+            visualCommandCount: Int,
+        ) {
+            require(PlanOperationCapability.CopyUpload in capabilities.supportedOperations() &&
+                PlanOperationCapability.UniformBuffer in capabilities.supportedOperations()) {
+                "AA resolved-colour source requires upload and uniform capabilities"
+            }
+            require(passes.isNotEmpty() && passes.all { it is PlanPass.PathRenderPass }) {
+                "AA resolved-colour sources contain only sealed path passes"
+            }
+            require(passes.none { it is PlanPass.ReadbackPass }) { "AA resolved-colour sources cannot read back" }
+            require(resources.none { it.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) }) {
+                "AA resolved-colour sources cannot own a standalone root or staging buffer"
+            }
+            require(resources.map { it.role }.toSet() == setOf(
+                PlanResourceRole.MultisampleColorTarget, PlanResourceRole.PathAaResolvedColor,
+                PlanResourceRole.VertexData, PlanResourceRole.IndexData, PlanResourceRole.UniformData,
+            ) && resources.size == 5) { "AA resolved-colour source resource inventory is not closed" }
+            val msaa = resources.single { it.role == PlanResourceRole.MultisampleColorTarget }
+            val resolved = resources.single { it.role == PlanResourceRole.PathAaResolvedColor }
+            require(msaa.kind == PlanResourceKind.Texture2D && msaa.format == PlanTextureFormat.Color(colorFormat) &&
+                msaa.copyExtent() == targetExtent && msaa.sampleCountI32 == 4 &&
+                msaa.usages() == setOf(PlanResourceUsage.RenderAttachment)) {
+                "AA resolved-colour source must declare one 4x render attachment"
+            }
+            require(resolved.kind == PlanResourceKind.Texture2D && resolved.format == PlanTextureFormat.Color(colorFormat) &&
+                resolved.copyExtent() == targetExtent && resolved.sampleCountI32 == 1 &&
+                resolved.usages() == setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled)) {
+                "AA resolved-colour source must declare one isolated sampled resolve texture"
+            }
+            require(capabilities.supportsResolve(PlanTextureFormat.Color(colorFormat), 4, 1)) {
+                "AA resolved-colour resolve is unsupported"
+            }
+            val pathPasses = passes.mapIndexed { ordinal, pass -> ordinal to (pass as PlanPass.PathRenderPass) }
+            require(pathPasses.size == visualCommandCount) { "AA resolved-colour source must publish one colour pass per draw" }
+            val data = PlanDrawDataResources(
+                resources.single { it.role == PlanResourceRole.VertexData }.id,
+                resources.single { it.role == PlanResourceRole.IndexData }.id,
+                resources.single { it.role == PlanResourceRole.UniformData }.id,
+            )
+            validatePathDrawDataShape(data, resourcesById)
+            pathPasses.forEachIndexed { ordinal, (_, pass) ->
+                require(pass.target == msaa.id && pass.drawDataResources == data &&
+                    pass.phase == PathRenderPhase.MultisampleDirectColor &&
+                    pass.draw is GeneralPathDraw && pass.draw.coverage == CoveragePlan.StencilAA4 &&
+                    pass.draw.sample == SamplePlan.Multisample4 &&
+                    pass.draw.strategy == PathFillStrategy.DirectTriangle && pass.draw.blend == BlendPlan.SrcOver &&
+                    pass.atomicGroup == null && pass.depthStencil == null &&
+                    pass.depthStencilAccess == null && pass.depthStencilLoadStore == null &&
+                    pass.load == (if (ordinal == 0) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load) &&
+                    pass.store == AttachmentStorePlan.Store &&
+                    pass.resolveTarget == (if (ordinal == pathPasses.lastIndex) resolved.id else null)) {
+                    "AA resolved-colour source pass is not a sealed direct 4x SrcOver resolve sequence"
+                }
+            }
+            requireLinearDependencies(passes, dependencies, "AA resolved-colour source")
+            require(msaa.firstPassIndex == 0 && msaa.lastPassIndexExclusive == passes.size &&
+                resolved.firstPassIndex == 0 && resolved.lastPassIndexExclusive == passes.size) {
+                "AA resolved-colour textures must cover their complete sealed sequence"
+            }
         }
 
         /** Trust-boundary factory available only to the W4d compiler after public validation. */
@@ -841,6 +930,7 @@ public class RenderGraph private constructor(
             )
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
             is PlanPass.LayerComposite -> listOf(pass.source, pass.destination)
+            is PlanPass.PathAaColorComposite -> listOf(pass.source, pass.destination)
             is PlanPass.FilterSourceClear -> listOf(pass.output, pass.boundSourceId)
             is PlanPass.FilterCoverageSourcePass -> buildList {
                 add(pass.output)

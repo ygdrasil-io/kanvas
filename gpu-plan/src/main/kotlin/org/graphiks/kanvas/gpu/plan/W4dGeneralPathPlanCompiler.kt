@@ -78,6 +78,8 @@ internal class W4dGeneralFramePreview(
 public class W4dGeneralPathPlanCompiler internal constructor(
     private val strokePolicyF64: PathStrokePolicyF64,
     private val acceptsNarrowTransforms: Boolean = false,
+    /** W6-only source contract; the standalone W4d graph keeps its terminal readback. */
+    private val allowAaColorSource: Boolean = false,
     /** W4e may promote a mixed clip frame to its AA4 construction branch without rewriting draws. */
     private val forceAaFrame: Boolean = false,
     /** W4e inserts its clip consumers before promoting the shared material/resource graph. */
@@ -86,9 +88,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private val imageProjection: ImageOriginGeometryProjectionV6? = null,
 ) : GpuPlanCompiler {
     internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection)
+        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, allowAaColorSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection)
     internal fun withImageOriginProjection(projection: ImageOriginGeometryProjectionV6?): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection)
+        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,allowAaColorSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection)
     public constructor() : this(PathStrokePolicyF64())
 
     /**
@@ -383,6 +385,12 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             else -> return DrawScope.Gap("Clip is outside W4d.2")
         }
         if (!solid(node, paint)) return DrawScope.Gap("Material, blend, or effect is outside W4d.2")
+        if (allowAaColorSource && node.coverage == CoverageRequest.ANTIALIASED &&
+            (node.material !is MaterialNode.Solid || paint.colorFilter != null ||
+                paint.style != PaintStyleNode.FILL || paint.pathEffect != null ||
+                node.effects != EffectStack.Empty)) {
+            return DrawScope.Gap("W6 AA colour source requires an unfiltered solid SrcOver fill")
+        }
         val fill = paint.style == PaintStyleNode.FILL
         val stroke = paint.style == PaintStyleNode.STROKE || paint.style == PaintStyleNode.STROKE_AND_FILL
         if (fill && paint.pathEffect != null) return DrawScope.Gap("Path effects require a stroke in W4d.2")
@@ -434,7 +442,11 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     internal fun constructSources(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> =
         constructChecked(candidate,capabilities,budget) { selected,geometry,anyAa,_,hardStencil ->
-            if (anyAa) promoted("W5b final blending requires the admitted single-sample W4d.2 topology")
+            if (anyAa && !allowAaColorSource) promoted("W5b final blending requires the admitted single-sample W4d.2 topology")
+            else if (anyAa && (selected.draws.any { !it.requestsAntiAlias } || selected.draws.any {
+                    it.strategy != PathFillStrategy.DirectTriangle || it.blend != BlendPlan.SrcOver
+                })) promoted("W6 AA colour source admits only solid SrcOver direct-triangle paths")
+            else if (anyAa) sourceAa(selected, capabilities, budget, geometry)
             else if (selected.draws.isEmpty()) SourceDeferredRenderConstructionV4.clearOnly(
                 PlanId(identity(selected,capabilities,budget,W5B_HARD_CAPABILITY_ID)),W5B_HARD_CAPABILITY_ID,
                 SizeI32(selected.target.extent.width,selected.target.extent.height),capabilities,budget, preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, W5B_HARD_CAPABILITY_ID, scene)) })
@@ -465,6 +477,97 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 }
             }
         }
+
+    /**
+     * W6 owns the final destination and readback.  This source publishes the same W4d AA
+     * geometry/pass authority as [aaGraph], but resolves only to its isolated sampled colour.
+     */
+    private fun sourceAa(
+        selected: Candidate,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        geometries: List<org.graphiks.math.geometry.PathFillGeometryF32>,
+    ): RenderPlanResult<SourceDeferredRenderConstructionV4> {
+        val provisional = when (val result = PathAaPlanBudget.calculate(
+            targetExtent = SizeI32(selected.target.extent.width, selected.target.extent.height),
+            geometriesF32 = geometries,
+            requiresAa4DepthStencil = false,
+            requiresHardMask = false,
+            requiresHardEdgeDepthStencil = false,
+            capabilities = capabilities,
+            budget = budget,
+        )) {
+            is PathAaPlanBudgetResult.WithinBudget -> result.footprint
+            is PathAaPlanBudgetResult.Exceeded -> return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
+            is PathAaPlanBudgetResult.Invalid -> return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 size is unrepresentable: ${result.code}")
+        }
+        val base = w4dGeneralExactFrameMemory(
+            provisional.base,
+            w4dGeneralNativePayloadBudget(selected.draws, materializesHardMasks = false),
+            capabilities,
+        ) ?: return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
+        if (!buffersFit(base, capabilities)) return promoted("W4d.2 buffer capability is unavailable")
+        val topology = aaResolvedColorTopology(selected, base, provisional)
+        val symbolic = remapSourcePassesV4(topology.passes) { reference ->
+            MaterialPlanRef(selected.draws.map(SealedDraw::material).indexOf(reference).also { require(it >= 0) })
+        }
+        return when (val source = SourceDeferredRenderConstructionV4.of(
+            PlanId(identity(selected, capabilities, budget, W6_AA_COLOR_SOURCE_CAPABILITY_ID)),
+            W6_AA_COLOR_SOURCE_CAPABILITY_ID,
+            SizeI32(selected.target.extent.width, selected.target.extent.height), FORMAT, capabilities, budget,
+            selected.draws.size, topology.resources, symbolic, topology.dependencies, selected.sources,
+            DeferredLaneTopologyV4.AaResolvedColor, null, emptyList(), emptyMap(), emptyMap(),
+            preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, W6_AA_COLOR_SOURCE_CAPABILITY_ID, scene)) },
+        )) {
+            is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(source.value)
+            is SourceConstructionResultV4.Refused -> source.failure
+        }
+    }
+
+    private data class AaResolvedColorTopology(
+        val resources: List<PlanResource>,
+        val passes: List<PlanPass>,
+        val dependencies: List<PlanPassDependency>,
+    )
+
+    private fun aaResolvedColorTopology(
+        selected: Candidate,
+        base: PathFillMemoryFootprint,
+        aa: PathAaMemoryFootprint,
+    ): AaResolvedColorTopology {
+        val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
+        val multisample = planResourceId(PlanResourceRole.MultisampleColorTarget, 0)
+        val resolved = planResourceId(PlanResourceRole.PathAaResolvedColor, 0)
+        val vertex = planResourceId(PlanResourceRole.VertexData, 0)
+        val index = planResourceId(PlanResourceRole.IndexData, 0)
+        val uniform = planResourceId(PlanResourceRole.UniformData, 0)
+        val data = PlanDrawDataResources(vertex, index, uniform)
+        val passes = selected.draws.mapIndexed { ordinal, sealed ->
+            val draw = generalDraw(sealed, CoveragePlan.StencilAA4, SamplePlan.Multisample4)
+            aaDirectColorPass(ordinal, multisample, draw, data, null,
+                if (ordinal == 0) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
+                if (ordinal == selected.draws.lastIndex) resolved else null)
+        }
+        fun texture(role: PlanResourceRole, format: PlanTextureFormat, bytes: Long,
+            usages: Set<PlanResourceUsage>, samples: Int) = PlanResource.of(role, 0, PlanResourceKind.Texture2D,
+            format, extent, bytes, usages, PlanResourceLifetime.FrameLocal, 0, passes.size, samples)
+        fun buffer(role: PlanResourceRole, bytes: Long, usages: Set<PlanResourceUsage>) =
+            PlanResource.of(role, 0, PlanResourceKind.Buffer, null, null, bytes, usages,
+                PlanResourceLifetime.FrameLocal, 0, passes.size)
+        val resources = listOf(
+            texture(PlanResourceRole.MultisampleColorTarget, PlanTextureFormat.Color(FORMAT), aa.multisampleColorBytes,
+                setOf(PlanResourceUsage.RenderAttachment), 4),
+            texture(PlanResourceRole.PathAaResolvedColor, PlanTextureFormat.Color(FORMAT), base.targetBytes,
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 1),
+            buffer(PlanResourceRole.VertexData, base.vertexCapacityBytes,
+                setOf(PlanResourceUsage.Vertex, PlanResourceUsage.CopyDestination)),
+            buffer(PlanResourceRole.IndexData, base.indexCapacityBytes,
+                setOf(PlanResourceUsage.Index, PlanResourceUsage.CopyDestination)),
+            buffer(PlanResourceRole.UniformData, base.uniformCapacityBytes,
+                setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination)),
+        )
+        return AaResolvedColorTopology(resources, passes, dependencies(passes))
+    }
 
     private fun <T: Any> constructChecked(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,budget: PlanBudget,
         finish: (Candidate,List<org.graphiks.math.geometry.PathFillGeometryF32>,Boolean,Boolean,Boolean)->RenderPlanResult<T>): RenderPlanResult<T> {
@@ -851,8 +954,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 val draw = generalDraw(sealed, CoveragePlan.StencilAA4, SamplePlan.Multisample4)
                 val load = if (clearColor) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load
                 if (sealed.strategy == PathFillStrategy.DirectTriangle) {
-                    passes += PlanPass.PathRenderPass(pathOrdinal++, multisampleId, draw, PathRenderPhase.MultisampleDirectColor,
-                        data, null, aaDepthId, load, AttachmentStorePlan.Store, null, null, null)
+                    passes += aaDirectColorPass(pathOrdinal++, multisampleId, draw, data, aaDepthId, load, null)
                     colorPassIndexes += passes.lastIndex
                 } else {
                     val group = canonicalGeneralPathAtomicGroup(draw)
@@ -955,6 +1057,13 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             materialPlanTable = selected.materialPlanTable,
         )
     }
+
+    /** The colour phase is identical for standalone AA and an isolated W6 source. */
+    private fun aaDirectColorPass(ordinal: Int, target: PlanResourceId, draw: GeneralPathDraw,
+        data: PlanDrawDataResources, depth: PlanResourceId?, load: AttachmentLoadPlan,
+        resolve: PlanResourceId?): PlanPass.PathRenderPass =
+        PlanPass.PathRenderPass(ordinal, target, draw, PathRenderPhase.MultisampleDirectColor,
+            data, null, depth, load, AttachmentStorePlan.Store, null, null, resolve)
 
     private fun generalDraw(sealed: SealedDraw, coverage: CoveragePlan, sample: SamplePlan): GeneralPathDraw =
         GeneralPathDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.geometry, sealed.strategy, sealed.scissorI32, coverage, sample,
@@ -1282,6 +1391,17 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         public const val W5A_HARD_CAPABILITY_ID: String = "solid-path-geometry-hard-1x-general-transform-simple-scissor-src-over-srgb-w5a-material-v2"
         /** W5a material-bearing successor to the historical [AA_CAPABILITY_ID] contract. */
         public const val W5A_AA_CAPABILITY_ID: String = "solid-path-geometry-mixed-aa4-general-transform-simple-scissor-src-over-srgb-w5a-material-v2"
+        /** W6-only sealed child source; intentionally distinct from W4d's standalone AA graph. */
+        public const val W6_AA_COLOR_SOURCE_CAPABILITY_ID: String = "w6-aa-resolved-color-source-v1"
+
+        internal fun w6AaColorSource(
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): W4dGeneralPathPlanCompiler = W4dGeneralPathPlanCompiler(
+            PathStrokePolicyF64(),
+            acceptsNarrowTransforms = true,
+            allowAaColorSource = true,
+            runtimeCatalog = catalog,
+        )
 
         public fun isLegacyCapabilityId(capabilityId: String): Boolean =
             capabilityId == HARD_CAPABILITY_ID || capabilityId == AA_CAPABILITY_ID
