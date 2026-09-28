@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.plan.W5aSourceNativeSiteRecipeV1
 import org.graphiks.kanvas.gpu.plan.W5aSourceNativeBindingKindV1
 import org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1
 import org.graphiks.kanvas.gpu.plan.W6SolidRectNativeSiteRecipeV1
+import org.graphiks.kanvas.gpu.plan.isW5aGradientSourceVariantV1
 import org.graphiks.kanvas.gpu.plan.w5aOrdinarySourceNativeVariantV1OrNull
 import org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -100,7 +101,7 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                     recipe.materialCanonicalIdentity == source.stage.canonicalIdentity &&
                     recipe.uniformByteCountI64 == source.stage.uniformByteCountI64 &&
                     recipe.copyUniformBytes().contentEquals(source.stage.uniformBytes) &&
-                    recipe.materialCoordinateCanonicalIdentity == (if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1)
+                    recipe.materialCoordinateCanonicalIdentity == (if (variant.isW5aGradientSourceVariantV1())
                         authority.coordinates?.canonicalIdentity.orEmpty() else "") &&
                     recipe.bindingManifest().map { it.bindingI32 to it.kind } == source.stage.bindingManifest.map { binding ->
                         binding.bindingI32 to when (binding.resourceKind) {
@@ -111,7 +112,7 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                     }) {
                     "W5a ordinary source packet does not match its sealed logical recipe: pass=${pass.id.value}, ordinal=$ordinal, command=${packet.commandIdValue}"
                 }
-                if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) {
+                if (variant.isW5aGradientSourceVariantV1()) {
                     val slab = requireNotNull(source.stage.gradientStopSlab)
                     val resource = physical.resource(requireNotNull(recipe.gradientStopResource))
                     require(recipe.gradientStopByteCountI64 == slab.byteSizeI64 &&
@@ -121,7 +122,7 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                         resource.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.GradientStopData &&
                         resource.usages() == setOf(org.graphiks.kanvas.gpu.plan.PlanResourceUsage.StorageRead,
                             org.graphiks.kanvas.gpu.plan.PlanResourceUsage.CopyDestination)) {
-                        "W5a ordinary linear-gradient packet lost its sealed stop storage resource"
+                        "W5a ordinary gradient packet lost its sealed stop storage resource"
                     }
                 }
                 return recipe
@@ -172,6 +173,10 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                         composeW5aHostSourceV1(template, source, destination, bounds)
                     }
                     org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1 -> {
+                        require(destination == null) { "W5a ordinary source recipe must not compose a destination read" }
+                        composeW5aHostSourceV1(template, source, destination, bounds)
+                    }
+                    org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryRadialGradientMaterialV1 -> {
                         require(destination == null) { "W5a ordinary source recipe must not compose a destination read" }
                         composeW5aHostSourceV1(template, source, destination, bounds)
                     }

@@ -3261,15 +3261,18 @@ internal class W6aLayerGraphConstruction(
         // recipes have been assembled.  The W5a recipe needs its typed logical descriptor now;
         // this creates no resource or lease and cannot duplicate the later physical allocation.
         val w5aRecipeResources = (resources + source.resources).let { rows ->
-            val needsLinearGradientSource = passes.filterIsInstance<PlanPass.RenderPass>().any { pass ->
+            val needsGradientSource = passes.filterIsInstance<PlanPass.RenderPass>().any { pass ->
                 pass.draws().any { draw ->
-                    w5aOrdinarySourceNativeVariantV1OrNull(table, pass, draw) ==
-                        W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1
+                    when (w5aOrdinarySourceNativeVariantV1OrNull(table, pass, draw)) {
+                        W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1,
+                        W5aSourceNativeVariantV1.OrdinaryRadialGradientMaterialV1 -> true
+                        else -> false
+                    }
                 }
             }
-            if (!needsLinearGradientSource || rows.any { it.role == PlanResourceRole.GradientStopData }) rows else {
+            if (!needsGradientSource || rows.any { it.role == PlanResourceRole.GradientStopData }) rows else {
                 val slab = requireNotNull(table).gradientStopSlab
-                requireNotNull(slab) { "W5a ordinary linear-gradient source lost its planner stop slab." }
+                requireNotNull(slab) { "W5a ordinary gradient source lost its planner stop slab." }
                 rows + PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer, null, null,
                     slab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
                     PlanResourceLifetime.FrameLocal, 0, passes.size)

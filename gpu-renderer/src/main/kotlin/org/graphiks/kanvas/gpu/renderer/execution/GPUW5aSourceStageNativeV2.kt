@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.isW5aGradientSourceVariantV1
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
 import org.graphiks.kanvas.gpu.renderer.color.validateColorWgsl
 import org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2
@@ -423,7 +424,7 @@ internal fun materializeW5aSourcePartitionV2(
                 recipe.copyUniformBytes().contentEquals(source.stage.uniformBytes)) {
                 "W5a ordinary source native provider received a packet different from its preflight-sealed recipe"
             }
-            if (recipe.variant == org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) {
+            if (recipe.variant.isW5aGradientSourceVariantV1()) {
                 val frame = requireNotNull(framePlan.w6aLayerFrameV1)
                 val slab = requireNotNull(source.stage.gradientStopSlab)
                 val resource = frame.physical.resource(requireNotNull(recipe.gradientStopResource))
@@ -432,7 +433,7 @@ internal fun materializeW5aSourcePartitionV2(
                     requireNotNull(requireNotNull(frame.graph.materialPlanTableOrNull()).gradientStopSlab).canonicalIdentity == slab.canonicalIdentity &&
                     resource.role == PlanResourceRole.GradientStopData && resource.byteSize == slab.byteSizeI64 &&
                     resource.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination)) {
-                    "W5a ordinary linear-gradient provider received a stop resource different from its preflight-sealed recipe"
+                    "W5a ordinary gradient provider received a stop resource different from its preflight-sealed recipe"
                 }
             }
         }

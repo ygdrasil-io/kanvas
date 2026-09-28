@@ -5,8 +5,15 @@ package org.graphiks.kanvas.gpu.plan
  * SolidRect backed by one explicitly admitted W5 MaterialV1 program: no coverage source,
  * destination read, W4e packet, image/noise/runtime binding, or renderer-owned handle is present.
  */
-public enum class W5aSourceNativeVariantV1 { OrdinarySolidMaterialV1, OrdinaryLinearGradientMaterialV1 }
+public enum class W5aSourceNativeVariantV1 { OrdinarySolidMaterialV1, OrdinaryLinearGradientMaterialV1, OrdinaryRadialGradientMaterialV1 }
 public enum class W5aSourceNativeBindingKindV1 { UniformBuffer, StorageBuffer }
+
+/** Closed-world admission for the only W5a source variants that consume the stop slab. */
+public fun W5aSourceNativeVariantV1.isW5aGradientSourceVariantV1(): Boolean = when (this) {
+    W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1,
+    W5aSourceNativeVariantV1.OrdinaryRadialGradientMaterialV1 -> true
+    W5aSourceNativeVariantV1.OrdinarySolidMaterialV1 -> false
+}
 
 public data class W5aSourceNativeBindingAbiV1(
     public val bindingI32: Int,
@@ -71,6 +78,16 @@ public class W5aSourceNativeSiteRecipeV1 internal constructor(
                         W5aSourceNativeBindingAbiV1(1, W5aSourceNativeBindingKindV1.StorageBuffer),
                     ),
             ) { "W5a ordinary linear-gradient source ABI changed" }
+            W5aSourceNativeVariantV1.OrdinaryRadialGradientMaterialV1 -> require(
+                materialProgramStructuralId == MaterialProgramPlan.RadialGradientClampSrgbV1.structuralId.value &&
+                    // binding0 is the 16-byte material vec4; the legacy radial-gradient tail is 80 bytes.
+                    uniformByteCountI64 == 96L && gradientStopResource != null && gradientStopByteCountI64 > 0L &&
+                    gradientStopCanonicalIdentity.isNotBlank() && materialCoordinateCanonicalIdentity.isNotBlank() &&
+                    frozenBindingManifest == listOf(
+                        W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer),
+                        W5aSourceNativeBindingAbiV1(1, W5aSourceNativeBindingKindV1.StorageBuffer),
+                    ),
+            ) { "W5a ordinary radial-gradient source ABI changed" }
         }
         require(geometryCanonicalEncodingV1.isNotBlank() && targetFormat == W6SolidRectTargetFormatV1.RGBA8UnormSrgb && targetSampleCountI32 == 1) {
             "W5a source geometry target is not the admitted RGBA8UnormSrgb single-sample SolidRect"
@@ -123,7 +140,7 @@ public fun isW5aOrdinarySolidSourceDrawV1(
         entry.bindings is MaterialBindingPlan.SolidRgbaF32V1
 }
 
-/** The next source-native form is deliberately one legacy linear-gradient ABI, not all gradients. */
+/** The admitted source-native forms remain explicit legacy MaterialV1 ABIs, never a catch-all gradient route. */
 public fun w5aOrdinarySourceNativeVariantV1OrNull(
     table: MaterialPlanTable?,
     pass: PlanPass.RenderPass,
@@ -133,10 +150,15 @@ public fun w5aOrdinarySourceNativeVariantV1OrNull(
     if (pass.w6bMaskSourceBinding != null || draw !is SolidRectDraw || draw.blend is BlendPlan.DestinationReadV1) return null
     val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1 ?: return null
     val entry = table?.entry(authority.ref) ?: return null
-    return if (entry.program == MaterialProgramPlan.LinearGradientClampSrgbV1 &&
-        entry.bindings is MaterialBindingPlan.LinearGradientV1 && authority.coordinates != null) {
-        W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1
-    } else null
+    return when {
+        entry.program == MaterialProgramPlan.LinearGradientClampSrgbV1 &&
+            entry.bindings is MaterialBindingPlan.LinearGradientV1 && authority.coordinates != null ->
+            W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1
+        entry.program == MaterialProgramPlan.RadialGradientClampSrgbV1 &&
+            entry.bindings is MaterialBindingPlan.RadialGradientV1 && authority.coordinates != null ->
+            W5aSourceNativeVariantV1.OrdinaryRadialGradientMaterialV1
+        else -> null
+    }
 }
 
 public fun freezeW5aSourceNativeSiteRecipesV1(
@@ -155,23 +177,25 @@ public fun freezeW5aSourceNativeSiteRecipesV1(
             val authority = solid.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
             val entry = materialTable.entry(authority.ref)
             val raw = RawMaterialRequirementsV2.of(materialTable, authority.ref)
-            val gradient = (entry.bindings as? MaterialBindingPlan.LinearGradientV1)
+            val gradient = entry.bindings as? MaterialBindingPlan.GradientV1
             val slab = materialTable.gradientStopSlab
             require(when (variant) {
                 W5aSourceNativeVariantV1.OrdinarySolidMaterialV1 -> raw.bindingCountI32 == 1 && raw.uniformByteCountI64 == 16L && !raw.hasCoordinatesV2
                 W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1 -> raw.bindingCountI32 == 1 && raw.uniformByteCountI64 == 128L &&
+                    !raw.hasCoordinatesV2 && gradient != null && slab != null && authority.coordinates != null
+                W5aSourceNativeVariantV1.OrdinaryRadialGradientMaterialV1 -> raw.bindingCountI32 == 1 && raw.uniformByteCountI64 == 96L &&
                     !raw.hasCoordinatesV2 && gradient != null && slab != null && authority.coordinates != null
             }) { "w5a ordinary source raw MaterialV1 ABI is not admitted" }
             val uniform = uniforms.getValue(raw.canonicalIdentity)
             val row = resources.single { it.id == uniform }
             require(row.role == PlanResourceRole.SourceUniformData && row.byteSize == raw.uniformByteCountI64 &&
                 row.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination)) { "w5a ordinary source uniform row changed after source layout" }
-            val stopResource = if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) resources.single {
+            val stopResource = if (variant.isW5aGradientSourceVariantV1()) resources.single {
                 it.role == PlanResourceRole.GradientStopData
             }.also { stop ->
                 require(stop.byteSize == requireNotNull(slab).byteSizeI64 &&
                     stop.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination)) {
-                    "w5a ordinary linear-gradient stop row changed after source layout"
+                    "w5a ordinary gradient stop row changed after source layout"
                 }
             } else null
             val geometry = solidHosts.getValue(W6GeometrySiteKeyV1(pass.id, ordinal))
@@ -186,10 +210,10 @@ public fun freezeW5aSourceNativeSiteRecipesV1(
             val recipe = W5aSourceNativeSiteRecipeV1(pass.id, ordinal, baseOwners.size, solid.commandIndex, authority.ref,
                 entry.program.structuralId.value, raw.structuralId, raw.canonicalIdentity, uniform, raw.uniformByteCountI64, raw.copyUniformBytes(),
                 stopResource?.id, stopResource?.byteSize ?: 0L,
-                if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) requireNotNull(slab).canonicalIdentity else "",
-                if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1)
+                if (variant.isW5aGradientSourceVariantV1()) requireNotNull(slab).canonicalIdentity else "",
+                if (variant.isW5aGradientSourceVariantV1())
                     authority.coordinates?.canonicalIdentity.orEmpty() else "",
-                if (variant == W5aSourceNativeVariantV1.OrdinaryLinearGradientMaterialV1) listOf(
+                if (variant.isW5aGradientSourceVariantV1()) listOf(
                     W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer),
                     W5aSourceNativeBindingAbiV1(1, W5aSourceNativeBindingKindV1.StorageBuffer),
                 ) else listOf(W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer)),

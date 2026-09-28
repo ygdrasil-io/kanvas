@@ -81,6 +81,28 @@ class W6aLayerW4W5SurfacePixelTest {
     }
 
     @Test
+    fun `radial gradient material uses the public ordinary W6 source lane`() {
+        // The samples at (.5,.5) and (1.5,.5) have radial t values 0 and 1.  This is a single,
+        // finite, non-composed CLAMP/sRGB radial MaterialV1 Rect, so it excludes W4e, W6b, and
+        // destination-read routes.  The literal oracle is fixed before Surface construction.
+        val expected = rgba(255, 0, 0) + rgba(0, 0, 255)
+        val gradient = Shader.RadialGradient(Point2F32(.5f, .5f), 1f, listOf(
+            GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue),
+        ))
+
+        val surface = Surface(2, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), opaque(RED).copy(shader = gradient, blendMode = BlendMode.SRC))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `precision collapsed butt stroke remains a public W6 direct path witness`() {
         // The F64 outline has four corners; at 2^24 its two terminal F32 corners coincide,
         // leaving Winding's line-only direct triangle.  The literal oracle precedes Surface.
