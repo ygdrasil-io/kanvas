@@ -1,5 +1,25 @@
 # W07 — diagnostic GM provisoire
 
+## Checkpoint des operands W6/W7 après relecture Astra
+
+Le commit `bd5eba11a6fc42c064c8279f2e3b788c77654509` rétablit la clé D24S8
+des passes stencil W6 génériques `StencilGeometryProducerV3`/`StencilCover` et
+reconnaît le `depthStencil` scellé des `PathRenderPass` AA W7 dans le seal des
+operands. Il ne modifie ni le format couleur ni la table de capacités GPU.
+La relecture Astra ciblée ne relève aucune nouvelle régression dans ce diff.
+
+Le témoin public `path fill stroke and hairline retain stencil through a
+translated layer` échouait avant correction à `Surface.render()` sur
+`invalid.preflight.encoder_lowering` (clé D24S8 empruntée absente). Après
+correction, ses pixels passent, ainsi que le contrôle W6 inverse-even-odd
+et deux témoins W7 de refus de capacité : XML JUnit W6 `2/0/0/0`, W7
+`2/0/0/0`. La tâche Gradle demeure en échec car l'exécuteur natif quitte
+avec le code `133` après les assertions. Les témoins W7 atteignent encore
+`w4d.general.texture-sample-support-unavailable` : ils ne prouvent ni pixels
+AA positifs ni budget B/B−1 sur ce runtime. Une sonde native sRGB 4× + resolve
+serait un travail diagnostique distinct ; aucune capacité n'est inférée du
+seul matériel Mac et aucune conformité ISO n'est revendiquée.
+
 ## Portée et preuve
 
 Ce relevé ouvre le diagnostic W7 sur le commit `b99e321c6bf6b7776fefd69a56fbe7439cc7a9cb`, empilé sur W6 `fc6e57209a69de43f57854886853714ccb1cad58`.
