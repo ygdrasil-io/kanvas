@@ -1497,3 +1497,26 @@ multisample route` et hard-mask `hard path mask clips an offset direct fill
 triangle in a W6 layer` sont XML `1/0/0/0`; leurs Gradle exits 1 proviennent du
 GLFW 133 post-JUnit et restent **UNKNOWN**. Cette note ne ferme pas la revue
 Sol ni 2A1/2B.
+
+### 2A0c.IIIb/c — correctif revue Sol, round 3
+
+`GeometryProducer.Fan` conserve désormais un snapshot immuable de
+`PathStencilEdgeFanF32` : vertices F32 (bits bruts), indices et débuts de
+contours, ainsi que son domaine. Ces faits entrent dans l'encodage canonique
+du site. Avant tout `device.create*`, le préflight confronte le fan du packet
+préparé et le contenu exact de sa slice V/I NDC au snapshot ; un fan de même
+taille mais de contenu différent ne peut donc plus partager une identité de
+catalogue. Les covers Geometry/Zero vérifient aussi les quatre bytes F32 zéro
+de `inverse=false` à l'offset U+16 de leur Uniform32 scellé.
+
+Le packet producer ne porte volontairement pas de consumer direct : le
+préflight exige ce `null` puis confronte son consumer inverse retenu par
+l'autorité scellée avec le cover natif suivant. Les covers, eux, authentifient
+leur consumer packet, domaine, mask et état depth/stencil. `w4ePreparedPath.scissor`
+reste le scissor du draw source et ne prétend pas être celui de la phase ; le
+gate compare donc les scissors locaux ordonnés du scan-span et le domaine du
+consumer effectivement consommés. Les trois compiles ciblées sortent 0 ; XML
+scan-span `14/0/0/0`, W6a `31/0/0/0`, D24S8 distinct `1/0/0/0` et
+empty/non-empty `1/0/0/0`. Les deux classes GPU terminent encore après JUnit
+par GLFW 133 (**UNKNOWN**), tandis que les deux sélecteurs W4e sortent 0.
+Cette note ne ferme pas la revue Sol, 2A0c.IV, 2A0d, 2A1 ou 2B.

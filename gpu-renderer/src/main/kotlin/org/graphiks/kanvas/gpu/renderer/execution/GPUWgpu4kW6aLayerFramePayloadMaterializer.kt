@@ -171,6 +171,55 @@ private fun preflightW6PathRenderDirectColors(
 }
 
 /** Authenticates the final W4e binding and its recorded initialize packets before any device.create*. */
+private fun W6InverseMaskPathRecipeV1.GeometryProducer.Fan.matchesPreparedFan(
+    path: org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Path,
+): Boolean {
+    val geometry = when (val prepared = path.copyGeometry()) {
+        is PathDrawGeometry.Fill -> prepared.valueF32
+        is PathDrawGeometry.Stroke -> prepared.valueF32.copyFillGeometryF32()
+        else -> return false
+    }
+    val fan = geometry.copyStencilEdgeFanF32OrNull() ?: return false
+    return geometry.fillRule == fillRule && fan.copyVerticesF32().rawBitsEqual(copyVerticesF32()) &&
+        fan.copyIndicesI32().contentEquals(copyIndicesI32()) &&
+        fan.copyContourStartsI32().contentEquals(copyContourStartsI32())
+}
+
+private fun W6InverseMaskPathRecipeV1.GeometryProducer.Fan.matchesFrozenPayload(
+    payload: W4eNativePayloadPlan,
+): Boolean {
+    val slice = payload.geometrySlice(ownerPassId.value, W4eNativePayloadPlan.STENCIL_PRODUCER)
+        ?: return false
+    val extent = target.copyExtentI32() ?: return false
+    val vertices = copyVerticesF32()
+    val indices = copyIndicesI32()
+    val actualVertices = payload.copyVertexData()
+    val actualIndices = payload.copyIndexData()
+    val vertexStart = try { Math.multiplyExact(slice.baseVertex, 2) } catch (_: ArithmeticException) { return false }
+    if (slice != geometrySlice || slice.vertexCount != vertices.size / 2 || slice.indexCount != indices.size ||
+        vertexStart < 0 || vertexStart + vertices.size > actualVertices.size ||
+        slice.firstIndex < 0 || slice.firstIndex + indices.size > actualIndices.size) return false
+    val expected = vertices.copyOf()
+    expected.indices.step(2).forEach { offset ->
+        expected[offset] = expected[offset] * 2f / extent.width - 1f
+        expected[offset + 1] = 1f - expected[offset + 1] * 2f / extent.height
+    }
+    return actualVertices.copyOfRange(vertexStart, vertexStart + expected.size).rawBitsEqual(expected) &&
+        actualIndices.copyOfRange(slice.firstIndex, slice.firstIndex + indices.size).contentEquals(indices)
+}
+
+private fun FloatArray.rawBitsEqual(other: FloatArray): Boolean = size == other.size && indices.all { index ->
+    this[index].toRawBits() == other[index].toRawBits()
+}
+
+private fun W4eNativePayloadPlan.hasInverseFalseUniform(slice: W4eNativeUniformSlice): Boolean {
+    if (slice.byteSize != 32L || slice.offsetBytes < 0L || slice.offsetBytes > Int.MAX_VALUE.toLong()) return false
+    val data = copyUniformData()
+    val inverseOffset = slice.offsetBytes + 16L
+    if (inverseOffset < 0L || inverseOffset + Float.SIZE_BYTES > data.size.toLong()) return false
+    return (0 until Float.SIZE_BYTES).all { index -> data[Math.toIntExact(inverseOffset) + index] == 0.toByte() }
+}
+
 private fun preflightW4eClipMaskInitializes(
     frame: GPUW6aLayerFramePlan,
     framePlan: GPUFramePlan,
@@ -295,26 +344,105 @@ private fun preflightW4eClipMaskInitializes(
                     val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(inverseRecipe.owner)
                         as? W6InverseMaskPathNativeSiteRecipeV1
                     val rows = frame.graph.resources().associateBy { it.id }
+                    val packet = render.drawPackets.single()
+                    val path = requireNotNull(packet.w4ePreparedPath)
+                    val consumer = packet.w4ePreparedClipConsumer as?
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
+                    val retainedConsumer = authority.consumerFor(bound.id.value) as?
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
+                    val nativePaths = binding.nativePasses().filterIsInstance<PlanPass.PathRenderPass>()
+                    val pairedGeometryCover = nativePaths.indexOfFirst { it.id == bound.id }.takeIf { it >= 0 }
+                        ?.let { nativePaths.getOrNull(it + 1) }
+                        ?.let { frame.inverseMaskPathRecipesByNativePassId[it.id] as? W6InverseMaskPathRecipeV1.GeometryCover }
+                    fun bounds(rect: RectI32) = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(
+                        rect.left, rect.top, rect.right, rect.bottom,
+                    )
                     require(catalog?.host === inverseRecipe && inverseRecipe.ownerPassId == bound.id &&
                         inverseRecipe.packetOrdinalI32 == bound.ordinal && inverseRecipe.load == bound.load &&
                         inverseRecipe.store == bound.store && inverseRecipe.blend == bound.draw.blend &&
                         operandMatches(rows.getValue(inverseRecipe.target.id), inverseRecipe.target) &&
+                        packet.role == GPUDrawPacketRole.W4ePrepared && packet.passId == bound.id.value &&
+                        packet.w4ePreparedClipPass == null && path.passId == bound.id.value &&
+                        path.commandIdValue == bound.draw.commandIndex && path.phase == bound.phase &&
+                        path.targetResourceId == inverseRecipe.target.id.value && path.resolveTargetResourceId == null &&
+                        path.vertexResourceId == binding.payload.vertexResourceId.value &&
+                        path.indexResourceId == binding.payload.indexResourceId.value &&
+                        path.uniformResourceId == binding.payload.uniformResourceId.value &&
+                        path.sample == SamplePlan.SingleSample && path.load == inverseRecipe.load &&
+                        path.store == inverseRecipe.store && path.blend == inverseRecipe.blend &&
+                        packet.blendPlan == org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(inverseRecipe.blend) &&
+                        render.target == frame.refs.getValue(inverseRecipe.target.id) &&
+                        render.samplePlan == GPUSamplePlan.SingleSampleFrame &&
                         render.loadStore.loadOp == (if (inverseRecipe.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load") &&
                         render.loadStore.storePlan == GPUStorePlan.Store && inverseUsesMatch(render, inverseRecipe)) {
                         "W6 inverse-mask native packet diverged from its catalog recipe before allocation."
                     }
                     when (inverseRecipe) {
-                        is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> require(
+                        is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> {
+                            require(packet.w4ePreparedClipConsumer == null) { "W6 inverse fan producer packet must omit a direct clip consumer." }
+                            require(retainedConsumer != null) { "W6 inverse fan producer lost its sealed clip consumer." }
+                            require(inverseRecipe.matchesPreparedFan(path)) { "W6 inverse fan prepared geometry changed after recipe freeze." }
+                            require(inverseRecipe.matchesFrozenPayload(binding.payload)) { "W6 inverse fan frozen V/I payload content changed after recipe freeze." }
+                            require(
                             operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil) &&
-                                binding.payload.geometrySlice(bound.id.value, W4eNativePayloadPlan.STENCIL_PRODUCER) == inverseRecipe.geometrySlice)
-                        is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans -> require(
-                            operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil))
+                                binding.payload.geometrySlice(bound.id.value, W4eNativePayloadPlan.STENCIL_PRODUCER) == inverseRecipe.geometrySlice &&
+                                retainedConsumer.consumerPassId == bound.id.value &&
+                                retainedConsumer.maskResourceId == pairedGeometryCover?.mask?.id?.value &&
+                                retainedConsumer.domain == bounds(inverseRecipe.copyDomainI32()) &&
+                                retainedConsumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry &&
+                                path.scissor == bounds(inverseRecipe.copyScissorI32()) && path.scanSpansDeviceI32 == null &&
+                                path.scanScissorsLocalI32 == null && path.depthStencilResourceId == inverseRecipe.depthStencil.id.value &&
+                                path.depthStencilAccess == PlanDepthStencilAccess.Write &&
+                                path.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore &&
+                                render.depthStencilLoadStore == GPUDepthStencilLoadStorePlan.WritableStencil(
+                                    GPUStencilLoadOperation.Clear, GPUStorePlan.Store, 0u,
+                                )) { "W6 inverse fan packet/depth state changed after recipe freeze." }
+                        }
+                        is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans -> {
+                            require(packet.w4ePreparedClipConsumer == null) { "W6 inverse scan producer packet must omit a direct clip consumer." }
+                            require(retainedConsumer != null) { "W6 inverse scan producer lost its sealed clip consumer." }
+                            require(
+                            operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil) &&
+                                retainedConsumer.consumerPassId == bound.id.value &&
+                                retainedConsumer.maskResourceId == pairedGeometryCover?.mask?.id?.value &&
+                                retainedConsumer.domain == bounds(inverseRecipe.copyDomainDeviceI32()) &&
+                                retainedConsumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry &&
+                                path.scanSpansDeviceI32?.copyDomainI32() == inverseRecipe.copyDomainDeviceI32() &&
+                                path.scanScissorsLocalI32?.copyOriginDeviceI32() == inverseRecipe.copyOriginDeviceI32() &&
+                                path.scanScissorsLocalI32?.copyDomainI32() == inverseRecipe.copyDomainLocalI32() &&
+                                path.scanScissorsLocalI32?.copyScissorsI32() == inverseRecipe.copyScissorsLocalI32() &&
+                                path.depthStencilResourceId == inverseRecipe.depthStencil.id.value &&
+                                path.depthStencilAccess == PlanDepthStencilAccess.Write &&
+                                path.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore &&
+                                render.depthStencilLoadStore == GPUDepthStencilLoadStorePlan.WritableStencil(
+                                    GPUStencilLoadOperation.Clear, GPUStorePlan.Store, 0u,
+                                )) { "W6 inverse scan-span packet/depth state changed after recipe freeze." }
+                        }
                         is W6InverseMaskPathRecipeV1.GeometryCover -> require(operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil) &&
                             operandMatches(rows.getValue(inverseRecipe.mask.id), inverseRecipe.mask) && operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform) &&
-                            binding.payload.uniformSlice(bound.id.value, W4eNativePayloadPlan.STENCIL_COVER_UNIFORM) == inverseRecipe.uniformSlice)
+                            binding.payload.uniformSlice(bound.id.value, W4eNativePayloadPlan.STENCIL_COVER_UNIFORM) == inverseRecipe.uniformSlice &&
+                            binding.payload.hasInverseFalseUniform(inverseRecipe.uniformSlice) &&
+                            consumer != null && consumer.consumerPassId == bound.id.value && consumer.maskResourceId == inverseRecipe.mask.id.value &&
+                            consumer.domain == bounds(inverseRecipe.copyDomainI32()) &&
+                            consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry &&
+                            path.scanSpansDeviceI32 == null &&
+                            path.scanScissorsLocalI32 == null && path.depthStencilResourceId == inverseRecipe.depthStencil.id.value &&
+                            path.depthStencilAccess == PlanDepthStencilAccess.ReadWrite &&
+                            path.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset &&
+                            render.depthStencilLoadStore == GPUDepthStencilLoadStorePlan.WritableStencil(
+                                GPUStencilLoadOperation.Load, GPUStorePlan.Store, null,
+                            )) { "W6 inverse Geometry cover packet/uniform/depth state changed after recipe freeze." }
                         is W6InverseMaskPathRecipeV1.ZeroCover -> require(operandMatches(rows.getValue(inverseRecipe.mask.id), inverseRecipe.mask) &&
                             operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform) &&
-                            binding.payload.uniformSlice(bound.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM) == inverseRecipe.uniformSlice)
+                            binding.payload.uniformSlice(bound.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM) == inverseRecipe.uniformSlice &&
+                            binding.payload.hasInverseFalseUniform(inverseRecipe.uniformSlice) &&
+                            consumer != null && consumer.consumerPassId == bound.id.value && consumer.maskResourceId == inverseRecipe.mask.id.value &&
+                            consumer.domain == bounds(inverseRecipe.copyDomainI32()) &&
+                            consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero &&
+                            path.scanSpansDeviceI32 == null &&
+                            path.scanScissorsLocalI32 == null && path.depthStencilResourceId == null &&
+                            path.depthStencilAccess == null && path.depthStencilLoadStore == null &&
+                            render.depthStencilLoadStore == null) { "W6 InverseMask.Zero cover packet/uniform state changed after recipe freeze." }
                     }
                 }
             }

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
+import org.graphiks.math.geometry.PathStencilEdgeFanF32
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectI32
 
@@ -100,17 +101,27 @@ public sealed class W6InverseMaskPathRecipeV1 protected constructor(
             ownerPassId: PlanPassId, packetOrdinalI32: Int, target: W4eClipMaskProducerPhysicalOperandV1,
             depthStencil: W4eClipMaskProducerPhysicalOperandV1, vertex: W4eClipMaskProducerPhysicalOperandV1,
             index: W4eClipMaskProducerPhysicalOperandV1, public val geometrySlice: W4eNativeGeometrySlice,
-            public val fillRule: FillRule, scissorI32: RectI32, load: AttachmentLoadPlan, store: AttachmentStorePlan,
+            public val fillRule: FillRule, fan: PathStencilEdgeFanF32, domainI32: RectI32, scissorI32: RectI32,
+            load: AttachmentLoadPlan, store: AttachmentStorePlan,
         ) : GeometryProducer(ownerPassId, packetOrdinalI32, target, depthStencil, vertex, index, load, store,
             if (fillRule in setOf(FillRule.EVEN_ODD, FillRule.INVERSE_EVEN_ODD))
                 W6InverseMaskPathProducerStencilV1.ClearZeroEvenOdd else W6InverseMaskPathProducerStencilV1.ClearZeroWinding,
             W6InverseMaskPathProducerPipelineV1.FanGeometry) {
             private val scissor = scissorI32.copy()
+            private val domain = domainI32.copy()
+            private val vertices = fan.copyVerticesF32()
+            private val indices = fan.copyIndicesI32()
+            private val contourStarts = fan.copyContourStartsI32()
             public fun copyScissorI32(): RectI32 = scissor.copy()
+            public fun copyDomainI32(): RectI32 = domain.copy()
+            public fun copyVerticesF32(): FloatArray = vertices.copyOf()
+            public fun copyIndicesI32(): IntArray = indices.copyOf()
+            public fun copyContourStartsI32(): IntArray = contourStarts.copyOf()
             init {
-                require(geometrySlice.purpose == W4eNativePayloadPlan.STENCIL_PRODUCER && !scissor.isEmpty)
+                require(geometrySlice.purpose == W4eNativePayloadPlan.STENCIL_PRODUCER && !domain.isEmpty && !scissor.isEmpty)
                 require(vertex.role == PlanResourceRole.VertexData && PlanResourceUsage.Vertex in vertex.usages())
                 require(index.role == PlanResourceRole.IndexData && PlanResourceUsage.Index in index.usages())
+                require(geometrySlice.vertexCount == vertices.size / 2 && geometrySlice.indexCount == indices.size)
             }
         }
     }
@@ -184,7 +195,10 @@ public class W6InverseMaskPathNativeSiteRecipeV1 internal constructor(public val
             }
             is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> {
                 operand("depth", host.depthStencil); operand("vertex", requireNotNull(host.vertex)); operand("index", requireNotNull(host.index))
-                enum("pipeline", host.pipeline); enum("stencil", host.stencil); enum("fill", host.fillRule); rect("scissor", host.copyScissorI32())
+                enum("pipeline", host.pipeline); enum("stencil", host.stencil); enum("fill", host.fillRule); rect("domain", host.copyDomainI32()); rect("scissor", host.copyScissorI32())
+                host.copyVerticesF32().forEachIndexed { index, value -> float("geometry.vertex.$index", value) }
+                host.copyIndicesI32().forEachIndexed { index, value -> int("geometry.index.$index", value) }
+                host.copyContourStartsI32().forEachIndexed { index, value -> int("geometry.contour-start.$index", value) }
                 int("vertex.first", host.geometrySlice.baseVertex); int("vertex.count", host.geometrySlice.vertexCount)
                 int("index.first", host.geometrySlice.firstIndex); int("index.count", host.geometrySlice.indexCount); int("max-index", host.geometrySlice.maxLocalIndex)
             }
@@ -240,12 +254,13 @@ public fun freezeW6InverseMaskPathRecipesV1(
                             local.copyOriginDeviceI32(), spans.copyDomainI32(), local.copyDomainI32(), local.copyScissorsI32(), pass.load, pass.store))
                     } else {
                         val geometry = interior.copyGeometryF32()
-                        if (geometry.copyStencilEdgeFanF32OrNull() != null) {
+                        val fan = geometry.copyStencilEdgeFanF32OrNull()
+                        if (fan != null) {
                             val slice = requireNotNull(binding.payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.STENCIL_PRODUCER))
                             add(W6InverseMaskPathRecipeV1.GeometryProducer.Fan(pass.id, pass.ordinal, target, depth,
                                 inverseMaskOperandV1(rows.getValue(binding.payload.vertexResourceId)),
                                 inverseMaskOperandV1(rows.getValue(binding.payload.indexResourceId)), slice, geometry.fillRule,
-                                pass.draw.copyScissorI32(), pass.load, pass.store))
+                                fan, inverse.geometryF32.copyDomainI32(), pass.draw.copyScissorI32(), pass.load, pass.store))
                         }
                     }
                 }
