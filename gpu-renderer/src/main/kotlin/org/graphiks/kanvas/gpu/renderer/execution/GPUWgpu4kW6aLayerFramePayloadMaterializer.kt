@@ -249,9 +249,12 @@ private fun preflightW4eClipMaskInitializes(
                 val coverNative = cover?.let { binding.nativePass(it.id) }
                 val coverRecipe = coverNative?.let { frame.inverseMaskPathRecipesByNativePassId[it.id] }
                     as? W6InverseMaskPathRecipeV1.GeometryCover
+                val coverConsumer = coverRender?.drawPackets?.singleOrNull()?.w4ePreparedClipConsumer as?
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
                 require(cover != null && coverNative is PlanPass.PathRenderPass && coverRecipe != null && coverRecipe.target.id == proxy.target &&
                     coverRecipe.depthStencil.id == proxy.depthStencil &&
-                    coverRecipe.copyDomainI32() == coverNative.draw.copyScissorI32()) {
+                    coverRecipe.copyDomainI32().let { domain -> coverConsumer?.domain ==
+                        org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(domain.left, domain.top, domain.right, domain.bottom) }) {
                     "W6 inverse scan-span recipe lost its distinct cover before native allocation."
                 }
             }

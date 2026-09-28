@@ -253,7 +253,7 @@ public fun freezeW6InverseMaskPathRecipesV1(
                     val slice = requireNotNull(binding.payload.uniformSlice(pass.id.value, W4eNativePayloadPlan.STENCIL_COVER_UNIFORM))
                     add(W6InverseMaskPathRecipeV1.GeometryCover(pass.id, pass.ordinal, target,
                         inverseMaskOperandV1(rows.getValue(requireNotNull(pass.depthStencil))), mask, uniform, slice,
-                        pass.draw.copyScissorI32(), pass.load, pass.store, pass.draw.blend))
+                        inverse.geometryF32.copyDomainI32(), pass.load, pass.store, pass.draw.blend))
                 }
                 else -> Unit
             }
@@ -261,7 +261,7 @@ public fun freezeW6InverseMaskPathRecipesV1(
                 pass.draw.copyPathGeometry() == PathDrawGeometry.Empty) {
                 val slice = requireNotNull(binding.payload.uniformSlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM))
                 add(W6InverseMaskPathRecipeV1.ZeroCover(pass.id, pass.ordinal, target, mask, uniform, slice,
-                    pass.draw.copyScissorI32(), pass.load, pass.store, pass.draw.blend))
+                    inverse.geometryF32.copyDomainI32(), pass.load, pass.store, pass.draw.blend))
             }
         }
     } }
