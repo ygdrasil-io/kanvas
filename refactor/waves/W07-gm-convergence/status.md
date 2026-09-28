@@ -1,5 +1,8 @@
 # W07 — diagnostic GM provisoire
 
+PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
+sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
+
 ## Checkpoint AA W6/W7
 
 Les phases `PathRenderPass` AA W6 sont maintenant reconnues par leur autorité
@@ -34,8 +37,8 @@ queue, les scopes de validation et les pixels lus réussissent ; sinon elle
 conserve `{1}` sans resolve. La relecture Astra a fait corriger le contrôle du
 `Result` de queue et l'unicité du `popErrorScope`. L'ancien test de table `{1}`
 constante a été retiré ; la preuve de comportement reste dans les tests publics
-`Surface`, sans nouveau test d'infrastructure. Aucun commit, push ou PR n'a été
-fait pour ce checkpoint.
+`Surface`, sans nouveau test d'infrastructure. La sonde et ce relevé sont
+inclus dans la PR draft #2410 ; ils ne ferment pas les gates globaux.
 
 L'activation a révélé et permis de corriger des seals W6/W7 jusque-là masqués
 par le refus de capacité : opérations V/I du `Path` AA, classification de
