@@ -144,7 +144,11 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 if (forceAaFrame || scene.any { it is SceneCommand.Draw && it.node.coverage == CoverageRequest.ANTIALIASED }) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
                 scene.canonicalId, target, recognized.refusals,
             )
-            is Recognition.Ready -> GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, recognized.draws, recognized.materialPlanTable, recognized.elidedNoOpsI32, recognized.requestedAa,recognized.sources))
+            is Recognition.Ready -> if (allowAaColorSource && (recognized.elidedNoOpsI32 != 0 ||
+                recognized.draws.size != 1 || recognized.draws.any {
+                    !it.requestsAntiAlias || it.strategy != PathFillStrategy.DirectTriangle || it.blend != BlendPlan.SrcOver
+                })) gap("W6 AA colour source admits one solid SrcOver direct-triangle child")
+            else GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, recognized.draws, recognized.materialPlanTable, recognized.elidedNoOpsI32, recognized.requestedAa,recognized.sources))
             is Recognition.Gap -> gap(recognized.message)
             is Recognition.Invalid -> invalid(recognized.message)
             is Recognition.Horizon -> horizon(recognized.message)
@@ -360,6 +364,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             }
         }
 
+    /** Semantic source scope only; selection additionally proves the prepared direct strategy. */
+    internal fun acceptsW6AaColorSourceScope(node: DrawNode): Boolean =
+        allowAaColorSource && classifyDrawScope(node) is DrawScope.Ready
+
     private fun classifyDrawScope(node: DrawNode): DrawScope {
         val paint = node.paint ?: return DrawScope.Gap("W4d.2 requires paint")
         val path = (node.geometry as? GeometryNode.Path)?.path
@@ -385,10 +393,15 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             else -> return DrawScope.Gap("Clip is outside W4d.2")
         }
         if (!solid(node, paint)) return DrawScope.Gap("Material, blend, or effect is outside W4d.2")
-        if (allowAaColorSource && node.coverage == CoverageRequest.ANTIALIASED &&
-            (node.material !is MaterialNode.Solid || paint.colorFilter != null ||
+        if (allowAaColorSource &&
+            (node.coverage != CoverageRequest.ANTIALIASED || node.material !is MaterialNode.Solid || paint.colorFilter != null ||
                 paint.style != PaintStyleNode.FILL || paint.pathEffect != null ||
-                node.effects != EffectStack.Empty)) {
+                node.effects != EffectStack.Empty || when (val blend = node.blend) {
+                    BlendNode.SrcOver -> false
+                    is BlendNode.Mode -> blend.mode != BlendMode.SRC_OVER
+                    is BlendNode.Paint -> blend.mode != BlendMode.SRC_OVER || blend.blender != null
+                    is BlendNode.Custom -> true
+                })) {
             return DrawScope.Gap("W6 AA colour source requires an unfiltered solid SrcOver fill")
         }
         val fill = paint.style == PaintStyleNode.FILL
@@ -442,7 +455,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     internal fun constructSources(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> =
         constructChecked(candidate,capabilities,budget) { selected,geometry,anyAa,_,hardStencil ->
-            if (anyAa && !allowAaColorSource) promoted("W5b final blending requires the admitted single-sample W4d.2 topology")
+            if (allowAaColorSource && !anyAa) promoted("W6 AA colour source cannot construct a hard path source")
+            else if (anyAa && !allowAaColorSource) promoted("W5b final blending requires the admitted single-sample W4d.2 topology")
             else if (anyAa && (selected.draws.any { !it.requestsAntiAlias } || selected.draws.any {
                     it.strategy != PathFillStrategy.DirectTriangle || it.blend != BlendPlan.SrcOver
                 })) promoted("W6 AA colour source admits only solid SrcOver direct-triangle paths")

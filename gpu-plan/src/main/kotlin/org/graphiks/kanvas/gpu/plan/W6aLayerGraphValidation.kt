@@ -25,6 +25,8 @@ internal fun validateW6aLayerTopology(
     val versions = mutableMapOf<PlanResourceId, Long>()
     val preparedMasks = mutableSetOf<PlanResourceId>()
     val sealedPictureSources = mutableSetOf<PlanResourceId>()
+    val resolvedAaSources = mutableSetOf<PlanResourceId>()
+    val consumedAaSources = mutableSetOf<PlanResourceId>()
     fun validatePictureTerminal(operand: PictureCompositeOperandsV1, source: PlanResourceId,
         destination: PlanResourceId, indexI32: Int): Long {
         require(operand.source == source && operand.sourceGenerationI64 == versions[source] &&
@@ -236,16 +238,23 @@ internal fun validateW6aLayerTopology(
             require(byId.getValue(data.vertex).role == PlanResourceRole.VertexData &&
                 byId.getValue(data.index).role == PlanResourceRole.IndexData &&
                 byId.getValue(data.uniform).role == PlanResourceRole.UniformData)
-            initialized += target.id
-            initialized += resolved.id
+            val composite = passes.getOrNull(indexI32 + 1) as? PlanPass.PathAaColorComposite
+            require(composite?.source == resolved.id) { "AA resolve must be immediately composited" }
+            require(initialized.add(target.id) && initialized.add(resolved.id) && resolvedAaSources.add(resolved.id)) {
+                "AA source resources belong to one occurrence"
+            }
             commands += pass.draw.commandIndex
         }
         is PlanPass.PathAaColorComposite -> {
             val source = byId.getValue(pass.source)
             val destination = byId.getValue(pass.destination)
+            val producer = passes.getOrNull(indexI32 - 1) as? PlanPass.PathRenderPass
+            require(producer?.resolveTarget == source.id && source.id in resolvedAaSources &&
+                consumedAaSources.add(source.id)) { "AA composite must consume its adjacent resolve exactly once" }
             require(source.role == PlanResourceRole.PathAaResolvedColor && source.id in initialized &&
                 destination.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
                     PlanResourceRole.PictureAggregateSource) && destination.id in initialized &&
+                destination.id !in restored && destination.id !in sealedPictureSources &&
                 PlanResourceUsage.Sampled in source.usages() && pass.source != pass.destination)
             val bounds = pass.copySourceBoundsLayerI32()
             val origin = pass.copyDestinationOriginLayerI32()
@@ -254,7 +263,7 @@ internal fun validateW6aLayerTopology(
             require(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= sourceExtent.width && bounds.bottom <= sourceExtent.height &&
                 origin.x >= 0 && origin.y >= 0 && origin.x.toLong() + bounds.width() <= destinationExtent.width &&
                 origin.y.toLong() + bounds.height() <= destinationExtent.height)
-            val after = Math.addExact(versions[destination.id] ?: 0L, 1L)
+            val after = Math.addExact(versions.getValue(destination.id), 1L)
             versions[destination.id] = after
             require(pass.destinationVersionAfter.valueI64 == after)
         }
@@ -620,6 +629,7 @@ internal fun validateW6aLayerTopology(
         else -> error("w6a.layer.unsupported_child")
     } }
     if (passes.any { it is PlanPass.FilterPass }) W6bFilterGraphWitnessV1.seal(resources, passes)
+    require(resolvedAaSources == consumedAaSources)
     require(restored == layers.map { it.id }.toSet())
     require(commands.size == visualCountI32 && commands.distinct().size == commands.size)
     // Picture streams prove source order and occurrence ownership independently. Their W4/W5

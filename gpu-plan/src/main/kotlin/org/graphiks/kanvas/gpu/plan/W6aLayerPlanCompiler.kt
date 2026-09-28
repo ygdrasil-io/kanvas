@@ -191,10 +191,15 @@ public class W6aLayerPlanCompiler public constructor(
                     stripW6bPayload(command as SceneCommand.Draw, drawIndexI32 in directInputDemandCommands)
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
             }, graphLimits)
+            val aaSource = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
+            val originalDraw = (commands[drawIndexI32] as SceneCommand.Draw).node
+            // Keep the historical ordinary general-path compiler for every other segment.
+            // The AA variant proves DirectTriangle during select, before capability planning.
+            val generalPath = if (scopeI32 != null && aaSource.acceptsW6AaColorSourceScope(originalDraw))
+                aaSource else W4dGeneralPathPlanCompiler()
             val child = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
                 W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
-                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(),
-                W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)), runtimeCatalog)
+                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), generalPath), runtimeCatalog)
             when (val selection = child.select(segment, target)) {
                 is GpuPlanSelection.Candidate -> segments += Segment(scopeI32, drawIndexI32, child, selection.candidate)
                 // A source lane that is admissible except for its W5 material must retain that
