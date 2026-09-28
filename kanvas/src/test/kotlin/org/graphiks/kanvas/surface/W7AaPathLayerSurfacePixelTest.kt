@@ -3,8 +3,12 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.geometry.FillType
@@ -14,6 +18,82 @@ import org.junit.jupiter.api.Test
 
 /** Public W7 witness for a resolved AA path colour source inside a W6 layer. */
 class W7AaPathLayerSurfacePixelTest {
+    @Test
+    fun `aa layer B minus one refuses`() {
+        // B is hand-derived from this fixed 7x7 direct-triangle fixture before either Surface
+        // exists.  It charges every declared physical row: root RGBA8 (196), its seven aligned
+        // 256-byte readback rows (1792), transparent layer RGBA8 (196), AA4 colour (784), the
+        // isolated sampled resolve (196), W4d V/I/U pool floors (16384 + 4096 + 4096), and the
+        // solid material source uniform (16).  Thus B = 27756; no lifetime/cache alias discount
+        // is taken.  The native sRGB-4x capability branch below deliberately does not claim B.
+        val budgetB = listOf(196L, 1792L, 196L, 784L, 196L, 16_384L, 4_096L, 4_096L, 16L)
+            .fold(0L, Math::addExact)
+        val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
+        val blue = ColorARGB.of(255, 17, 61, 211)
+        val triangle = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
+        }
+
+        fun record(surface: Surface) = surface.canvas {
+            saveLayer()
+            drawPath(triangle, Paint(blue, antiAlias = true))
+            restore()
+        }
+
+        val admitted = Surface(7, 7, config = RenderConfig(frameLocalBudgetBytes = budgetB))
+        record(admitted)
+        val admittedResult = renderOrAcceptExactAaCapabilityRefusal(admitted) ?: return
+        assertPixel(admittedResult.pixels, 7, 1, 1, 17, 61, 211, 255)
+        assertTrue(admittedResult.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            admittedResult.nativeEvidenceScopeKinds.toString())
+
+        val refusal = Surface(7, 7, config = RenderConfig(
+            frameLocalBudgetBytes = Math.subtractExact(budgetB, 1L),
+        ))
+        record(refusal)
+        val sentinel = UByteArray(7 * 7 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> { refusal.readPixels(bounds, sentinel) }
+        assertTrue(failure.message?.startsWith("w6a.layer.frame_budget_exceeded:") == true, failure.message)
+        assertContentEquals(before, sentinel)
+
+        refusal.discardRecordedOperations()
+        refusal.canvas { drawRect(bounds, Paint(blue, antiAlias = false)) }
+        val recovered = refusal.render()
+        assertPixel(recovered.pixels, 7, 3, 3, 17, 61, 211, 255)
+        assertTrue(recovered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            recovered.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `aa filtered path stays outside color source`() {
+        val triangle = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
+        }
+        val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
+        val filters = listOf(
+            Paint(ColorARGB.Blue, imageFilter = ImageFilter.Blur(1f, 1f), antiAlias = true),
+            Paint(ColorARGB.Blue, maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f), antiAlias = true),
+        )
+        filters.forEach { paint ->
+            val surface = Surface(7, 7)
+            surface.canvas {
+                saveLayer()
+                drawPath(triangle, paint)
+                restore()
+            }
+            val sentinel = UByteArray(7 * 7 * 4) { 0x5au }
+            val before = sentinel.copyOf()
+            val failure = assertFailsWith<IllegalStateException> { surface.readPixels(bounds, sentinel) }
+            // A filter must not be stripped and promoted to the W4d AA-colour source.  Its
+            // owner-specific W6/W6b refusal is the public boundary until separate filter and
+            // ResolvedCoverage projects define a source contract.
+            assertTrue(failure.message?.startsWith("w6a.layer.unsupported_spatial_filter:") == true,
+                failure.message)
+            assertContentEquals(before, sentinel)
+        }
+    }
+
     @Test
     fun `aa children preserve order`() {
         // The second opaque child must cover the first at (2, 2); (6, 6) is

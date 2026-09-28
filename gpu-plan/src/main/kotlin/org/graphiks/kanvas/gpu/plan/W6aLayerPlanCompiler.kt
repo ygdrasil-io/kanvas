@@ -6,6 +6,7 @@ import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.CapturedFilterRootV1
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.ColorFilterNode
+import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.MaskFilterNode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
@@ -130,6 +131,19 @@ public class W6aLayerPlanCompiler public constructor(
                 is SceneCommand.Draw -> {
                     scopeByDrawIndex[indexI32] = stack.lastOrNull()?.idI32
                     val paint = command.node.paint
+                    // W6b may retain a captured filter and strip it from the child lane.  That
+                    // is not an admission to the W4d resolved-colour source: this AA path has
+                    // no filter or ResolvedCoverage contract yet, so name the W6 boundary
+                    // before a later child-chain NotCandidate could become UnsupportedChild.
+                    if (stack.isNotEmpty() && command.node.geometry is GeometryNode.Path &&
+                        command.node.coverage == CoverageRequest.ANTIALIASED &&
+                        (paint?.imageFilter != null || paint?.maskFilter != null)
+                    ) {
+                        return invalid(
+                            W6aPlanDiagnostics.UnsupportedSpatialFilter,
+                            "W6a AA resolved-colour sources do not admit image or mask filters.",
+                        )
+                    }
                     if ((!ownsW6b && (paint?.imageFilter != null || paint?.maskFilter != null)) ||
                         (command.node.effects !is EffectStack.Empty && !isW6bFilterStack(command.node.effects))
                     ) {
