@@ -9,9 +9,9 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.color.ColorARGB
-import org.graphiks.math.geometry.Point2F32
-import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.vector.Vector3F32
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -51,19 +51,21 @@ class LightingGm : SkiaGm {
         val sinA = sin(Math.toRadians(fAzimuth.toDouble())).toFloat()
         val cosA = cos(Math.toRadians(fAzimuth.toDouble())).toFloat()
 
-        val spotTarget = Point2F32(40f, 40f)
-        val spotLocation = Point2F32(
+        val spotTarget = Point3F32(40f, 40f, 0f)
+        val spotLocation = Point3F32(
             spotTarget.x + 70.7214f * cosA,
             spotTarget.y + 70.7214f * sinA,
+            spotTarget.z + 20f,
         )
-        val pointLocation = Point2F32(
+        val pointLocation = Point3F32(
             spotTarget.x + 50f * cosA,
             spotTarget.y + 50f * sinA,
+            10f,
         )
         val elevationRad = Math.toRadians(5.0).toFloat()
         val cosEl = cos(elevationRad)
         val sinEl = sin(elevationRad)
-        val distantDirection = Vector2F32(cosA * cosEl, sinA * cosEl)
+        val distantDirection = Vector3F32(cosA * cosEl, sinA * cosEl, sinEl)
 
         val kd = 2f
         val ks = 1f
