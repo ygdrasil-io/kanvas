@@ -1578,3 +1578,15 @@ stencil IDs, ordering or load/store`; son Gradle exit est aussi `1` et GLFW
 `133` reste séparé. Aucune production n'a été modifiée dans Task 1, aucun
 test InverseMask/scan-span existant n'a été touché, et 2A0c.IV reste ouvert
 pour la recette Geometry DirectTriangle puis le gate fan.
+
+La revue Sol de Task 1 a relevé que le premier triangle plaçait son hypoténuse
+sur quatre centres de pixels, sans règle de frontière indépendante. Le sommet
+`(1,5)` est déplacé à `(1,4)` : l'expected littéral 3/2/1 ne change pas et
+aucun centre ne tombe sur le nouvel edge. Le sélecteur exact reste XML
+`1/1/0/0` avec le **même** diagnostic `w6a.layer.invalid_native_path`
+avant pixels ; il constitue maintenant un RED causal du validateur W6.
+L'analyse du code situe le refus dans la classification du premier D24S8
+scene-local `InverseDomain.Geometry` comme cover, alors que l'encodeur le
+clear/initialise dans son pass `SingleSampleDirectColor`. La correction
+phase-aware de cette validation précède les recettes IV ; elle ne généralise
+pas l'acceptation des covers sans producer.

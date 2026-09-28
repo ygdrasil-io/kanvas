@@ -146,7 +146,7 @@ class W6aLayerW4W5SurfacePixelTest {
 
     @Test
     fun `unmasked inverse direct triangle removes only its finite W6 interior`() {
-        // At unambiguous pixel centres, the inverse complement of this strict triangle leaves
+        // Its oblique edge crosses no pixel centre: the inverse complement leaves
         // three clear pixels on row 1, two on row 2, and one on row 3.  No clip-path mask is
         // present, so these pixels causally cover the bounded inverse-domain Geometry route.
         val clear = rgba(0, 0, 0, 0)
@@ -160,7 +160,7 @@ class W6aLayerW4W5SurfacePixelTest {
             blue, blue, blue, blue, blue, blue,
         ).flatten().toUByteArray()
         val inverseTriangle = Path().apply {
-            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 4f); close()
             fillType = FillType.INVERSE_WINDING
         }
 
