@@ -16,6 +16,48 @@ avant setup et rendu. Fonts et codecs sont exclus du périmètre. Les scores
 enregistrés sont historiques ; l'audit `strict=true`, `orphanCount=0` vérifie
 seulement leur cohérence de registre, pas la similarité des pixels actuels.
 
+## Checkpoint Task 4 — budget AA et refus hors route
+
+Le commit `b8b035b329163dba37f21c6de7a85d4cd851e383` ajoute les témoins publics
+W7 du budget et des filtres, ainsi que le refus W6 explicite qui empêche qu'un
+`Path` AA filtré dans une layer perde sa provenance en
+`w6a.layer.unsupported_child`. Image et mask filter retournent maintenant
+`w6a.layer.unsupported_spatial_filter` avant que W6b ne retire leur payload
+pour une voie enfant W4d. Cela ne constitue ni une route image-filter
+`ResolvedColor`, ni une implémentation de `ResolvedCoverage` ; ces deux travaux
+restent différés.
+
+Le témoin 7×7 `DirectTriangle` publie son budget indépendant
+`B = 27 756` octets, obtenu sans rabais d'aliasing ou de cache : root RGBA8
+196, staging readback 1 792 (sept lignes alignées à 256), layer RGBA8 196,
+couleur AA 4× 784, `PathAaResolvedColor` 196, pools V/I/U 16 384/4 096/4 096,
+uniforme solide 16. Cette dérivation correspond aux allocations déclarées de
+la fixture (pas de D24S8, car `DirectTriangle` n'emploie pas le stencil) ; le
+budget W6 reste checked-I64 et charge toute ressource déclarée, y compris les
+staging et ressources des autres lanes, sans économie de lifetime.
+
+Sur cet hôte, `GPUBackendRuntimeNative` publie sRGB 4× comme `{1}`. Le test
+public observe donc d'abord exactement
+`w4d.general.texture-sample-support-unavailable` et ne peut pas atteindre
+l'allocation native ni établir ici que B admet et B−1 refuse. L'oracle
+capable-backend conserve ce contrôle B/B−1, son sentinel atomique et la
+réutilisation de `Surface`, mais aucune réussite B/B−1 n'est revendiquée sur
+cette machine. Les compiles `:gpu-plan:compileKotlin`,
+`:gpu-renderer:compileKotlin` et `:kanvas:compileTestKotlin` passent. Le
+sélecteur filtre passe avec Gradle 0 ; le sélecteur B passe côté JUnit mais
+Gradle termine 1 car le processus natif quitte 133 après l'assertion.
+
+Un inventaire frais a été produit uniquement dans
+`/private/tmp/w7-task4-gm-inventory.json` par
+`generateSkiaGmInventory -Pgm.inventoryOutput=...` (succès, 4 min 10 s), sans
+PNG, référence, score ni dashboard. Il compte 631 GMs, 443 éligibles, 124
+rendables et 262 échecs de rendu. La sonde antérieure de 44 chemins AA n'a pas
+conservé ses identités, donc aucune comparaison par GM ne serait honnête : les
+44 premiers refus frais `w6a.layer.unsupported_child` restent génériques (52
+au total). Le nouveau diagnostic filtré est prouvé par le témoin `Surface`,
+sans prétendre avoir réparé ces 44 GMs. Les gates W6 2A1 (leases/programmes
+natif) et 2B restent ouverts ; aucune conformité ISO W7 n'est déclarée.
+
 ## Résultats observés
 
 | Mesure | Inventaire W0–W2 suivi | W7 initial | W7 après correction lifetime |
