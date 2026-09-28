@@ -957,15 +957,18 @@ class W6aLayerW4W5SurfacePixelTest {
 
     @Test
     fun `points preserve translated device squares and sibling source order`() {
+        // Explicit SolidColor selects the admitted simple MaterialV1 solid rather than the
+        // LegacyColor route. Each Point remains an ordinary, non-clip-only W6 source draw.
         val expected = rgba(0, 0, 0, 0) + rgba(239, 51, 73) + rgba(17, 61, 211) + rgba(17, 61, 211) + rgba(43, 181, 93)
         for (layered in listOf(false, true)) {
             val surface = Surface(5, 1)
             surface.canvas {
                 if (layered) saveLayer(RectF32.ofLTRB(1f, 0f, 5f, 1f))
                 translate(1f, 0f)
-                drawPoint(.5f, .5f, opaque(RED).copy(strokeWidth = 0f))
-                drawPoints(PointMode.POINTS, listOf(Point2F32(1.5f, .5f), Point2F32(2.5f, .5f)), opaque(BLUE).copy(strokeWidth = 0f))
-                drawPoint(3.5f, .5f, opaque(GREEN).copy(strokeWidth = 1f))
+                drawPoint(.5f, .5f, opaque(RED).copy(shader = Shader.SolidColor(RED), strokeWidth = 0f))
+                drawPoints(PointMode.POINTS, listOf(Point2F32(1.5f, .5f), Point2F32(2.5f, .5f)),
+                    opaque(BLUE).copy(shader = Shader.SolidColor(BLUE), strokeWidth = 0f))
+                drawPoint(3.5f, .5f, opaque(GREEN).copy(shader = Shader.SolidColor(GREEN), strokeWidth = 1f))
                 if (layered) restore()
             }
             assertContentEquals(expected, surface.render().pixels, "layered=$layered")

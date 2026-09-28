@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
 import org.graphiks.kanvas.gpu.plan.AnalyticRectDraw
 import org.graphiks.kanvas.gpu.plan.AnalyticRRectDraw
+import org.graphiks.kanvas.gpu.plan.W5bPointDraw
 import org.graphiks.kanvas.gpu.plan.W5aSourceNativeSiteRecipeV1
 import org.graphiks.kanvas.gpu.plan.W5aSourceNativeBindingKindV1
 import org.graphiks.kanvas.gpu.plan.W5aSourceNativeVariantV1
@@ -83,7 +84,8 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                 val pass = render.w6aPassV1 as? PlanPass.RenderPass ?: return null
                 val ordinal = render.drawPackets.indexOf(packet)
                 val draw = pass.draws().getOrNull(ordinal)?.takeIf {
-                    it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw
+                    it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw ||
+                        it is W5bPointDraw && it.clipOnly == null
                 } ?: return null
                 val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1 ?: return null
                 val w6 = requireNotNull(frame.w6aLayerFrameV1)
@@ -100,7 +102,8 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                             it.host.target.format == recipe.targetFormat && it.host.target.sampleCountI32 == recipe.targetSampleCountI32
                     }
                     W5aSourceNativeGeometryFamilyV1.AnalyticRect,
-                    W5aSourceNativeGeometryFamilyV1.AnalyticRRect -> (geometry as? W6CorePrimitiveNativeSiteRecipeV1)?.let {
+                    W5aSourceNativeGeometryFamilyV1.AnalyticRRect,
+                    W5aSourceNativeGeometryFamilyV1.Point -> (geometry as? W6CorePrimitiveNativeSiteRecipeV1)?.let {
                         it.canonicalLogicalEncodingV1 == recipe.geometryCanonicalEncodingV1 &&
                             it.host.selector.target.format.name == recipe.targetFormat.name &&
                             it.host.selector.target.sampleCountI32 == recipe.targetSampleCountI32

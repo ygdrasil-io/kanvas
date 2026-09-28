@@ -18,7 +18,7 @@ public enum class W5aSourceNativeVariantV1 {
     OrdinaryConicalGradientOpacityMaterialV1,
 }
 public enum class W5aSourceNativeBindingKindV1 { UniformBuffer, StorageBuffer }
-public enum class W5aSourceNativeGeometryFamilyV1 { SolidRect, AnalyticRect, AnalyticRRect }
+public enum class W5aSourceNativeGeometryFamilyV1 { SolidRect, AnalyticRect, AnalyticRRect, Point }
 
 /** Closed-world admission for the only W5a source variants that consume the stop slab. */
 public fun W5aSourceNativeVariantV1.isW5aGradientSourceVariantV1(): Boolean = when (this) {
@@ -136,7 +136,7 @@ public class W5aSourceNativeSiteRecipeV1 internal constructor(
                 uniformByteCountI64 == 16L && gradientStopResource == null && gradientStopByteCountI64 == 0L &&
                 gradientStopCanonicalIdentity.isEmpty() && materialCoordinateCanonicalIdentity.isEmpty() &&
                 frozenBindingManifest == listOf(W5aSourceNativeBindingAbiV1(0, W5aSourceNativeBindingKindV1.UniformBuffer))) {
-                "W5a analytic source admits only the simple SolidLinearPremulV1 U16 ABI"
+                "W5a CorePrimitive source admits only the simple SolidLinearPremulV1 U16 ABI"
             }
         }
     }
@@ -177,7 +177,8 @@ public fun w5aOrdinarySourceNativeVariantV1OrNull(
     draw: PlanDraw,
 ): W5aSourceNativeVariantV1? {
     if (pass.w6bMaskSourceBinding != null ||
-        (draw !is SolidRectDraw && draw !is AnalyticRectDraw && draw !is AnalyticRRectDraw) ||
+        (draw !is SolidRectDraw && draw !is AnalyticRectDraw && draw !is AnalyticRRectDraw && draw !is W5bPointDraw) ||
+        (draw as? W5bPointDraw)?.clipOnly != null ||
         draw.blend is BlendPlan.DestinationReadV1) return null
     val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1 ?: return null
     val materialTable = table ?: return null
@@ -260,6 +261,15 @@ public fun freezeW5aSourceNativeSiteRecipesV1(
                 is SolidRectDraw -> solidHosts.getValue(site).also { require(it.colorMode is W6SolidRectColorModeV1.UniformColor16 && it.blend == draw.blend) }
                 is AnalyticRectDraw -> coreHosts.getValue(site).also { require(it is W6AnalyticRectHostRecipeV1 && it.selector.blend == draw.blend) }
                 is AnalyticRRectDraw -> coreHosts.getValue(site).also { require(it is W6AnalyticRRectHostRecipeV1 && it.selector.blend == draw.blend) }
+                is W5bPointDraw -> coreHosts.getValue(site).also { host ->
+                    require(host is W6PointHostRecipeV1 && host.selector.blend == draw.blend &&
+                        host.pointMode == draw.pointMode &&
+                        host.copyVerticesF32().contentEquals(draw.copyVerticesF32()) &&
+                        host.copyIndicesI32().contentEquals(draw.copyIndicesI32()) &&
+                        host.bounds == draw.copyBoundsI32() && host.scissor == draw.copyScissorI32()) {
+                        "W5a Point source geometry differs from its sealed W6 Point host"
+                    }
+                }
                 else -> error("Unadmitted W5a ordinary source geometry")
             }
             val hostSites = if (draw is SolidRectDraw) solidHosts.keys else coreHosts.keys
@@ -286,7 +296,7 @@ public fun freezeW5aSourceNativeSiteRecipesV1(
                 is SolidRectDraw -> W5aSourceNativeGeometryFamilyV1.SolidRect
                 is AnalyticRectDraw -> W5aSourceNativeGeometryFamilyV1.AnalyticRect
                 is AnalyticRRectDraw -> W5aSourceNativeGeometryFamilyV1.AnalyticRRect
-                else -> error("Unadmitted W5a ordinary source geometry")
+                is W5bPointDraw -> W5aSourceNativeGeometryFamilyV1.Point
             }
             val recipe = W5aSourceNativeSiteRecipeV1(pass.id, ordinal, baseOwners.size, draw.commandIndex, authority.ref,
                 entry.program.structuralId.value, leafEntry.program.structuralId.value, opacityCount, raw.structuralId, raw.canonicalIdentity, uniform, raw.uniformByteCountI64, raw.copyUniformBytes(),
