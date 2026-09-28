@@ -41,7 +41,7 @@ class W6bDropShadowSurfacePixelTest {
             color = color,
             mode = DropShadowMode.SHADOW_ONLY,
         )
-        val actual = Surface(9, 7).also { surface ->
+        val result = Surface(9, 7).also { surface ->
             surface.canvas {
                 save()
                 translate(-2f, 0f)
@@ -53,10 +53,11 @@ class W6bDropShadowSurfacePixelTest {
                 ))
                 restore()
             }
-        }.render().pixels
+        }.render()
 
-        W6bDropShadowCpuOracle.assertNear(expected, actual, toleranceI32 = 3)
-        assertNotEquals(0u, actual[(2 + 2 * 9) * 4 + 3])
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), result.nativeEvidenceScopeKinds.toString())
+        W6bDropShadowCpuOracle.assertNear(expected, result.pixels, toleranceI32 = 3)
+        assertNotEquals(0u, result.pixels[(2 + 2 * 9) * 4 + 3])
     }
 
     /**
@@ -159,16 +160,17 @@ class W6bDropShadowSurfacePixelTest {
             color = shadow,
             mode = DropShadowMode.COMPOSITE,
         )
-        val actual = Surface(7, 5).also { surface ->
+        val result = Surface(7, 5).also { surface ->
             surface.canvas {
                 drawRect(RectF32.ofLTRB(3f, 2f, 4f, 3f), Paint(source,
                     imageFilter = ImageFilter.DropShadow(0f, 0f, 0f, 0f, shadow,
                         mode = DropShadowMode.COMPOSITE), antiAlias = false))
             }
-        }.render().pixels
+        }.render()
 
-        W6bDropShadowCpuOracle.assertNear(expected, actual, toleranceI32 = 3)
-        assertNotEquals(0u, actual[(3 + 2 * 7) * 4 + 3])
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), result.nativeEvidenceScopeKinds.toString())
+        W6bDropShadowCpuOracle.assertNear(expected, result.pixels, toleranceI32 = 3)
+        assertNotEquals(0u, result.pixels[(3 + 2 * 7) * 4 + 3])
     }
 
     /**

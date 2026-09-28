@@ -29,7 +29,9 @@ internal fun planPassId(role: PlanPassRole, ordinal: Int): PlanPassId =
 internal fun canonicalPathAtomicGroup(draw: PathDraw): PlanAtomicGroupId = when (draw) {
     is PathFillDraw -> PlanAtomicGroupId("w4c:${draw.commandIndex}")
     is PathStrokeDraw -> PlanAtomicGroupId("w4d:${draw.commandIndex}")
-    is W5bW4ePathDraw -> requireNotNull(draw.nativeColorPass.atomicGroup)
+    is W5bW4ePathDraw -> draw.nativeColorPass.atomicGroup ?: if (draw.hasW4eInverseMaskStencilPair()) {
+        PlanAtomicGroupId("w4e.inverse-mask:${draw.commandIndex}")
+    } else error("W5b W4e paths require a sealed stencil atomic group")
     is GeneralPathDraw -> canonicalGeneralPathAtomicGroup(draw)
 }
 

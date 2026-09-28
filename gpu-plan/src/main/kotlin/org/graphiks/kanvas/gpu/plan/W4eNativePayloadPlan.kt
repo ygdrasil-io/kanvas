@@ -6,6 +6,7 @@ import java.util.Collections
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.SizeI32
 
 /**
@@ -86,12 +87,14 @@ public class W4eNativePayloadPlan private constructor(
             targetExtent: SizeI32,
             capabilities: PlanCapabilitySnapshot,
             materialPlanTable: MaterialPlanTable?,
-        ): W4eNativePayloadPlan? = build(passes, resources, targetExtent, capabilities, materialPlanTable, null)
+        ): W4eNativePayloadPlan? = build(passes, resources, targetExtent, capabilities, materialPlanTable, null,
+            originDeviceI32 = Point2I32.Origin)
 
         /** Geometry bytes only; symbolic source refs are authenticated, never evaluated here. */
         internal fun fromDeferred(passes: List<PlanPass>,resources: List<PlanResource>,targetExtent: SizeI32,
-            capabilities: PlanCapabilitySnapshot,sources: MaterialSourceConstructionTableV4): W4eNativePayloadPlan? =
-            build(passes,resources,targetExtent,capabilities,null,null,sources)
+            capabilities: PlanCapabilitySnapshot,sources: MaterialSourceConstructionTableV4,
+            originDeviceI32: Point2I32 = Point2I32.Origin): W4eNativePayloadPlan? =
+            build(passes,resources,targetExtent,capabilities,null,null,sources,originDeviceI32)
 
         /** W4e producer-only payload. No color/path draw or material may enter this authority. */
         internal fun fromClipPrefix(
@@ -103,7 +106,8 @@ public class W4eNativePayloadPlan private constructor(
         ): W4eNativePayloadPlan? {
             require(passes.isNotEmpty() && passes.all { it is PlanPass.ClipMaskInitialize ||
                 it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold })
-            return build(passes, resources, targetExtent, capabilities, null, data)
+            return build(passes, resources, targetExtent, capabilities, null, data,
+                originDeviceI32 = Point2I32.Origin)
         }
 
         private fun build(
@@ -114,6 +118,7 @@ public class W4eNativePayloadPlan private constructor(
             materialPlanTable: MaterialPlanTable?,
             clipOnlyData: PlanDrawDataResources?,
             deferredSources: MaterialSourceConstructionTableV4? = null,
+            originDeviceI32: Point2I32,
         ): W4eNativePayloadPlan? = try {
             if (targetExtent.isEmpty()) return null
             val pathPasses = passes.filterIsInstance<PlanPass.PathRenderPass>()
@@ -129,6 +134,14 @@ public class W4eNativePayloadPlan private constructor(
                 !index.isExactW4eBuffer(PlanResourceRole.IndexData, PlanResourceUsage.Index) ||
                 !uniform.isExactW4eBuffer(PlanResourceRole.UniformData, PlanResourceUsage.Uniform)
             ) return null
+            // A scan-span producer owns no V/I slice, but the same published integer rebase must
+            // already fit this payload target before resources are materialized.
+            if (pathPasses.any { pass -> pass.scanSpansDeviceI32?.let { spans ->
+                    val scissors = spans.localScissorsI32OrNull(originDeviceI32, targetExtent)
+                    scissors == null || scissors.copyScissorsI32().size != spans.spanCountI32 ||
+                        (spans.spanCountI32 == 0) != scissors.copyScissorsI32().isEmpty()
+                } == true
+            }) return null
 
             val vertices = ArrayList<Float>()
             val indices = ArrayList<Int>()
@@ -336,6 +349,14 @@ public class W4eNativePayloadPlan private constructor(
                 if (pass.draw.copyPathGeometry() is PathDrawGeometry.Empty) return true
                 return geometry?.let { addDirectGeometry(pass.id.value, HARD_MASK_PRODUCER, it) } == true
             }
+            // The W4e inverse Geometry producer is the already admitted fullscreen primitive
+            // constrained by immutable integer scissors.  It owns no indexed triangle slice,
+            // including when its finite raster interior is Empty.  Keep the discriminator
+            // narrow here as well as at RenderGraph sealing: a historical producer must never
+            // lose its V/I payload merely by carrying an inapplicable nullable field.
+            if (pass.scanSpansDeviceI32 != null) {
+                return isStencilProducer && consumer is ClipPlanStrategy.InverseMask
+            }
             if ((consumer !is ClipPlanStrategy.InverseDomain || preservesZeroInverseSource) && isStencilProducer) {
                 return addDrawable(STENCIL_PRODUCER)
             }
@@ -398,14 +419,19 @@ public class W4eNativePayloadPlan private constructor(
             }
 
             val direct = geometry?.copyDirectTriangleF32OrNull()
-            val inverseMask = consumer is ClipPlanStrategy.InverseMask
+            val inverseMask = consumer as? ClipPlanStrategy.InverseMask
+            // Zero has no finite producer geometry to invert. Its one fullscreen consumer
+            // therefore samples the already-built hard mask normally, rather than applying
+            // the inverse-mask shader policy reserved for finite Geometry sources.
+            val inverseMaskZero = inverseMask?.geometryF32?.interiorCoverageF32 ==
+                InverseInteriorCoverageF32.Zero
             if (!addUniform(
                     pass.id.value,
                     CONSUMER_UNIFORM,
                     if (consumer == null) {
                         color4(materialColor() ?: return false)
                     } else {
-                        color8(materialColor() ?: return false, inverseMask)
+                        color8(materialColor() ?: return false, inverseMask != null && !inverseMaskZero)
                     },
                 )
             ) return false

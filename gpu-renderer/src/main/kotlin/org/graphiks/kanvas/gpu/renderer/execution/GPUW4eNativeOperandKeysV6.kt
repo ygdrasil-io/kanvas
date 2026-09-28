@@ -39,15 +39,19 @@ internal fun w4eNativeOperandKeysV6(w4ePacket: GPUDrawPacket,
                     .GPUW4ePreparedClipGeometry.Path
             ) {
                 val pathGeometry = preparedPass.geometry.copyPathGeometryF32()
-                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
-                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:path-producer"))
-                add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
-                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:path-vertices"))
-                add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
-                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:path-indices"))
-                if (pathGeometry.copyDirectTriangleF32OrNull() == null) {
+                if (preparedPath?.scanSpansDeviceI32?.spanCountI32 != 0) {
                     add(key(GPUPreparedNativeOperandRole.RenderPipeline,
-                        GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:path-cover"))
+                        GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:path-producer"))
+                }
+                if (preparedPath?.scanSpansDeviceI32 == null) {
+                    add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                        GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:path-vertices"))
+                    add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                        GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:path-indices"))
+                    if (pathGeometry.copyDirectTriangleF32OrNull() == null) {
+                        add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                            GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:path-cover"))
+                    }
                 }
             } else {
                 add(key(GPUPreparedNativeOperandRole.RenderPipeline,
@@ -113,12 +117,16 @@ internal fun w4eNativeOperandKeysV6(w4ePacket: GPUDrawPacket,
                 add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
                     GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:hard-mask-indices"))
             } else if (stencilProducer) {
-                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
-                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:stencil-producer"))
-                add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
-                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:stencil-vertices"))
-                add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
-                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:stencil-indices"))
+                if (preparedPath.scanSpansDeviceI32?.spanCountI32 != 0) {
+                    add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                        GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:stencil-producer"))
+                }
+                if (preparedPath.scanSpansDeviceI32 == null) {
+                    add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                        GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:stencil-vertices"))
+                    add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                        GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:stencil-indices"))
+                }
             } else if (hardMaskStencilCover) {
                 add(key(GPUPreparedNativeOperandRole.RenderPipeline,
                     GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:stencil-cover"))
@@ -185,4 +193,3 @@ internal fun w4eNativeOperandKeysV6(w4ePacket: GPUDrawPacket,
         else -> error("W4e packet has no sealed pass authority")
     }
 }
-

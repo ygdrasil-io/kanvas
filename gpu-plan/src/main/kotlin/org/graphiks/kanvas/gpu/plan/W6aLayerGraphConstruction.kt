@@ -101,6 +101,9 @@ private fun RectF64.toExactI32OrNull(): RectI32? {
 /** Deliberately distinguished from malformed W6 topology so callers can recover before native work. */
 internal class W6aRestoreAdmissionFailure(message: String) : IllegalArgumentException(message)
 
+/** The W4e draw cap is frame-wide after W6 has expanded every final producer occurrence. */
+internal class W6aScanSpanDrawLimitFailure(message: String) : RuntimeException(message)
+
 /**
  * Freezes a complete layer event stack into one physical graph. In particular, this class never
  * groups by depth: each Begin, direct draw segment, and End is emitted in captured command order.
@@ -132,6 +135,8 @@ internal class W6aLayerGraphConstruction(
     private val filterSourceBindings: Map<PlanResourceId, W6bFilterGraphConstruction.SourceBinding>
     /** Direct lighting sources defer their terminal hard clip until FilterComposite. */
     private val directConsumerDemandCommands: Set<Int>
+    /** Direct mask blurs retain their full analytic source coverage until FilterComposite. */
+    private val directMaskBlurCommands: Set<Int>
     /** Additional real W5 source rows used by captured MaskShader coverage evaluation. */
     private val maskMaterialSourcesByOccurrence: Map<Int, MaterialSourceConstructionV4>
     /** One W5 row per isolated Picture paint; it samples a sealed graph texture, never a SceneSnapshot. */
@@ -716,7 +721,14 @@ internal class W6aLayerGraphConstruction(
             )
             RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
                 val occurrence = directFiltersByCommand[draw.commandIndex]
-                intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))?.let { raster ->
+                val raster = if (occurrence?.mask is MaskFilterNode.Blur) {
+                    // A mask blur consumes the complete RRect/path coverage before the
+                    // public clip is applied at its terminal composite.
+                    w6aRasterBoundsI32(draw)
+                } else {
+                    intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))
+                }
+                raster?.let { raster ->
                     val produced = if (occurrence == null) raster else run {
                         val direct = occurrence
                         val terminalClip = directTerminalClip(direct)
@@ -1090,6 +1102,7 @@ internal class W6aLayerGraphConstruction(
         )
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
         val directConsumerDemandCommands = linkedSetOf<Int>()
+        val directMaskBlurCommands = linkedSetOf<Int>()
         activeFilterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
             val binding = bindingsByCommand.getValue(occurrence.insertionCommandIndexI32)
             val earlyFacts = requireNotNull(directAutoLayerFactsByOccurrence[occurrence])
@@ -1106,6 +1119,7 @@ internal class W6aLayerGraphConstruction(
                 Math.addExact(targetBounds.left, 1), Math.addExact(targetBounds.top, 1))
             val consumerDemandFilter = W6bFilterGraphConstruction.hasConsumerDemandTerminal(occurrence)
             if (consumerDemandFilter) directConsumerDemandCommands += occurrence.insertionCommandIndexI32
+            if (occurrence.mask is MaskFilterNode.Blur) directMaskBlurCommands += occurrence.insertionCommandIndexI32
             // The sampler recipe maps its public local lens with this captured draw transform.
             // Derive it before reverse demand so direct clipped Magnifier input matches the
             // immutable coordinates later used to freeze the filter pass.
@@ -1140,6 +1154,7 @@ internal class W6aLayerGraphConstruction(
             )
         }
         this.directConsumerDemandCommands = directConsumerDemandCommands
+        this.directMaskBlurCommands = directMaskBlurCommands
         /*
          * MaskShader is not a placeholder operation: the captured MaterialNode is normalized by
          * the same W5 source authority as the rest of the frame.  Its row is appended to this
@@ -1627,7 +1642,8 @@ internal class W6aLayerGraphConstruction(
                         ?: error("Picture W6b coverage source is missing its frozen W4 producer.")
                     val coverageDraw = selected.withFinalBlendV1(BlendPlan.LegacySrcOverV1)
                     val coverageDepth = (coverageDraw as? PathDraw)?.takeIf {
-                        it.strategy == PathFillStrategy.StencilCover
+                        it.strategy == PathFillStrategy.StencilCover ||
+                            (it as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true
                     }?.let {
                         planResourceId(PlanResourceRole.DepthStencil, nextCoverageDepthOrdinalI32.also { ordinal ->
                             nextCoverageDepthOrdinalI32 = Math.addExact(ordinal, 1)
@@ -1644,14 +1660,23 @@ internal class W6aLayerGraphConstruction(
                         ),
                     )
                 }
-                val terminal = if (draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover) {
+                val terminal = if (draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                        (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)) {
                     val data = dataByCommand.getValue(draw.commandIndex)
                     val depth = planResourceId(PlanResourceRole.DepthStencil, laneI32 + 1)
                     val group = canonicalPathAtomicGroup(draw)
+                    val producerNative = geometry?.passes()?.filterIsInstance<PlanPass.PathRenderPass>()?.singleOrNull {
+                        it.phase == PathRenderPhase.SingleSampleStencilProducer
+                    }?.let { nativePass(it, passes.size) as PlanPass.PathRenderPass }
+                    val scanSpans = producerNative?.scanSpansDeviceI32
+                    val localScissors = scanSpans?.let { spans -> requireNotNull(
+                        spans.localScissorsI32OrNull(targetOriginDevice(target), targetExtent(target)),
+                    ) }
                     val producer = PlanPass.StencilGeometryProducerV3(passes.size, target, depth, draw.commandIndex,
                         draw.copyPathGeometry(), draw.copyScissorI32(), data, group,
-                        AttachmentLoadPlan.Load, AttachmentStorePlan.Store)
+                        AttachmentLoadPlan.Load, AttachmentStorePlan.Store, scanSpans, localScissors)
                     passes += producer
+                    producerNative?.let { requireNotNull(native)[producer.id] = it }
                     val after = DestinationVersionI64(Math.addExact(versions.getValue(target), 1L))
                     versions[target] = after.valueI64
                     PlanPass.StencilCover(passes.size, target, depth, draw, data, group, AttachmentLoadPlan.Load,
@@ -1659,9 +1684,7 @@ internal class W6aLayerGraphConstruction(
                         PlanDepthStencilLoadStore.LoadStoreTestReset, after, coverage, entry.plannedCommandId).also { pass ->
                         passes += pass
                         geometry?.passes()?.filterIsInstance<PlanPass.PathRenderPass>()?.let { originals ->
-                            requireNotNull(native)[producer.id] = nativePass(originals.single {
-                                it.phase == PathRenderPhase.SingleSampleStencilProducer }, producer.ordinal)
-                            native[pass.id] = nativePass(originals.single {
+                            requireNotNull(native)[pass.id] = nativePass(originals.single {
                                 it.phase == PathRenderPhase.SingleSampleStencilColorCover }, pass.ordinal)
                         }
                     }
@@ -2574,7 +2597,8 @@ internal class W6aLayerGraphConstruction(
                         }
                         val selectedDraw = draws.single()
                         val sourceDepth = selectedDraw.takeIf { draw ->
-                            draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
+                            draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                                (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)
                         }?.let { planResourceId(PlanResourceRole.DepthStencil, bindings.indexOf(binding) + 1) }
                         var coverageDepth: PlanResourceId? = null
                         var rasterBinding: PlanPass.W6bRasterCoverageBindingV1? = null
@@ -2584,7 +2608,8 @@ internal class W6aLayerGraphConstruction(
                             rasterBinding = if (occurrence.mask is MaskFilterNode.Blur ||
                                 occurrence.mask is MaskFilterNode.Shader || occurrence.mask is MaskFilterNode.Table) {
                                 coverageDepth = selectedDraw.takeIf { draw ->
-                                    draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
+                                    draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                                        (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)
                                 }?.let {
                                     planResourceId(PlanResourceRole.DepthStencil,
                                         nextCoverageDepthOrdinalI32.also { ordinal ->
@@ -2659,14 +2684,28 @@ internal class W6aLayerGraphConstruction(
                                 copy.copySourceBoundsI32(), copy.copyDestinationOriginI32(), copy.bytesPerRowI64)
                             selectedDraw.withFinalBlendV1(selectedDraw.blend.bindDestinationReadV1(version, snapshot))
                         } else selectedDraw.also { require(selectedCopy == null) }
-                        if (draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover) {
+                        if (draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                                (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)) {
                             val data = dataByCommand.getValue(draw.commandIndex)
                             val depth = requireNotNull(sourceDepth)
                             val group = canonicalPathAtomicGroup(draw)
+                            val producerNative = when {
+                                w4e != null -> localNative(w4e.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                                    .single { it.phase == PathRenderPhase.SingleSampleStencilProducer }, passes.size)
+                                general != null -> localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                                    .single { it.draw.commandIndex == draw.commandIndex &&
+                                        it.phase == PathRenderPhase.SingleSampleStencilProducer }, passes.size)
+                                else -> null
+                            } as? PlanPass.PathRenderPass
+                            val scanSpans = producerNative?.scanSpansDeviceI32
+                            val localScissors = scanSpans?.let { spans -> requireNotNull(
+                                spans.localScissorsI32OrNull(targetOriginDevice(target), targetExtent(target)),
+                            ) }
                             val producer = PlanPass.StencilGeometryProducerV3(passes.size, target, depth, draw.commandIndex,
                                 draw.copyPathGeometry(), draw.copyScissorI32(), data, group,
-                                AttachmentLoadPlan.Load, AttachmentStorePlan.Store)
+                                AttachmentLoadPlan.Load, AttachmentStorePlan.Store, scanSpans, localScissors)
                             passes += producer
+                            producerNative?.let { requireNotNull(native)[producer.id] = it }
                             val after = DestinationVersionI64(Math.addExact(versions.getValue(target), 1L))
                             versions[target] = after.valueI64
                             // The isolated source is transparent: the selected parent blend is
@@ -2680,14 +2719,9 @@ internal class W6aLayerGraphConstruction(
                                 PlanDepthStencilLoadStore.LoadStoreTestReset, after, maskCoverage)
                             passes += cover
                             if (w4e != null) {
-                                requireNotNull(native)[producer.id] = localNative(w4e.passes().filterIsInstance<PlanPass.PathRenderPass>()
-                                    .single { it.phase == PathRenderPhase.SingleSampleStencilProducer }, producer.ordinal)
-                                native[cover.id] = localNative((selectedDraw as W5bW4ePathDraw).nativeColorPass, cover.ordinal)
+                                requireNotNull(native)[cover.id] = localNative((selectedDraw as W5bW4ePathDraw).nativeColorPass, cover.ordinal)
                             } else if (general != null) {
-                                requireNotNull(native)[producer.id] = localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
-                                    .single { it.draw.commandIndex == draw.commandIndex &&
-                                        it.phase == PathRenderPhase.SingleSampleStencilProducer }, producer.ordinal)
-                                native[cover.id] = localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                                requireNotNull(native)[cover.id] = localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
                                     .single { it.draw.commandIndex == draw.commandIndex &&
                                         it.phase == PathRenderPhase.SingleSampleStencilColorCover }, cover.ordinal)
                             }
@@ -2849,6 +2883,7 @@ internal class W6aLayerGraphConstruction(
         filterSourceBindings = java.util.Collections.unmodifiableMap(LinkedHashMap(sourceBindingsById))
         passes += PlanPass.ReadbackPass(passes.size, root, staging, readbackRowBytesI64,
             Math.addExact(Math.multiplyExact(readbackRowBytesI64, (extent.height - 1).toLong()), Math.multiplyExact(extent.width.toLong(), 4L)))
+        requireFrameWideScanSpanDrawLimit(passes)
         rawPasses = immutableList(passes)
         val consumedMaskShaderOccurrences = rawPasses.filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
             ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding as?
@@ -2951,10 +2986,32 @@ internal class W6aLayerGraphConstruction(
             val target = physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)
             val targetExtent = targetExtents.getValue(target)
             val payload = requireNotNull(W4eNativePayloadPlan.fromDeferred(native.values.toList(), resources, targetExtent,
-                caps, lanes[laneI32].sourceTable())) { "w6a.layer.w4e_payload" }
+                caps, lanes[laneI32].sourceTable(), targetOriginDevice(target))) { "w6a.layer.w4e_payload" }
             w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload, targetOriginDevice(target))
         }
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes, caps, budget)
+    }
+
+    /**
+     * Child W4e lanes can each satisfy their local admission while their final W6 occurrences
+     * exceed the frame-wide command contract. Count the emitted producer passes, never source
+     * identities, before resources, native payloads, or a RenderGraph are published.
+     */
+    private fun requireFrameWideScanSpanDrawLimit(passes: List<PlanPass>) {
+        var drawCountI32 = 0
+        passes.filterIsInstance<PlanPass.StencilGeometryProducerV3>().forEach { producer ->
+            val spans = producer.scanSpansDeviceI32 ?: return@forEach
+            val scissors = requireNotNull(producer.scanScissorsLocalI32)
+            require(scissors.copyScissorsI32().size == spans.spanCountI32) {
+                "W6 scan-span producer scissors diverged before frame-wide admission."
+            }
+            drawCountI32 = Math.addExact(drawCountI32, spans.spanCountI32)
+            if (drawCountI32 > W4eScanSpanAdmissionV1.MAX_PRODUCER_SCAN_SPAN_DRAWS_I32) {
+                throw W6aScanSpanDrawLimitFailure(
+                    "W4e inverse scan-span producers exceed ${W4eScanSpanAdmissionV1.MAX_PRODUCER_SCAN_SPAN_DRAWS_I32} draws",
+                )
+            }
+        }
     }
 
     fun publish(
@@ -3016,13 +3073,18 @@ internal class W6aLayerGraphConstruction(
         fun localizedCoverageDraw(binding: PlanPass.W6bRasterCoverageBindingV1, target: PlanResourceId): PlanDraw {
             val selected = byLaneAndCommand.getValue(binding.sourceLaneI32 to binding.draw.commandIndex)
                 .withFinalBlendV1(binding.draw.blend)
+            val sourceDraw = when {
+                binding.draw.commandIndex in directMaskBlurCommands -> selected.withoutW6aTerminalClip(expandAnalyticRaster = true)
+                binding.draw.commandIndex in directConsumerDemandCommands -> selected.withoutW6aTerminalClip()
+                else -> selected
+            }
             if (bindings.getOrNull(binding.sourceLaneI32)?.occurrenceInput?.commandIndexI32 == binding.draw.commandIndex) {
-                return selected
+                return sourceDraw
             }
             val source = requireNotNull(filterSourceBindings[target]) {
                 "A raster W6b coverage binding requires its published source mapping."
             }
-            return localizeLayerDraw(selected, source.mapping, source.copyDeviceBoundsI32())
+            return localizeLayerDraw(sourceDraw, source.mapping, source.copyDeviceBoundsI32())
         }
         require(maskMaterialRoots.keys == maskMaterialSourcesByOccurrence.keys)
         require(graphTextureMaterialRoots.keys == graphTextureMaterialSourcesByAggregate.keys)
@@ -3116,7 +3178,8 @@ internal class W6aLayerGraphConstruction(
                 is PlanPass.StencilGeometryProducerV3 -> {
                     val draw = boundDraw(pass.commandIndexI32, pass.target) as PathDraw
                     PlanPass.StencilGeometryProducerV3(pass.ordinal, pass.target, pass.depthStencil, pass.commandIndexI32,
-                        draw.copyPathGeometry(), draw.copyScissorI32(), pass.drawDataResources, pass.atomicGroup, pass.load, pass.store)
+                        draw.copyPathGeometry(), draw.copyScissorI32(), pass.drawDataResources, pass.atomicGroup, pass.load, pass.store,
+                        pass.scanSpansDeviceI32, pass.scanScissorsLocalI32)
                 }
                 is PlanPass.StencilCover -> PlanPass.StencilCover(pass.ordinal, pass.target, pass.depthStencil,
                     boundDraw(pass.draw.commandIndex, pass.target) as PathDraw, pass.drawDataResources, pass.atomicGroup,
@@ -3188,13 +3251,176 @@ internal class W6aLayerGraphConstruction(
                 else -> pass
             }
         }
-        val allResources = resources + source.resources
+        // SolidRect host selection belongs to the same final source/layout boundary as its W5
+        // rows.  The recipe is behavior-neutral and does not participate in the W6 budget yet.
+        val finalW4eBindings = w4eBindings.map { binding ->
+            binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
+        }
+        val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes)
+        // RenderGraph.construct publishes this same frame-local row later, after all final
+        // recipes have been assembled.  The W5a recipe needs its typed logical descriptor now;
+        // this creates no resource or lease and cannot duplicate the later physical allocation.
+        val w5aRecipeResources = (resources + source.resources).let { rows ->
+            val needsGradientSource = passes.filterIsInstance<PlanPass.RenderPass>().any { pass ->
+                pass.draws().any { draw ->
+                    w5aOrdinarySourceNativeVariantV1OrNull(table, pass, draw)?.isW5aGradientSourceVariantV1() == true
+                }
+            }
+            if (!needsGradientSource || rows.any { it.role == PlanResourceRole.GradientStopData }) rows else {
+                val slab = requireNotNull(table).gradientStopSlab
+                requireNotNull(slab) { "W5a ordinary gradient source lost its planner stop slab." }
+                rows + PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer, null, null,
+                    slab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
+                    PlanResourceLifetime.FrameLocal, 0, passes.size)
+            }
+        }
+        val corePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes)
+        val w5aOrdinarySolidSourceRecipes = freezeW5aSourceNativeSiteRecipesV1(
+            passes, table, w5aRecipeResources, source.uniforms, solidRectHostRecipes, corePrimitiveHostRecipes)
+        val preparedVerticesHostRecipes = if (passes.asSequence().filterIsInstance<PlanPass.RenderPass>()
+                .any { render -> render.draws().any { it is W5bVerticesDraw } })
+            freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table)) else emptyMap()
+        val plainLayerCompositeRecipes = freezeW6PlainLayerCompositeRecipesV1(passes)
+        val filteredLayerCompositeRecipes = freezeW6FilteredLayerCompositeRecipesV1(passes, resources + source.resources)
+        val layerCompositeDestinationRecipes = freezeW6LayerCompositeDestinationRecipesV1(passes, resources + source.resources)
+        val layerCompositeFilteredDestinationRecipes = freezeW6LayerCompositeFilteredDestinationRecipesV1(passes, resources + source.resources)
+        val pictureCompositeGraphRecipes = freezeW6PictureCompositeGraphRecipesV1(passes, resources + source.resources)
+        val pictureCompositeGraphFilteredRecipes = freezeW6PictureCompositeGraphFilteredRecipesV1(passes, resources + source.resources)
+        val pictureCompositeGraphDestinationRecipes = freezeW6PictureCompositeGraphDestinationRecipesV1(passes, resources + source.resources)
+        val filterCompositeDrawRecipes = freezeW6FilterCompositeDrawRecipesV1(passes, resources + source.resources)
+        val filterCompositeLayerPlainRecipes = freezeW6FilterCompositeLayerPlainRecipesV1(passes, resources + source.resources)
+        val filterCompositeLayerFilteredRecipes = freezeW6FilterCompositeLayerFilteredRecipesV1(passes, resources + source.resources)
+        val filterCompositeLayerDestinationRecipes = freezeW6FilterCompositeLayerDestinationRecipesV1(passes, resources + source.resources)
+        val filterCompositeLayerFilteredDestinationRecipes = freezeW6FilterCompositeLayerFilteredDestinationRecipesV1(passes, resources + source.resources)
+        val filterCompositePicturePlainRecipes = freezeW6FilterCompositePicturePlainRecipesV1(passes, resources + source.resources)
+        val filterCompositePictureGraphRecipes = freezeW6FilterCompositePictureGraphRecipesV1(passes, resources + source.resources)
+        val filterCompositePictureGraphFilteredRecipes = freezeW6FilterCompositePictureGraphFilteredRecipesV1(passes, resources + source.resources)
+        val filterCompositePictureGraphDestinationRecipes = freezeW6FilterCompositePictureGraphDestinationRecipesV1(passes, resources + source.resources)
+        val filterCompositePictureGraphFilteredDestinationRecipes = freezeW6FilterCompositePictureGraphFilteredDestinationRecipesV1(passes, resources + source.resources)
+        val filterCompositePictureDestinationRecipes = freezeW6FilterCompositePictureDestinationRecipesV1(passes, resources + source.resources)
+        val clipMaskInitializeRecipes = freezeW4eClipMaskInitializeRecipesV1(finalW4eBindings)
+        val clipMaskProducerRecipes = freezeW4eClipMaskProducerRecipesV1(finalW4eBindings, resources + source.resources)
+        val clipMaskProducerDirectTriangleRecipes = freezeW4eClipMaskProducerDirectTriangleRecipesV1(finalW4eBindings, resources + source.resources)
+        val clipMaskProducerStencilEdgeRecipes = freezeW4eClipMaskProducerStencilEdgeRecipesV1(finalW4eBindings, resources + source.resources)
+        val pathRenderDirectColorRecipes = freezeW6PathRenderDirectColorRecipesV1(finalW4eBindings, resources + source.resources)
+        val inverseMaskPathRecipes = freezeW6InverseMaskPathRecipesV1(w4eBindings, resources + source.resources)
+        val inverseDomainZeroCoverRecipes = freezeW6InverseDomainZeroCoverRecipesV1(finalW4eBindings, resources + source.resources)
+        val inverseDomainDirectRecipes = freezeW6InverseDomainDirectRecipesV1(finalW4eBindings, resources + source.resources)
+        val inverseDomainFanRecipes = freezeW6InverseDomainFanRecipesV1(finalW4eBindings, resources + source.resources)
+        val clipMaskFoldRecipes = freezeW4eClipMaskFoldRecipesV1(finalW4eBindings, resources + source.resources)
+        val w6bCoverageRasterGeometry = freezeW6bCoverageRasterGeometryV1(passes, resources + source.resources, caps)
+        val w6bCoverageRasterHostRecipes = freezeW6bCoverageRasterHostsV1(passes, resources + source.resources, w6bCoverageRasterGeometry)
+        val w6FullscreenEmptyRecipes = freezeW6FullscreenEmptyRecipesV1(passes, resources + source.resources)
+        val w6FullscreenCoverageAlphaRecipes = freezeW6FullscreenCoverageAlphaRecipesV1(passes, resources + source.resources)
+        val w6FullscreenCoverageSolidRectRecipes = freezeW6FullscreenCoverageSolidRectRecipesV1(passes, resources + source.resources)
+        val w6FullscreenCoverageRetainRecipes = freezeW6FullscreenCoverageRetainRecipesV1(passes, resources + source.resources)
+        val w6FullscreenPictureSourceLayerRecipes = freezeW6FullscreenPictureSourceLayerRecipesV1(passes, resources + source.resources)
+        val w6FullscreenPictureSourceGraphRecipes = freezeW6FullscreenPictureSourceGraphRecipesV1(passes, resources + source.resources)
+        val w6FilterSpatialCropRecipes = freezeW6FilterSpatialCropRecipesV1(passes, resources + source.resources)
+        val w6FilterSpatialOffsetRecipes = freezeW6FilterSpatialOffsetRecipesV1(passes, resources + source.resources)
+        val w6FilterSpatialTileRecipes = freezeW6FilterSpatialTileRecipesV1(passes, resources + source.resources)
+        val w6FilterMorphologyRecipes = freezeW6FilterMorphologyRecipesV1(passes, resources + source.resources)
+        val w6FilterColorFilterRecipes = freezeW6FilterColorFilterRecipesV1(passes, resources + source.resources)
+        val w6FilterMergeRecipes = freezeW6FilterMergeRecipesV1(passes, resources + source.resources)
+        val w6FilterBlendRecipes = freezeW6FilterBlendRecipesV1(passes, resources + source.resources)
+        val w6FilterSeparableBlurRecipes = freezeW6FilterSeparableBlurRecipesV1(passes, resources + source.resources)
+        val w6FilterMaskBlurNormalRecipes = freezeW6FilterMaskBlurNormalRecipesV1(passes, resources + source.resources)
+        val w6FilterMaskBlurDualSourceRecipes = freezeW6FilterMaskBlurDualSourceRecipesV1(passes, resources + source.resources)
+        val w6FilterMaskShaderRecipes = if (passes.any { (it as? PlanPass.FilterPass)?.operation is FilterPassOperationV1.MaskShader })
+            freezeW6FilterMaskShaderRecipesV1(passes, resources + source.resources, requireNotNull(table)) else emptyMap()
+        val w6FilterMaskTableRecipes = freezeW6FilterMaskTableRecipesV1(passes, resources + source.resources)
+        val w6FilterMaterializedSourceRecipes = freezeW6FilterMaterializedSourceRecipesV1(passes, resources + source.resources)
+        val w6FilterDropShadowColorizeRecipes = freezeW6FilterDropShadowColorizeRecipesV1(passes, resources + source.resources)
+        val w6FilterDropShadowCompositeRecipes = freezeW6FilterDropShadowCompositeRecipesV1(passes, resources + source.resources)
+        // W4e's terminal masked consumer is physically final even though its PathRenderPass is
+        // carried by the rebased binding rather than the top-level pass list.  Feed that sealed
+        // binding to the catalog so its owner is authenticated before native allocation.
+        val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
+            passes + finalW4eBindings.flatMap { it.nativePasses() }, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
+            plainLayerCompositeRecipes, filteredLayerCompositeRecipes, layerCompositeDestinationRecipes, layerCompositeFilteredDestinationRecipes, pictureCompositeGraphRecipes, pictureCompositeGraphFilteredRecipes, pictureCompositeGraphDestinationRecipes, filterCompositeDrawRecipes, filterCompositeLayerPlainRecipes, filterCompositeLayerFilteredRecipes, filterCompositeLayerDestinationRecipes, filterCompositeLayerFilteredDestinationRecipes, filterCompositePicturePlainRecipes, filterCompositePictureGraphRecipes, filterCompositePictureGraphFilteredRecipes, filterCompositePictureGraphDestinationRecipes, filterCompositePictureGraphFilteredDestinationRecipes, filterCompositePictureDestinationRecipes, clipMaskInitializeRecipes, clipMaskProducerRecipes, clipMaskProducerDirectTriangleRecipes, clipMaskProducerStencilEdgeRecipes, clipMaskFoldRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
+            w6FullscreenCoverageAlphaRecipes,
+            w6FullscreenCoverageSolidRectRecipes,
+            w6FullscreenCoverageRetainRecipes,
+            w6FullscreenPictureSourceLayerRecipes,
+            w6FullscreenPictureSourceGraphRecipes,
+            w6FilterSpatialCropRecipes, w6FilterSpatialOffsetRecipes, w6FilterSpatialTileRecipes, w6FilterMorphologyRecipes, w6FilterColorFilterRecipes, w6FilterMergeRecipes, w6FilterBlendRecipes, w6FilterSeparableBlurRecipes, w6FilterMaskBlurNormalRecipes, w6FilterMaskBlurDualSourceRecipes, w6FilterMaskShaderRecipes, w6FilterMaskTableRecipes, w6FilterMaterializedSourceRecipes, w6FilterDropShadowColorizeRecipes, w6FilterDropShadowCompositeRecipes,
+            pathRenderDirectColors = pathRenderDirectColorRecipes,
+            inverseMaskPaths = inverseMaskPathRecipes,
+            inverseDomainZeroCovers = inverseDomainZeroCoverRecipes,
+            inverseDomainDirects = inverseDomainDirectRecipes,
+            inverseDomainFans = inverseDomainFanRecipes,
+            w5aOrdinarySolidSources = w5aOrdinarySolidSourceRecipes,
+        )
+        val finalSource = SourcePhysicalConstructionV1(
+            resources = source.resources,
+            uniforms = source.uniforms,
+            caches = source.caches,
+            w6cColorUniformBindings = source.w6cColorUniformBindings,
+            w4eGeometry = finalW4eBindings,
+            w6SolidRectHostRecipes = solidRectHostRecipes,
+            w6CorePrimitiveHostRecipes = corePrimitiveHostRecipes,
+            w6PreparedVerticesHostRecipes = preparedVerticesHostRecipes,
+            w6PlainLayerCompositeRecipes = plainLayerCompositeRecipes,
+            w6FilteredLayerCompositeRecipes = filteredLayerCompositeRecipes,
+            w6LayerCompositeDestinationRecipes = layerCompositeDestinationRecipes,
+            w6LayerCompositeFilteredDestinationRecipes = layerCompositeFilteredDestinationRecipes,
+            w6PictureCompositeGraphRecipes = pictureCompositeGraphRecipes,
+            w6PictureCompositeGraphFilteredRecipes = pictureCompositeGraphFilteredRecipes,
+            w6PictureCompositeGraphDestinationRecipes = pictureCompositeGraphDestinationRecipes,
+            w6FilterCompositeDrawRecipes = filterCompositeDrawRecipes,
+            w6FilterCompositeLayerPlainRecipes = filterCompositeLayerPlainRecipes,
+            w6FilterCompositeLayerFilteredRecipes = filterCompositeLayerFilteredRecipes,
+            w6FilterCompositeLayerDestinationRecipes = filterCompositeLayerDestinationRecipes,
+            w6FilterCompositeLayerFilteredDestinationRecipes = filterCompositeLayerFilteredDestinationRecipes,
+            w6FilterCompositePicturePlainRecipes = filterCompositePicturePlainRecipes,
+            w6FilterCompositePictureGraphRecipes = filterCompositePictureGraphRecipes,
+            w6FilterCompositePictureGraphFilteredRecipes = filterCompositePictureGraphFilteredRecipes,
+            w6FilterCompositePictureGraphDestinationRecipes = filterCompositePictureGraphDestinationRecipes,
+            w6FilterCompositePictureGraphFilteredDestinationRecipes = filterCompositePictureGraphFilteredDestinationRecipes,
+            w6FilterCompositePictureDestinationRecipes = filterCompositePictureDestinationRecipes,
+            w4eClipMaskInitializeRecipes = clipMaskInitializeRecipes,
+            w4eClipMaskProducerRecipes = clipMaskProducerRecipes,
+            w4eClipMaskProducerDirectTriangleRecipes = clipMaskProducerDirectTriangleRecipes,
+            w4eClipMaskProducerStencilEdgeRecipes = clipMaskProducerStencilEdgeRecipes,
+            w6PathRenderDirectColorRecipes = pathRenderDirectColorRecipes,
+            w6InverseMaskPathRecipes = inverseMaskPathRecipes,
+            w6InverseDomainZeroCoverRecipes = inverseDomainZeroCoverRecipes,
+            w6InverseDomainDirectRecipes = inverseDomainDirectRecipes,
+            w6InverseDomainFanRecipes = inverseDomainFanRecipes,
+            w4eClipMaskFoldRecipes = clipMaskFoldRecipes,
+            w6bCoverageRasterGeometry = w6bCoverageRasterGeometry,
+            w6bCoverageRasterHostRecipes = w6bCoverageRasterHostRecipes,
+            w6FullscreenEmptyRecipes = w6FullscreenEmptyRecipes,
+            w6FullscreenCoverageAlphaRecipes = w6FullscreenCoverageAlphaRecipes,
+            w6FullscreenCoverageSolidRectRecipes = w6FullscreenCoverageSolidRectRecipes,
+            w6FullscreenCoverageRetainRecipes = w6FullscreenCoverageRetainRecipes,
+            w6FullscreenPictureSourceLayerRecipes = w6FullscreenPictureSourceLayerRecipes,
+            w6FullscreenPictureSourceGraphRecipes = w6FullscreenPictureSourceGraphRecipes,
+            w6FilterSpatialCropRecipes = w6FilterSpatialCropRecipes,
+            w6FilterSpatialOffsetRecipes = w6FilterSpatialOffsetRecipes,
+            w6FilterSpatialTileRecipes = w6FilterSpatialTileRecipes,
+            w6FilterMorphologyRecipes = w6FilterMorphologyRecipes,
+            w6FilterColorFilterRecipes = w6FilterColorFilterRecipes,
+            w6FilterMergeRecipes = w6FilterMergeRecipes,
+            w6FilterBlendRecipes = w6FilterBlendRecipes,
+            w6FilterSeparableBlurRecipes = w6FilterSeparableBlurRecipes,
+            w6FilterMaskBlurNormalRecipes = w6FilterMaskBlurNormalRecipes,
+            w6FilterMaskBlurDualSourceRecipes = w6FilterMaskBlurDualSourceRecipes,
+            w6FilterMaskShaderRecipes = w6FilterMaskShaderRecipes,
+            w6FilterMaskTableRecipes = w6FilterMaskTableRecipes,
+            w6FilterMaterializedSourceRecipes = w6FilterMaterializedSourceRecipes,
+            w6FilterDropShadowColorizeRecipes = w6FilterDropShadowColorizeRecipes,
+            w6FilterDropShadowCompositeRecipes = w6FilterDropShadowCompositeRecipes,
+            w5aOrdinarySolidSourceRecipes = w5aOrdinarySolidSourceRecipes,
+            nativeSiteRecipeCatalogV1 = nativeSiteRecipeCatalog,
+        )
+        val allResources = resources + finalSource.resources
         val peak = W6aLayerPlanBudget.peak(allResources, passes, caps, budget)
         val construction = RenderGraph.construct(id, W6aLayerPlanCompiler.CAPABILITY_ID, extent,
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, caps, budget, RenderGraph.visualDraws(passes).size, allResources, passes,
             passes.zipWithNext { first, second -> PlanPassDependency(first.id, second.id) }, peak, table)
         val sourceNonUniform = Math.subtractExact(construction.peakFrameLocalBytes,
-            source.resources.filter { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) })
+            finalSource.resources.filter { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) })
         val frozenMaterialRows = buildList {
             maskMaterialRoots.forEach { (occurrenceIdI32, material) ->
                 val source = maskMaterialSourcesByOccurrence.getValue(occurrenceIdI32)
@@ -3208,15 +3434,7 @@ internal class W6aLayerGraphConstruction(
             }
         }
         return RenderGraph.publishW6a(construction, frame,
-            packConstructedFrame(listOf(construction), table, sourceNonUniform, frozenMaterialRows), SourcePhysicalConstructionV1(
-                resources = source.resources,
-                uniforms = source.uniforms,
-                caches = source.caches,
-                w6cColorUniformBindings = source.w6cColorUniformBindings,
-                w4eGeometry = w4eBindings.map { binding ->
-                    binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
-                },
-            ))
+            packConstructedFrame(listOf(construction), table, sourceNonUniform, frozenMaterialRows), finalSource)
     }
 
     /** Appended after all native W5 lanes, preserving one source-table/publish authority. */
@@ -3463,10 +3681,16 @@ internal class W6aLayerGraphConstruction(
     }
 
     /** Removes only the deferred direct-filter clip wrappers; geometry remains W5-owned. */
-    private fun PlanDraw.withoutW6aTerminalClip(): PlanDraw {
+    private fun PlanDraw.withoutW6aTerminalClip(expandAnalyticRaster: Boolean = false): PlanDraw {
         var source = this
         while (source is ClippedPlanDraw) source = source.source
-        return source
+        if (!expandAnalyticRaster) return source
+        // A direct mask blur consumes analytic coverage before FilterComposite applies the clip.
+        return when (source) {
+            is AnalyticRectDraw, is AnalyticRRectDraw ->
+                source.withLocalizedScissorV6(w6aRasterBoundsI32(source))
+            else -> source
+        }
     }
 
     /** Bakes an already-admitted hard clip into the existing W4 draw; no renderer clip planning occurs. */

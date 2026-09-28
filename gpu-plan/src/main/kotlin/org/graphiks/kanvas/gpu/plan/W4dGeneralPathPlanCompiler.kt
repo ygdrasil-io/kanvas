@@ -99,6 +99,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         candidate: GpuPlanCandidate,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
+        scanSpanProducerCommandIndexes: Set<Int> = emptySet(),
     ): RenderPlanResult<W4dGeneralFramePreview> {
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
@@ -117,8 +118,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
         val geometry = selected.draws.map { it.fillGeometry() }
         return try {
-            if (anyAa) preflightAa(selected, capabilities, budget, geometry, anyHard, hardStencil)
-            else preflightHard(selected, capabilities, budget, geometry, hardStencil)
+            if (anyAa) preflightAa(selected, capabilities, budget, geometry, anyHard, hardStencil, scanSpanProducerCommandIndexes)
+            else preflightHard(selected, capabilities, budget, geometry, hardStencil, scanSpanProducerCommandIndexes)
         } catch (_: ArithmeticException) {
             resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 arithmetic overflowed")
         } catch (_: IllegalArgumentException) {
@@ -501,12 +502,15 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         budget: PlanBudget,
         geometries: List<org.graphiks.math.geometry.PathFillGeometryF32>,
         usesStencil: Boolean,
-    ): RenderPlanResult<W4dGeneralFramePreview> = withHardMemory(selected,capabilities,budget,geometries) { memory ->
+        scanSpanProducerCommandIndexes: Set<Int>,
+    ): RenderPlanResult<W4dGeneralFramePreview> = withHardMemory(selected,capabilities,budget,geometries,
+        scanSpanProducerCommandIndexes) { memory ->
         RenderPlanResult.Ready(hardFramePreview(selected,memory,usesStencil))
     }
 
     private fun <T: Any> withHardMemory(selected: Candidate,capabilities: PlanCapabilitySnapshot,budget: PlanBudget,
         geometries: List<org.graphiks.math.geometry.PathFillGeometryF32>,
+        scanSpanProducerCommandIndexes: Set<Int> = emptySet(),
         finish: (PathFillMemoryFootprint)->RenderPlanResult<T>): RenderPlanResult<T> {
         val provisionalMemory = when (val value = PathStrokePlanBudget.calculate(
             SizeI32(selected.target.extent.width, selected.target.extent.height), geometries, capabilities, budget,
@@ -517,7 +521,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
         val memory = w4dGeneralExactFrameMemory(
             provisionalMemory,
-            w4dGeneralNativePayloadBudget(selected.draws, materializesHardMasks = false),
+            w4dGeneralNativePayloadBudget(selected.draws, materializesHardMasks = false, scanSpanProducerCommandIndexes),
             capabilities,
         ) ?: return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
         if (memory.peakBytes > budget.maxFrameLocalBytes) {
@@ -534,6 +538,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         geometries: List<org.graphiks.math.geometry.PathFillGeometryF32>,
         anyHard: Boolean,
         hardStencil: Boolean,
+        scanSpanProducerCommandIndexes: Set<Int>,
     ): RenderPlanResult<W4dGeneralFramePreview> {
         val provisionalMemory = when (val value = PathAaPlanBudget.calculate(
             targetExtent = SizeI32(selected.target.extent.width, selected.target.extent.height),
@@ -550,7 +555,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
         val base = w4dGeneralExactFrameMemory(
             provisionalMemory.base,
-            w4dGeneralNativePayloadBudget(selected.draws, materializesHardMasks = true),
+            w4dGeneralNativePayloadBudget(selected.draws, materializesHardMasks = true, scanSpanProducerCommandIndexes),
             capabilities,
         ) ?: return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
         val terminalPeakBytes = try {
@@ -674,8 +679,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             resources = buildList {
                 add(FrameResourceSpan(memory.targetBytes, 0, passCount))
                 add(FrameResourceSpan(memory.readbackBytes, readbackIndex, passCount))
-                add(FrameResourceSpan(memory.vertexCapacityBytes, 0, passCount))
-                add(FrameResourceSpan(memory.indexCapacityBytes, 0, passCount))
+                add(FrameResourceSpan(memory.vertexCapacityBytes, 0, passCount, PlanResourceRole.VertexData))
+                add(FrameResourceSpan(memory.indexCapacityBytes, 0, passCount, PlanResourceRole.IndexData))
                 add(FrameResourceSpan(memory.uniformCapacityBytes, 0, passCount))
                 if (usesStencil) add(FrameResourceSpan(memory.depthStencilBytes, 0, passCount))
             },
@@ -702,8 +707,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     add(FrameResourceSpan(memory.hardEdgeDepthStencilCapacityBytes, life.first, life.last))
                 }
                 add(FrameResourceSpan(memory.base.readbackBytes, topology.readbackIndex, topology.passCount))
-                add(FrameResourceSpan(memory.base.vertexCapacityBytes, 0, topology.passCount))
-                add(FrameResourceSpan(memory.base.indexCapacityBytes, 0, topology.passCount))
+                add(FrameResourceSpan(memory.base.vertexCapacityBytes, 0, topology.passCount, PlanResourceRole.VertexData))
+                add(FrameResourceSpan(memory.base.indexCapacityBytes, 0, topology.passCount, PlanResourceRole.IndexData))
                 add(FrameResourceSpan(memory.base.uniformCapacityBytes, 0, topology.passCount))
             },
             colorConsumerPassByCommand = topology.colorConsumerPassByCommand,
@@ -1007,6 +1012,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private fun w4dGeneralNativePayloadBudget(
         draws: List<SealedDraw>,
         materializesHardMasks: Boolean,
+        scanSpanProducerCommandIndexes: Set<Int> = emptySet(),
     ): W4dGeneralNativePayloadBudget {
         var vertexFloatCount = 0L
         var indexCount = 0L
@@ -1020,8 +1026,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             when (draw.strategy) {
                 PathFillStrategy.DirectTriangle -> {
                     val direct = requireNotNull(geometry.copyDirectTriangleF32OrNull())
-                    vertexFloatCount = Math.addExact(vertexFloatCount, direct.copyVerticesF32().size.toLong())
-                    indexCount = Math.addExact(indexCount, direct.copyIndicesI32().size.toLong())
+                    if (draw.commandIndex !in scanSpanProducerCommandIndexes) {
+                        vertexFloatCount = Math.addExact(vertexFloatCount, direct.copyVerticesF32().size.toLong())
+                        indexCount = Math.addExact(indexCount, direct.copyIndicesI32().size.toLong())
+                    }
                     uniforms += 32L
                     if (materializesHardMasks && !draw.requestsAntiAlias) {
                         addQuad()
@@ -1058,9 +1066,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             Math.addExact(total, w4dGeneralAlignUp(bytes, alignment))
         }
         val policy = capabilities.bufferAllocationPolicy
-        val vertexCapacityBytes = policy.reserve(PlanScratchBufferKind.Vertex, vertexUsefulBytes) ?: return null
-        val indexCapacityBytes = policy.reserve(PlanScratchBufferKind.Index, indexUsefulBytes) ?: return null
-        val uniformCapacityBytes = policy.reserve(PlanScratchBufferKind.Uniform, uniformReservedBytes) ?: return null
+        // The W4e scan-span producer has no indexed upload, but it still owns the established
+        // physical scratch pools.  Reserve their policy floor once; reserve(0) means "no pool"
+        // in the shared policy and would incorrectly turn this valid route into an overflow.
+        fun reserve(kind: PlanScratchBufferKind, usefulBytes: Long): Long? =
+            policy.reserve(kind, maxOf(1L, usefulBytes))
+        val vertexCapacityBytes = reserve(PlanScratchBufferKind.Vertex, vertexUsefulBytes) ?: return null
+        val indexCapacityBytes = reserve(PlanScratchBufferKind.Index, indexUsefulBytes) ?: return null
+        val uniformCapacityBytes = reserve(PlanScratchBufferKind.Uniform, uniformReservedBytes) ?: return null
         if (listOf(vertexCapacityBytes, indexCapacityBytes, uniformCapacityBytes).any { value ->
                 value > Int.MAX_VALUE.toLong()
             }

@@ -24,6 +24,245 @@ import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
+    /** IIIc3d2: graph red SCREEN green is yellow, then DIFFERENCE against the prior blue Picture is white. */
+    @Test
+    fun externalPictureFilterWithColorFilterDifferenceReadsDestinationSnapshotFromGraphOperand() {
+        // Removing b1 gives magenta, removing b2 gives yellow, and sampling the blue carrier gives green.
+        val expected = ubyteArrayOf(255u, 255u, 255u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        fun picture(color: ColorARGB) = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(color, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val source = picture(ColorARGB.Red)
+        val carrier = picture(ColorARGB.Blue)
+        val filteredParent = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+                drawPicture(carrier, Paint(
+                    imageFilter = ImageFilter.Picture(source),
+                    colorFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SCREEN),
+                    blendMode = BlendMode.DIFFERENCE,
+                    antiAlias = false,
+                ))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas { drawPicture(filteredParent, Paint(blendMode = BlendMode.SRC, antiAlias = false)) }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** IIIc3d1: the external graph source, rather than its blue carrier, reads the prior green Picture destination. */
+    @Test
+    fun externalPictureFilterDifferenceReadsDestinationSnapshotFromGraphOperand() {
+        val expectedGraphSource = ubyteArrayOf(255u, 255u, 0u, 255u)
+        // Blue carrier DIFFERENCE green would be cyan; a stale/transparent snapshot would leave red.
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        fun picture(color: ColorARGB) = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(color, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val source = picture(ColorARGB.Red)
+        val carrier = picture(ColorARGB.Blue)
+        val filteredParent = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+                drawPicture(carrier, Paint(
+                    imageFilter = ImageFilter.Picture(source),
+                    blendMode = BlendMode.DIFFERENCE,
+                    antiAlias = false,
+                ))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas { drawPicture(filteredParent, Paint(blendMode = BlendMode.SRC, antiAlias = false)) }
+
+        val result = surface.render()
+        assertContentEquals(expectedGraphSource, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** IIIc3c2: b0 red plus dynamic W5f SCREEN green is yellow; c1 without b1 remains red.
+     * A standalone blue carrier plus SCREEN would be cyan, but that direct Picture topology is
+     * intentionally outside Prepared Surface and is not substituted with PictureComposite. */
+    @Test
+    fun externalPictureFilterWithColorFilterUsesGraphOperandAndW5f() {
+        val expectedCompositeAndW5f = ubyteArrayOf(255u, 255u, 0u, 255u)
+        val expectedWithoutW5f = ubyteArrayOf(255u, 0u, 0u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        fun picture(color: ColorARGB) = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(color, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val source = picture(ColorARGB.Red)
+        val carrier = picture(ColorARGB.Blue)
+
+        fun render(paint: Paint): RenderResult {
+            val surface = Surface(1, 1)
+            surface.canvas { drawPicture(carrier, paint) }
+            return surface.render()
+        }
+
+        val compositeAndW5f = render(Paint(
+            imageFilter = ImageFilter.Picture(source),
+            colorFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SCREEN),
+            blendMode = BlendMode.SRC,
+            antiAlias = false,
+        ))
+        assertContentEquals(expectedCompositeAndW5f, compositeAndW5f.pixels)
+        assertTrue(compositeAndW5f.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+
+        val withoutW5f = render(Paint(
+            imageFilter = ImageFilter.Picture(source),
+            blendMode = BlendMode.SRC,
+            antiAlias = false,
+        ))
+        assertContentEquals(expectedWithoutW5f, withoutW5f.pixels)
+        assertTrue(withoutW5f.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** IIIc3c1: an external Picture filter supplies the graph operand, not the carrier Picture pixels. */
+    @Test
+    fun externalPictureFilterOnDrawPictureUsesGraphOperand() {
+        val expected = ubyteArrayOf(255u, 0u, 0u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        fun picture(color: ColorARGB) = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(color, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val source = picture(ColorARGB.Red)
+        val carrier = picture(ColorARGB.Blue)
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            drawPicture(carrier, Paint(imageFilter = ImageFilter.Picture(source), blendMode = BlendMode.SRC, antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** IIIc3a: an inner filtered Picture restores its sealed source without a graph-texture operand. */
+    @Test
+    fun filteredInnerPictureRestoresWithoutGraphOperand() {
+        val expected = ubyteArrayOf(0u, 0u, 0u, 54u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(
+                ColorARGB.Red,
+                imageFilter = ImageFilter.ColorFilter(ColorFilter.Luma),
+                blendMode = BlendMode.SRC,
+                antiAlias = false,
+            ))
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+            drawPicture(picture, Paint(blendMode = BlendMode.SRC, antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** IIIc3b: an inner filtered Picture reads its preceding Picture destination for DIFFERENCE. */
+    @Test
+    fun filteredInnerPictureDifferenceReadsDestinationSnapshotWithoutGraphOperand() {
+        val expected = ubyteArrayOf(0u, 255u, 255u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+                drawRect(bounds, Paint(
+                    ColorARGB.Red,
+                    imageFilter = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC)),
+                    blendMode = BlendMode.DIFFERENCE,
+                    antiAlias = false,
+                ))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            drawPicture(picture, Paint(blendMode = BlendMode.SRC, antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** IIIb2b2: the graph Picture terminal reads a snapshot of its colored parent for DIFFERENCE. */
+    @Test
+    fun layerOwnedDrawPictureDifferenceReadsDestinationSnapshot() {
+        val expected = ubyteArrayOf(255u, 0u, 255u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            saveLayer(SaveLayerRec())
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+            drawPicture(picture, Paint(blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** IIIb2b2: the destination-read graph ABI also retains its W5f color-filter uniform. */
+    @Test
+    fun layerOwnedDrawPictureFilteredDifferenceReadsDestinationSnapshot() {
+        val expected = ubyteArrayOf(0u, 255u, 255u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            saveLayer(SaveLayerRec())
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+            drawPicture(picture, Paint(colorFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SRC),
+                blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** IIIb2b1: a layer-owned W6 frame applies the outer Picture color filter at its graph composite. */
+    @Test
+    fun layerOwnedDrawPictureWithColorFilterUsesGraphComposite() {
+        val expected = ubyteArrayOf(0u, 0u, 255u, 255u)
+        val pictureBounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(pictureBounds).drawRect(pictureBounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            saveLayer(SaveLayerRec())
+            drawRect(pictureBounds, Paint(ColorARGB.Red, antiAlias = false))
+            restore()
+            drawPicture(picture, Paint(colorFilter = ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC), antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /** Interleaved direct and filter-owned Pictures must retain distinct physical occurrences. */
     @Test
     fun interleavedDirectAndFilterPicturesRetainOrderAfterWireReplay() {
@@ -361,6 +600,33 @@ class W6dPictureFilterSurfacePixelTest {
         val surface = Surface(2, 1)
         surface.canvas {
             drawRect(bounds, Paint(ColorARGB.Black, imageFilter = ImageFilter.Picture(source), antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** W6 PictureComposite admits a nonempty root clip disjoint from its source as an Empty site. */
+    @Test
+    fun pictureCompositeNullScissorKeepsLayerSibling() {
+        val expected = ubyteArrayOf(
+            0u, 0u, 255u, 255u,
+            0u, 0u, 255u, 255u,
+        )
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 1f)
+        val rootOutside = RectF32.ofLTRB(2f, 0f, 3f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 1)
+        surface.canvas {
+            saveLayer(SaveLayerRec())
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+            clipRect(rootOutside, ClipOp.INTERSECT, antiAlias = false)
+            drawPicture(picture, Paint(antiAlias = false))
         }
 
         val result = surface.render()

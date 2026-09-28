@@ -24,7 +24,10 @@ class W6bImageBlurSurfacePixelTest {
 
         val surface = blurredImpulseSurface(TileMode.DECAL)
 
-        W6bImageBlurCpuOracle.assertNear(expected, surface.render().pixels)
+        val actual = surface.render()
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+        W6bImageBlurCpuOracle.assertNear(expected, actual.pixels)
     }
 
     @Test

@@ -72,7 +72,8 @@ internal class PreparedCommandRebindingV1(private val commandIndexI32: Int) {
                 source.depthStencilAccess, source.depthStencilLoadStore)
             is PlanPass.StencilGeometryProducerV3 -> PlanPass.StencilGeometryProducerV3(source.ordinal, source.target,
                 source.depthStencil, commandIndexI32, source.copyGeometry(), source.copyScissorI32(),
-                source.drawDataResources, group(source.atomicGroup), source.load, source.store)
+                source.drawDataResources, group(source.atomicGroup), source.load, source.store,
+                source.scanSpansDeviceI32, source.scanScissorsLocalI32)
             is PlanPass.StencilCover -> PlanPass.StencilCover(source.ordinal, source.target, source.depthStencil,
                 draw(source.draw) as PathDraw, source.drawDataResources, group(source.atomicGroup), source.load, source.store,
                 source.depthStencilAccess, source.depthStencilLoadStore, source.destinationVersionAfter,

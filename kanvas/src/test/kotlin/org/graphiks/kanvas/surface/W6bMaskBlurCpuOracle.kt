@@ -43,13 +43,27 @@ internal object W6bMaskBlurCpuOracle {
 
     fun renderDstOutOverGreen(): UByteArray = dstOutGreen(styled(BlurStyle.NORMAL, translatedRectCoverage()))
 
-    fun renderClippedRoundedRectMask(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, clippedRoundedRectCoverage()))
+    fun renderClippedRoundedRectMask(): UByteArray = hardClip(
+        opaqueSource(styled(BlurStyle.NORMAL, roundedRectCoverage())),
+    )
 
     fun renderDirectTriangleMaskSourceOver(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, directTriangleCoverage()))
+
+    /** Square-cap public Point fixture: a 2px point centred at (5,4) freezes [4,6)×[3,5). */
+    fun renderPointMaskSourceOver(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, pointCoverage()))
 
     fun renderStencilPathDstOutOverGreen(): UByteArray = dstOutGreen(styled(BlurStyle.NORMAL, stencilPathCoverage()))
 
     fun renderStencilPathMaskSourceOver(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, stencilPathCoverage()))
+
+    fun renderTranslatedStencilPathMaskSourceOver(): UByteArray =
+        opaqueSource(styled(BlurStyle.NORMAL, translatedStencilPathCoverage()))
+
+    fun renderEvenOddDonutMaskSourceOver(): UByteArray =
+        opaqueSource(styled(BlurStyle.NORMAL, evenOddDonutCoverage()))
+
+    fun renderStrokeMaskSourceOver(coverageRgba: UByteArray): UByteArray =
+        opaqueSource(styled(BlurStyle.NORMAL, FloatArray(widthI32 * heightI32) { coverageRgba[it * 4 + 3].toInt() / 255f }))
 
     fun renderLayerOverBlue(): UByteArray = sourceOverBlue(opaqueSourceAlpha(styled(BlurStyle.NORMAL, translatedRectCoverage())))
 
@@ -72,6 +86,14 @@ internal object W6bMaskBlurCpuOracle {
         return pictureMaskSource(childCoverage, blur(innerMask))
     }
 
+    /** A Picture-owned source carries paint alpha in coverage; MaterializedSource keeps its source support. */
+    fun renderPictureOwnedMultiplyMaskBlur(): UByteArray {
+        val sourceAlpha = FloatArray(widthI32 * heightI32)
+        fillRect(sourceAlpha, 3, 2, 7, 6, 0.5f)
+        val mask = blur(sourceAlpha)
+        return pictureMaskWithSourceSupport(sourceAlpha, mask)
+    }
+
     private fun translatedRectCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
         // The public draw is local [3,6)×[3,6) after translate(1, 0).
         fillRect(coverage, 4, 3, 7, 6, 1f)
@@ -89,16 +111,21 @@ internal object W6bMaskBlurCpuOracle {
         }
     }
 
-    private fun clippedRoundedRectCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+    /** Fixed-grid RRect area coverage, evaluated before the public hard clip. */
+    private fun roundedRectCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
         for (yI32 in 0 until heightI32) for (xI32 in 0 until widthI32) {
-            val xF32 = xI32 + .5f
-            val yF32 = yI32 + .5f
-            val clip = xF32 >= 3f && xF32 < 8f && yF32 >= 2f && yF32 < 7f
-            val nearestX = xF32.coerceIn(4f, 6f)
-            val nearestY = yF32.coerceIn(4f, 5f)
-            val dxF32 = xF32 - nearestX
-            val dyF32 = yF32 - nearestY
-            if (clip && dxF32 * dxF32 + dyF32 * dyF32 <= 4f) coverage[yI32 * widthI32 + xI32] = 1f
+            var coveredSamplesI32 = 0
+            repeat(rrectSamplesPerAxisI32) { sampleYI32 -> repeat(rrectSamplesPerAxisI32) { sampleXI32 ->
+                val xF32 = xI32 + (sampleXI32 + .5f) / rrectSamplesPerAxisI32
+                val yF32 = yI32 + (sampleYI32 + .5f) / rrectSamplesPerAxisI32
+                val nearestX = xF32.coerceIn(4f, 6f)
+                val nearestY = yF32.coerceIn(4f, 5f)
+                val dxF32 = xF32 - nearestX
+                val dyF32 = yF32 - nearestY
+                if (dxF32 * dxF32 + dyF32 * dyF32 <= 4f) coveredSamplesI32++
+            } }
+            coverage[yI32 * widthI32 + xI32] = coveredSamplesI32.toFloat() /
+                (rrectSamplesPerAxisI32 * rrectSamplesPerAxisI32).toFloat()
         }
     }
 
@@ -124,6 +151,26 @@ internal object W6bMaskBlurCpuOracle {
         }
     }
 
+    private fun translatedStencilPathCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        val vertices = arrayOf(floatArrayOf(2f, 2f), floatArrayOf(8f, 2f), floatArrayOf(8f, 6f),
+            floatArrayOf(5f, 4f), floatArrayOf(2f, 6f))
+        for (yI32 in 0 until heightI32) for (xI32 in 0 until widthI32) {
+            val xF32 = xI32 + .5f; val yF32 = yI32 + .5f
+            var inside = false
+            for (indexI32 in vertices.indices) {
+                val start = vertices[indexI32]; val end = vertices[(indexI32 + 1).rem(vertices.size)]
+                if ((start[1] > yF32) != (end[1] > yF32) &&
+                    xF32 < (end[0] - start[0]) * (yF32 - start[1]) / (end[1] - start[1]) + start[0]) inside = !inside
+            }
+            if (inside) coverage[yI32 * widthI32 + xI32] = 1f
+        }
+    }
+
+    private fun evenOddDonutCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        fillRect(coverage, 2, 2, 8, 6, 1f)
+        fillRect(coverage, 4, 3, 6, 5, 0f)
+    }
+
     private fun directTriangleCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
         val vertices = arrayOf(
             floatArrayOf(2f, 2f),
@@ -142,6 +189,10 @@ internal object W6bMaskBlurCpuOracle {
             if ((cross0 >= 0f && cross1 >= 0f && cross2 >= 0f) ||
                 (cross0 <= 0f && cross1 <= 0f && cross2 <= 0f)) coverage[yI32 * widthI32 + xI32] = 1f
         }
+    }
+
+    private fun pointCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        fillRect(coverage, 4, 3, 6, 5, 1f)
     }
 
     private fun styled(style: BlurStyle, original: FloatArray): FloatArray {
@@ -190,6 +241,16 @@ internal object W6bMaskBlurCpuOracle {
 
     private fun opaqueSource(alpha: FloatArray): UByteArray = opaqueSourceAlpha(alpha)
 
+    /** The canvas clip is a hard scissor over the final premultiplied bytes. */
+    private fun hardClip(pixels: UByteArray): UByteArray = pixels.also { output ->
+        for (yI32 in 0 until heightI32) for (xI32 in 0 until widthI32) {
+            if (xI32 !in 3 until 8 || yI32 !in 2 until 7) {
+                val offsetI32 = (yI32 * widthI32 + xI32) * 4
+                repeat(4) { channelI32 -> output[offsetI32 + channelI32] = 0u }
+            }
+        }
+    }
+
     private fun opaqueWhiteSource(alpha: FloatArray): UByteArray = UByteArray(alpha.size * 4).also { pixels ->
         alpha.forEachIndexed { pixelI32, alphaF32 ->
             val offsetI32 = pixelI32 * 4
@@ -220,6 +281,19 @@ internal object W6bMaskBlurCpuOracle {
         }
     }
 
+    private fun pictureMaskWithSourceSupport(sourceAlpha: FloatArray, mask: FloatArray): UByteArray = UByteArray(mask.size * 4).also { pixels ->
+        mask.indices.forEach { pixelI32 ->
+            if (sourceAlpha[pixelI32] > 0f) {
+                val offsetI32 = pixelI32 * 4
+                val encoded = encodePremul(mask[pixelI32])
+                pixels[offsetI32] = encoded
+                pixels[offsetI32 + 1] = encoded
+                pixels[offsetI32 + 2] = encoded
+                pixels[offsetI32 + 3] = encodeAlpha(mask[pixelI32])
+            }
+        }
+    }
+
     private fun dstOutGreen(mask: FloatArray): UByteArray = UByteArray(mask.size * 4).also { pixels ->
         mask.forEachIndexed { pixelI32, alphaF32 ->
             val remainingF32 = (1f - alphaF32).coerceIn(0f, 1f)
@@ -245,4 +319,6 @@ internal object W6bMaskBlurCpuOracle {
 
     private fun encodePremul(valueF32: Float): UByte = (valueF32.coerceIn(0f, 1f).pow(1f / 2.2f) * 255f).roundToInt().toUByte()
     private fun encodeAlpha(valueF32: Float): UByte = (valueF32.coerceIn(0f, 1f) * 255f).roundToInt().toUByte()
+
+    private const val rrectSamplesPerAxisI32 = 8
 }

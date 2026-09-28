@@ -23,9 +23,13 @@ import org.junit.jupiter.api.Test
 class W6aLayerSurfacePixelTest {
     @Test
     fun `emptyLayerWithoutAnySourceRemainsTransparent`() {
+        val expected = UByteArray(64)
         val surface = Surface(4, 4)
         surface.canvas { saveLayer(); restore() }
-        assertContentEquals(UByteArray(64), surface.render().pixels)
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test
@@ -110,6 +114,9 @@ class W6aLayerSurfacePixelTest {
 
     @Test
     fun `boundedLayerIsolatesOverlappingChildren`() {
+        val expected = UByteArray(64) { index -> when (index % 4) {
+            0 -> 17u; 1 -> 61u; 2 -> 211u; else -> 255u
+        } }
         val surface = Surface(4, 4)
         surface.canvas {
             saveLayer(RectF32.ofLTRB(0f, 0f, 4f, 4f))
@@ -118,7 +125,9 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        assertPixel(surface.render().pixels, 4, 1, 1, 17, 61, 211, 255)
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test
@@ -151,6 +160,12 @@ class W6aLayerSurfacePixelTest {
 
     @Test
     fun `twoEqualLayerDescriptorsRemainDistinctOccurrences`() {
+        val expected = UByteArray(64) { index -> when (index % 4) {
+            0 -> if ((index / 4) % 4 < 2) 239u else 17u
+            1 -> if ((index / 4) % 4 < 2) 51u else 61u
+            2 -> if ((index / 4) % 4 < 2) 73u else 211u
+            else -> 255u
+        } }
         val surface = Surface(4, 4)
         surface.canvas {
             saveLayer()
@@ -161,13 +176,16 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        val pixels = surface.render().pixels
-        assertPixel(pixels, 4, 0, 1, 239, 51, 73, 255)
-        assertPixel(pixels, 4, 3, 1, 17, 61, 211, 255)
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test
     fun `ordinaryLayerDoesNotUseLegacyFallback`() {
+        val expected = UByteArray(64) { index -> when (index % 4) {
+            0 -> 17u; 1 -> 61u; 2 -> 211u; else -> 255u
+        } }
         val surface = Surface(4, 4)
         surface.canvas {
             saveLayer(RectF32.ofLTRB(0f, 0f, 4f, 4f))
@@ -175,7 +193,9 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        assertPixel(surface.render().pixels, 4, 1, 1, 17, 61, 211, 255)
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test

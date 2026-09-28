@@ -415,6 +415,13 @@ Les additions et multiplications de budget utilisent I64 avec overflow
 vérifié. Le budget couvre les bytes logiques et physiques, alignements inclus.
 Un refus de budget précède toute allocation et garde un diagnostic stable.
 
+Pour les modules, pipelines et samplers dont le driver ne révèle pas la taille,
+« couvre » signifie une **lease logique pessimiste** identifiée, gelée et
+comptée avant matérialisation, et non une mesure byte-exacte de l'allocation
+native. Les `PlanResource` de taille déclarée restent comptés exactement.
+L'[amendement de fermeture W6](2026-09-26-w6-final-gates-design.md) précise
+l'inventaire, les owners et les preuves de cette limite.
+
 ## 12. Matérialisation et rollback
 
 W6 distingue quatre frontières qui ne partagent pas le mot
@@ -542,7 +549,9 @@ La livraison est séquentielle :
 2. W6b, stackée sur W6a ;
 3. W6c, stackée sur W6b ;
 4. W6d, stackée sur W6c ;
-5. W6e, stackée sur W6d.
+5. le prérequis de bounds contextuels W6e, stacké sur W6d ;
+6. W6e, stackée sur ce prérequis ;
+7. la correction des derniers gates W6, stackée sur W6e.
 
 Chaque lot utilise un agent d'implémentation adapté, Astra pour les tâches
 architecturales ou numériques complexes. Sol est réservé aux reviews. Une
@@ -569,7 +578,8 @@ W6 est fermée lorsque :
 6. aucune route admise ne reconstruit scope, bounds, ressources ou filtre ;
 7. les quatre régions de bounds et leurs mappings restent identiques jusqu'au
    native ;
-8. les budgets couvrent toutes les ressources avant allocation ;
+8. les budgets couvrent exactement les ressources déclarées et réservent
+   logiquement les artefacts driver opaques avant matérialisation, selon §11 ;
 9. les frontières plan gelé, publication native, soumission et visibilité
    publique sont distinctes, sans spécialisation tardive ;
 10. aucun fallback sémantique n'est possible après admission ;
@@ -593,6 +603,8 @@ W6 est fermée lorsque :
   AA4/MSAA ou formats HDR, avec diagnostic exact ;
 - device-loss non observable publiquement, tant qu'aucune API publique ne
   permet une preuve honnête.
+- taille byte-exacte des modules, pipelines et samplers opaques du driver :
+  seuls leurs leases logiques gelés sont revendiqués.
 
 Ces reports n'autorisent ni un fallback silencieux, ni une déclaration ISO ou
 Skia globale.

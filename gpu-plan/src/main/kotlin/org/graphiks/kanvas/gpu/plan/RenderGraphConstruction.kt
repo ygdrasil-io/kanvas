@@ -115,8 +115,12 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
                     source.copyScissorI32(),source.blend,composedV5=true)
                 is PathStrokeDraw -> PathStrokeDraw.ofMaterial(source.commandIndex,ref,source.copyGeometryF32(),
                     source.copyScissorI32(),source.mode,source.styleF64,source.blend,composedV5=true)
-                is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
-                    source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,composedV5=true)
+                is GeneralPathDraw -> when (source.copyPathGeometry()) {
+                    is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty ->
+                        source.rebindW4eSealedInverseMaterialV1(PlanDrawMaterialAuthority.MaterialV5(ref))
+                    else -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
+                        source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,composedV5=true)
+                }
                 else -> error(W5gPlanDiagnostics.Unpromoted)
             }
             val imageCoordinates = overlayCoordinates?.invoke(source)
@@ -127,8 +131,12 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
                     source.copyRasterBounds(),source.copyScissor(),source.blend,coordinatesV4=imageCoordinates)
                 is PathFillDraw -> PathFillDraw.ofMaterial(source.commandIndex,ref,source.copyGeometryF32(),source.strategy,
                     source.copyScissorI32(),source.blend,coordinatesV4=imageCoordinates)
-                is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
-                    source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,coordinatesV4=imageCoordinates)
+                is GeneralPathDraw -> when (source.copyPathGeometry()) {
+                    is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty ->
+                        source.rebindW4eSealedInverseMaterialV1(PlanDrawMaterialAuthority.MaterialV4(ref, imageCoordinates))
+                    else -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
+                        source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,coordinatesV4=imageCoordinates)
+                }
                 else -> error(W5fPlanDiagnostics.Unpromoted)
             }
             when (source) {
@@ -138,11 +146,24 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
                 is AnalyticRRectDraw -> source.withMaterialRef(ref)
                 is PathFillDraw -> source.withMaterialRef(ref)
                 is PathStrokeDraw -> source.withMaterialRef(ref)
-                is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
-                    source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,
-                    source.materialCoordinates,source.materialCoordinatesV2,
-                    (source.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
-                    source.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
+                is GeneralPathDraw -> when (source.copyPathGeometry()) {
+                    is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty -> {
+                        val authority = when (val current = source.materialAuthority) {
+                            is PlanDrawMaterialAuthority.MaterialV5 -> PlanDrawMaterialAuthority.MaterialV5(ref)
+                            is PlanDrawMaterialAuthority.MaterialV4 -> PlanDrawMaterialAuthority.MaterialV4(ref, current.coordinates)
+                            is PlanDrawMaterialAuthority.MaterialV3 -> PlanDrawMaterialAuthority.MaterialV3(ref, current.imageCoordinates)
+                            is PlanDrawMaterialAuthority.MaterialV2 -> PlanDrawMaterialAuthority.MaterialV2(ref, current.coordinates)
+                            is PlanDrawMaterialAuthority.MaterialV1 -> PlanDrawMaterialAuthority.MaterialV1(ref, current.coordinates)
+                            is PlanDrawMaterialAuthority.LegacyColorV1 -> error(W5fPlanDiagnostics.Unpromoted)
+                        }
+                        source.rebindW4eSealedInverseMaterialV1(authority)
+                    }
+                    else -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
+                        source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,
+                        source.materialCoordinates,source.materialCoordinatesV2,
+                        (source.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+                        source.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
+                }
                 else -> error("Unsupported composite construction draw")
             }
         }

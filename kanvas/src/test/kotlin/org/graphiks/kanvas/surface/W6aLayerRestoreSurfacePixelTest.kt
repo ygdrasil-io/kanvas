@@ -6,8 +6,10 @@ import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.assertContentEquals
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
@@ -21,6 +23,34 @@ import org.junit.jupiter.api.Test
  * the compact CPU equations deliberately do not invoke a planner, renderer, or test control.
  */
 class W6aLayerRestoreSurfacePixelTest {
+    @Test
+    fun `filteredLayerImageFilterRestoreWithoutColorFilterUsesSrcComposite`() {
+        val expected = rgbaCpu(0, 0, 0, 54)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+            saveLayer(paint = Paint(imageFilter = ImageFilter.ColorFilter(ColorFilter.Luma), blendMode = BlendMode.SRC, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `filtered layer restore color filter runs after image filter`() {
+        val expected = rgbaCpu(0, 255, 0, 255)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(paint = Paint(imageFilter = ImageFilter.ColorFilter(ColorFilter.Luma), colorFilter = opaqueGreenFromTransparentBlack(), blendMode = BlendMode.SRC, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
     @Test
     fun `restoreAlphaAppliesOnceToOverlappingChildren`() {
         // Opaque blue is the final child result. The independent CPU oracle applies 128/255 in
@@ -52,7 +82,9 @@ class W6aLayerRestoreSurfacePixelTest {
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
             restore()
         }
-        assertContentEquals(expected, surface.render().pixels)
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test
@@ -81,7 +113,67 @@ class W6aLayerRestoreSurfacePixelTest {
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.of(255, 239, 51, 73), antiAlias = false))
             restore()
         }
-        assertContentEquals(expected, surface.render().pixels)
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `color filtered layer difference restore uses fresh parent snapshot`() {
+        // The W5f restore filter turns the red child green before DIFFERENCE reads the fresh
+        // blue parent. This is cyan; absent W5f is magenta, a stale red snapshot is yellow,
+        // and filtering after the blend is green.
+        val expected = rgbaCpu(0, 255, 255, 255)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val restoreFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SRC)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(paint = Paint(colorFilter = restoreFilter, blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `filtered layer difference restore reads blue parent after image filter`() {
+        // The image filter replaces the child with opaque red before restore. DIFFERENCE against
+        // the immediately preceding opaque blue parent is opaque magenta.
+        val expected = rgbaCpu(255, 0, 255, 255)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val redImageFilter = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Red, BlendMode.SRC))
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(paint = Paint(imageFilter = redImageFilter, blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `filtered layer color filter difference restore reads blue parent after image filter`() {
+        // The image filter makes the layer red, then the restore color filter replaces it with
+        // green. DIFFERENCE against the fresh blue parent is therefore opaque cyan.
+        val expected = rgbaCpu(0, 255, 255, 255)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val redImageFilter = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Red, BlendMode.SRC))
+        val greenRestoreFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SRC)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(paint = Paint(
+                imageFilter = redImageFilter,
+                colorFilter = greenRestoreFilter,
+                blendMode = BlendMode.DIFFERENCE,
+                antiAlias = false,
+            ))
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test

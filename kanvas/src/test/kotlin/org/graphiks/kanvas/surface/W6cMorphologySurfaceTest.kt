@@ -4,6 +4,7 @@ package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
@@ -26,7 +27,10 @@ class W6cMorphologySurfaceTest {
             restore()
         }
 
-        assertContentEquals(expected, surface.render().pixels)
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test

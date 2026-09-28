@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.isW5aGradientSourceVariantV1
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
 import org.graphiks.kanvas.gpu.renderer.color.validateColorWgsl
 import org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2
@@ -170,7 +171,8 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
 private fun nativeSourcePacketV3(packets: List<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket>,
     ordinalI32: Int, source: W5aPacketMaterialSourceV2) =
     packets.singleOrNull()?.takeIf { packet ->
-        packet.w5bFinalFrameWitnessV3?.w4eLane?.owns(packet) == true &&
+        (packet.w5bFinalFrameWitnessV3?.w4eLane?.owns(packet) == true ||
+            packet.w4ePreparedClipConsumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain) &&
             packet.materialSourcePartitionV3() === source && packet.w4ePreparedFrameAuthority != null
     } ?: packets.getOrNull(ordinalI32)
 
@@ -409,6 +411,66 @@ internal fun materializeW5aSourcePartitionV2(
         .associate { it.index to (it.value as GPUFrameStep.RenderPassStep) }
     if (renders.values.none { render -> render.drawPackets.any { it.materialSourcePartitionV3() != null } }) return geometry
     val old = geometry.draft.payload
+    // The W5h witness is the sole logical input to this native provider.  Recheck the admitted
+    // raw bytes before this stage can create even its shared source buffers or layouts.
+    renders.values.flatMap { it.drawPackets }.filter { it.materialSourcePartitionV3() != null }.forEach { packet ->
+        val validated = sourceWitness.packet(framePlan, packet)
+        validated.nativeRecipe?.let { recipe ->
+            val source = requireNotNull(packet.materialSourcePartitionV3())
+            require(recipe.commandIndexI32 == packet.commandIdValue &&
+                recipe.materialStructuralId == source.stage.structuralId &&
+                recipe.materialCanonicalIdentity == source.stage.canonicalIdentity &&
+                recipe.uniformByteCountI64 == source.stage.uniformByteCountI64 &&
+                recipe.copyUniformBytes().contentEquals(source.stage.uniformBytes)) {
+                "W5a ordinary source native provider received a packet different from its preflight-sealed recipe"
+            }
+            if (recipe.variant.isW5aGradientSourceVariantV1()) {
+                val frame = requireNotNull(framePlan.w6aLayerFrameV1)
+                val slab = requireNotNull(source.stage.gradientStopSlab)
+                val resource = frame.physical.resource(requireNotNull(recipe.gradientStopResource))
+                require(recipe.gradientStopByteCountI64 == slab.byteSizeI64 &&
+                    recipe.gradientStopCanonicalIdentity == slab.canonicalIdentity &&
+                    requireNotNull(requireNotNull(frame.graph.materialPlanTableOrNull()).gradientStopSlab).canonicalIdentity == slab.canonicalIdentity &&
+                    resource.role == PlanResourceRole.GradientStopData && resource.byteSize == slab.byteSizeI64 &&
+                    resource.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination)) {
+                    "W5a ordinary gradient provider received a stop resource different from its preflight-sealed recipe"
+                }
+            }
+        }
+    }
+    // Resolve the native template for every admitted W5a site while this remains a read-only
+    // provider check.  Later allocation reuses this exact template rather than selecting one.
+    val verifiedOrdinaryTemplates = java.util.IdentityHashMap<GPURenderPipeline, GPUW5aGeometryPipelineTemplate>()
+    old.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>().forEach { operand ->
+        val render = renders.getValue(operand.sourceStepIndex)
+        if (render.drawPackets.none { it.materialSourcePartitionV3() != null }) return@forEach
+        val sources = sourceDrawsV2(render, operand)
+        var currentPipeline: GPUPreparedNativeRenderPipelineOperand? = null
+        var drawOrdinalI32 = 0
+        operand.commands.forEach { command ->
+            if (command is GPUPreparedNativeRenderCommand.SetPipeline) currentPipeline = command.pipeline
+            if (command !is GPUPreparedNativeRenderCommand.Draw && command !is GPUPreparedNativeRenderCommand.DrawIndexed) return@forEach
+            val ordinalI32 = drawOrdinalI32++
+            val source = sources.getOrNull(ordinalI32) ?: return@forEach
+            val packet = nativeSourcePacketV3(render.drawPackets, ordinalI32, source) ?: return@forEach
+            val validated = sourceWitness.packet(framePlan, packet)
+            if (validated.nativeRecipe == null) return@forEach
+            val base = requireNotNull(currentPipeline)
+            val template = templates.sourceTemplate(base.pipeline)
+                ?: old.auxiliaryOwnedHandles.asSequence().mapNotNull { it.handle as? GPUW5aGeometryPipelineTemplateProvider }
+                    .mapNotNull { it.sourceTemplate(base.pipeline) }.firstOrNull()
+                ?: error("W5a ordinary source native provider has no geometry template for its sealed pipeline")
+            require(template.descriptor.vertex.entryPoint == validated.template.vertexEntryPoint &&
+                template.pipelineRecipeId == validated.template.pipelineRecipeId &&
+                template.descriptor.fragment?.entryPoint == validated.template.fragmentEntryPoint &&
+                template.descriptor.fragment?.targets?.single()?.hostTargetV1() == validated.template.target) {
+                "W5a ordinary source native provider template differs from its preflight-sealed recipe"
+            }
+            require(verifiedOrdinaryTemplates.put(base.pipeline, template)?.let { it === template } != false) {
+                "W5a ordinary source native provider resolved conflicting templates for one pipeline"
+            }
+        }
+    }
     val owned = GPUW5aSourceOwnedHandlesV2()
     val generation = old.identity.deviceGeneration
     var replacement: GPUPreparedNativeFrameDraft? = null
@@ -507,6 +569,14 @@ internal fun materializeW5aSourcePartitionV2(
                 val source = sources[ordinalI32] ?: return@forEach
                 val sourcePacket = nativeSourcePacketV3(packets, ordinalI32, source)
                 val validated = sourceWitness.packet(framePlan, requireNotNull(sourcePacket))
+                // The preflight chose and authenticated the logical recipe before this source
+                // stage starts allocating.  A native template may only verify that translation.
+                validated.nativeRecipe?.let { recipe ->
+                    require(recipe.drawOrdinalI32 == ordinalI32 && recipe.commandIndexI32 == source.commandIdI32 &&
+                        recipe.materialStructuralId == source.stage.structuralId &&
+                        recipe.materialCanonicalIdentity == source.stage.canonicalIdentity &&
+                        recipe.copyUniformBytes().contentEquals(source.stage.uniformBytes))
+                }
                 val destination = (sourcePacket?.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
                     ?.also { requireNotNull(it.sealedW5b) { "W5 destination-read source lost its sealed final blend" } }
                     .takeUnless { materializesW6bMaskSource }
@@ -519,10 +589,11 @@ internal fun materializeW5aSourcePartitionV2(
                 val scalar = destination?.sealedW5b?.compositionAbiI32 == 4
                 require(!scalar || coverageGroup != null && packets[ordinalI32].corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === coverage?.witness)
                 val base = requireNotNull(currentPipeline)
-                val key = SourcePipelineKey(generation.value, validated.structuralId, base.pipeline, destination?.sealedW5b?.compositionAbiI32 ?: 2,
+                val programIdentity = validated.nativeRecipe?.canonicalLogicalEncodingV1() ?: validated.structuralId
+                val key = SourcePipelineKey(generation.value, programIdentity, base.pipeline, destination?.sealedW5b?.compositionAbiI32 ?: 2,
                     destinationCopy?.sourceKey, destinationCopy?.logicalBounds, materializesW6bMaskSource)
                 val (pipeline, materialLayout) = pipelines.getOrPut(key) {
-                    val template = templates.sourceTemplate(base.pipeline)
+                    val template = verifiedOrdinaryTemplates[base.pipeline] ?: templates.sourceTemplate(base.pipeline)
                         ?: old.auxiliaryOwnedHandles.asSequence().mapNotNull { it.handle as? GPUW5aGeometryPipelineTemplateProvider }
                             .mapNotNull { it.sourceTemplate(base.pipeline) }.firstOrNull()
                         ?: error("W5a source lost its authentic geometry pipeline template")
@@ -631,7 +702,7 @@ internal fun materializeW5aSourcePartitionV2(
             }
               GPUPreparedNativeScopeOperand.Render(operand.sourceStepIndex, operand.pass, operand.commands,
                   operand.semanticPayloads, operand.operandLayout, operand.operationKind, operand.passSegment, bindings,
-                  operand.w5bInitialClearV3, operand.w6aPassV1)
+                  operand.w5bInitialClearV3, operand.w6aPassV1, operand.w6InverseMaskScanSpanPipelineWitnessV1)
         }
         val payload = GPUPreparedNativeFramePayload(old.identity, operands, old.scopeOperandKeys,
             listOf(GPUPreparedNativeAuxiliaryHandle(owned, GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion)) + old.auxiliaryOwnedHandles,

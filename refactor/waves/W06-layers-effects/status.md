@@ -2,6 +2,45 @@
 
 ## Statut
 
+### Task 2A0 Step 1 — inventaire de sites natifs avant tout nouveau B
+
+Cette table est le relevé de départ pour 2A0, pas un inventaire déjà publié :
+un `owner` est un `PlanPassId` et l'ordinal est celui de la séquence finale
+du planner (ordinal de draw, de packet ou de bundle, selon le site). Les
+faits cités sont les faits logiques typés à encoder dans `NativeSiteRecipeV1` ;
+ils ne sont ni un hash générique de classe de pass, ni du WGSL, ni des bytes
+du driver. Sauf la ligne W6d, chaque site **à programme** `OPEN` doit recevoir
+en 2A1 une lease distincte de `max(4096L, descriptorBytes + recipeBytes)` en
+checked-I64, même sur cache chaud. Cela reste une réserve logique, non une
+mesure byte-exacte du driver.
+
+| Site natif actuel | Owner / ordinal stable | Faits de recette logique typée à fermer | Charge et statut sur cette branche |
+| --- | --- | --- | --- |
+| W6a `RenderPass` — `SolidRectDraw` | `RenderPass.id` / `drawOrdinalI32` (`W6GeometrySiteKeyV1`) | `W6SolidRectHostRecipeV1`: fullscreen triangle, `UniformColor16` ou `FrozenColor` F32 canonique, `BlendPlan`, origine matériau, RGBA8-sRGB/1×, `FragmentPosition`, ABI group 0. | **FROZEN 2P0** dans le layout ; pas encore une `NativeSiteRecipeV1`, donc aucune nouvelle lease/budget 2A0. |
+| W6a `RenderPass` — `AnalyticRectDraw` | `RenderPass.id` / `drawOrdinalI32` | `W6AnalyticRectHostRecipeV1` et selector `AnalyticRect`: bounds/raster/scissor, origine, AA analytique, triangle-list indexé, uniform/group 0 de 80 octets, blend, RGBA8-sRGB/1×. | **FROZEN 2P1** ; charge programme encore **OPEN**. |
+| W6a `RenderPass` — `AnalyticRRectDraw` | `RenderPass.id` / `drawOrdinalI32` | `W6AnalyticRRectHostRecipeV1`: `RRectF32` canonique, origine `RECT`/`RRECT`, raster/scissor et le même selector analytic 80. | **FROZEN 2P2** ; charge programme encore **OPEN**. |
+| W6a `RenderPass` — `W5bPointDraw` non clip-only | `RenderPass.id` / `drawOrdinalI32` | `W6PointHostRecipeV1`: `PointMode`, séquences V/I immuables, bounds/scissor, origine, selector `Point`, triangle-list, uniform/group 0 de 32 octets, blend, RGBA8-sRGB/1×. | **FROZEN 2P3** ; charge programme encore **OPEN**. Les paths W4e et la coverage W6b ne sont pas inclus. |
+| W6a `RenderPass` — `W5bVerticesDraw` | `RenderPass.id` / `drawOrdinalI32` | `W6PreparedVerticesHostRecipeV1`: layout/attributs/stride, topology, largeur d'index, alpha primitive, payload upload canonique, source `MaterialPlanTable` et bindings canoniques, identité de programme hôte sans handle, blend, origine, DrawUniform64/group 0, RGBA8-sRGB/1×. | **FROZEN 2P4** ; charge programme encore **OPEN**. Text/font et W4e restent hors de cette recette. |
+| W6a `LayerComposite` restore simple | `LayerComposite.id` / site `0` (`W6LayerCompositeSiteKeyV1`) | `W6PlainLayerCompositeRecipeV1`: source/destination `PlanResourceId`, bounds et origine copiés, alpha F32 canonique, blend non-destination-read, fullscreen restore, texture group 0, RGBA8-sRGB/1×. | **FROZEN 2P5/2A0b.IIIa1/IIIa2** : restore simple, filtré W5f, destination-read texture+snapshot et W5f+snapshot ont des recettes distinctes revues. Charge programme, B/B−1 et authentification 2B encore **OPEN**. |
+| W6a `RenderPass`, `StencilGeometryProducerV3`, `StencilCover` hors recettes 2P | `PlanPass.id` / ordinal draw, puis **un ordinal par bundle créé** | Draw/packet final, target/depth-stencil/resolve, geometry et buffers déjà scellés, phase, sample count, load/store, stencil state, blend et bindings source/coverage. Pour un stencil, `stencil-producer` et `stencil-cover` sont deux recettes et deux ordinals, jamais un seul site. | **OPEN 2A0** pour ces sites hors source masque W6b ; aucune charge actuellement. La sélection renderer est encore dynamique. |
+| W6a `FilterCoverageSourcePass` | `FilterCoverageSourcePass.id` / ordinal de bundle coverage | Variante explicite : alpha source + sampling, absence publiée (`emptyRender` transparent), `SolidRect` coverage, ou raster W4 avec target, depth, sample, geometry et bindings. Si `depthStencil != null`, `coverageRasterRender` exige deux packets et crée deux pipelines : producer (ordinal 0) puis coverage/cover (ordinal 1), sous le même owner. | **FROZEN** : raster direct/producer/cover en 2P7b, absence `Empty` en 2A0b.Ia, alpha en Ib1 et SolidRect en Ib2 ; **aucune lease/budget encore**. Les deux bundles stencil restent deux futures leases distinctes. L'absence crée réellement programme, groupe vide et draw : ce n'est pas un skip. |
+| W6a helpers `emptyRender` | Pass propriétaire / ordinal de chaque appel : `PictureAggregateBeginPass`, `FilterSourceClear`, `PictureAggregateSealPass`, coverage sans producteur et no-op composite | Target, clear/load/store, couleur/raison de no-op et phase publiée. Le comportement courant crée un layout vide, shader module, pipeline layout/pipeline et bind group vide, puis un fullscreen draw. | **FROZEN 2A0b.Ia**, témoin public `PictureComposite` scissor nul confirmé en Ic2 ; **un bundle programme par site reste dû au budget 2A1**. Aucune variante « zéro programme » n'est autorisée sans changement de comportement séparé. |
+| W6a sources, filtres et composites | ID de chaque `PictureSourcePass`, `FilterCoverageRetainPass`, `FilterPass`, `PictureComposite` ou `FilterComposite` / ordinal de l'unique render ou de chaque draw | Inputs/outputs et offsets target-local, operation spécialisée (Crop/Offset/Tile/ColorFilter/Merge/Blend/Morphology/blur/mask style ou mask shader), ordre des inputs, uniform/storage/image/runtime bindings, scissor, blend, format/sample, ABI. Les `FilterComposite.Draw` no-op et les branches filtrées/destination-read sont des variantes séparées. | **FROZEN 2A0b.I/II/III** : `FilterCoverageRetainPass`, les deux `PictureSourcePass` (layer/graph), tous les `FilterPass` non-W6d `Crop`/`Offset`/`Tile`/`Morphology`/`ColorFilter`/`Merge`/`Blend`/`SeparableBlur`/`MaskBlurStyle`/`MaskShader`/`MaskTable`/`MaterializedSource`/`DropShadowColorize`/`DropShadowComposite` sont gelés et revus ; les no-op composites relèvent d'`Empty`. Les composites actifs/filtrés/destination-read sont review-clean après IIIa2 ; ce gel ne réserve encore aucune charge. `TextureCopy` et `ReadbackPass` restent sans bundle ; leur destination-read sampler est réservé à Task 3. Aucune nouvelle lease/budget encore. |
+| W6d `FilterPass.frozenSamplingProgram` | `FilterPass.id` / owner déjà unique (ordinal du futur inventaire à adapter, pas une copie de lease) | `W6dFrozenProgramBindingV1`, inputs/output, descriptor RGBA8/1×, usages shader module + render pipeline, génération et lifetime frame completion. | **DÉJÀ LEASÉ W6d** via `W6dProgramLeaseV1` : `max(4096L, descriptorBytes + recipePayloadBytes)`, range `[0, passes.size)`. 2A0/2A1 l'intègre par référence, sans double charge. |
+| W4e `ClipMaskInitialize` dans `encodeW4eNativePasses` | `ClipMaskInitialize.id` / packet ordinal final (un seul bundle) | `W4eClipMaskInitializeRecipeV1`: output, domaine `RectI32`, coverage F32 canonique, fullscreen triangle, clear, RGBA8-unorm/1×, aucun bind group. | **FROZEN 2P6** et préflight de cohérence présent ; pas encore lease/budget 2A0. |
+| W4e `ClipMaskProducer`, `ClipMaskFold` de W6 | `PlanPass.id` / `PlanPass.ordinal` du packet, puis ordinal de bundle créé | Producer : target/resolve/depth, géométrie Rect/RRect/Path/Empty, inverse, AA, sample et slices V/I/U ; Fold : previous/source/output, opération et domaine. | **FROZEN 2A0c.I + IIa + IIb1** : Rect/RRect analytiques, Fold, `Path` triangle direct et bundle stencil-edge ordinal 0 sont review-clean. **OPEN IIb2** cover ordinal 1, puis III/IV. Aucun lease/budget 2A1 ou gate 2B. `PathMaskClear` W4d direct n'est pas publié par W6. |
+| W4e path packet admis par W6 dans `encodeW4eNativePasses` | `PlanPass.id` / `PlanPass.ordinal` du packet, puis ordinal de bundle dans ce packet | Phases W6 `SingleSampleDirectColor`, `SingleSampleStencilProducer`, `SingleSampleStencilColorCover` seulement ; géométrie/bounds/scissor, fill strategy/rule, target/depth, load/store/stencil/blend, consumer mask/inverse/domain et bindings U/V/I. Les phases `Multisample*`/`HardEdge*` du même encodeur restent sur la route W4d directe, hors inventaire W6. | **OPEN 2A0c.III/IV**. Un stencil-cover à intérieur inverse peut créer `interiorZero` puis `cover`. Un inverse-domain à intérieur Geometry crée **trois pipelines** : `domainStencil` 0, `interiorZero` 1, color `cover` 2. `commonSource` peut omettre le draw domainStencil, mais pas sa création logique ni sa réservation. |
+| Dispatcher `materializeGeometry` | Inventaire de frame entier ; il ne fabrique pas d'owner | Route W6a/W4e/route directe, génération, `FramePlan`/source witness/encoder/resource seals et ensemble fermé des recipes attendues. | **OPEN 2B** : aucun `W6NativeArtifactConsumptionV1.preflight` commun avant allocation ; ne pas annoncer l'authentification native fermée. |
+| W5a post-spécialisation dans `materializeW5aSourcePartitionV2` | `RenderPass.id` ou `StencilCover.id` / ordinal de draw source après `sourceDrawsV2` | Référence à la recette géométrique W6/W4e (jamais handle WebGPU), `MaterialPlanTable` structural id, stage/binding manifest canonique, template hôte, ABI composition, destination snapshot/bounds, flag source masque W6b et les groupes matériau/coverage/destination réellement requis. Pour un packet W4e inverse-domain, `sourceDrawsV2` accepte 2–3 draws : les préfixes no-bindings restent les bundles W4e de leurs propres ordinals ; seule la dernière draw à bind group porte la source W5a. | **OPEN 2A0/2B** ; le renderer compose encore module/layout/pipeline/group après spécialisation. Une source masque W6b et une source ordinaire sont des variantes distinctes. |
+| W5a groupes coverage et destination, y compris `Kanvas.w5b.layered.nearest` | Même owner/ordinal W5a que la source qui les consomme ; destination par `TextureCopy.destination` avant freeze | Coverage : texture group 3 et ABI scalar lorsque requis. Destination : snapshot texture + sampler nearest, ABI composition et bounds. | Groupes programme **OPEN 2A0** ; le sampler natif W6 destination-read est **OPEN Task 3** (future lease `4096L` par slot). Le sampler runtime W5h reste reporté : aucun effet public positif ne le demande et `PlanCacheResourceRequest.Sampler.byteSizeI64` demeure `0L`. |
+
+Les recettes 2P0–2P6 ci-dessus sont donc des prérequis de sélection, pas une
+preuve de B/B−1 et pas une fermeture de l'authentification. Avant 2A1, aucun
+nouvel inventaire de charges n'est gelé ; avant 2B, le dispatcher, W6, W4e et
+W5a ne consomment pas encore une autorité commune exhaustive. Les bytes WGSL,
+les handles et la taille réelle module/pipeline/sampler du driver restent dans
+le renderer et hors de la comptabilité logique du planner.
+
 ## Checkpoint W6e Task 6 — budgets, cache, refus terminal et recovery publics
 
 La convergence W6e est empilée sur le prérequis revu
@@ -757,3 +796,1115 @@ La branche prérequis est `codex/w6e-filter-bounds-recipe`, stackée sur
 aucun test d'infrastructure, GM, dashboard/render/rebaseline,
 `jpg-color-cube`, font ou codec externe n'a été exécuté. Aucun merge ni claim
 ISO n'est déduit de ces résultats.
+
+### Audit 2A0b.IIIb1 — branche directe PictureComposite inatteignable
+
+La tentative de recette pour un `PictureComposite` actif sans
+`graphTextureOperand` a été annulée par le revert `50e271db6` du commit
+`6f95c9c57`. La review Sol a tracé l'unique construction
+`PlanPass.PictureComposite(...)` : elle crée d'abord une
+`GraphTextureSourceRequestV1`, publie le `PictureSourcePass` sur le même
+`source.resourceId`, puis attache l'operand à la publication. Les témoins
+Picture publics parcourent donc la variante graph IIIb2, pas IIIb1 ; leur
+XML vert `21/0/0/0` ne prouvait pas IIIb1. Aucun changement IIIb1 ne demeure
+dans la production ; IIIb2 doit geler la vraie variante active et retirer ou
+refuser le fallback direct tardif. Cette preuve de reachability ne ferme ni
+IIIb2, ni III, ni le budget/lease/2B.
+
+### 2A0b.IIIb2a — PictureComposite graph-texture simple
+
+`W6PictureCompositeGraphRecipeV1` scelle uniquement le terminal actif dont
+`PictureSourcePass.graphTextureOperand` est présent, sans color filter ni
+destination-read. Elle encode owner/ordinal, source composite et source graph
+scellée avec génération, alpha, blend, formats/extents physiques, bounds,
+offset, scissor, load/store, ABI texture-only et draw fullscreen. Le scissor
+nul demeure la recette `Empty` existante.
+
+La recette entre dans le catalogue et `PlanPhysicalLayoutV1`. Avant toute
+allocation, le préflight reconstruit la recette et compare ressources physiques
+source/destination ainsi que le `GPUFrameResourceUse` enregistré. Le renderer
+relit offset/alpha/blend depuis la recette et authentifie le bridge graph. Les
+futures variantes color filter ou destination snapshot restent explicitement
+hors de cette tranche (IIIb2b).
+
+Vérification : `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0. `W6dPictureFilterSurfacePixelTest`
+rapporte 21 tests JUnit passés (pixels et scopes `Render` + `Readback`), puis
+le worker natif termine 133 : native **UNKNOWN**, non assimilée à un succès
+Gradle. Aucun budget, lease ou authentification 2B n'est revendiqué.
+
+### 2A0b.IIIb2b1 — PictureComposite graph-texture filtré sans snapshot
+
+Le `DrawPicture` muni d'un `colorFilter` est admis sur la route W6 lorsqu'un
+sibling `saveLayer` non vide établit l'ownership de la frame ; le seul test
+top-level suivait la continuation legacy et son refus `unsupported.composite.paint`
+n'était pas une preuve d'inaccessibilité. Un témoin public de cette route fixe
+l'attendu avant `PictureRecorder`/`Surface`, puis vérifie pixels et scopes
+`Render` + `Readback`.
+
+`W6PictureCompositeGraphFilteredRecipeV1` scelle le graph operand, l'identité
+W5f, la fenêtre uniforme, les extents et le draw. La préparation enregistre
+source et uniforme ; le préflight les authentifie avant allocation ; le
+renderer traduit la recette via un helper dédié. La review Sol du commit
+`58cd9e4` a relevé un fallback encore admissible sans recette filtrée ; le
+correctif `88261b4` le réserve au seul destination-read futur, et sa relecture
+est **Approved**. Les trois compilations ciblées sortent 0 ; le XML public
+`W6dPictureFilterSurfacePixelTest` est `22/0/0/0`. Le worker natif sort 133 :
+**UNKNOWN**. IIIb2b2, IIIc, budget/leases et 2B restent ouverts.
+
+### 2A0b.IIIb2b2 — PictureComposite graph-texture avec snapshot destination
+
+Les terminaux `PictureComposite` actifs à graph-texture dont le blend est
+`BlendPlan.DestinationReadV1` sont maintenant catalogués avant toute
+allocation. La forme sans filtre est une recette dédiée
+`W6PictureCompositeGraphDestinationRecipeV1` : source graph scellée et sa
+génération, snapshot/destination versionnés, alpha, formule de blend,
+descriptions source/cible/snapshot, offset, scissor, `Load`/`Store`, ABI
+texture+snapshot et fullscreen draw entrent dans son encodage canonique.
+
+La forme filtrée conserve la recette graph filtrée, mais sélectionne l'ABI
+distincte `SourceTextureThenColorFilterUniformThenDestinationSnapshot`; son
+uniform W5f, son offset et le snapshot sont enregistrés et préflightés dans
+l'ordre source, uniform, snapshot. Le renderer est catalog-first pour ces
+deux formes : une composite active sans recette est refusée, et aucun fallback
+destination-read n'est conservé.
+
+Les témoins publics `layerOwnedDrawPictureDifferenceReadsDestinationSnapshot`
+et `layerOwnedDrawPictureFilteredDifferenceReadsDestinationSnapshot` fixent
+respectivement le parent bleu/source rouge `DIFFERENCE` et la variante W5f
+verte, avant `PictureRecorder`/`Surface`; ils vérifient pixels et scopes
+`Render` + `Readback`. Les deux assertions JUnit passent; le worker natif
+termine 133, donc le statut natif reste **UNKNOWN**. IIIc, leases/budget et
+2B restent ouverts.
+
+Le commit `ab7f063` a reçu une relecture Sol **Approved** sans défaut
+Critical/Important. IIIb2 est review-clean ; IIIa2 attend une autorisation
+explicite et IIIc ainsi que les gates ultérieurs restent ouverts.
+
+### 2A0b.IIIc1 — FilterComposite.Draw actif
+
+Le commit `e417bd7` fige le composite `Draw` actif dans
+`W6FilterCompositeDrawRecipeV1` : descriptions physiques source/cible,
+bounds, origine, offset, scissor, blend, `Load`/`Store`, shader, ABI texture et
+draw fullscreen sont encodés canoniquement. Le catalogue choisit la recette
+active ou la recette `Empty` déjà scellée pour un no-op ; la route active sans
+recette est refusée. Le préflight confronte recette, ressources physiques et
+usage enregistré avant toute allocation, puis le renderer traduit la recette
+dans un helper dédié. `Layer` et `Picture` ne sont pas revendiqués ici.
+
+Le témoin public `directImageColorFilterSrcCompositeReplacesOpaqueParent`
+fixe le pixel luma attendu avant `Surface`, puis vérifie pixels et scopes
+`Render` + `Readback` pour un blend `SRC` sur parent vert. Les trois
+compilations ciblées réussissent ; `W6cComposeSurfaceTest` donne `5/0/0/0`
+dans le XML, mais le worker natif sort 133 (**UNKNOWN**). Relecture Sol
+**Approved**, aucun défaut Critical/Important. IIIc2/IIIc3, IIIa2,
+W4e/W5a, leases/budget et 2B restent ouverts.
+
+### 2A0b.IIIc2a1 — FilterComposite.Layer sans filtre de restore
+
+Le commit `4737e09` fige le restore `FilterComposite.Layer` actif sans
+`colorFilter` de restore ni lecture de destination dans une recette propre à
+ce pass, distincte de `LayerComposite`. Elle porte source/cible et leurs
+descriptions physiques, layer remplacée, versions parent, alpha/blend,
+coordonnées, `Load`/`Store`, ABI texture seule et draw. Le catalogue et le
+seal la réauthentifient ; le préflight confronte ressources et usage enregistré
+avant allocation. Le renderer choisit depuis le catalogue `Empty` ou cette
+recette, puis la traduit via un helper dédié. Le bridge sans recette reste
+strictement réservé aux variantes W5f/destination-read des sous-lots suivants.
+
+Deux témoins publics `saveLayer(imageFilter=...)` sont ajoutés avec attendu
+fixé avant `Surface`, pixels et `Render` + `Readback` : seul celui sans filtre
+de restore prouve IIIc2a1 ; l'autre garde la future variante W5f. Trois
+compilations ciblées réussissent ; les XML de
+`W6aLayerRestoreSurfacePixelTest` et `W6cComposeSurfaceTest` sont
+respectivement `11/0/0/0` et `5/0/0/0`. L'exécuteur natif sort 133
+(**UNKNOWN**). Relecture Sol **Approved**, aucun Critical/Important.
+IIIc2a2, IIIc2b, IIIc3, IIIa2, W4e/W5a, budget/leases et 2B restent ouverts.
+
+### 2A0b.IIIc2a2 — FilterComposite.Layer avec W5f, sans snapshot
+
+Le commit `f2330b6` ajoute une recette distincte de IIIc2a1 pour le
+`colorFilter` de restore. L'identité W5f, la ressource `UniformData`, sa
+fenêtre offset/capacité, la description physique, le shader, l'ABI
+texture+uniform et le draw sont gelés et authentifiés. La préparation inclut
+explicitement l'uniform ; le pass enregistre dans l'ordre source puis uniform,
+et le préflight compare cet ordre et la fenêtre avant toute allocation.
+Le renderer sélectionne la variante depuis le catalogue et utilise un helper
+W5f dédié ; le bridge sans recette ne reste autorisé que pour
+`destination-read` de IIIc2b.
+
+Le témoin public avec `saveLayer(imageFilter=..., colorFilter=...)` fixe
+l'attendu avant `Surface`, puis vérifie pixels et `Render` + `Readback`.
+Trois compilations ciblées réussissent ; les deux classes publiques ciblées
+produisent `11/0/0/0` et `5/0/0/0` dans leurs XML. L'exécuteur natif sort
+133 (**UNKNOWN**). La relecture Sol est **Approved**, sans défaut
+Critical/Important. IIIc2a est review-clean ; IIIc2b, IIIc3, IIIa2 et les
+gates W4e/W5a, budget/leases et 2B restent ouverts.
+
+### 2A0b.IIIc2b1 — FilterComposite.Layer destination-read sans W5f
+
+Le commit `b8c93fa` ajoute une recette distincte pour le restore filtré qui
+lit un snapshot de destination, sans `colorFilter` de restore. Elle sépare
+source filtrée et layer remplacée, lie snapshot et version du parent, et
+scelle descriptions physiques, alpha/blend, coordonnées, ABI texture source
+puis snapshot et draw. La préparation enregistre ces deux usages dans cet
+ordre. Avant allocation, le préflight vérifie la copie du parent vers le
+snapshot antérieure au restore, la version requise et les usages enregistrés.
+Le renderer traduit la recette cataloguée dans un helper dédié ; seul le cas
+combiné W5f+snapshot conserve temporairement un bridge sans recette.
+
+Le témoin public `saveLayer(imageFilter=...)` avec parent bleu et
+`DIFFERENCE` fixe magenta avant `Surface` et vérifie pixels, `Render` et
+`Readback`. Le témoin cyan garde la combinaison W5f future, sans servir de
+preuve de b1. Trois compilations ciblées réussissent ; les deux classes
+publiques donnent `13/0/0/0` et `5/0/0/0` en XML. L'exécuteur natif sort 133
+(**UNKNOWN**). Relecture Sol **Approved**, aucun Critical/Important.
+IIIc2b2, IIIc3, IIIa2 et les gates W4e/W5a, budget/leases et 2B restent
+ouverts.
+
+### 2A0b.IIIc2b2 — FilterComposite.Layer W5f avec snapshot
+
+Le commit `cfe7eda` fige la dernière variante active de
+`FilterComposite.Layer` dans une recette propre : identité et fenêtre W5f,
+snapshot/version du parent, ressources physiques, alpha/blend, coordonnées,
+ABI source→uniform→snapshot et draw. L'uniform est préparé ; le pass enregistre
+les trois usages dans cet ordre. Le préflight contrôle copie causale, fenêtre
+uniforme et pass enregistré avant allocation. Le renderer sélectionne les
+cinq formes `Layer` depuis le catalogue (`Empty` compris) sans bridge actif,
+puis applique alpha→W5f→blend via un helper dédié.
+
+Le témoin cyan public porte `imageFilter`, `colorFilter` de restore et
+`DIFFERENCE`; l'attendu est fixé avant `Surface`, puis pixels, `Render` et
+`Readback` sont contrôlés. Trois compilations ciblées réussissent ; les trois
+classes publiques ciblées donnent `13/0/0/0`, `5/0/0/0` et `24/0/0/0`
+dans leurs XML. L'exécuteur natif sort 133 (**UNKNOWN**). Relecture Sol
+**Approved**, aucun Critical/Important. IIIc2 est review-clean ; IIIc3,
+IIIa2 et les gates W4e/W5a, budget/leases et 2B restent ouverts.
+
+### 2A0b.IIIc3a — FilterComposite.Picture direct
+
+La recette typée texture-only, son catalogue/seal, les usages enregistrés,
+le préflight avant allocation et la traduction native catalog-first couvrent
+le terminal Picture direct. La provenance distingue explicitement l'absence de
+`PictureSourcePass` d'un pass présent sans graph operand. Le témoin public
+`filteredInnerPictureRestoresWithoutGraphOperand` fixe les pixels attendus
+avant `PictureRecorder`/`Surface` et vérifie `Render` + `Readback`. Une revue Sol
+a confirmé sa causalité, puis une autre a demandé le scellage complet des
+facts du terminal ; la relecture ciblée de ce correctif ne relève plus de
+défaut Critical/Important.
+
+`:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` réussissent. Les premiers runs W6d échouaient
+avant le plan avec `GPU runtime is unavailable` ; une instrumentation
+temporaire (retirée) a identifié `NoSuchMethodError` sur `TextureDescriptor` :
+le toolkit `wgpu4k` de juillet chargeait des `webgpu-ktypes*` de septembre.
+Le commit `4dcbd9f` verrouille les quatre modules transitifs sur le build
+compatible de juillet ; sa revue Sol est **Approved**. Sans init script,
+le témoin IIIc3a donne `1/0/0/0`, puis W6d `25/0/0/0`, W6a restore
+`13/0/0/0` et W6c compose `5/0/0/0` dans leurs XML ciblés. Chaque exécuteur
+natif sort ensuite 133 (**UNKNOWN**). IIIc3a est commitée à `3e9e7a1` et la
+relecture finale Sol est **Approved**, sans finding Critical/Important/Minor.
+IIIc3b/c/d, IIIa2, les budgets et 2B ne sont pas clos.
+
+IIIc3b est ensuite commitée dans `5c2d54f` puis corrigée par le témoin causal
+de destination dans `9be726b`; la relecture Sol est **Approved**, sans finding.
+
+### 2A0b.IIIc3b — FilterComposite.Picture direct destination-read
+
+Le témoin public direct construit d'abord un parent vert
+dans le `Picture`, puis un draw rouge avec `ImageFilter.ColorFilter(Blend bleu SRC)` et
+`DIFFERENCE`; l'attendu cyan opaque, distinct du parent si le composite était
+omis, est fixé avant `PictureRecorder`/`Surface`
+et contrôle pixels, `Render` et `Readback`. La nouvelle recette distincte
+scelle source/snapshot, provenance directe, versions, copie causale,
+descriptions physiques, load/store, ABI b0+b2 et draw. Le renderer la lit
+catalog-first, préflight les uses source/snapshot et la copie avant toute
+allocation, puis utilise une traduction dédiée sans fallback direct.
+Une première version du témoin était non causale : `Luma(red)` puis
+`DIFFERENCE` laissait le même vert que l'absence de composite. L'oracle cyan
+corrigé distingue maintenant l'exécution de son omission ; la sélection
+gelée reste vérifiée structurellement, sans prétendre à un RED de l'ancien
+fallback. Les trois compilations ciblées réussissent ; W6d redonne
+`26/0/0/0` dans son XML après correction, puis
+l'exécuteur natif sort 133 (**UNKNOWN**). IIIc3c/d, IIIa2, budgets et 2B
+restent ouverts.
+
+### 2A0b.IIIc3c1 — FilterComposite.Picture graph operand b0
+
+Provenance confirmée : `Canvas.drawPicture` publie `DisplayOp.DrawPicture`,
+capturé par `PictureStreamAggregateV1.build` comme filtre du root Picture ; la
+construction publie ensuite `GraphTextureSourceRequestV1`/`appendStreamSource`
+avant `FilterCompositeOperationV1.Picture`. Le témoin rouge-vs-bleu est donc
+causal pour l'ABI graph b0, pas pour `PictureComposite`.
+
+La recette planner distincte, le catalogue, le seal, les usages enregistrés et
+le préflight avant la première allocation couvrent le seul binding b0
+`pass.source`; `graphSealedSource` reste une provenance physique validée, déjà
+consommée par `PictureSourcePass`. Le dispatch catalog-first et son helper
+traduisent la recette sans choisir shader/layout depuis l'operand ; le bridge
+temporaire conserve uniquement les variantes graph W5f/snapshot c2/d. Les trois
+compilations ciblées réussissent ; le témoin causal donne `1/0/0/0` XML et la
+classe W6d `27/0/0/0`, puis chaque worker natif sort 133 (**UNKNOWN**).
+IIIc3c1 est revue Sol **Approved** à `8f3d62b`; IIIc3c2/d, IIIa2, budgets et 2B restent ouverts.
+
+### 2A0b.IIIc3c2 — FilterComposite.Picture graph operand b0 + W5f b1
+
+La recette distincte `GraphTextureThenColorFilterUniform`
+porte l'identité d'exécution W5f, les bytes dynamiques, la ressource
+`SourceUniformData` et sa fenêtre/offset; catalogue, seal/publication, usages
+enregistrés, préflight physique et traduction catalog-first restent sur
+`FilterComposite.Picture`, sans snapshot destination. Le témoin public fixe
+avant `PictureRecorder`/`Surface` le jaune opaque de la source graph rouge avec
+`Blend(vert, SCREEN)` et conserve le contrôle IIIc3c1 rouge sans W5f; les deux
+vérifient `Render`+`Readback`. Un contre-factuel carrier bleu + SCREEN serait
+cyan, mais le `drawPicture` direct est refusé par
+`unsupported.surface.prepared.mixed-composite-topology`; il n'est ni présenté
+comme preuve ni remplacé par `PictureComposite`.
+Les trois compilations ciblées réussissent ; le témoin exact donne
+`1/0/0/0` et la classe W6d complète `28/0/0/0` dans les XML. Gradle termine
+sur l'exécuteur natif 133 (**UNKNOWN**), et non sur un échec JUnit.
+IIIc3c2 est revue Sol **Approved** à `dab4281` ; IIIc3d, IIIa2, budgets et
+2B restent ouverts.
+
+### 2A0b.IIIc3d1 — FilterComposite.Picture graph operand b0 + destination snapshot b2
+
+La variante externe sans W5f est maintenant une recette distincte
+`W6FilterCompositePictureGraphDestinationRecipeV1`. Elle scelle le source
+graph et sa génération, le snapshot de destination et sa version, les quatre
+descriptions physiques source/cible/graph/snapshot, offset/scissor,
+load/store, blend et l’ABI `GraphTextureThenDestinationSnapshot` (b0+b2).
+Le catalogue, `PlanPhysicalLayoutV1`, les usages enregistrés, le préflight de
+la `TextureCopy` causale avant le render et la traduction catalog-first la
+transportent de bout en bout; aucun uniform W5f n’est accepté dans cette
+variante. Le bridge W5f+snapshot reste exclusivement réservé à IIIc3d2.
+
+Le témoin public
+`externalPictureFilterDifferenceReadsDestinationSnapshotFromGraphOperand`
+fixe le jaune avant `PictureRecorder`/`Surface`: source graph rouge
+`DIFFERENCE` parent vert, le carrier bleu n’étant qu’un contre-factuel cyan.
+Il passe avec les scopes `Render` et `Readback`. `:gpu-plan:compileKotlin`,
+`:gpu-renderer:compileKotlin` et `:kanvas:compileTestKotlin` sortent 0. Le
+sélecteur public donne XML `1/0/0/0` et la classe W6d entière `29/0/0/0`,
+puis l’exécuteur natif sort 133 :
+**UNKNOWN**, non assimilé à un succès Gradle. La revue Sol de IIIc3d1 est
+**Approved** à `47c8104` ; IIIc3d2, IIIa2, budgets et 2B restent ouverts.
+
+### 2A0b.IIIc3d2 — FilterComposite.Picture graph operand b0 + W5f b1 + destination snapshot b2
+
+La recette planner-owned `W6FilterCompositePictureGraphFilteredDestinationRecipeV1`
+publie l’ABI ordonnée b0+b1+b2, le filtre W5f et sa fenêtre uniforme, le
+graph source et le snapshot causal. Le renderer prépare et préflighte les
+trois ressources avant allocation, puis traduit catalog-first l’ordre
+alpha → W5f → blend destination. Le fallback actif `FilterComposite.Picture`
+est retiré ; seul `Empty` reste admis pour un scissor nul. Le témoin public
+fixe le blanc avant `PictureRecorder`/`Surface` : sans W5f, magenta ; sans
+snapshot, jaune ; avec la carrier bleue au lieu du graph source, vert. Les
+trois compilations ciblées réussissent. Le témoin donne XML `1/0/0/0`, W6d
+entière `30/0/0/0`, puis l'exécuteur natif sort 133 (**UNKNOWN**). La revue
+Sol de d2 est **Approved** à `e51302e`, sans finding Critical/Important/Minor.
+IIIc3 est review-clean pour les six ABI Picture actives et `Empty` ; à ce
+checkpoint IIIa2, W4e/W5a, budget/leases et 2B ne sont pas clos.
+
+### 2A0b.IIIa2 — LayerComposite destination-read et gate composites
+
+Le `LayerComposite` actif sans `imageFilter` possède deux recettes distinctes :
+source texture + snapshot parent, puis source texture + uniforme W5f + snapshot
+parent. Chacune scelle owner/ordinal, version destination,
+bounds/origine/scissor, alpha/blend, formats/extents/samples, load/store, ABI
+et draw. Le catalogue, le seal et les usages enregistrés suivent les deux
+formes ; le préflight avant allocation vérifie le `TextureCopy` causal, son
+ordre **et sa région exacte**, ainsi que les ressources physiques. Le renderer
+traduit la recette sélectionnée et refuse l'ancien fallback destination-read
+actif.
+
+Le témoin public sans `imageFilter` fixe un parent rouge puis bleu et un child
+rouge : le restore W5f vert suivi de `DIFFERENCE` doit donner cyan. Magenta
+signale W5f omis, jaune un snapshot rouge périmé et vert l'ordre filtre/blend
+inversé. Le témoin plain existant vérifie aussi `Render` et `Readback`. Les
+commits `44d6718` et `21a3c02` ont reçu une revue Sol initiale puis une
+relecture ciblée **Approved** ; l'unique finding Important sur la région
+enregistrée est `ADDRESSED`.
+
+Compilations séparées `:gpu-plan`, `:gpu-renderer` et
+`:kanvas:compileTestKotlin` : exit 0 d'après le rapport Terra. Le contrôle
+indépendant après correctif du sélecteur W6a donne XML `14/0/0/0`
+(timestamp 2026-09-27T13:38:20Z), Gradle exit 1 après worker natif 133, donc
+native **UNKNOWN**. W6c `6/0/0/0` et W6d `9/0/0/0` ont été rapportés par
+Terra avant le correctif ciblé ; aucune suite globale n'est revendiquée.
+IIIa1/IIIa2, IIIb2 et IIIc1–IIIc3 sont review-clean : **2A0b.III et 2A0b
+sont clos pour le seul gel/sélection des recettes W6a**. 2A0c W4e, 2A0d
+W5a, leases/B/B−1, 2B et le gate W6 global restent ouverts.
+
+### Préservation W6 — uniformes filtrés dans les lanes W4e
+
+Avant 2A0c.I1, deux témoins publics RRect échouaient pendant la publication
+W6 avec `Collection contains more than one matching element`. La cause n'était
+pas le GPU : quatre factories de recettes `LayerComposite` et
+`FilterComposite.Layer` filtrées cherchaient une ressource par le seul rôle
+`UniformData`, alors que les lanes W4e en portent aussi. Le commit `9f6f365`
+sélectionne l'ID exact de l'uniforme de frame `UniformData:0` et authentifie
+son type et ses usages. Les deux témoins RRect donnent XML `2/0/0/0`, la
+classe publique restore `14/0/0/0`; leurs workers natifs sortent ensuite
+133 (**UNKNOWN**). Revue indépendante Sol : **Approved**.
+
+### 2A0c.I1 — ClipMaskProducer Rect/RRect sur la route W6
+
+Les seuls producteurs analytiques finaux `Rect` et `RRect` ont une recette
+versionnée avec géométrie F32 issue de `:math`, owner/packet/bundle, cible,
+resolve, depth, U-slice et choix shader/ABI/load/store. Le catalogue, le
+seal physique, la projection sur les packets, le préflight des ressources et
+usages enregistrés avant allocation, puis la traduction native catalog-first
+la transportent sans nouveau site pour `Path` ou `Empty`. `Empty` est éliminé
+avant émission par le planner; la route W4d directe conserve son encodeur.
+Une revue Sol a relevé l'absence initiale des paramètres depth/stencil pour
+RRect AA; `3c58bb5` les fige dans la recette canonique et l'encodeur les
+consomme. La relecture ciblée a marqué ce finding **ADDRESSED**, sans nouveau
+Critical/Important. Implémentation initiale : `0f99d77`.
+
+Les compilations ciblées `:gpu-plan`, `:gpu-renderer` et
+`:kanvas:compileTestKotlin` sortent 0. La classe publique W6aLayerW4W5
+donne XML `20/0/0/0`, mais Gradle sort 1 après worker natif 133 :
+**UNKNOWN** global. Deux sélecteurs publics W4e directs, Rect/RRect/Path
+ordonné et distinction des clips Rect hard/analytic, passent avec Gradle
+exit 0. Une invocation plus large de `GPUPlanSurfacePixelTest` a produit
+`F4/E0/S2` sur d'autres routes; son état de base n'a pas été établi et
+aucune réussite de classe entière n'est revendiquée. I1 est review-clean ;
+`ClipMaskFold`, producteurs/path phases, W5a, leases/B/B−1 et 2B restent
+ouverts.
+
+### 2A0c.I2 — ClipMaskFold sur la route W6
+
+Chaque `ClipMaskFold` du binding W4e final dans W6 porte désormais une
+recette versionnée : ordre `previous` puis `source`, cible `output`, opération
+de combinaison, domaine I32 de `:math`, descriptions physiques, ABI à deux
+textures, Clear/Store, couleur de clear et draw fullscreen. Le catalogue,
+le seal, la projection packet et le préflight précèdent l'allocation native ;
+la traduction choisit depuis cette recette pour W6, tandis que la route W4d
+directe conserve son comportement. Le premier commit `8f717da` vérifiait
+encore certains choix natifs en les émettant en dur; `ff75afd` traduit aussi
+`load/store/clearColor` depuis la recette. Revue indépendante Sol :
+**Approved**, aucun finding Critical/Important.
+
+Les compilations `:gpu-plan`, `:gpu-renderer` et
+`:kanvas:compileTestKotlin` sortent 0. La classe publique W6aLayerW4W5
+donne XML `20/0/0/0`, et le sélecteur d'ordre Rect/RRect/Path `1/0/0/0`,
+mais leurs exécuteurs natifs sortent 133 (**UNKNOWN**). Les deux sélecteurs
+W4e directs pertinents passent avec Gradle exit 0. I1 et I2 sont
+review-clean; Path producer, phases path, inverse-domain, W5a,
+leases/B/B−1 et 2B restent ouverts.
+
+### 2A0c.IIa — ClipMaskProducer.Path triangle direct sur la route W6
+
+Le clip `Path` strictement triangulaire possède désormais une recette
+versionnée pour son unique bundle W6 : owner/pass/packet/bundle, géométrie et
+scissor de `:math`, cible/resolve/depth, ressources et slices V/I, fill rule,
+inverse/AA 1× ou 4×, shader/topologie/ABI, stencil/blend et load/store/clear
+depth-stencil. Le catalogue et le seal du layout authentifient cette recette ;
+le packet W6 la conserve, puis le préflight compare avant `device.create*`
+les rows physiques et usages enregistrés exacts, y compris le resolve 4×.
+L'encodeur traduit les choix gelés pour W6 ; la route W4d directe garde son
+fallback distinct. Aucune géométrie n'a été déplacée hors de `:math`.
+
+Le témoin public d'un triangle translaté fixe ses pixels avant `Surface`,
+distingue la forme de sa boîte englobante et vérifie `Render` + `Readback`.
+Commits `2f7cd14`, `53f1aa8`, puis correctif `9ffe6d4`. Les trois
+compilations ciblées sortent 0. Vérification indépendante sur `9ffe6d4` :
+classe publique W6aLayerW4W5 XML `21/0/0/0`, worker natif 133 donc
+**UNKNOWN** ; sélecteur W4e direct Rect/RRect/Path : Gradle exit 0 (la
+dernière répétition contrôleur était `FROM-CACHE`). La review Sol initiale a
+relevé deux findings Important — traduction native incomplète et préflight
+AA/ressources inexact — et la relecture ciblée les marque **ADDRESSED**, sans
+nouveau Critical/Important. IIa est review-clean ; IIb stencil-edge fan,
+III/IV, 2A0d W5a, leases/B/B−1, 2B et gate W6 global restent ouverts.
+
+### 2A0c.IIb1 — ClipMaskProducer.Path stencil-edge bundle 0
+
+Le `Path` non triangulaire dont `:math` émet un stencil-edge fan gèle désormais
+le premier des deux sites natifs de son packet : owner/pass/packet/bundle
+ordinal 0, fill rule Winding/EvenOdd, fan/scissor, cible/resolve/depth et V/I,
+AA/sample/inverse, stencil producer sans écriture couleur et paramètres de
+pipeline/attachment. Le catalogue, le seal et la projection W6 précèdent un
+préflight exact avant allocation : géométrie du packet réellement préparé,
+rows physiques, V/I slice, usages enregistrés ordonnés et état D24S8. Le
+pipeline edge est choisi depuis les axes typés ; le pipeline cover ordinal 1
+reste provisoirement sur son chemin existant et n'a **pas** de recette IIb1.
+
+Le témoin public concave en L, dans une layer translatée, fixe les pixels avant
+`Surface`, distingue le fan de sa boîte englobante et vérifie `Render` et
+`Readback`. Commits `e68d2cb`, `ddd534c`, `caf3735`, `6643968`. Compilations
+`:gpu-plan`, `:gpu-renderer`, `:kanvas:compileTestKotlin` : exit 0 rapporté ;
+contrôle indépendant sur `6643968` : classe W6aLayerW4W5 XML `22/0/0/0`,
+Gradle exit 1 après worker natif 133 (**UNKNOWN**) ; sélecteur W4e direct
+Rect/RRect/Path exécuté sans cache, Gradle exit 0. La première review Sol a
+relevé un préflight incomplet et des axes natifs non consommés ; les relectures
+successives marquent ces points **ADDRESSED** et ne relèvent aucun nouveau
+Critical/Important. IIb1 est review-clean, mais IIb2 cover, III/IV, W5a,
+leases/B/B−1, 2B et le gate W6 global restent ouverts.
+
+### 2A0c.IIb2 — ClipMaskProducer.Path stencil-cover bundle 1
+
+Le même `ClipMaskProducer.Path` à fan stencil gèle maintenant ses deux sites
+natifs ordonnés sous le même pass et packet : edge bundle 0 puis cover bundle
+1. La recette cover versionnée lie sa cible, son resolve AA éventuel et son
+D24S8 aux ressources physiques finales, au fill rule/scissor de `:math`, au
+sample count et aux axes shader/topologie/ABI/stencil/blend. Le cover et
+l'edge sont deux pipelines du même render pass : l'état d'attachment et le
+fan V/I sont portés par l'edge, dont l'identité et les usages sont vérifiés
+avec le cover avant toute création native. Le catalogue, le seal, le packet
+W6 et le préflight conservent les deux bundles même si un draw est omis. La
+route W4d directe garde son fallback distinct.
+
+Le témoin public EVEN_ODD à deux contours fixe ses pixels avant `Surface` :
+son trou distingue la couverture du simple contour extérieur et demande
+`Render` + `Readback`. Commit `164a5d796`. Les trois compilations ciblées
+sortent 0 ; le sélecteur W4e direct passe avec Gradle exit 0. Le nouveau
+sélecteur et la classe W6aLayerW4W5 donnent XML `23/0/0/0` pour la classe,
+mais leurs workers natifs sortent 133 après JUnit : **UNKNOWN** pour le gate
+global. Review indépendante Sol : **Approved**, aucun finding
+Critical/Important ; la review est statique et ne remplace pas les tests.
+IIb est review-clean ; 2A0c.III/IV, W5a, leases/B/B−1, 2B et le gate W6
+global restent ouverts.
+
+### 2A0c.IIIa1 — PathRenderPass DirectColor Fill triangle non clippé
+
+Le premier site `SingleSampleDirectColor` ordinaire W6 gèle uniquement le
+`drawPath` Fill triangulaire non clippé : owner final pass/packet/bundle 0,
+géométrie et scissor de `:math`, cible et lignes physiques U/V/I, slices,
+blend et axes du pipeline. Le catalogue, le seal, la projection précoce sur
+le packet et le préflight des usages enregistrés ordonnés précèdent la
+création native. L'encodeur W6 choisit ce pipeline depuis la recette ; les
+autres formes DirectColor et la route W4d directe gardent leur chemin
+existant. Ce sous-lot ne clôt donc **pas** IIIa.
+
+Le témoin public `drawPath` triangulaire translaté dans une layer fixe ses
+pixels avant `Surface` et vérifie `Render` + `Readback`. Commit `c878919`.
+Les compilations ciblées passent ; après correction des invariants, la classe
+W6aLayerW4W5 affiche XML `24/0/0/0`, puis son worker sort 133
+(**UNKNOWN** pour le build). Le sélecteur W4e direct Rect/RRect/Path passe
+avec Gradle exit 0 sans build cache. Revue indépendante Sol : **Approved**
+sans finding Critical/Important, statique et limitée à IIIa1. Les DirectColor
+clippés, Stroke ou non triangulaires doivent être audités avant une clôture
+IIIa ; IIIb/c, IV, W5a, leases/B/B−1 et 2B restent ouverts.
+
+### 2A0c.IIIa2 — PathRenderPass DirectColor Stroke triangulaire
+
+Un Stroke public à largeur 1 et cap Butt, du point `(0,0)` à `(2^24,2^24)`,
+fournit un cas rare mais réel : les deux coins distants du contour se
+confondent après conversion F32 ; la géométrie finale de `:math` est un
+triangle direct. L'audit initial l'avait jugé inatteignable ; une review Sol
+a trouvé ce contre-exemple avant toute modification de production. La
+recette `SingleSampleDirectColor` porte maintenant un tag canonique Stroke
+distinct, sans changer l'encodage Fill de IIIa1. Le catalogue, le packet,
+le préflight pré-allocation et la sélection native couvrent ce site ; les
+autres formes restent sur leur route existante.
+
+Le témoin `Surface` public fixe la diagonale bleue littérale avant la
+construction et exige `Render` + `Readback`. Commit `ac3c20a`. Les trois
+compilations ciblées passent. La classe W6aLayerW4W5 affiche XML
+`25/0/0/0`, puis le worker natif sort 133 (**UNKNOWN** pour le build) ; le
+sélecteur W4e direct passe avec Gradle exit 0 sans build cache. Revue
+indépendante Sol : **Approved**, aucun finding Critical/Important, revue
+statique. IIIa1 et IIIa2 sont review-clean ; les DirectColor sous scissor
+ou masque et les phases IIIb/c restent ouverts.
+
+### 2A0c.IIIa3 — audit du Scissor DirectColor public
+
+La première tentative `a97f466` ajoutait une variante typée Scissor et un
+témoin `clipRect` public. La review Sol a montré que ce témoin n'exerçait pas
+la variante : le premier `clipRect(INTERSECT)` devient `DeviceRect` dans le
+Canvas, admis par W4d sans opération W4e ; deux Rect deviennent une pile
+complexe à deux entrées et sélectionnent Mask, tandis qu'une rotation
+transforme le Rect en Path/Mask. Le sous-lot a été retiré par le revert
+récupérable `a83e114` ; `git diff 70e4877..a83e114` est vide. Aucun test
+vert de cette tentative n'est revendiqué comme preuve du site Scissor. Il
+n'y a pas de recette/lease Scissor publique à compter à ce stade ; une
+éventuelle entrée IR non exposée par Canvas demanderait son propre audit.
+Le prochain cas public à examiner est Mask/InverseMask, sans fermer IIIa.
+
+### 2A0c.IIIa4a — DirectColor Fill sous Mask
+
+Un témoin `Surface` public combine `saveLayer`, un `clipPath` dur non
+rectangulaire et un `drawPath` Fill triangulaire décalé. Son oracle littéral
+6×6 distingue l'intersection visible du triangle sans masque et des seules
+bounds du clip ; il exige `Render` et `Readback`. La route finale est un
+`ClippedGeneralPathDraw(Mask)` / `SingleSampleDirectColor`, distinct du
+préfixe `ClipMaskInitialize` / `ClipMaskProducer` / `ClipMaskFold`.
+
+La recette IIIa gèle désormais le mask sampled et son ABI group-zero
+texture+uniform avec fenêtre U de 32 octets ; le Fill/Stroke non masqué
+conserve son ABI uniforme de 16 octets et ses clés canoniques à l'identique.
+Le `RenderPass` parent du graphe et son `PathRenderPass` natif W4e ont des
+IDs distincts : catalogue, seal, projection et préflight pré-allocation
+authentifient leur binding final commun, les rows physiques mask/U/V/I,
+la géométrie, le scissor et les usages enregistrés ordonnés. Le pipeline
+masqué est sélectionné depuis la recette ; `InverseMask` et `Stroke` masqué
+restent sur le fallback W4e, sans lease IIIa4a fictive.
+
+Commits locaux `c6b6ca7`, `2d9fa83`, puis `b55d37d`. La review Sol a
+identifié l'admission involontaire du `Stroke` masqué ; la garde Fill l'a
+exclu et la re-review l'a approuvée sans autre finding Critical/Important.
+Trois compilations ciblées passent. Après correction, le témoin exact est
+XML `1/0/0/0`, la classe W6a XML `26/0/0/0` ; les deux ont Gradle exit 1
+uniquement après l'exit natif 133 (**UNKNOWN**). Le sélecteur W4e direct
+hard-ordered est XML `1/0/0/0`, Gradle/native exit 0. IIIa4a est
+review-clean ; IIIa4b `InverseMask`, IIIb/c, IV et les gates suivants
+restent ouverts.
+
+### Diagnostic du worker natif 133 sur macOS
+
+Le GPU Metal Apple M2 Max est disponible et le décalage ABI toolkit/ktypes
+déjà corrigé n'explique pas cet exit post-JUnit. Des rapports de crash `java`
+du 27 septembre montrent `EXC_BREAKPOINT`/`SIGTRAP`, avec l'assertion AppKit
+« Must only be used from the main thread » sur `Java: Thread-5` ; la pile
+passe par `-[NSWindow _doOrderWindow:]` puis `libglfw.dylib`. La factory
+enregistre `Thread { created.close() }` comme `shutdownHook` ; la fermeture
+de la session atteint `GLFWContext.close()` via le teardown gate. Cette
+chaîne explique avec forte confiance le crash post-JUnit, sans preuve
+absolue du call-site Java puisque la pile IPS n'est pas symbolisée à ce
+niveau. `dispose()` explicite et la dernière lease peuvent également
+fermer GLFW sur le thread appelant : supprimer seulement le hook ne
+garantirait donc pas la sûreté générale AppKit. Aucun correctif de ce
+lifecycle natif n'est revendiqué dans IIIa4a. Les XML JUnit à zéro échec
+ne transforment donc pas l'exit 133 en gate natif réussi. Aucun GM ni test
+d'infrastructure n'a été lancé pour ce diagnostic.
+
+### 2A0c — InverseMask.Geometry DirectTriangle : scan spans, occurrences et recette W6
+
+Le producer Geometry hard-edge W6 porte maintenant une recette physique distincte
+`W6InverseMaskPathRecipeV1`. Elle sépare explicitement `GeometryProducer.NonEmpty`
+(domaine device/local, origine, scissors I32 ordonnés, nombre de draws, D24S8,
+fullscreen sans bindings et zéro slice V/I) de `GeometryProducer.Empty` (clear-only,
+zéro draw), ainsi que du `GeometryCover` au owner/scissor distinct. Le freeze final,
+le catalogue native-site, le seal du layout, le packet W4e/W6, le préflight avant
+`device.create*` et la validation native comparent ces faits et les ressources
+physiques. Le renderer ne re-rasterise rien.
+La route dépend du fullscreen primitive W4e déjà publié : elle n'introduit ni
+triangle V/I producer ni pipeline lié à un buffer de géométrie.
+
+Le plafond est maintenant frame-wide : les occurrences finales de
+`StencilGeometryProducerV3` sont additionnées avant `rawPasses`, graphe,
+ressources et allocation. Le 4 097e draw est refusé par le diagnostic typé
+`w4e.clip.scan-span-draw-limit`; deux occurrences du même `Path` (4 098 draws)
+ne sont donc jamais dédupliquées par `commonSource`. Les admissions W4e lane
+restent inchangées. Le B_frame exact est `15_715_808` bytes, y compris le second
+`Uniform16` `SourceUniformData`; B_lane reste un gate enfant susceptible d'un
+refus agrégé W6 aval.
+
+Les témoins Surface publics Task 4 (miroir, winding, frontière `4.98f/5.02f`,
+4 096 admis et 4 098 refusé/sentinel) sont XML `1/0/0/0`. Les sélecteurs
+préservés Task 2/3 (rebase, Empty clear-only, fullscreen 700, B/B−1, B_lane,
+4 097), direct triangle, fan EVEN_ODD et 6×6 restent chacun XML `1/0/0/0`.
+Les compilations `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0. Les succès qui matérialisent le GPU ont
+Gradle exit 1 uniquement après le worker GLFW macOS 133; ce gap demeure
+**UNKNOWN** et séparé des XML. Le refus W4e 4 097 pré-allocation sort Gradle 0.
+
+Commit d'implémentation Task 4 : `687d1a7` (`feat(w6): seal inverse scan-span
+occurrences`). Les corrections `d98de2b4f`, `3521f98cd` et `a387979e7`
+scellent la séquence native exacte et la provenance du pipeline fullscreen :
+le témoin est créé avec ce pipeline dédié, non à partir d'un handle arbitraire,
+et le préflight vérifie identité, génération et format de cible. La relecture
+Sol ciblée du dernier correctif ne relève aucun Critical/Important. À
+`a387979e7`, la compilation `:gpu-renderer:compileKotlin` sort 0 et la classe
+Surface W6 donne XML `13/0/0/0` ; Gradle sort 1 uniquement après l'exit natif
+GLFW 133 post-JUnit. La revue transversale a ensuite trouvé que l'admission
+comptait aussi les triangles inverses AA, pourtant publiés sous
+`MultisampleDirectColor`. Le correctif `cdbbd7f80` borne l'admission et la
+substitution V/I aux commandes hard-edge éligibles ; son témoin Surface public
+de 4 097 lignes a d'abord reproduit le faux diagnostic puis ne le reçoit plus.
+La revue Sol ciblée ne relève aucun Critical/Important. À ce commit, la classe
+Surface W6 est XML `14/0/0/0`, avec le même exit natif 133 post-JUnit ; le
+témoin AA n'affirme ni pixels ni succès global de sa route multisample, seulement
+l'absence du plafond propre au producer scan-span. Ce sous-lot inverse-mask est review-clean, mais cette
+extension ne ferme pas 2A0c, 2A1 ni 2B ; ces gates restent ouverts pour les
+sous-lots ultérieurs.
+
+### 2A0c.IIIb/c — InverseMask W6 : fan, origine, reset et Zero
+
+Les quatre témoins `Surface` publics Task 2 emploient des oracles littéraux :
+le fan concave `INVERSE_EVEN_ODD` avec deux contours de même winding, le
+rebase d'une couche W6 translatée, deux fills inverses successifs qui exigent
+le reset du stencil, et `InverseMask.Zero` sous un clip L hard. Chaque
+sélecteur donne XML `1/0/0/0`. Les quatre runs GPU finissent avec Gradle exit
+1 seulement après l'exit GLFW natif macOS 133 : ce dernier reste **UNKNOWN**
+et séparé du verdict JUnit.
+
+Le source W4e scellé peut maintenant conserver sa géométrie
+`InverseDomainSource`/`Empty` lorsque les phases W5/W6 rebindent seulement le
+material ou le blend ; les constructeurs publics continuent de la refuser.
+`InverseMask.Zero` publie son unique consumer color fullscreen avec le mask
+sampled normal (`inverse=false`) : le planner exclut Zero de
+`inverseMaskDirectGeometryCommands`, donc aucun producer, D24S8 ou bytes V/I
+ne sont créés pour ce cas. La vérification W4e public empty/non-empty a aussi
+mis en évidence une sélection W5a trop étroite : le paquet `InverseDomain`
+scellé sans lane W5b est désormais associé à son unique source material.
+
+Les compilations `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0. La préservation W6 hard-mask donne XML
+`1/0/0/0`, avec le même exit 133 **UNKNOWN** ; la préservation W4e public
+empty/non-empty donne XML `1/0/0/0`, Gradle exit 0. Une relance indépendante
+de la classe W6a entière à `3c2660739` donne XML `31/0/0/0`, puis Gradle exit 1
+sur GLFW natif 133. La revue Sol du commit ne relève aucun Critical/Important,
+y compris sur l'association W5a du packet scellé. Ce sous-lot ne lance ni GM,
+ni dashboard Skia, ni suite globale ; les recettes natives fan/Zero de Task 3,
+2A0c.IV et les gates 2A1/2B demeurent ouverts.
+
+### 2A0c.IIIb/c — recettes natives par site Geometry/Zero
+
+Le gel Task 3 remplace le wrapper producer/cover par une recette scellée par
+`PathRenderPass` W4e natif, avec `NativeSiteOwnerV1(nativePass.id,
+nativePass.ordinal, 0)`. Les variantes sont `GeometryProducer.ScanSpans`
+(`NonEmpty`/`Empty` sans V/I), `GeometryProducer.Fan` (fill rule, V/I,
+D24S8 et clear stencil), `GeometryCover` (mask/U 32, `TestZeroKeep`,
+`LoadStoreTestReset`) et `ZeroCover` (mask/U 32, sans depth/V/I). Les IDs W6
+restent exclusivement des témoins de binding ; la recette Zero est l'unique
+site `SingleSampleDirectColor` sous son `RenderPass` W6.
+
+Le catalogue, le seal et le packet utilisent les IDs natifs et parcourent les
+bindings W4e finals ; la branche catalogue proxy `StencilGeometryProducerV3`
+a été retirée. `GPUW6aLayerFramePlan` projette chaque recette vers sa phase W6,
+le préflight compare les ressources et packets avant `device.create*`, et
+l'appel W6 de `encodeW4eNativePasses` sélectionne son ABI/pipeline par cette
+map catalog-first. L'appel W4e autonome conserve son chemin déjà scellé quand
+aucune projection W6 ne fournit cette map. Aucun lease 2A1 ni claim 2B n'a été
+créé.
+
+Vérification finale : `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`
+et `:kanvas:compileTestKotlin` sortent 0. Les XML publics sont scan-span
+`14/0/0/0`, W6a `31/0/0/0`, D24S8 distinct `1/0/0/0` et inverse
+empty/non-empty `1/0/0/0`. Les deux classes GPU ont Gradle exit 1 seulement
+après l'exit GLFW natif macOS 133, donc **UNKNOWN** séparé des XML ; les deux
+sélecteurs W4e sortent Gradle 0. Task 3 est prêt pour revue Sol ; 2A0c.IV,
+2A0d, 2A1 et 2B restent ouverts.
+
+### 2A0c.IIIb/c — correctif revue Sol, round 1
+
+Le scan-span gèle son `load/store` natif réel. Les usages W4e sont tirés de la
+phase scellée : scan-span sans V/I/U, fan avec V/I sans U, covers avec U sans
+V/I. Le préflight vérifie catalogue/owner, operands, load/store, blend et ordre
+d’usages avant allocation. L’encodeur W6 sélectionne le stencil fan et le
+pipeline cover depuis la recette, puis confronte les données préparées. Aucun
+lease 2A1 ni claim 2B n’est créé.
+
+### 2A0c.IIIb/c — correctif revue Sol, round 2
+
+Les phases W4d multisample et hard-edge restent sur leurs usages V/I/U
+historiques ; seuls les quatre sites inverse W6 réduisent leurs usages à ceux
+consommés. Le préflight inverse compare désormais chaque `GPUFrameResourceUse`
+entier (ref, rôle, usage, lifetime et écriture), ainsi que les slices scellées.
+Les sélecteurs publics AA `AA inverse direct over scan span limit keeps its
+multisample route` et hard-mask `hard path mask clips an offset direct fill
+triangle in a W6 layer` sont XML `1/0/0/0`; leurs Gradle exits 1 proviennent du
+GLFW 133 post-JUnit et restent **UNKNOWN**. Cette note ne ferme pas la revue
+Sol ni 2A1/2B.
+
+### 2A0c.IIIb/c — correctif revue Sol, round 3
+
+`GeometryProducer.Fan` conserve désormais un snapshot immuable de
+`PathStencilEdgeFanF32` : vertices F32 (bits bruts), indices et débuts de
+contours, ainsi que son domaine. Ces faits entrent dans l'encodage canonique
+du site. Avant tout `device.create*`, le préflight confronte le fan du packet
+préparé et le contenu exact de sa slice V/I NDC au snapshot ; un fan de même
+taille mais de contenu différent ne peut donc plus partager une identité de
+catalogue. Les covers Geometry/Zero vérifient aussi les quatre bytes F32 zéro
+de `inverse=false` à l'offset U+16 de leur Uniform32 scellé.
+
+Le packet producer ne porte volontairement pas de consumer direct : le
+préflight exige ce `null` puis confronte son consumer inverse retenu par
+l'autorité scellée avec le cover natif suivant. Les covers, eux, authentifient
+leur consumer packet, domaine, mask et état depth/stencil. `w4ePreparedPath.scissor`
+reste le scissor du draw source et ne prétend pas être celui de la phase ; le
+gate compare donc les scissors locaux ordonnés du scan-span et le domaine du
+consumer effectivement consommés. Les trois compiles ciblées sortent 0 ; XML
+scan-span `14/0/0/0`, W6a `31/0/0/0`, D24S8 distinct `1/0/0/0` et
+empty/non-empty `1/0/0/0`. Les deux classes GPU terminent encore après JUnit
+par GLFW 133 (**UNKNOWN**), tandis que les deux sélecteurs W4e sortent 0.
+Cette note ne ferme pas la revue Sol, 2A0c.IV, 2A0d, 2A1 ou 2B.
+
+### 2A0c.IIIc — correctif revue Sol, round 4/5
+
+Avant la première allocation, les deux covers confrontent désormais l'identité
+du consumer porté par le packet à `authority.consumerFor(passId)` ; l'égalité
+des champs ne suffit donc plus. Le gate contrôle aussi le `scissor` de la
+source (`bound.draw`), distinct du domaine de couverture, et le ZeroCover
+exige `PathDrawGeometry.Empty`. Ces trois contrôles reproduisent les
+assertions auparavant tardives de l'encodeur sans créer de géométrie.
+Les trois compiles ciblées sortent 0. Le lancement groupé des sélecteurs
+publics produit les XML W6a `31/0/0/0`, scan-span `14/0/0/0` et W4e
+`2/0/0/0`; Gradle s'arrête ensuite avec GLFW 133, après JUnit (**UNKNOWN**
+pour la couche native, sans échec JUnit).
+
+La relecture Sol ciblée de `6082d3a68` ne relève aucun finding
+Critical/Important. Le sous-lot Task 3 `2A0c.IIIb/c` est review-clean : le
+catalogue par site natif, le contenu Fan et le packet inverse sont authentifiés
+avant allocation, puis consommés par le dispatch fondé sur la recette. Les
+gates `2A0c.IV`, `2A0d`, `2A1` et `2B` demeurent ouverts ; les XML ci-dessus
+n'établissent pas la réussite de la terminaison native GLFW.
+
+### 2A0c.IV Task 1 — inventaire InverseDomain sans mask et témoins publics
+
+L'inventaire W6 porte sur les `finalW4eBindings`, rebinding final des sources
+avant catalogue : les sites sont donc identifiés par le `PathRenderPass` natif
+scellé, jamais par l'index proxy W6 ni par un ID de fixture. Pour
+`InverseDomain.Zero`, quel que soit le support conservé `PathDrawGeometry.Empty`
+ou `PathDrawGeometry.InverseDomainSource`, l'unique site est
+`NativeSiteOwnerV1(path.id, path.ordinal, 0)`. Il est
+`SingleSampleDirectColor`, crée un cover couleur fullscreen (draw 3) et
+consomme uniquement `INVERSE_DOMAIN_ZERO_UNIFORM` U16 : ni V/I, ni D24S8.
+Le compilateur sélectionne `Empty` seulement si `segmentCount == 0`; un Path
+public non vide sans intérieur fini conserve `InverseDomainSource`.
+
+Pour `InverseDomain.Geometry.DirectTriangle`, un même `path.id` et
+`path.ordinal` porte les slots ordonnés `0=domainStencil`, `1=interiorZero`,
+`2=colorCover`. Le quad de domaine et l'intérieur ont leurs slices V/I
+exactes, le cover consomme `INVERSE_DOMAIN_UNIFORM` U16, et le D24S8 est
+scene-local. `commonSource=true` omet la commande de draw du slot 0 Direct,
+mais le pipeline `domainStencil` est toujours créé et authentifié.
+L'inventaire initial avait attribué à tort ce triplet à `StencilEdgeFan` :
+ses deux passes natives adjacentes conservent chacun leur owner slot 0,
+`fanStencil` producer puis `colorCover` TestZero, avec D24S8 partagé. Le
+témoin pixel Fan initial était valide, mais ne prouvait pas trois créations.
+Le domaine et le scissor source demeurent les facts I32/F32 scellés de
+`:math:geometry`; le renderer ne les reconstruit pas.
+
+Les témoins `Surface` ajoutés dans `W6aLayerW4W5SurfacePixelTest` fixent leur
+oracle littéral avant `Surface`, n'emploient aucun `clipPath`, et exigent
+chacun les scopes `Render` et `Readback`: Empty/Zero, non-empty
+`InverseDomainSource`/Zero, Geometry DirectTriangle et Geometry fan
+`INVERSE_EVEN_ODD` à deux contours. Les selectors Zero Empty, Zero non-empty
+et fan donnent chacun XML `1/0/0/0`, puis Gradle exit `1` après GLFW `133`;
+le statut natif est donc **UNKNOWN**. Le selector DirectTriangle donne XML
+`1/1/0/0`, avant pixels et avant submit, avec le RED causal
+`w6a.layer.invalid_native_path: W6 path operands differ from the frozen graph's
+stencil IDs, ordering or load/store`; son Gradle exit est aussi `1` et GLFW
+`133` reste séparé. Aucune production n'a été modifiée dans Task 1, aucun
+test InverseMask/scan-span existant n'a été touché, et 2A0c.IV reste ouvert
+pour la recette Geometry DirectTriangle puis le gate fan.
+
+La revue Sol de Task 1 a relevé que le premier triangle plaçait son hypoténuse
+sur quatre centres de pixels, sans règle de frontière indépendante. Le sommet
+`(1,5)` est déplacé à `(1,4)` : l'expected littéral 3/2/1 ne change pas et
+aucun centre ne tombe sur le nouvel edge. Le sélecteur exact reste XML
+`1/1/0/0` avec le **même** diagnostic `w6a.layer.invalid_native_path`
+avant pixels ; il constitue maintenant un RED causal du validateur W6.
+L'analyse du code situe le refus dans la classification du premier D24S8
+scene-local `InverseDomain.Geometry` comme cover, alors que l'encodeur le
+clear/initialise dans son pass `SingleSampleDirectColor`. La correction
+phase-aware de cette validation précède les recettes IV ; elle ne généralise
+pas l'acceptation des covers sans producer.
+
+Le bridge `GPUW6aNativePathValidation` reconnaît maintenant uniquement le
+`PathRenderPass SingleSampleDirectColor` W4e dont le consumer scellé est
+`InverseDomain.Geometry` et dont l'accès/load-store stencil ordinaire est
+absent. Il exige que la passe native initialise vraiment le D24S8 scene-local
+(depth/stencil writable, depth clear à 1, stencil clear à 0, stores) ; les
+autres covers conservent la règle du producer préalable. Après ce changement,
+le DirectTriangle corrigé est XML `1/0/0/0`. Le run public groupé est W6a
+`35/0/0/0`, scan-span `14/0/0/0`, W4e `2/0/0/0`. Les compiles renderer et
+tests Kanvas sortent 0 ; Gradle finit à 1 uniquement après GLFW 133
+post-JUnit, donc la terminaison native demeure **UNKNOWN**. La revue Sol
+ciblée du bridge est clean, sans finding Critical/Important ; les recettes IV
+et gates 2A1/2B restent ouverts.
+
+### 2A0c.IV Task 2 — `InverseDomain.Zero`, bundle natif unique
+
+`W6InverseDomainZeroCoverRecipeV1` gèle depuis le `PathRenderPass` final un
+seul owner `NativeSiteOwnerV1(path.id, path.ordinal, 0)` : predicate `Zero`,
+source `Empty` ou `InverseDomainSource`, domaine I32, scissor source, target,
+load/store/blend, draw fullscreen 3 et ABI bind group 0. Le canonique contient
+les operands physiques et chacun des 16 octets du
+`INVERSE_DOMAIN_ZERO_UNIFORM` U16. Tout `InverseDomain.Zero` final qui ne
+serait pas `SingleSampleDirectColor` sans resolve/D24S8, ou qui porterait
+`Fill`/`Stroke`, est refusé ; la slice V/I
+`INVERSE_DOMAIN_ZERO_SOURCE` est également refusée. La géométrie reste dans
+`:math:geometry` et `InverseDomain.Geometry` garde sa route historique : cette
+tâche ne revendique aucune fermeture IV.
+
+La famille dédiée entre dans catalogue, seal et projection W6. Le seal
+recalcule les recettes depuis les bindings finaux, et le layout physique
+transporte explicitement cette map. Le préflight, avant tout `device.create*`,
+authentifie owner/catalogue, operands physiques, slice et bytes U, identity du
+packet/consumer, forme source, domaine/scissor, phase/sample/load/store/blend
+et les deux `resourceUses` exacts target+U. Il vérifie aussi les owners de
+bindings sans draw émis (cache hit/draw omis), afin que l'absence d'une
+commande ne retire pas le site du catalogue. L'encodeur W6 reçoit la map
+typée, sélectionne la recette Zero avant le fallback `InverseDomain`, puis
+utilise son pipeline unmasked, groupe 0, U et domaine ; l'appel W4e autonome
+reste inchangé quand aucune map W6 n'est fournie.
+
+Les compiles séparées `:gpu-plan:compileKotlin`,
+`:gpu-renderer:compileKotlin` et `:kanvas:compileTestKotlin` sortent 0. Le
+run public final donne XML W6a `35/0/0/0`, scan-span `14/0/0/0` et les deux
+sélecteurs W4e `2/0/0/0`. Gradle se termine ensuite sur GLFW macOS 133 après
+JUnit : état natif **UNKNOWN**, pas PASS. `git diff --check` est propre. La
+revue Sol indépendante du commit `9dcaf822f` est clean, sans finding
+Critical/Important ; 2A0c.IV, 2A0d, 2A1 et 2B restent ouverts.
+
+### 2A0c.IV Task 3 — `InverseDomain.Geometry` DirectTriangle, triplet natif
+
+`W6InverseDomainDirectRecipeV1` fige le seul owner `PathRenderPass.id` et
+`ordinal` sous trois sites ordonnés : `0=domainStencil`, `1=interiorZero`,
+`2=colorCover`. La forme est strictement `DirectTriangle`; le fan reste pour
+Task 4. La recette porte target, D24S8 scene-local, V/I/U, domaine I32 et
+scissor source distincts, load/store/blend, fill rule, les deux slices et les
+snapshots exacts NDC des V/I quad et intérieur, ainsi que les 16 bytes U16.
+Le catalogue/seal reconstruit le triplet depuis `finalW4eBindings`; aucun
+owner Geometry n'est créé depuis le proxy W6 et aucun lease 2A1/claim 2B n'est
+émis.
+
+La projection W6 et le préflight exigent les trois recettes de catalogue, le
+packet propriétaire, operands, slices/bytes et les cinq usages ordonnés
+target/V/I/U/D24S8 avant `device.create*`. L'encodeur construit toujours les
+trois pipelines catalogués; avec `commonSource=true`, seule la commande draw
+de `domainStencil` est omise. Le `DirectTriangle` préparé est confronté au
+snapshot NDC, sans triangulation renderer. Le RED public initial a révélé que
+le payload V/I est scellé en NDC alors que `:math` expose des coordonnées
+device; la comparaison applique maintenant la projection existante avant
+l'assertion, sans changer l'oracle.
+
+Compiles séparées : `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`
+et `:kanvas:compileTestKotlin` sorties 0. Le sélecteur DirectTriangle est XML
+`1/0/0/0`; Gradle finit à 1 seulement après GLFW macOS 133, donc natif
+**UNKNOWN** distinct. Les sélecteurs de préservation et la revue Sol sont
+consignés ci-dessous ; IV, fan Task 4, 2A1 et 2B restent ouverts.
+
+La re-revue Sol a conduit à sceller `interiorZero` sur le stencil concret
+`Replace`, et le `colorCover` sur exactement trois sommets fullscreen. Avant
+tout `device.create*`, le préflight Direct confronte désormais la géométrie
+préparée projetée NDC et ses indices au snapshot, l'identité
+packet/consumer/domaine, puis scissor, operands, V/I, sample/resolve/pass,
+blend, target, D24S8, load/store et `resourceUses`. Les trois témoins Surface
+Direct/Zero/Fan donnent XML `3/0/0/0`; le même GLFW macOS 133 post-JUnit reste
+**UNKNOWN**.
+
+Le dernier garde de re-revue lie chaque step au owner Direct par la projection
+scellée `RenderPass` W6 → `binding.nativePass(proxy.id)` W4e, au lieu d'une
+appartenance large au binding. Il confronte aussi les `passId` packet/path et
+le scissor source préparé avant allocation. La recette slot 1 est validée
+avant toute création de pipeline (y compris slot 0).
+
+Le gate final Task 3 sur `6c6cda2` donne les trois compiles Kotlin ciblées
+avec sortie 0, les XML publics W6a `35/0/0/0`, scan-span `14/0/0/0` et les
+deux sélecteurs W4e `2/0/0/0` (ce dernier Gradle 0). Pour W6a/scan-span,
+Gradle sort 1 uniquement après GLFW 133 post-JUnit : terminaison native
+**UNKNOWN**, pas PASS. La re-review Sol indépendante de `d572f2ab4..6c6cda2`
+ne relève aucun finding Critical/Important. Task 3 est review-clean ; la
+variante Fan, 2A1 et 2B ne le sont pas.
+
+### Amendement 2A0c.IV Task 4 — topologie Fan après audit architectural
+
+Le témoin Fan `INVERSE_EVEN_ODD` était vert avant recette. La première
+tentative locale de lui imposer le triplet Direct a révélé que W4d/W4e garde
+un producer `SingleSampleStencilProducer` et un cover
+`SingleSampleStencilColorCover` adjacents, non un `SingleSampleDirectColor`.
+La normalisation exploratoire a ensuite échoué sur le contrat RenderGraph
+`Single-sample direct color passes require a direct hard draw and logical
+target` : changer seulement la phase laisserait `StencilCover` et
+`atomicGroup` incompatibles, tout en exposant W4e autonome et les routes AA.
+Le prototype non commité est conservé de façon récupérable dans le stash
+nommé `w6 inverse-domain fan single-pass prototype rejected after architecture
+audit` ; la branche publiée n'a pas reçu cette normalisation.
+
+L'audit Astra en lecture seule confirme deux bundles réellement créés par la
+route W6 Fan : pipeline `fanStencil` sur le producer et pipeline+bind group
+`colorCover` sur le cover. La spec finale §4 exige l'inventaire exact de ces
+créations et leurs owners/ordinals, pas la fusion des passes. Le plan IV est
+amendé pour sceller deux sites Fan `(producer.id, producer.ordinal, 0)` et
+`(cover.id, cover.ordinal, 0)`, leur identité commune, leur D24S8 et leurs
+payloads distincts avant allocation. Le plan global 2A0c est corrigé aussi,
+pour que les futures leases 2A1 n'utilisent pas l'ancien compte de trois
+bundles pour Fan. Le triplet Direct reste review-clean ;
+Task 4 Fan, 2A1 et 2B restent ouverts, sans nouveau B/B−1 revendiqué.
+
+### 2A0c.IV Task 4 — `InverseDomain.Geometry.StencilEdgeFan`, paire native scellée
+
+Task 4 conserve strictement la paire W4e native : le producer
+`SingleSampleStencilProducer` publie le site
+`(producer.id, producer.ordinal, 0)` `fanStencil`, et son cover adjacent
+`SingleSampleStencilColorCover` publie `(cover.id, cover.ordinal, 0)`
+`colorCover`. Le host `W6InverseDomainFanRecipeV1` gèle leurs IDs/ordinals,
+ordre adjacent, command index, atomic group, target, D24S8, domaines/scissors,
+load/store et blend. Il prend ses snapshots F32/I32 directement depuis
+`:math:geometry` (vertices, indices et contour starts), les confronte au
+payload NDC déjà scellé, et porte les 16 bytes U16 du cover. Ainsi deux fans
+de tailles identiques et de contenu différent ont des encodages canoniques
+différents. EVEN_ODD sélectionne un stencil parity concret; WINDING sélectionne
+le winding concret; le cover est exactement TestZero, group 0 et draw 3.
+
+Le catalogue, le seal et la projection W6 reconnaissent exactement ces deux
+sites à owner distinct. Le préflight, avant `device.create*`, exige les deux
+packets et leurs source steps adjacents, le consumer absent du producer mais
+retenu par authority, le consumer InverseDomain présent du cover, les operands
+et slices/bytes, ainsi que les usages réellement consommés target/D24S8/V/I/U.
+Il ne déduit aucune absence des autres slices d'un slab W4e. L'encodeur route
+d'abord par recette : pipeline stencil Fan sur producer, puis pipeline
+InverseDomain/TestZero + groupe U16 sur cover. Direct, Zero, InverseMask et le
+fallback W4e sans recettes restent séparés. Aucun lease 2A1, claim 2B,
+géométrie renderer, changement W4e/RenderGraph, infrastructure de tests, GM,
+font ou codec n'est introduit.
+
+Les compiles séparées `:gpu-plan:compileKotlin` et
+`:gpu-renderer:compileKotlin` sortent 0; `git diff --check` est propre. Le
+sélecteur public Fan EVEN_ODD donne XML `1/0/0/0`; les témoins existants
+WINDING et inverses successifs donnent XML `2/0/0/0`. Chaque invocation
+Gradle termine néanmoins après JUnit sur GLFW macOS 133 : statut process/natif
+**UNKNOWN**, jamais PASS. Le premier RED Task 4 était
+`W6 InverseDomain.Geometry fan producer/cover must retain one draw and atomic group` :
+il a révélé que le freezer parcourait aussi la cover comme candidate. Le filtre
+strict producer corrige ce problème sans normaliser la paire; un RED catalogue
+subséquent a été fermé en incluant la map Fan dans la reconstruction attendue.
+La revue Sol transversale de `c7a7286be` ne trouve aucun finding
+Critical/Important sur Zero/Direct/Fan, le provider W5a ou les routes de
+contournement packet/cache. La vérification indépendante après commit donne
+W6a XML `35/0/0/0` et scan-span XML `14/0/0/0`, chacun avec GLFW 133 après
+JUnit et donc statut natif **UNKNOWN** ; les deux sélecteurs W4e donnent
+Gradle 0 et XML `2/0/0/0`. Task 4 et `2A0c.IV` sont review-clean. `2A0d`,
+les leases/budgets `2A1`, l'authentification globale `2B` et la qualification
+native globale restent ouverts ; aucun B/B−1 n'est revendiqué ici.
+
+### Handoff 2A0d — spécialisation source W5a
+
+Le plan `refactor/plans/2026-09-28-w6-w5a-source-native-sites-implementation-plan.md`
+est corrigé et relu Sol sans finding Critical/Important. Il sépare une recette logique `:gpu-plan` du
+stage/template/WGSL internes au renderer, impose une bijection frame entière
+avant allocation, et ajoute la recette W5a au slot dense qui suit les bundles
+du même owner/draw/packet. Les producers W4e ne reçoivent pas de site source ;
+seul le color consumer terminal en reçoit un. Le Task 1 commence par un
+`RenderPass` W6 ordinaire, sans W6b ni destination-read ; les variantes W4e et
+ABI étendues suivent. Le sampler physique de destination et sa lease restent
+reportés au Task 3 du plan W6 principal, avec re-seal avant B/B−1.
+
+### 2A0d Task 1a — source W5a ordinaire `SolidRect`/`MaterialV1` solid
+
+Le commit local `d8b2c76ee` livre une première tranche verticale : pour un
+`RenderPass` W6 `SolidRectDraw` portant réellement `MaterialV1`
+`SolidLinearPremulV1 + SolidRgbaF32V1`, la recette plan-only gèle le programme
+et son Raw ID distinct, les 16 bytes U16 et l'ABI group 1 uniform, l'owner
+géométrique/canonique, target/sample/blend et le site W5a au slot `1` après
+le bundle SolidRect `0`. Le catalogue/seal reconstruit ce site depuis les
+passes finales ; une table matériau absente donne une map vide. W5h applique
+le même prédicat d'admission, vérifie la bijection recettes/packets à l'échelle
+du frame, le template logique et l'ABI avant `beginFramePreparation`. Le stage
+W5a vérifie son provider en prépass sans allocation puis réutilise le template
+attesté. Aucun site W4e, W6b ou destination-read n'est revendiqué.
+
+Le nouveau témoin `Surface` fixe deux pixels avant construction, exerce deux
+draws publics portés par des owners distincts et vérifie les scopes
+`Render`/`Readback` ; il ne prétend
+pas prouver un ordinal non nul (les deux passes ont ordinal `0`). Les trois
+compiles ciblées sont sorties 0, ma relance de la classe W6 donne XML
+`36/0/0/0`; Gradle finit sur GLFW 133 après JUnit, qualification native
+**UNKNOWN**. `git show --check` est propre et la revue Sol de `d8b2c76ee`
+n'a trouvé aucun finding Critical/Important. Task 1b (autres sources ordinaires)
+ainsi que W4e, W6b, destination-read, 2A1/B/B−1 et 2B restent ouverts.
+
+### 2A0d Task 1b — premier sous-lot `LinearGradientClampSrgbV1`
+
+Le commit local `b037096336` ajoute seulement le gradient linéaire legacy
+`MaterialV1` sur `RenderPass`/`SolidRectDraw` W6 ordinaire. La recette scelle
+l'ABI group 1 `[uniformBuffer(0), storageBuffer(1)]`, l'uniforme exact de
+**128 octets** (en-tête 16 + gradient 112), l'identité des coordonnées, et
+le `GradientStopData` frame-local déjà publié (ID, taille, usages et identité
+du slab). Le descripteur précoce possède le même ID déterministe que la row
+finale `RenderGraph.construct` ; le seal reconstruit la recette. W5h compare
+stage, bindings, ressources physiques et template avant allocation ; le
+provider revalide la row et le slab sans nouvelle lease. Le variant solid
+conserve ses 16 octets et n'incorpore pas les coordonnées inutilisées.
+
+Le témoin `Surface` public fixe deux pixels gradient avant `Surface`, traverse
+une layer W6 et exige `Render`/`Readback`. Les trois compilations ciblées sont
+vertes. Ma relance de la classe W6 donne XML `37/0/0/0`, suivi d'un exit
+Gradle 133 après JUnit : GLFW/natif **UNKNOWN**, pas un PASS natif. Une
+exécution plus large de W5c a produit XML `27/7/0/0` : sept refus
+`unsupported.material.composed.numeric-domain-unbounded` sur variantes
+conical/sweep/radial et un cas mixte hors admission ; leur baseline n'est pas
+prouvée et aucun succès global W5c n'est revendiqué. Le cas linéaire ciblé
+est XML `1/0/0/0`. `git diff --check` est propre et la revue Sol de
+`b037096336` n'a trouvé aucun finding Critical/Important. Task 1b reste
+ouverte pour les autres sources ordinaires ; 2A0d entier, W4e, W6b,
+destination-read, 2A1/B/B−1 et 2B restent ouverts.
+
+### 2A0d Task 1b — deuxième sous-lot `RadialGradientClampSrgbV1`
+
+Le commit local `f09a4791e` admet uniquement le radial legacy non composé
+`MaterialV1` sur un `SolidRectDraw` W6 ordinaire. Il scelle les 96 octets
+uniformes (en-tête 16 + radial 80), group 1 uniform `0`/storage stops `1`,
+les coordonnées et la même row `GradientStopData` frame-local que le linear.
+Le prédicat de consommation du slab reste fermé explicitement sur
+`Linear|Radial`, sans admettre par négation un futur image/noise. Solid U16 et
+Linear U128 restent inchangés, et aucune lease 2A1 n'est ajoutée.
+
+Un témoin `Surface` radial non composé, rayon strictement positif, fixe
+l'expected avant `Surface` et exige `Render`/`Readback`. La compilation
+ciblée `gpu-plan`/`gpu-renderer`/`kanvas:compileTestKotlin` est verte ; ma
+relance indépendante de la classe W6 donne XML `38/0/0/0`, puis Gradle exit
+133 après JUnit (natif **UNKNOWN**). Le témoin W5c radial simple avait
+également passé en JUnit avant ce sous-lot ; les refus composed du run plus
+large restent hors admission et non résolus. `git show --check` est propre ;
+la revue Sol de `f09a4791e` n'a trouvé aucun finding Critical/Important.
+Task 1b et tout 2A0d restent ouverts pour les autres sources/geometry hosts,
+W4e, W6b et destination-read, puis 2A1/B/B−1 et 2B.
+
+### 2A0d Task 1b — feuilles legacy `MaterialV1` et chaînes `OpacityV1` sur `SolidRect`
+
+Le commit local `1e1bf6a5c` élargit explicitement le même site ordinaire W6
+aux cinq feuilles `Solid`, `Linear`, `Radial`, `Sweep`, `Conical` et à leurs
+chaînes contiguës `OpacityV1`. La recette scelle l'ID structural racine et
+feuille, le nombre d'alphas, les bytes uniformes exacts (bases
+16/128/96/112/192 + 16 par alpha), le manifest group 1, les stops et les
+coordonnées des gradients. La table matériau impose la topologie enfant
+`index−1`; le constructeur et W5h reconstruisent la chaîne pour authentifier
+l'ID racine. Le slab stops n'est ajouté que pour les variants gradient
+énumérés. Aucun host autre que `SolidRect`, ni W4e, W6b, destination-read,
+V2/V4/V5 ou lease 2A1 n'est admis.
+
+Le témoin `Surface` public couvre les cinq feuilles avec deux stages
+`OpacityV1` (shader et alpha de Paint) et des gradients à deux stops ; son
+oracle CPU est calculé avant `Surface` et vérifie `Render`/`Readback`. Ma
+relance de la classe W6 donne XML `39/0/0/0`, suivi de Gradle exit 133 après
+JUnit : qualification native **UNKNOWN**. `:kanvas:compileTestKotlin` est
+verte, `git show --check` propre, revue Sol sans finding Critical/Important.
+Ce lot ferme les cinq feuilles legacy **sur `SolidRect` seulement**. Task 1b,
+les autres geometry hosts/ABI, puis 2A0d/2A1/2B restent ouverts.
+
+### 2A0d Task 1b — sources solid simples sur `AnalyticRect/AnalyticRRect`
+
+Le commit local `9cee9f3` étend le site W5a ordinaire aux deux hosts
+CorePrimitive analytiques avec `MaterialV1` solid simple U16 uniquement.
+La recette source scelle explicitement la famille géométrique, le canonical
+encoding de `W6CorePrimitiveNativeSiteRecipeV1`, target/sample/blend et
+l'owner/bundle dense `1` après le bundle géométrique `0`. Le seal physique
+et W5h recoupent recettes et packets avant allocation ; les variants
+SolidRect précédents sont préservés. Opacity, gradients, Point/Vertices/Path,
+W4e, W6b, destination-read et V2/V4/V5 restent exclus de cette admission.
+
+Le témoin `Surface` W6 public utilise Rect et RRect AA fractionnaires dans
+une layer. L'expected précède `Surface` : quatre pixels de bord à couverture
+`0,75`, deux centres pleins et un pixel extérieur transparent, avec scopes
+`Render`/`Readback`. La première revue Sol a trouvé un oracle limité aux
+centres ; l'amend l'a corrigé et sa seconde revue ne trouve plus de finding
+Critical/Important. Ma relance indépendante donne XML `40/0/0/0`, suivie
+de Gradle exit 133 après JUnit : natif **UNKNOWN**. Les compilations ciblées
+`gpu-plan`/`gpu-renderer`/`kanvas:compileTestKotlin` sont vertes et
+`git show --check` est propre. Task 1b et tout 2A0d restent ouverts.
+
+### 2A0d Task 1b — source solid simple sur `Point` ordinaire
+
+`8f7342668` admet la source W5a `MaterialV1` Solid U16 sur
+`W5bPointDraw` uniquement lorsque `clipOnly == null`. La recette compare
+mode, V/I, bounds, scissor et blend au host `W6PointHostRecipeV1`, puis
+occupe le slot dense suivant la géométrie du même owner. W5h confronte
+packet, recette, canonical geometry, template, uniform bytes et manifest
+avant la préparation native. W6b, destination-read, W4e, gradients/Opacity,
+V2/V4/V5, Vertices/Path et leases restent exclus.
+
+Le témoin public `Surface` sélectionne explicitement `Shader.SolidColor` et
+fixe les pixels avant `Surface`. La première revue Sol a relevé l'absence
+de sa propre assertion `Render`/`Readback` ; `995bde6` l'a ajoutée au cas
+layered, puis la relecture Sol a été clean. Les trois compilations ciblées
+sont sorties 0. La relance des deux classes publiques pertinentes donne
+W6a XML `40/0/0/0`, W5a XML `48/1/0/1` : l'unique échec W5a concerne
+le refus attendu d'un `Vertices` avec filtre couleur sur la route racine,
+sans modification de cette route dans ce lot ; sa baseline n'est pas
+vérifiée. Gradle finit aussi avec GLFW exit 133 : statut natif **UNKNOWN**,
+distinct de l'échec JUnit W5a. Task 1b et 2A0d restent ouverts.

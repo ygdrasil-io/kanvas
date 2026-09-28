@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.PathFillScanScissorsI32
+import org.graphiks.math.geometry.PathFillScanSpansI32
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokeGeometryF32
 import org.graphiks.math.geometry.PathStrokeDrawMode
@@ -194,8 +196,16 @@ public class GeneralPathDraw private constructor(
 
     /** Pre-publication target rebinding retains this already selected General path contract. */
     internal fun rebindGeometryV6(geometry: PathDrawGeometry, scissorI32: RectI32,
-        material: PlanDrawMaterialAuthority = materialAuthority): GeneralPathDraw =
+        material: PlanDrawMaterialAuthority = materialAuthority, blend: BlendPlan = this.blend): GeneralPathDraw =
         GeneralPathDraw(commandIndex, material, geometry, strategy, scissorI32, coverage, sample, blend)
+
+    /** W4e may rebind material facts for its sealed inverse source without reopening path selection. */
+    internal fun rebindW4eSealedInverseMaterialV1(material: PlanDrawMaterialAuthority,
+        blend: BlendPlan = this.blend): GeneralPathDraw {
+        val geometry = copyPathGeometry()
+        require(geometry is PathDrawGeometry.InverseDomainSource || geometry == PathDrawGeometry.Empty)
+        return rebindGeometryV6(geometry, copyScissorI32(), material, blend)
+    }
 
     /** Legacy-only compatibility view. W5 path draws carry no reconstructed colour. */
     override public val color: ColorF32
@@ -287,12 +297,20 @@ public class GeneralPathDraw private constructor(
 }
 
 /** Retains the same immutable General geometry without projecting it into a narrow path lane. */
-public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw = GeneralPathDraw.ofMaterial(
-    commandIndex, materialAuthority.materialPlanRef(), copyPathGeometry(), strategy,
-    copyScissorI32(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
-    (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
-    materialAuthority is PlanDrawMaterialAuthority.MaterialV5,
-)
+public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw {
+    val geometry = copyPathGeometry()
+    return when (geometry) {
+        is PathDrawGeometry.InverseDomainSource,
+        PathDrawGeometry.Empty,
+        -> rebindW4eSealedInverseMaterialV1(materialAuthority, blend)
+        else -> GeneralPathDraw.ofMaterial(
+            commandIndex, materialAuthority.materialPlanRef(), geometry, strategy,
+            copyScissorI32(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
+            (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+            materialAuthority is PlanDrawMaterialAuthority.MaterialV5,
+        )
+    }
+}
 
 /** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */
 public class ClippedGeneralPathDraw private constructor(
@@ -1000,6 +1018,8 @@ public sealed interface PlanPass {
         public val depthStencilAccess: PlanDepthStencilAccess?,
         public val depthStencilLoadStore: PlanDepthStencilLoadStore?,
         public val resolveTarget: PlanResourceId?,
+        /** W4e Geometry producer authority; null preserves the historical indexed path route. */
+        public val scanSpansDeviceI32: PathFillScanSpansI32? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.PathRender
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -1033,11 +1053,18 @@ public sealed interface PlanPass {
         public val atomicGroup: PlanAtomicGroupId,
         public val load: AttachmentLoadPlan,
         public val store: AttachmentStorePlan,
+        /** W4e Geometry authority retained in device coordinates for this W6 producer. */
+        public val scanSpansDeviceI32: PathFillScanSpansI32? = null,
+        /** The one checked device-to-target rebase paired with [scanSpansDeviceI32]. */
+        public val scanScissorsLocalI32: PathFillScanScissorsI32? = null,
     ) : PlanPass {
         override public val role: PlanPassRole = PlanPassRole.StencilProducer
         override public val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedGeometry = geometry
         private val storedScissorI32 = scissorI32.copy()
+        init {
+            require((scanSpansDeviceI32 == null) == (scanScissorsLocalI32 == null))
+        }
         public fun copyGeometry(): PathDrawGeometry = storedGeometry
         public fun copyScissorI32(): RectI32 = storedScissorI32.copy()
     }

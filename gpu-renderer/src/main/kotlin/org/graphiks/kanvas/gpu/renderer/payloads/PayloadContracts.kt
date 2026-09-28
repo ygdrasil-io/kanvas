@@ -1591,6 +1591,12 @@ sealed interface GPUDrawSemanticPayload {
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
     }
 
+    /** One sealed path-stencil producer packet; scan spans may expand it only during native encoding. */
+    class PathStencilProducer internal constructor(payloadRef: GPUDrawPayloadRef) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "PathStencilProducer"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+    }
+
     /** Exact core geometry, material, target, and typed clip plan for Slice 12A. */
     class CorePrimitive internal constructor(
         payloadRef: GPUDrawPayloadRef,

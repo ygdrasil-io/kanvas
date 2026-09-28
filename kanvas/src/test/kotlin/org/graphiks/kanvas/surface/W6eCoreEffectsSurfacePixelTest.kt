@@ -17,7 +17,9 @@ import org.junit.jupiter.api.Test
 class W6eCoreEffectsSurfacePixelTest {
     @Test
     fun coreShardKeepsExactAndBlurOracleAssertionsSeparate() {
-        // Every expected is owned before any Surface exists. Crop/Offset/Tile are byte-exact;
+        // Every expected is owned before any Surface exists. The Crop row is the public IIa1
+        // witness: it crosses its target-local texture recipe, Render and Readback. Offset/Tile
+        // remain preservation neighbours for IIa2. Crop/Offset/Tile are byte-exact;
         // blur and shadow use the independent CPU family oracle below rather than that policy.
         val cropExpected = rgbaRow(listOf(transparent, blue, transparent, transparent))
         val offsetExpected = rgbaRow(listOf(transparent, blue, transparent, transparent))

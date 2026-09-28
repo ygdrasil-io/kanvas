@@ -204,6 +204,7 @@ private class W4dGeneralGraphDigestWriter(private val table: MaterialPlanTable?)
                 nullableText("$prefix.depth-stencil-access", pass.depthStencilAccess?.name)
                 nullableText("$prefix.depth-stencil-load-store", pass.depthStencilLoadStore?.name)
                 nullableText("$prefix.resolve-target", pass.resolveTarget?.value)
+                scanSpans("$prefix.scan-spans-device", pass.scanSpansDeviceI32)
             }
             is PlanPass.ReadbackPass -> {
                 text("$prefix.kind", "readback")
@@ -273,6 +274,25 @@ private class W4dGeneralGraphDigestWriter(private val table: MaterialPlanTable?)
         text("$prefix.vertex", resources.vertex.value)
         text("$prefix.index", resources.index.value)
         text("$prefix.uniform", resources.uniform.value)
+    }
+
+    private fun scanSpans(prefix: String, spans: org.graphiks.math.geometry.PathFillScanSpansI32?) {
+        if (spans == null) {
+            text("$prefix.kind", "none")
+            return
+        }
+        val domain = spans.copyDomainI32()
+        text("$prefix.kind", if (spans is org.graphiks.math.geometry.PathFillScanSpansI32.Empty) "empty" else "non-empty")
+        i32("$prefix.domain.left", domain.left)
+        i32("$prefix.domain.top", domain.top)
+        i32("$prefix.domain.right", domain.right)
+        i32("$prefix.domain.bottom", domain.bottom)
+        i32("$prefix.count", spans.spanCountI32)
+        spans.copySpansI32().forEachIndexed { indexI32, spanI32 ->
+            i32("$prefix[$indexI32].left", spanI32.leftI32)
+            i32("$prefix[$indexI32].right", spanI32.rightI32)
+            i32("$prefix[$indexI32].y", spanI32.yI32)
+        }
     }
 
     private fun pathDraw(prefix: String, draw: PathRenderDraw, materialV2: Boolean) {

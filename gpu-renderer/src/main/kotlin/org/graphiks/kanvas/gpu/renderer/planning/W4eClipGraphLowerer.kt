@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.renderer.planning
 
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.PathDrawGeometry
+import org.graphiks.kanvas.gpu.plan.PathRenderPhase
 import org.graphiks.kanvas.gpu.plan.PlanPassDependency
 import org.graphiks.kanvas.gpu.plan.PlanResource
 import org.graphiks.kanvas.gpu.plan.PlanResourceKind
@@ -31,6 +33,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskResolveAction
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawPayloadRef
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveW4ePreparedFrameTaskListAssembler
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
@@ -285,6 +289,11 @@ internal class W4eClipGraphLowerer {
         role = GPUDrawPacketRole.W4ePrepared,
         blendPlan = W5bBlendPlanLowerer.lower(finalBlend),
         bindingLayoutHash = "w4e.prepared-path.sealed-bindings",
+        semanticPayload = preparedPath.scanSpansDeviceI32?.let {
+            GPUDrawSemanticPayload.PathStencilProducer(
+                GPUDrawPayloadRef(preparedPath.commandIdValue, "w4e.prepared-path.stencil-producer"),
+            )
+        },
         vertexSourceLabel = "w4e.prepared-path.sealed-geometry",
         targetStateHash = "w4e.prepared-path.attachments",
         originalPaintOrder = index,
@@ -379,9 +388,42 @@ internal class W4eClipGraphLowerer {
                     "W4e path target must reference a declared resource"
                 })
                 add(use(path.targetResourceId, targetRole, GPUFrameResourceUsage.RenderAttachment, true))
-                add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
-                add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
-                add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                when (pass.phase) {
+                    PathRenderPhase.SingleSampleStencilProducer -> if (pass.scanSpansDeviceI32 == null) {
+                        add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
+                        add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
+                    }
+                    PathRenderPhase.SingleSampleStencilColorCover ->
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    PathRenderPhase.SingleSampleDirectColor -> if (
+                        consumer is GPUW4ePreparedClipConsumerAuthority.InverseDomain && when (pass.draw.copyPathGeometry()) {
+                            PathDrawGeometry.Empty,
+                            is PathDrawGeometry.InverseDomainSource,
+                            -> true
+                            else -> false
+                        }
+                    ) {
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    } else if (pass.draw.copyPathGeometry() == PathDrawGeometry.Empty) {
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    } else {
+                        add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
+                        add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    }
+                    PathRenderPhase.MultisampleDirectColor,
+                    PathRenderPhase.MultisampleStencilProducer,
+                    PathRenderPhase.MultisampleStencilColorCover,
+                    PathRenderPhase.HardEdgeMaskProducer,
+                    PathRenderPhase.HardEdgeMaskStencilProducer,
+                    PathRenderPhase.HardEdgeMaskStencilCover,
+                    PathRenderPhase.HardEdgeBinaryColorCover,
+                    -> {
+                        add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
+                        add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    }
+                }
                 path.depthStencilResourceId?.let { depth ->
                     add(use(depth, GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, true))
                 }

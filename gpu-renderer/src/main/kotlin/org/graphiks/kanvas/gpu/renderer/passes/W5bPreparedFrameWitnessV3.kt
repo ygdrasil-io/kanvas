@@ -124,7 +124,14 @@ internal class W5bPreparedFrameWitnessV3(
         (packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.blend == GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone ||
             w4eLane?.owns(packet) == true) &&
         graph.passes().filterIsInstance<PlanPass.StencilGeometryProducerV3>().any {
-            it.commandIndexI32 == packet.commandIdValue && (it.id.value == packet.passId ||
+            it.commandIndexI32 == packet.commandIdValue && (it.scanSpansDeviceI32 == null ||
+                packet.w4ePreparedPath?.scanSpansDeviceI32 === it.scanSpansDeviceI32 &&
+                    packet.w4ePreparedPath?.scanScissorsLocalI32?.copyOriginDeviceI32() ==
+                    it.scanScissorsLocalI32?.copyOriginDeviceI32() &&
+                    packet.w4ePreparedPath?.scanScissorsLocalI32?.copyDomainI32() ==
+                    it.scanScissorsLocalI32?.copyDomainI32() &&
+                    packet.w4ePreparedPath?.scanScissorsLocalI32?.copyScissorsI32() ==
+                    it.scanScissorsLocalI32?.copyScissorsI32()) && (it.id.value == packet.passId ||
                 (scratchFor(packet) as? W5bGeometryScratchV3.General)?.ownsProducer(packet, it) == true ||
                 w4eLane?.ownsProducer(packet, it) == true)
         }

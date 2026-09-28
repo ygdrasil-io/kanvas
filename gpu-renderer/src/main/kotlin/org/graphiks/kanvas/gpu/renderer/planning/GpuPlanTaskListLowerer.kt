@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.CoveragePlan
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.PlanPassId
 import org.graphiks.kanvas.gpu.plan.PlanResource
 import org.graphiks.kanvas.gpu.plan.PlanResourceKind
 import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
@@ -405,7 +406,8 @@ public class GpuPlanTaskListLowerer {
     internal fun packet(draw: PlanDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds, materialPlanTable: MaterialPlanTable?,
         prepared: org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive?,
         packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null,
-        frozenW6aGraph: RenderGraph? = null): GPUDrawPacket {
+        frozenW6aGraph: RenderGraph? = null,
+        coveragePassId: PlanPassId? = null): GPUDrawPacket {
         val bounds = when (draw) { is SolidRectDraw -> draw.copyVisibleBounds(); is W5bPointDraw -> draw.copyBoundsI32(); else -> error("Unknown direct geometry") }
         val scissor = when (draw) { is SolidRectDraw -> draw.copyScissor(); is W5bPointDraw -> draw.copyScissorI32(); else -> error("Unknown direct geometry") }
         require(bounds.roundTripsExactlyThroughF32() && scissor.roundTripsExactlyThroughF32()) {
@@ -416,11 +418,18 @@ public class GpuPlanTaskListLowerer {
         val clip = if (scissorBounds == target) GPUClipCoveragePlan.NoClip else GPUClipCoveragePlan.Scissor(GPUBounds(scissor.left.toFloat(), scissor.top.toFloat(), scissor.right.toFloat(), scissor.bottom.toFloat()))
         val execution = if (scissorBounds == target) GPUClipExecutionPlan.NoClip else GPUClipExecutionPlan.ScissorOnly(scissorBounds)
         val blend = W5bBlendPlanLowerer.lower(draw.blend)
+        val coverageOnly = coveragePassId != null
         val analysisRecordId = "analysis.fill_rect.${draw.commandIndex}"
         val semantic = if (draw is W5bPointDraw) {
             val geometry = if (frozenW6aGraph != null) {
+                val renderPassOwnsDraw = frozenW6aGraph.passes().filterIsInstance<PlanPass.RenderPass>()
+                    .flatMap { it.draws() }.any { it === draw }
+                val coveragePassOwnsDraw = coveragePassId?.let { passId ->
+                    (frozenW6aGraph.passes().singleOrNull { it.id == passId } as? PlanPass.FilterCoverageSourcePass)
+                        ?.rasterBinding?.draw === draw
+                } == true
                 require(prepared == null && frozenW6aGraph.verifyW6aLayerCompilerWitness() &&
-                    frozenW6aGraph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.any { it === draw })
+                    (renderPassOwnsDraw || coveragePassOwnsDraw))
                 GPUCorePrimitiveGeometryInput.TriangulatedPath(draw.copyVerticesF32().toList(), draw.copyIndicesI32().toList(),
                     draw.copyContourStartsI32().toList(), draw.copyVerticesF32().size / 2,
                     GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom))
@@ -438,7 +447,8 @@ public class GpuPlanTaskListLowerer {
                 GPUCorePrimitiveSourceFamily.PointLine, geometry, listOf(color.red, color.green, color.blue, color.alpha),
                 target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(),
                 GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, prepared?.analysisRecordId,
-                prepared?.analysisCommandFamily, material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4)))
+                prepared?.analysisCommandFamily, material = if (coverageOnly) null else
+                    W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4)))
         } else GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity()), material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4)))
         val structuralKey = corePrimitiveRenderPipelineStructuralKey(
             semantic,
@@ -447,7 +457,8 @@ public class GpuPlanTaskListLowerer {
             sampleCount = 1,
             colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
         )
-        return GPUDrawPacket(GPUDrawPacketID("packet.w3.${draw.commandIndex}"), draw.commandIndex, analysisRecordId, "pass.w3.main", "root", "binding.w3.${draw.commandIndex}", "w3-solid-rect", paintOrder.toLong(), "paint-order:$paintOrder", GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY), 1, GPUDrawPacketRole.Shading, blend, structuralKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY), bindingLayoutHash = CORE_PRIMITIVE_BINDING_LAYOUT_HASH, uniformSlot = semantic.payloadRef.uniformSlot, semanticPayload = semantic, vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL, scissorBoundsHash = corePrimitiveScissorAuthority(scissorBounds), targetStateHash = corePrimitiveTargetStateHash(1, GPUColorFormat.RGBA8UnormSrgb), originalPaintOrder = paintOrder, resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION, frameProvenance = GPUFrameProvenance.None, clipCoveragePlan = clip, clipExecutionPlan = execution)
+        val coverageSuffix = coveragePassId?.let { ".w6b.${it.value}" }.orEmpty()
+        return GPUDrawPacket(GPUDrawPacketID("packet.w3.${draw.commandIndex}$coverageSuffix"), draw.commandIndex, analysisRecordId, "pass.w3.main", "root", "binding.w3.${draw.commandIndex}$coverageSuffix", "w3-solid-rect", paintOrder.toLong(), "paint-order:$paintOrder", GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY), 1, GPUDrawPacketRole.Shading, blend, structuralKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY), bindingLayoutHash = CORE_PRIMITIVE_BINDING_LAYOUT_HASH, uniformSlot = semantic.payloadRef.uniformSlot, semanticPayload = semantic, vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL, scissorBoundsHash = corePrimitiveScissorAuthority(scissorBounds), targetStateHash = corePrimitiveTargetStateHash(1, GPUColorFormat.RGBA8UnormSrgb), originalPaintOrder = paintOrder, resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION, frameProvenance = GPUFrameProvenance.None, clipCoveragePlan = clip, clipExecutionPlan = execution)
     }
 
     private fun memoryBudget(capabilities: GPUCapabilities, graph: RenderGraph, shape: W3Graph, bounds: GPUPixelBounds, generation: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID, compositeSessionIdentity: String?): GPUFrameMemoryBudgetPlan? {

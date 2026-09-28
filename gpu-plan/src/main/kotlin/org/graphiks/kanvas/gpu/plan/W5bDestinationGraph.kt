@@ -107,7 +107,8 @@ internal object W5bDestinationGraphSealer {
             W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,
             W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
         val initialClearI32 = if (draws.isEmpty() || draws.first().blend is BlendPlan.DestinationReadV1) 1 else 0
-        val stencilCountI32 = draws.count { it is PathDraw && it.strategy == PathFillStrategy.StencilCover }
+        val stencilCountI32 = draws.count { it is PathDraw && (it.strategy == PathFillStrategy.StencilCover ||
+            (it as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true) }
         val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + stencilCountI32 + 1 + (clip?.passes()?.size ?: 0) + nativePrefix.size)
         val regions = draws.filter { it.blend is BlendPlan.DestinationReadV1 }
             .associate { it.commandIndex to destinationBounds(it, extent) }
@@ -197,7 +198,8 @@ internal object W5bDestinationGraphSealer {
                 val data = draw?.let { drawDataByCommandI32[it.commandIndex] } ?: drawDataResources
                 val load = if (hasColorAttachment) AttachmentLoadPlan.Load else AttachmentLoadPlan.ClearTransparent
                 hasColorAttachment = true
-                if (draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover) {
+                if (draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                        (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)) {
                     val depth = requireNotNull(depthStencilByCommandI32[draw.commandIndex])
                     val atomic = canonicalPathAtomicGroup(draw)
                     passes += PlanPass.StencilGeometryProducerV3(producerOrdinalI32++, target.id, depth,

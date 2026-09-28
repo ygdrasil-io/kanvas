@@ -4,7 +4,9 @@ package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
@@ -35,6 +37,640 @@ import org.junit.jupiter.api.Test
  */
 class W6aLayerW4W5SurfacePixelTest {
     @Test
+    fun `two ordinary solid material rects retain distinct W6 owners`() {
+        // Both public solid paints lower through the ordinary W5 material path.  Their expected
+        // pixels are deliberately fixed before Surface: current W6 creates one RenderPass per
+        // draw, so this witnesses two owners at ordinal zero rather than a made-up ordinal one.
+        val red = rgba(239, 51, 73)
+        val blue = rgba(17, 61, 211)
+        val expected = red + red + blue + blue
+
+        val surface = Surface(4, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), opaque(RED))
+            drawRect(RectF32.ofLTRB(2f, 0f, 4f, 1f), opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `analytic Rect and RRect use simple MaterialV1 solids in a W6 layer`() {
+        // Full-cover sample centres are intentionally separate from the fractional AA edges.
+        // The literal oracle precedes Surface and the scope assertion requires Render+Readback.
+        val rect = ColorARGB.Red
+        val rrect = ColorARGB.Blue
+        val expectedRect = W5aSolidOpacityCpuOracle.draw(rect, 1f)
+        val expectedRRect = W5aSolidOpacityCpuOracle.draw(rrect, 1f)
+        val expectedRectEdge = W5aSolidOpacityCpuOracle.draw(rect, 1f, coverageF32 = .75f)
+        val expectedRRectEdge = W5aSolidOpacityCpuOracle.draw(rrect, 1f, coverageF32 = .75f)
+
+        val surface = Surface(7, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(.25f, -1f, 2.75f, 2f),
+                opaque(RED).copy(shader = Shader.SolidColor(rect), antiAlias = true))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(3.25f, -1f, 5.75f, 2f), CornerRadiiF32.of(1f)),
+                opaque(RED).copy(shader = Shader.SolidColor(rrect), antiAlias = true))
+            restore()
+        }
+        val actual = surface.render()
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRectEdge, actual.pixels.copyOfRange(0, 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRect, actual.pixels.copyOfRange(4, 8))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRectEdge, actual.pixels.copyOfRange(8, 12))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRRectEdge, actual.pixels.copyOfRange(12, 16))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRRect, actual.pixels.copyOfRange(4 * 4, 5 * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expectedRRectEdge, actual.pixels.copyOfRange(5 * 4, 6 * 4))
+        assertContentEquals(rgba(0, 0, 0, 0), actual.pixels.copyOfRange(6 * 4, 7 * 4))
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `linear gradient material uses the public ordinary W6 source lane`() {
+        // The two samples are the sRGB gradient at x=.5 and x=1.5, calculated before Surface.
+        // This remains deliberately a Rect in one layer: the admitted route is an ordinary W6
+        // RenderPass source, not a W6b coverage pass or a W4e path consumer.
+        val expected = rgba(191, 0, 64) + rgba(64, 0, 191)
+        val gradient = Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(2f, 0f), listOf(
+            GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue),
+        ))
+
+        val surface = Surface(2, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), opaque(RED).copy(shader = gradient, blendMode = BlendMode.SRC))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `radial gradient material uses the public ordinary W6 source lane`() {
+        // The samples at (.5,.5) and (1.5,.5) have radial t values 0 and 1.  This is a single,
+        // finite, non-composed CLAMP/sRGB radial MaterialV1 Rect, so it excludes W4e, W6b, and
+        // destination-read routes.  The literal oracle is fixed before Surface construction.
+        val expected = rgba(255, 0, 0) + rgba(0, 0, 255)
+        val gradient = Shader.RadialGradient(Point2F32(.5f, .5f), 1f, listOf(
+            GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue),
+        ))
+
+        val surface = Surface(2, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), opaque(RED).copy(shader = gradient, blendMode = BlendMode.SRC))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `legacy MaterialV1 opacity chains retain native W6 evidence`() {
+        // Every gradient has two stops, so normalization cannot collapse this witness into a
+        // Solid material. The CPU oracle precedes Surface and never reads a W5/W6 plan.
+        val shaders = listOf(
+            Shader.Opacity(Shader.SolidColor(ColorARGB.Red), .5f),
+            Shader.Opacity(Shader.LinearGradient(Point2F32(1f, 0f), Point2F32(3f, 0f), listOf(
+                GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))), .5f),
+            Shader.Opacity(Shader.RadialGradient(Point2F32(2.5f, .5f), 1f, listOf(
+                GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))), .5f),
+            Shader.Opacity(Shader.SweepGradient(Point2F32(3.5f, .5f), stops = listOf(
+                GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))), .5f),
+            Shader.Opacity(Shader.ConicalGradient(Point2F32(4.5f, .5f), 0f, Point2F32(4.5f, .5f), 1f,
+                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))), .5f),
+        )
+        // Shader opacity plus Paint alpha are intentionally distinct planner stages.
+        val paintAlpha = 128f / 255f
+        val expected = shaders.mapIndexed { index, shader -> W5fColorCpuOracle.expectedShaderTree(shader,
+            paintAlphaF32 = paintAlpha, finalBlend = BlendMode.SRC, devicePointF32 = Point2F32(index + .5f, .5f))
+            .also(W5fSurfacePixelFixtures::requireBounded) }
+        val surface = Surface(5, 1)
+        surface.canvas {
+            saveLayer()
+            shaders.forEachIndexed { index, shader ->
+                drawRect(RectF32.ofLTRB(index.toFloat(), 0f, index + 1f, 1f),
+                    opaque(RED.withAlpha(128)).copy(shader = shader, blendMode = BlendMode.SRC))
+            }
+            restore()
+        }
+        val actual = surface.render()
+        expected.forEachIndexed { index, value -> WgslFloatEnvelopeV1Oracle.assertAdmits(value,
+            actual.pixels.copyOfRange(index * 4, (index + 1) * 4)) }
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `precision collapsed butt stroke remains a public W6 direct path witness`() {
+        // The F64 outline has four corners; at 2^24 its two terminal F32 corners coincide,
+        // leaving Winding's line-only direct triangle.  The literal oracle precedes Surface.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, clear, clear, clear,
+            clear, blue, clear, clear,
+            clear, clear, blue, clear,
+            clear, clear, clear, blue,
+        ).flatten().toUByteArray()
+        val diagonal = Path().apply { moveTo(0f, 0f); lineTo(16_777_216f, 16_777_216f) }
+
+        val surface = Surface(4, 4)
+        surface.canvas {
+            saveLayer()
+            drawPath(diagonal, opaque(BLUE).copy(style = PaintStyle.STROKE, strokeWidth = 1f))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `unclipped direct triangle path keeps its translated asymmetric pixels in a W6 layer`() {
+        // This is a drawPath, not a clipPath: it reaches the W6-final DirectColor packet.
+        // Keep the public pixel oracle before Surface construction.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear,
+            clear, blue, blue, blue, clear,
+            clear, blue, blue, clear, clear,
+            clear, blue, clear, clear, clear,
+            clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val triangle = Path().apply {
+            moveTo(0f, 0f); lineTo(4f, 0f); lineTo(0f, 4f); close()
+        }
+
+        val surface = Surface(5, 5)
+        surface.canvas {
+            saveLayer()
+            translate(1f, 1f)
+            drawPath(triangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `unmasked empty inverse colors the full W6 layer domain`() {
+        // A path with no segments has no finite interior: its bounded inverse is the full
+        // layer domain.  This literal oracle precedes Surface and has no clip-path mask.
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue,
+            blue, blue, blue, blue,
+            blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val inverseEmpty = Path().apply { fillType = FillType.INVERSE_WINDING }
+
+        val surface = Surface(4, 3)
+        surface.canvas {
+            saveLayer()
+            drawPath(inverseEmpty, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `unmasked nonempty zero inverse retains its full W6 layer domain`() {
+        // This source has a segment but no finite fill interior.  It therefore exercises the
+        // preserved InverseDomainSource form rather than the truly Empty form above; its public
+        // inverse coverage is nevertheless the full domain.  The oracle precedes Surface.
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue,
+            blue, blue, blue, blue,
+            blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val inverseLine = Path().apply {
+            moveTo(1f, 1f); lineTo(3f, 1f)
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(4, 3)
+        surface.canvas {
+            saveLayer()
+            drawPath(inverseLine, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `unmasked inverse direct triangle removes only its finite W6 interior`() {
+        // Its oblique edge crosses no pixel centre: the inverse complement leaves
+        // three clear pixels on row 1, two on row 2, and one on row 3.  No clip-path mask is
+        // present, so these pixels causally cover the bounded inverse-domain Geometry route.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue, blue, blue,
+            blue, clear, clear, clear, blue, blue,
+            blue, clear, clear, blue, blue, blue,
+            blue, clear, blue, blue, blue, blue,
+            blue, blue, blue, blue, blue, blue,
+            blue, blue, blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val inverseTriangle = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 4f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer()
+            drawPath(inverseTriangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `unmasked inverse even odd donut preserves its fan hole in a W6 layer`() {
+        // The two same-winding contours select EVEN_ODD fan geometry.  The inner square belongs
+        // to the inverse result, unlike the outer finite interior; every expected byte is fixed
+        // before Surface construction and no clip-path mask participates.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue, blue, blue, blue, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, blue, blue, clear, clear, blue,
+            blue, clear, clear, blue, blue, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, blue, blue, blue, blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val inverseEvenOdd = Path().apply {
+            moveTo(1f, 1f); lineTo(7f, 1f); lineTo(7f, 7f); lineTo(1f, 7f); close()
+            moveTo(3f, 3f); lineTo(5f, 3f); lineTo(5f, 5f); lineTo(3f, 5f); close()
+            fillType = FillType.INVERSE_EVEN_ODD
+        }
+
+        val surface = Surface(8, 8)
+        surface.canvas {
+            saveLayer()
+            drawPath(inverseEvenOdd, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `hard path mask clips an offset direct fill triangle in a W6 layer`() {
+        // At pixel centres, the L clip keeps its top row and first column; the direct fill
+        // triangle otherwise also covers pixels to that column's right.
+        // This literal intersection is distinct from both the unmasked fill and the clip bounds.
+        // Keep the public oracle before Surface construction.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear,
+            clear, blue, blue, blue, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val triangle = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
+        }
+
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(triangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `inverse winding direct fill remains clipped by a hard concave path in a W6 layer`() {
+        // Pixel centres in the L clip are (1.5, 1.5..4.5) and its top arm.  The finite inverse
+        // triangle excludes the entire top arm, leaving only x=1 inside the clip.  Thus this
+        // differs from an unclipped inverse (which colors outside the L) and a non-inverse fill
+        // (which colors the top-right arm).  Keep the literal oracle before Surface creation.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val inverseTriangle = Path().apply {
+            moveTo(2f, 1f); lineTo(5f, 1f); lineTo(2f, 4f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseTriangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `inverse even odd hole remains visible under a hard concave clip in a W6 layer`() {
+        // The two contours share their winding, so EVEN_ODD makes the inner 2x2 square part
+        // of the inverse result.  This literal oracle is the clipped complement, not either
+        // contour's direct coverage; it precedes Surface construction deliberately.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue, blue, blue, blue, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, blue, blue, clear, clear, blue,
+            blue, clear, clear, blue, blue, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, clear,
+            blue, blue, blue, blue, blue, blue, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(0f, 0f); lineTo(8f, 0f); lineTo(8f, 6f); lineTo(6f, 6f)
+            lineTo(6f, 8f); lineTo(0f, 8f); close()
+        }
+        val inverseEvenOdd = Path().apply {
+            moveTo(1f, 1f); lineTo(7f, 1f); lineTo(7f, 7f); lineTo(1f, 7f); close()
+            moveTo(3f, 3f); lineTo(5f, 3f); lineTo(5f, 5f); lineTo(3f, 5f); close()
+            fillType = FillType.INVERSE_EVEN_ODD
+        }
+
+        val surface = Surface(8, 8)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseEvenOdd, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `inverse masked fill rebases once in a translated W6 layer`() {
+        // This is the 6x6 L witness shifted by exactly (1,1): only the translated L column is
+        // blue.  A second device-to-layer translation moves it, while no rebase leaves it at x=1.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val inverseTriangle = Path().apply {
+            moveTo(2f, 1f); lineTo(5f, 1f); lineTo(2f, 4f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(8, 8)
+        surface.canvas {
+            saveLayer()
+            translate(1f, 1f)
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseTriangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `successive inverse masked fills reset their W6 stencil`() {
+        // The second inverse fill must see an empty stencil, not the first triangle's producer.
+        // These four causally distinct literal samples cover outside both interiors, each
+        // triangle's interior, and the concave clip exterior.
+        val blue = rgba(17, 61, 211)
+        val red = rgba(239, 51, 73)
+        val clear = rgba(0, 0, 0, 0)
+        val expectedAtOneOne = blue
+        val expectedAtFourFour = red
+        val expectedAtZeroZero = blue
+        val expectedAtSevenSeven = clear
+        val clip = Path().apply {
+            moveTo(0f, 0f); lineTo(8f, 0f); lineTo(8f, 6f); lineTo(6f, 6f)
+            lineTo(6f, 8f); lineTo(0f, 8f); close()
+        }
+        val firstInverse = Path().apply {
+            moveTo(1f, 1f); lineTo(4f, 1f); lineTo(1f, 4f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+        val secondInverse = Path().apply {
+            moveTo(4f, 4f); lineTo(7f, 4f); lineTo(4f, 7f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(8, 8)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(firstInverse, opaque(RED))
+            drawPath(secondInverse, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        fun pixel(xI32: Int, yI32: Int): UByteArray = actual.pixels.copyOfRange((yI32 * 8 + xI32) * 4, (yI32 * 8 + xI32 + 1) * 4)
+        assertContentEquals(expectedAtOneOne, pixel(1, 1))
+        assertContentEquals(expectedAtFourFour, pixel(4, 4))
+        assertContentEquals(expectedAtZeroZero, pixel(0, 0))
+        assertContentEquals(expectedAtSevenSeven, pixel(7, 7))
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `empty inverse masked fill colors only its hard L clip in a W6 layer`() {
+        // An empty inverse path is the normal clip coverage itself.  It must not allocate or
+        // read a synthetic stencil producer; the public result is the literal hard L.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear,
+            clear, blue, blue, blue, blue, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val inverseEmpty = Path().apply { fillType = FillType.INVERSE_WINDING }
+
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseEmpty, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `even odd path clip preserves its stencil cover hole in a W6 layer`() {
+        // The inner contour has the same winding as the exterior.  Only the frozen EVEN_ODD
+        // stencil edge plus its non-zero cover test leaves this center pixel transparent.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue,
+            blue, clear, clear, blue,
+            blue, clear, clear, blue,
+            blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val donut = Path().apply {
+            moveTo(0f, 0f); lineTo(4f, 0f); lineTo(4f, 4f); lineTo(0f, 4f); close()
+            moveTo(1f, 1f); lineTo(3f, 1f); lineTo(3f, 3f); lineTo(1f, 3f); close()
+            fillType = FillType.EVEN_ODD
+        }
+
+        val surface = Surface(4, 4)
+        surface.canvas {
+            saveLayer()
+            clipPath(donut, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `concave path clip keeps its stencil edge fan coverage in a W6 layer`() {
+        // An L is neither its bounds nor a direct triangle.  Its public pixels are fixed before
+        // Surface construction so this remains a renderer witness, not a planner observation.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, blue, blue, blue, blue,
+            clear, blue, clear, clear, clear,
+            clear, blue, clear, clear, clear,
+            clear, blue, clear, clear, clear,
+            clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val concave = Path().apply {
+            moveTo(0f, 0f); lineTo(4f, 0f); lineTo(4f, 1f)
+            lineTo(1f, 1f); lineTo(1f, 4f); lineTo(0f, 4f); close()
+        }
+
+        val surface = Surface(5, 5)
+        surface.canvas {
+            saveLayer()
+            translate(1f, 0f)
+            clipPath(concave, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `direct triangle path clip retains only its translated wedge in a W6 layer`() {
+        // This fixed wedge is deliberately unlike its enclosing 4x4 rectangle.  Keep this
+        // public oracle before Surface construction: it is the W6-layer witness for the
+        // strict direct-triangle Path clip, not an observation of planner or renderer state.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear,
+            clear, blue, blue, blue, clear,
+            clear, blue, blue, clear, clear,
+            clear, blue, clear, clear, clear,
+            clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val triangle = Path().apply {
+            moveTo(0f, 0f); lineTo(4f, 0f); lineTo(0f, 4f); close()
+        }
+
+        val surface = Surface(5, 5)
+        surface.canvas {
+            saveLayer()
+            translate(1f, 1f)
+            clipPath(triangle, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `affine general path retains its native geometry in a translated target`() {
         val expected = rgba(0, 0, 0, 0) + rgba(17, 61, 211) + rgba(17, 61, 211) + rgba(17, 61, 211) + rgba(0, 0, 0, 0)
         val shape = Path().apply {
@@ -50,7 +686,12 @@ class W6aLayerW4W5SurfacePixelTest {
                 drawPath(shape, opaque(BLUE))
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            // The root control may use the prepared path; only the W6 layer is required to
+            // reach native Render + Readback evidence through its W4e path route.
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 
@@ -75,7 +716,12 @@ class W6aLayerW4W5SurfacePixelTest {
                     Paint(shader = gradient, antiAlias = false))
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            // The root control may use the prepared path; only the W6 layer is required to
+            // reach native Render + Readback evidence through its ordered W4e clip prefix.
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 
@@ -111,26 +757,77 @@ class W6aLayerW4W5SurfacePixelTest {
                     opaque(RED).copy(antiAlias = true))
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val result = surface.render()
+            assertContentEquals(expected, result.pixels, "layered=$layered")
+            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${result.nativeEvidenceScopeKinds}")
         }
     }
 
     @Test
-    fun `fractional frozen Point and Vertices rebase at a nonzero layer origin`() {
-        val expected = rgba(0, 0, 0, 0) + rgba(43, 181, 93) + rgba(239, 51, 73)
-        val triangle = Vertices(VertexMode.TRIANGLES,
-            listOf(Point2F32(2f, -1f), Point2F32(3f, -1f), Point2F32(2f, 2f)))
+    fun `fractional AA Rect retains exact pixels and native evidence in a translated layer`() {
+        // This is the fixed public byte contract from the pre-2P1 fractional RRect witness
+        // directly above. At this sole raster row y=.5, the RRect bounds [-1, 2] and radius .25
+        // give -.75 <= .5 <= 1.75, so its analytic boundary is exactly the same vertical Rect
+        // boundary. Both shapes use the same opaque public RED and layer transform; this makes
+        // the RRect a separate, pre-existing oracle for the Rect route rather than an observed
+        // output of the recipe under test. Keep the literal before either Surface is constructed.
+        val expectedFromPreTaskRRectContract =
+            rgba(0, 0, 0, 0) + rgba(228, 48, 69, 229) + rgba(239, 51, 73)
+        val rrectControl = Surface(3, 1)
+        rrectControl.canvas {
+            saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(1.1f, -1f, 4.1f, 2f), CornerRadiiF32.of(.25f)),
+                opaque(RED).copy(antiAlias = true))
+            restore()
+        }
         val surface = Surface(3, 1)
         surface.canvas {
             saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
+            drawRect(RectF32.ofLTRB(1.1f, -1f, 4.1f, 2f), opaque(RED).copy(antiAlias = true))
+            restore()
+        }
+
+        val reference = rrectControl.render()
+        val actual = surface.render()
+        assertContentEquals(expectedFromPreTaskRRectContract, reference.pixels)
+        assertContentEquals(reference.pixels, actual.pixels)
+        assertContentEquals(expectedFromPreTaskRRectContract, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `fractional frozen Point and Vertices rebase at a nonzero layer origin`() {
+        // This must fail if a W6 Point site is lowered from root rather than frozen layer-local facts.
+        val expectedPoint = rgba(0, 0, 0, 0) + rgba(43, 181, 93) + rgba(0, 0, 0, 0)
+        val expectedVertices = rgba(0, 0, 0, 0) + rgba(0, 0, 0, 0) + rgba(239, 51, 73)
+        val pointSurface = Surface(3, 1)
+        pointSurface.canvas {
+            saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
             drawPoint(1.1f, .5f, opaque(GREEN).copy(strokeWidth = 0f))
+            restore()
+        }
+        val point = pointSurface.render()
+        assertContentEquals(expectedPoint, point.pixels)
+        assertTrue(point.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            point.nativeEvidenceScopeKinds.toString())
+
+        val triangle = Vertices(VertexMode.TRIANGLES,
+            listOf(Point2F32(2f, -1f), Point2F32(3f, -1f), Point2F32(2f, 2f)))
+        val verticesSurface = Surface(3, 1)
+        verticesSurface.canvas {
+            saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
             save()
             translate(.1f, 0f)
             drawVertices(triangle, opaque(RED))
             restore()
             restore()
         }
-        assertContentEquals(expected, surface.render().pixels)
+        val vertices = verticesSurface.render()
+        assertContentEquals(expectedVertices, vertices.pixels)
+        assertTrue(vertices.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            vertices.nativeEvidenceScopeKinds.toString())
     }
 
     @Test
@@ -229,7 +926,11 @@ class W6aLayerW4W5SurfacePixelTest {
                 } }
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            // The root control uses the prepared route; only a layer reaches W6 native evidence.
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 
@@ -246,24 +947,34 @@ class W6aLayerW4W5SurfacePixelTest {
                 pixelClip(1) { drawVertices(vertices, opaque(BLUE)) }
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            // The root control uses the prepared route; only a layer reaches W6 native evidence.
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 
     @Test
     fun `points preserve translated device squares and sibling source order`() {
+        // Explicit SolidColor selects the admitted simple MaterialV1 solid rather than the
+        // LegacyColor route. Each Point remains an ordinary, non-clip-only W6 source draw.
         val expected = rgba(0, 0, 0, 0) + rgba(239, 51, 73) + rgba(17, 61, 211) + rgba(17, 61, 211) + rgba(43, 181, 93)
         for (layered in listOf(false, true)) {
             val surface = Surface(5, 1)
             surface.canvas {
                 if (layered) saveLayer(RectF32.ofLTRB(1f, 0f, 5f, 1f))
                 translate(1f, 0f)
-                drawPoint(.5f, .5f, opaque(RED).copy(strokeWidth = 0f))
-                drawPoints(PointMode.POINTS, listOf(Point2F32(1.5f, .5f), Point2F32(2.5f, .5f)), opaque(BLUE).copy(strokeWidth = 0f))
-                drawPoint(3.5f, .5f, opaque(GREEN).copy(strokeWidth = 1f))
+                drawPoint(.5f, .5f, opaque(RED).copy(shader = Shader.SolidColor(RED), strokeWidth = 0f))
+                drawPoints(PointMode.POINTS, listOf(Point2F32(1.5f, .5f), Point2F32(2.5f, .5f)),
+                    opaque(BLUE).copy(shader = Shader.SolidColor(BLUE), strokeWidth = 0f))
+                drawPoint(3.5f, .5f, opaque(GREEN).copy(shader = Shader.SolidColor(GREEN), strokeWidth = 1f))
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 

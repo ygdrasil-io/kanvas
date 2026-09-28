@@ -10,12 +10,14 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Test
@@ -24,7 +26,12 @@ import org.junit.jupiter.api.Test
 class W6bMaskShaderTableSurfacePixelTest {
     @Test
     fun `solid mask shader consumes the frozen W5 material mapping`() {
-        val actual = Surface(3, 1).also { surface ->
+        val expected = ubyteArrayOf(
+            255u, 0u, 0u, 255u,
+            255u, 0u, 0u, 255u,
+            255u, 0u, 0u, 255u,
+        )
+        val result = Surface(3, 1).also { surface ->
             surface.canvas {
                 drawRect(bounds3x1, Paint(
                     ColorARGB.Red,
@@ -32,18 +39,16 @@ class W6bMaskShaderTableSurfacePixelTest {
                     antiAlias = false,
                 ))
             }
-        }.render().pixels
+        }.render()
 
-        assertContentEquals(ubyteArrayOf(
-            255u, 0u, 0u, 255u,
-            255u, 0u, 0u, 255u,
-            255u, 0u, 0u, 255u,
-        ), actual)
+        assertContentEquals(expected, result.pixels)
+        assertMaskShaderRenderAndReadback(result)
     }
 
     @Test
     fun `gradient mask shader multiplies frozen coverage before source blend`() {
-        val actual = Surface(3, 1).also { surface ->
+        val expected = gradientMaskedRedPixels
+        val result = Surface(3, 1).also { surface ->
             surface.canvas {
                 drawRect(bounds3x1, Paint(
                     ColorARGB.Red,
@@ -51,15 +56,17 @@ class W6bMaskShaderTableSurfacePixelTest {
                     antiAlias = false,
                 ))
             }
-        }.render().pixels
+        }.render()
 
-        assertContentEquals(gradientMaskedRedPixels, actual)
+        assertContentEquals(expected, result.pixels)
+        assertMaskShaderRenderAndReadback(result)
     }
 
     @Test
     fun `image-backed mask shader consumes its frozen W5 resource`() {
+        val expected = red1x1
         val alphaResource = Image.fromPixels(1, 1, byteArrayOf(-1, -1, -1, -1), alphaType = AlphaType.PREMUL)
-        val actual = Surface(1, 1).also { surface ->
+        val result = Surface(1, 1).also { surface ->
             surface.canvas {
                 drawRect(bounds1x1, Paint(
                     ColorARGB.Red,
@@ -67,9 +74,30 @@ class W6bMaskShaderTableSurfacePixelTest {
                     antiAlias = false,
                 ))
             }
-        }.render().pixels
+        }.render()
 
-        assertContentEquals(red1x1, actual)
+        assertContentEquals(expected, result.pixels)
+        assertMaskShaderRenderAndReadback(result)
+    }
+
+    @Test
+    fun `image color-filter mask shader consumes frozen texture ABI`() {
+        val alphaResource = Image.fromPixels(1, 1, byteArrayOf(-1, -1, -1, -1), alphaType = AlphaType.PREMUL)
+        val result = Surface(1, 1).also { surface ->
+            surface.canvas {
+                drawRect(bounds1x1, Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Shader(Shader.WithColorFilter(
+                        Shader.Image(alphaResource),
+                        ColorFilter.Matrix(ColorMatrixF32.ofIdentity()),
+                    )),
+                    antiAlias = false,
+                ))
+            }
+        }.render()
+
+        assertContentEquals(red1x1, result.pixels)
+        assertMaskShaderRenderAndReadback(result)
     }
 
     @Test
@@ -168,7 +196,7 @@ class W6bMaskShaderTableSurfacePixelTest {
             188u, 0u, 0u, 128u,
         )
         val identity = UByteArray(256) { indexI32 -> indexI32.toUByte() }
-        val actual = Surface(2, 1).also { surface ->
+        val result = Surface(2, 1).also { surface ->
             surface.canvas {
                 drawRect(RectF32.ofLTRB(.5f, 0f, 1.5f, 1f), Paint(
                     ColorARGB.Red,
@@ -176,9 +204,10 @@ class W6bMaskShaderTableSurfacePixelTest {
                     antiAlias = true,
                 ))
             }
-        }.render().pixels
+        }.render()
 
-        assertContentEquals(expected, actual)
+        assertContentEquals(expected, result.pixels)
+        assertMaskShaderRenderAndReadback(result)
     }
 
     @Test
@@ -241,6 +270,11 @@ class W6bMaskShaderTableSurfacePixelTest {
             org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.White),
         ),
     )
+
+    private fun assertMaskShaderRenderAndReadback(result: RenderResult) {
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+    }
 
     private fun assertTerminalWithoutReadbackMutation(surface: Surface, diagnosticPrefix: String) {
         val sentinel = UByteArray(16) { 0x5au }
