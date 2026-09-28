@@ -1663,8 +1663,8 @@ l'assertion, sans changer l'oracle.
 Compiles séparées : `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`
 et `:kanvas:compileTestKotlin` sorties 0. Le sélecteur DirectTriangle est XML
 `1/0/0/0`; Gradle finit à 1 seulement après GLFW macOS 133, donc natif
-**UNKNOWN** distinct. Task 3 attend encore les sélecteurs de préservation et
-la revue Sol; IV, fan Task 4, 2A1 et 2B restent ouverts.
+**UNKNOWN** distinct. Les sélecteurs de préservation et la revue Sol sont
+consignés ci-dessous ; IV, fan Task 4, 2A1 et 2B restent ouverts.
 
 La re-revue Sol a conduit à sceller `interiorZero` sur le stencil concret
 `Replace`, et le `colorCover` sur exactement trois sommets fullscreen. Avant
@@ -1680,3 +1680,11 @@ scellée `RenderPass` W6 → `binding.nativePass(proxy.id)` W4e, au lieu d'une
 appartenance large au binding. Il confronte aussi les `passId` packet/path et
 le scissor source préparé avant allocation. La recette slot 1 est validée
 avant toute création de pipeline (y compris slot 0).
+
+Le gate final Task 3 sur `6c6cda2` donne les trois compiles Kotlin ciblées
+avec sortie 0, les XML publics W6a `35/0/0/0`, scan-span `14/0/0/0` et les
+deux sélecteurs W4e `2/0/0/0` (ce dernier Gradle 0). Pour W6a/scan-span,
+Gradle sort 1 uniquement après GLFW 133 post-JUnit : terminaison native
+**UNKNOWN**, pas PASS. La re-review Sol indépendante de `d572f2ab4..6c6cda2`
+ne relève aucun finding Critical/Important. Task 3 est review-clean ; la
+variante Fan, 2A1 et 2B ne le sont pas.
