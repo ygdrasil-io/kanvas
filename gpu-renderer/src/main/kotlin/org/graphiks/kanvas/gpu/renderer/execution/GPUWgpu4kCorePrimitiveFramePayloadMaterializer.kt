@@ -85,6 +85,7 @@ import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldLoadV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldShaderFamilyV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldStoreV1
 import org.graphiks.kanvas.gpu.plan.W4eNativePayloadPlan
+import org.graphiks.kanvas.gpu.plan.W4eNativeGeometrySlice
 import org.graphiks.kanvas.gpu.plan.W6PathRenderDirectColorRecipeV1
 import org.graphiks.kanvas.gpu.plan.W6PathRenderDirectColorShaderFamilyV1
 import org.graphiks.kanvas.gpu.plan.W6PathRenderDirectColorTopologyV1
@@ -503,11 +504,13 @@ internal fun encodeW4eNativePasses(
         passId: String,
         purpose: String,
         scissor: GPUPixelBounds,
+        frozenSlice: W4eNativeGeometrySlice? = null,
     ): List<GPUPreparedNativeRenderCommand> {
         val slice = nativePayload.geometrySlice(passId, purpose) ?: throw refusal(
             "invalid.native-core-primitive.w4e-native-buffer",
             "W4e $purpose geometry for $passId was not sealed into the shared V/I slabs.",
         )
+        require(frozenSlice == null || slice == frozenSlice) { "W6 inverse geometry slice diverged from its sealed recipe." }
         return listOf(
             GPUPreparedNativeRenderCommand.SetVertexBuffer(
                 0,
@@ -979,7 +982,6 @@ internal fun encodeW4eNativePasses(
                         "W4e stencil producer has no sealed drawable geometry.",
                     )
                     val frozenFanRecipe = frozenInverseRecipe as? W6InverseMaskPathRecipeV1.GeometryProducer.Fan
-                        as? W6InverseMaskPathRecipeV1.GeometryProducer.Fan
                     if (inverseMaskPathRecipesByPassId.isNotEmpty() && fan != null &&
                         consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
                     ) {
@@ -1038,7 +1040,8 @@ internal fun encodeW4eNativePasses(
                             add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generation)))
                             addAll(indexedGeometryCommands(entry.packet.passId,
                                 if (retainedInverseInterior) W4eNativePayloadPlan.INVERSE_DOMAIN_INTERIOR else W4eNativePayloadPlan.STENCIL_PRODUCER,
-                                if (retainedInverseInterior) requireNotNull(retainedInverse).domain else sealedPath.scissor))
+                                if (retainedInverseInterior) requireNotNull(retainedInverse).domain else sealedPath.scissor,
+                                frozenFanRecipe?.geometrySlice))
                         })
                     }
                 } else if (frozenInverseRecipe is W6InverseMaskPathRecipeV1.GeometryCover ||
