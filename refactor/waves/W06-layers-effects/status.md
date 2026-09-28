@@ -1765,8 +1765,7 @@ native globale restent ouverts ; aucun B/B−1 n'est revendiqué ici.
 ### Handoff 2A0d — spécialisation source W5a
 
 Le plan `refactor/plans/2026-09-28-w6-w5a-source-native-sites-implementation-plan.md`
-est corrigé et relu Sol sans finding Critical/Important, mais **aucun site
-2A0d n'est encore livré**. Il sépare une recette logique `:gpu-plan` du
+est corrigé et relu Sol sans finding Critical/Important. Il sépare une recette logique `:gpu-plan` du
 stage/template/WGSL internes au renderer, impose une bijection frame entière
 avant allocation, et ajoute la recette W5a au slot dense qui suit les bundles
 du même owner/draw/packet. Les producers W4e ne reçoivent pas de site source ;
@@ -1798,3 +1797,29 @@ compiles ciblées sont sorties 0, ma relance de la classe W6 donne XML
 **UNKNOWN**. `git show --check` est propre et la revue Sol de `d8b2c76ee`
 n'a trouvé aucun finding Critical/Important. Task 1b (autres sources ordinaires)
 ainsi que W4e, W6b, destination-read, 2A1/B/B−1 et 2B restent ouverts.
+
+### 2A0d Task 1b — premier sous-lot `LinearGradientClampSrgbV1`
+
+Le commit local `b037096336` ajoute seulement le gradient linéaire legacy
+`MaterialV1` sur `RenderPass`/`SolidRectDraw` W6 ordinaire. La recette scelle
+l'ABI group 1 `[uniformBuffer(0), storageBuffer(1)]`, l'uniforme exact de
+**128 octets** (en-tête 16 + gradient 112), l'identité des coordonnées, et
+le `GradientStopData` frame-local déjà publié (ID, taille, usages et identité
+du slab). Le descripteur précoce possède le même ID déterministe que la row
+finale `RenderGraph.construct` ; le seal reconstruit la recette. W5h compare
+stage, bindings, ressources physiques et template avant allocation ; le
+provider revalide la row et le slab sans nouvelle lease. Le variant solid
+conserve ses 16 octets et n'incorpore pas les coordonnées inutilisées.
+
+Le témoin `Surface` public fixe deux pixels gradient avant `Surface`, traverse
+une layer W6 et exige `Render`/`Readback`. Les trois compilations ciblées sont
+vertes. Ma relance de la classe W6 donne XML `37/0/0/0`, suivi d'un exit
+Gradle 133 après JUnit : GLFW/natif **UNKNOWN**, pas un PASS natif. Une
+exécution plus large de W5c a produit XML `27/7/0/0` : sept refus
+`unsupported.material.composed.numeric-domain-unbounded` sur variantes
+conical/sweep/radial et un cas mixte hors admission ; leur baseline n'est pas
+prouvée et aucun succès global W5c n'est revendiqué. Le cas linéaire ciblé
+est XML `1/0/0/0`. `git diff --check` est propre et la revue Sol de
+`b037096336` n'a trouvé aucun finding Critical/Important. Task 1b reste
+ouverte pour les autres sources ordinaires ; 2A0d entier, W4e, W6b,
+destination-read, 2A1/B/B−1 et 2B restent ouverts.
