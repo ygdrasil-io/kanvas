@@ -2448,7 +2448,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             stencilLoadOperation = depthLoad, stencilStoreOperation = depthLoad?.let { GPUPreparedNativeStoreOperation.Store }),
                         GPUPreparedNativeRenderPipelineOperand(pipeline, generation), GPUPreparedNativeBindGroupOperand(group, generation), 0L,
                         buffer(data.vertex), geometry.vertexUsefulBytes, buffer(data.index), geometry.indexUsefulBytes,
-                        geometry.slices.single(), phase)
+                        requireNotNull(geometry.slices.singleOrNull { it.pathPassId == phase.id.value }) {
+                            "W6 AA source phase has no authenticated W4d geometry slice."
+                        }, phase)
                 }
             }.toMap()
             val w4eOperands = frame.w4eAuthorities.flatMap { (binding, authority) ->

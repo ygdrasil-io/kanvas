@@ -294,7 +294,16 @@ public class RenderGraph private constructor(
                                 pass.load == AttachmentLoadPlan.Load && pass.draws().isNotEmpty()
                             is PlanPass.PathRenderPass -> pass.resolveTarget?.let { resolved ->
                                 construction.resources().singleOrNull { it.id == resolved }?.role == PlanResourceRole.PathAaResolvedColor
-                            } == true
+                            } == true || (pass.phase == PathRenderPhase.MultisampleStencilProducer &&
+                                construction.passes().withIndex().singleOrNull { it.value === pass }?.let { (index, _) ->
+                                    (construction.passes().getOrNull(index + 1) as? PlanPass.PathRenderPass)?.let { cover ->
+                                        cover.phase == PathRenderPhase.MultisampleStencilColorCover &&
+                                            cover.target == pass.target && cover.depthStencil == pass.depthStencil &&
+                                            cover.atomicGroup == pass.atomicGroup && cover.resolveTarget?.let { resolved ->
+                                                construction.resources().singleOrNull { it.id == resolved }?.role == PlanResourceRole.PathAaResolvedColor
+                                            } == true
+                                    } == true
+                                } == true)
                             is PlanPass.PathAaColorComposite -> pass.destination == scope.targetResource
                             is PlanPass.StencilGeometryProducerV3 -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
                             is PlanPass.StencilCover -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
@@ -701,10 +710,31 @@ public class RenderGraph private constructor(
             require(resources.none { it.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) }) {
                 "AA resolved-colour sources cannot own a standalone root or staging buffer"
             }
-            require(resources.map { it.role }.toSet() == setOf(
-                PlanResourceRole.MultisampleColorTarget, PlanResourceRole.PathAaResolvedColor,
-                PlanResourceRole.VertexData, PlanResourceRole.IndexData, PlanResourceRole.UniformData,
-            ) && resources.size == 5) { "AA resolved-colour source resource inventory is not closed" }
+            val pathPasses = passes.mapIndexed { ordinal, pass -> ordinal to (pass as PlanPass.PathRenderPass) }
+            val direct = pathPasses.singleOrNull()?.second?.takeIf { it.phase == PathRenderPhase.MultisampleDirectColor }
+            val stencil = pathPasses.takeIf { it.size == 2 }?.let { it[0].second to it[1].second }
+            val hasStencilPair = stencil?.let { (producer, cover) ->
+                producer.phase == PathRenderPhase.MultisampleStencilProducer &&
+                    cover.phase == PathRenderPhase.MultisampleStencilColorCover &&
+                    producer.target == cover.target && producer.atomicGroup != null &&
+                    producer.atomicGroup == cover.atomicGroup && producer.depthStencil != null &&
+                    producer.depthStencil == cover.depthStencil && producer.resolveTarget == null &&
+                    cover.resolveTarget != null && producer.load == AttachmentLoadPlan.ClearTransparent &&
+                    cover.load == AttachmentLoadPlan.Load && producer.store == AttachmentStorePlan.Store &&
+                    cover.store == AttachmentStorePlan.Store && producer.depthStencilAccess == PlanDepthStencilAccess.Write &&
+                    producer.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore &&
+                    cover.depthStencilAccess == PlanDepthStencilAccess.ReadWrite &&
+                    cover.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset
+            } == true
+            require(direct != null || hasStencilPair) { "AA resolved-colour source must be one direct pass or one stencil pair" }
+            val expectedRoles = buildSet {
+                add(PlanResourceRole.MultisampleColorTarget); add(PlanResourceRole.PathAaResolvedColor)
+                add(PlanResourceRole.VertexData); add(PlanResourceRole.IndexData); add(PlanResourceRole.UniformData)
+                if (hasStencilPair) add(PlanResourceRole.DepthStencil)
+            }
+            require(resources.map { it.role }.toSet() == expectedRoles && resources.size == expectedRoles.size) {
+                "AA resolved-colour source resource inventory is not closed"
+            }
             val msaa = resources.single { it.role == PlanResourceRole.MultisampleColorTarget }
             val resolved = resources.single { it.role == PlanResourceRole.PathAaResolvedColor }
             require(msaa.kind == PlanResourceKind.Texture2D && msaa.format == PlanTextureFormat.Color(colorFormat) &&
@@ -720,26 +750,34 @@ public class RenderGraph private constructor(
             require(capabilities.supportsResolve(PlanTextureFormat.Color(colorFormat), 4, 1)) {
                 "AA resolved-colour resolve is unsupported"
             }
-            val pathPasses = passes.mapIndexed { ordinal, pass -> ordinal to (pass as PlanPass.PathRenderPass) }
-            require(pathPasses.size == visualCommandCount) { "AA resolved-colour source must publish one colour pass per draw" }
+            require(visualCommandCount == 1 && (direct != null || hasStencilPair)) {
+                "AA resolved-colour source must publish one sealed draw occurrence"
+            }
             val data = PlanDrawDataResources(
                 resources.single { it.role == PlanResourceRole.VertexData }.id,
                 resources.single { it.role == PlanResourceRole.IndexData }.id,
                 resources.single { it.role == PlanResourceRole.UniformData }.id,
             )
             validatePathDrawDataShape(data, resourcesById)
-            pathPasses.forEachIndexed { ordinal, (_, pass) ->
-                require(pass.target == msaa.id && pass.drawDataResources == data &&
-                    pass.phase == PathRenderPhase.MultisampleDirectColor &&
-                    pass.draw is GeneralPathDraw && pass.draw.coverage == CoveragePlan.StencilAA4 &&
-                    pass.draw.sample == SamplePlan.Multisample4 &&
-                    pass.draw.strategy == PathFillStrategy.DirectTriangle && pass.draw.blend == BlendPlan.SrcOver &&
-                    pass.atomicGroup == null && pass.depthStencil == null &&
-                    pass.depthStencilAccess == null && pass.depthStencilLoadStore == null &&
-                    pass.load == (if (ordinal == 0) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load) &&
-                    pass.store == AttachmentStorePlan.Store &&
-                    pass.resolveTarget == (if (ordinal == pathPasses.lastIndex) resolved.id else null)) {
-                    "AA resolved-colour source pass is not a sealed direct 4x SrcOver resolve sequence"
+            fun common(pass: PlanPass.PathRenderPass) = pass.target == msaa.id && pass.drawDataResources == data &&
+                pass.draw is GeneralPathDraw && pass.draw.coverage == CoveragePlan.StencilAA4 &&
+                pass.draw.sample == SamplePlan.Multisample4 && pass.draw.blend == BlendPlan.SrcOver
+            if (direct != null) require(common(direct) && direct.draw.strategy == PathFillStrategy.DirectTriangle &&
+                direct.atomicGroup == null && direct.depthStencil == null && direct.depthStencilAccess == null &&
+                direct.depthStencilLoadStore == null && direct.load == AttachmentLoadPlan.ClearTransparent &&
+                direct.store == AttachmentStorePlan.Store && direct.resolveTarget == resolved.id) {
+                "AA resolved-colour source direct pass is not a sealed 4x SrcOver resolve"
+            }
+            if (hasStencilPair) {
+                val (producer, cover) = requireNotNull(stencil)
+                val depth = resources.single { it.role == PlanResourceRole.DepthStencil }
+                require(depth.kind == PlanResourceKind.Texture2D && depth.copyExtent() == targetExtent && depth.sampleCountI32 == 4 &&
+                    depth.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                    depth.usages() == setOf(PlanResourceUsage.DepthStencilAttachment) &&
+                    common(producer) && common(cover) && producer.draw.strategy == PathFillStrategy.StencilCover &&
+                    cover.draw.strategy == PathFillStrategy.StencilCover && producer.depthStencil == depth.id && cover.depthStencil == depth.id &&
+                    cover.resolveTarget == resolved.id && depth.firstPassIndex == 0 && depth.lastPassIndexExclusive == passes.size) {
+                    "AA resolved-colour source stencil pair is not a sealed D24S8 4x resolve sequence"
                 }
             }
             requireLinearDependencies(passes, dependencies, "AA resolved-colour source")
