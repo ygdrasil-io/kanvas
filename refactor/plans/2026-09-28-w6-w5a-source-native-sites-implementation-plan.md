@@ -1,6 +1,6 @@
 # W6 2A0d — sites natifs de spécialisation source W5a
 
-**Statut :** plan corrigé et relu Sol, sans finding Critical/Important ; Task 1 prêt, aucun site 2A0d livré. Base `050ca414a`, Draft PR #2409 empilée sur #2408.
+**Statut :** plan corrigé et relu Sol ; Task 1a (`SolidRect`/`MaterialV1` solid simple) review-clean à `d8b2c76ee`, autres variantes 2A0d ouvertes. Base initiale `050ca414a`, Draft PR #2409 empilée sur #2408.
 **Contrat :** `refactor/specs/2026-09-26-w6-final-gates-design.md` §4 et `refactor/plans/2026-09-26-w6-final-gates-implementation-plan.md` Step 2 / 2A0d.
 
 ## Décision de frontière
@@ -17,6 +17,8 @@
 - Préserver les préfixes W4e : `sourceDrawsV2` autorise 2–3 draws sous un packet inverse, vérifie leurs pipelines `NoBindings` et associe la source uniquement à la dernière draw à bind group. Les recettes W4e `0..n-1` restent intactes ; la recette W5a terminale suit ce préfixe et ne le remplace pas dans l'inventaire.
 
 ## Task 1 — slice verticale RenderDraw ordinaire
+
+**Découpage d'exécution :** Task 1a livre seulement `RenderPass`/`SolidRectDraw` avec `MaterialV1` `SolidLinearPremulV1 + SolidRgbaF32V1`, U16 et group 1 uniform, sans W6b/destination/W4e. Son témoin public a deux owners distincts (chacun draw ordinal 0), et sa revue Sol est clean à `d8b2c76ee`. Task 1b étend la couverture aux autres sources ordinaires réellement publiées, en sous-lots par ABI/geometry host, avant de prétendre que l'inventaire RenderDraw est exhaustif. Les gradients/autres `MaterialV1`, `MaterialV2/V3/V4/V5`, Point/Vertices/Path et ressources image/gradient/noise/runtime ne sont **pas** couverts par 1a ; les sous-lots ultérieurs doivent éviter de compter deux fois leur site avec Task 3(c). Ni 1a ni le seul Task 1 ne ferment 2A0d.
 
 1. Relever sur les bindings finaux et sur un témoin public `Surface` W6+W5 les sources réellement atteignables, leur `commandIndex`, `drawOrdinalI32`, uniform source et recette géométrique. Établir l'attendu de pixels avant `Surface` ; garder `Render`+`Readback`. Les témoins existants peuvent être GREEN en baseline : ne pas fabriquer un RED de pixels pour un gel d'inventaire. Deux draws matériau distincts dans une même layer prouvent des **owners distincts**, pas un ordinal non nul : la route W6 courante crée un `RenderPass` par draw, chacun d'ordinal `0`. Prouver l'ordinal structurellement depuis les passes finales, sauf si une route publique multi-draw par pass est réellement trouvée ; aucune fixture privée n'est admise.
 2. Créer le type plan-only `W5aSourceNativeSiteRecipeV1` et ses faits/variants bornés dans `:gpu-plan`, sa famille `NativeSiteRecipeV1`, son encodage canonique versionné et la collection depuis les `RenderPass` finaux. La première variante exclut explicitement W6b coverage-masque, destination-read et W4e ; elle inclut les programmes matériau simples réellement admis, leurs uniforms et group 1, et référence le bundle géométrique de même draw. L'étendre aux autres familles seulement avec leurs axes prouvés.

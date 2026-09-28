@@ -1774,3 +1774,27 @@ seul le color consumer terminal en reçoit un. Le Task 1 commence par un
 `RenderPass` W6 ordinaire, sans W6b ni destination-read ; les variantes W4e et
 ABI étendues suivent. Le sampler physique de destination et sa lease restent
 reportés au Task 3 du plan W6 principal, avec re-seal avant B/B−1.
+
+### 2A0d Task 1a — source W5a ordinaire `SolidRect`/`MaterialV1` solid
+
+Le commit local `d8b2c76ee` livre une première tranche verticale : pour un
+`RenderPass` W6 `SolidRectDraw` portant réellement `MaterialV1`
+`SolidLinearPremulV1 + SolidRgbaF32V1`, la recette plan-only gèle le programme
+et son Raw ID distinct, les 16 bytes U16 et l'ABI group 1 uniform, l'owner
+géométrique/canonique, target/sample/blend et le site W5a au slot `1` après
+le bundle SolidRect `0`. Le catalogue/seal reconstruit ce site depuis les
+passes finales ; une table matériau absente donne une map vide. W5h applique
+le même prédicat d'admission, vérifie la bijection recettes/packets à l'échelle
+du frame, le template logique et l'ABI avant `beginFramePreparation`. Le stage
+W5a vérifie son provider en prépass sans allocation puis réutilise le template
+attesté. Aucun site W4e, W6b ou destination-read n'est revendiqué.
+
+Le nouveau témoin `Surface` fixe deux pixels avant construction, exerce deux
+draws publics portés par des owners distincts et vérifie les scopes
+`Render`/`Readback` ; il ne prétend
+pas prouver un ordinal non nul (les deux passes ont ordinal `0`). Les trois
+compiles ciblées sont sorties 0, ma relance de la classe W6 donne XML
+`36/0/0/0`; Gradle finit sur GLFW 133 après JUnit, qualification native
+**UNKNOWN**. `git show --check` est propre et la revue Sol de `d8b2c76ee`
+n'a trouvé aucun finding Critical/Important. Task 1b (autres sources ordinaires)
+ainsi que W4e, W6b, destination-read, 2A1/B/B−1 et 2B restent ouverts.
