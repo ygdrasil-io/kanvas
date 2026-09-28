@@ -794,11 +794,11 @@ internal fun encodeW4eNativePasses(
         require(recipe.shader(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectShaderV1.PathGeometry &&
             recipe.topology(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectTopologyV1.TriangleList &&
             recipe.groupZeroAbi(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectGroupZeroAbiV1.NoBindings &&
-            interiorStencil == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectStencilV1.ClearZeroOrReplaceWhenDomainOmitted) {
+            interiorStencil == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectStencilV1.ClearReplaceOne) {
             "W6 InverseDomain.Geometry Direct interior recipe selected unsupported shader, topology, ABI, or stencil state."
         }
         val interiorZero = createW4ePathGeometryPipeline(device, format, 1, 0f,
-            stencil = if (commonSource) w4eStencilReplaceState() else w4eStencilZeroState(), colorWrite = false,
+            stencil = w4eStencilReplaceState(), colorWrite = false,
             label = "Kanvas.frame.w6.inverseDomain.interiorZero", owned = owned)
         val cover = if (commonSource) inverseWindingDomainPipeline(format, 1, entry.packet.blendPlan)
             else inverseDomainPipeline(format, 1, null)
@@ -827,7 +827,7 @@ internal fun encodeW4eNativePasses(
             add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(cover.pipeline, generation)))
             add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generation)))
             add(GPUPreparedNativeRenderCommand.SetScissor(domain.left, domain.top, domain.width(), domain.height()))
-            add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))
+            add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.fullscreenVertexCountI32)))
         })
     }
     return entries.map { entry -> try {

@@ -13,7 +13,7 @@ public enum class W6InverseDomainDirectBundleV1 { DomainStencil, InteriorZero, C
 public enum class W6InverseDomainDirectShaderV1 { PathGeometry, InverseDomainCover }
 public enum class W6InverseDomainDirectTopologyV1 { TriangleList, FullscreenTriangle }
 public enum class W6InverseDomainDirectGroupZeroAbiV1 { NoBindings, InverseDomainUniform }
-public enum class W6InverseDomainDirectStencilV1 { ClearReplaceOne, ClearZeroOrReplaceWhenDomainOmitted, TestZeroKeep }
+public enum class W6InverseDomainDirectStencilV1 { ClearReplaceOne, TestZeroKeep }
 
 /**
  * One final W6 inverse-domain Zero packet.  This deliberately owns no mask, V/I, or D24S8:
@@ -116,12 +116,13 @@ public class W6InverseDomainDirectRecipeV1 internal constructor(
     public fun copyQuadVerticesF32(): FloatArray = quadVertices.copyOf(); public fun copyQuadIndicesI32(): IntArray = quadIndices.copyOf()
     public fun copyInteriorVerticesF32(): FloatArray = interiorVertices.copyOf(); public fun copyInteriorIndicesI32(): IntArray = interiorIndices.copyOf()
     public fun copyUniformBytes(): ByteArray = bytes.copyOf()
+    public val fullscreenVertexCountI32: Int = 3
     public fun shader(bundle: W6InverseDomainDirectBundleV1): W6InverseDomainDirectShaderV1 = if (bundle == W6InverseDomainDirectBundleV1.ColorCover) W6InverseDomainDirectShaderV1.InverseDomainCover else W6InverseDomainDirectShaderV1.PathGeometry
     public fun topology(bundle: W6InverseDomainDirectBundleV1): W6InverseDomainDirectTopologyV1 = if (bundle == W6InverseDomainDirectBundleV1.ColorCover) W6InverseDomainDirectTopologyV1.FullscreenTriangle else W6InverseDomainDirectTopologyV1.TriangleList
     public fun groupZeroAbi(bundle: W6InverseDomainDirectBundleV1): W6InverseDomainDirectGroupZeroAbiV1 = if (bundle == W6InverseDomainDirectBundleV1.ColorCover) W6InverseDomainDirectGroupZeroAbiV1.InverseDomainUniform else W6InverseDomainDirectGroupZeroAbiV1.NoBindings
     public fun stencil(bundle: W6InverseDomainDirectBundleV1): W6InverseDomainDirectStencilV1 = when (bundle) {
         W6InverseDomainDirectBundleV1.DomainStencil -> W6InverseDomainDirectStencilV1.ClearReplaceOne
-        W6InverseDomainDirectBundleV1.InteriorZero -> W6InverseDomainDirectStencilV1.ClearZeroOrReplaceWhenDomainOmitted
+        W6InverseDomainDirectBundleV1.InteriorZero -> W6InverseDomainDirectStencilV1.ClearReplaceOne
         W6InverseDomainDirectBundleV1.ColorCover -> W6InverseDomainDirectStencilV1.TestZeroKeep
     }
     init {
@@ -174,6 +175,7 @@ public class W6InverseDomainDirectNativeSiteRecipeV1 internal constructor(
         int("quad.first", host.quadSlice.firstIndex); int("quad.count", host.quadSlice.indexCount); int("quad.base", host.quadSlice.baseVertex)
         int("interior.first", host.interiorSlice.firstIndex); int("interior.count", host.interiorSlice.indexCount); int("interior.base", host.interiorSlice.baseVertex)
         enum("load", host.load); enum("store", host.store); blend("blend", host.blend)
+        if (bundle == W6InverseDomainDirectBundleV1.ColorCover) int("draw.vertices", host.fullscreenVertexCountI32)
         text("scene.depth", "D24S8"); text("depth.clear", "1"); text("stencil.clear", "0"); text("depth.load", "Clear"); text("depth.store", "Store"); text("stencil.load", "Clear"); text("stencil.store", "Store"); text("domain.draw.omitted.commonSource", "true")
     }
 }

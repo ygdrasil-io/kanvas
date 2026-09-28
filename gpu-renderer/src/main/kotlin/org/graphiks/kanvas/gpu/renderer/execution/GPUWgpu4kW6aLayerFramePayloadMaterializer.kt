@@ -367,6 +367,10 @@ private fun preflightW4eClipMaskInitializes(
             val interiorGeometry = (retained?.interiorCoverage as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry)
                 ?.copyGeometryF32()
             val interior = interiorGeometry?.copyDirectTriangleF32OrNull()
+            val preparedInteriorNdc = interior?.copyVerticesF32()?.also { values -> values.indices.step(2).forEach { offset ->
+                values[offset] = values[offset] * 2f / recipe.target.copyExtentI32()!!.width - 1f
+                values[offset + 1] = 1f - values[offset + 1] * 2f / recipe.target.copyExtentI32()!!.height
+            } }
             fun vertexSlice(slice: W4eNativeGeometrySlice): FloatArray = payload.copyVertexData().copyOfRange(slice.baseVertex * 2, (slice.baseVertex + slice.vertexCount) * 2)
             fun indexSlice(slice: W4eNativeGeometrySlice): IntArray = payload.copyIndexData().copyOfRange(slice.firstIndex, slice.firstIndex + slice.indexCount)
             val domain = recipe.copyDomainI32(); val scissor = recipe.copySourceScissorI32()
@@ -380,11 +384,16 @@ private fun preflightW4eClipMaskInitializes(
                 vertexSlice(recipe.interiorSlice).contentEquals(recipe.copyInteriorVerticesF32()) && indexSlice(recipe.interiorSlice).contentEquals(recipe.copyInteriorIndicesI32()) &&
                 operandMatches(target, recipe.target) && operandMatches(depth, recipe.depthStencil) && operandMatches(vertex, recipe.vertex) && operandMatches(index, recipe.index) && operandMatches(uniformRow, recipe.uniform) &&
                 interior != null && interiorGeometry?.fillRule == recipe.fillRule && retained?.domain == GPUPixelBounds(domain.left, domain.top, domain.right, domain.bottom) &&
+                preparedInteriorNdc!!.contentEquals(recipe.copyInteriorVerticesF32()) && interior.copyIndicesI32().contentEquals(recipe.copyInteriorIndicesI32()) &&
                 pass.draw.copyScissorI32() == scissor && packet?.role == GPUDrawPacketRole.W4ePrepared && packet.passId == pass.id.value &&
                 path?.commandIdValue == pass.draw.commandIndex && path.phase == PathRenderPhase.SingleSampleDirectColor && path.targetResourceId == recipe.target.id.value &&
+                path.vertexResourceId == recipe.vertex.id.value && path.indexResourceId == recipe.index.id.value && path.sample == SamplePlan.SingleSample && path.resolveTargetResourceId == null &&
                 path.depthStencilResourceId == recipe.depthStencil.id.value && path.uniformResourceId == recipe.uniform.id.value &&
                 path.depthStencilAccess == null && path.depthStencilLoadStore == null && path.load == recipe.load && path.store == recipe.store && path.blend == recipe.blend &&
-                render != null && render.resourceUses == expectedUses) {
+                packet?.w4ePreparedClipConsumer === retained && packet?.blendPlan == org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(recipe.blend) &&
+                render != null && render.target == frame.refs.getValue(recipe.target.id) && render.samplePlan == GPUSamplePlan.SingleSampleFrame &&
+                render.loadStore.loadOp == (if (recipe.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load") && render.loadStore.storePlan == GPUStorePlan.Store &&
+                render.depthStencilLoadStore == null && render.resourceUses == expectedUses) {
                 "W6 InverseDomain.Geometry Direct packet, uses, slices, or ordered catalog diverged before allocation."
             }
         }

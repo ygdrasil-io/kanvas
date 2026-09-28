@@ -1665,3 +1665,12 @@ et `:kanvas:compileTestKotlin` sorties 0. Le sélecteur DirectTriangle est XML
 `1/0/0/0`; Gradle finit à 1 seulement après GLFW macOS 133, donc natif
 **UNKNOWN** distinct. Task 3 attend encore les sélecteurs de préservation et
 la revue Sol; IV, fan Task 4, 2A1 et 2B restent ouverts.
+
+La re-revue Sol a conduit à sceller `interiorZero` sur le stencil concret
+`Replace`, et le `colorCover` sur exactement trois sommets fullscreen. Avant
+tout `device.create*`, le préflight Direct confronte désormais la géométrie
+préparée projetée NDC et ses indices au snapshot, l'identité
+packet/consumer/domaine, puis scissor, operands, V/I, sample/resolve/pass,
+blend, target, D24S8, load/store et `resourceUses`. Les trois témoins Surface
+Direct/Zero/Fan donnent XML `3/0/0/0`; le même GLFW macOS 133 post-JUnit reste
+**UNKNOWN**.
