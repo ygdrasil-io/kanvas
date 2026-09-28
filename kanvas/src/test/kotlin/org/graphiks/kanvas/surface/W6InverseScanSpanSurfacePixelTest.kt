@@ -82,10 +82,10 @@ class W6InverseScanSpanSurfacePixelTest {
 
     @Test
     fun `inverse scan span lane budget refuses B minus one before readback`() {
-        // B_lane is the final W4e-owned peak before insertClips publishes anything.  The
-        // checked liveness alternatives include target/readback, masks, both D24S8 roles, and
-        // the sole V/I/U policy reservation (with zero useful V/I for this producer).  The
-        // prefix's target + three simultaneously-live masks is the maximum.
+        // B_lane is the final W4e-owned peak before W4e publishes anything. This clipPath is a
+        // path producer, so the prefix binds the shared 16 KiB V + 4 KiB I pools. At its hard
+        // producer every physical mask allocation starts at prefix pass zero, and the logical
+        // target is frame-resident: target + three masks + D24S8 + V/I = 9,820,480 bytes.
         val widthI32 = 700
         val heightI32 = 700
         val rgba8Bytes = rgba8Bytes(widthI32, heightI32)
@@ -94,9 +94,10 @@ class W6InverseScanSpanSurfacePixelTest {
             4L * 1_024L, // IndexData physical minimum
             4L * 1_024L, // W4e UniformData physical minimum
         )
+        val prefixNativeBytes = checkedAdd(16L * 1_024L, 4L * 1_024L)
         val laneBudgetBytes = maxOf(
-            checkedAdd(rgba8Bytes, checkedMultiply(rgba8Bytes, 3L)), // fold: target + two accumulators + scratch
-            checkedAdd(rgba8Bytes, checkedMultiply(rgba8Bytes, 2L), rgba8Bytes), // hard producer: target + two masks + D24S8
+            checkedAdd(rgba8Bytes, checkedMultiply(rgba8Bytes, 3L), prefixNativeBytes), // fold: target + three masks + prefix V/I
+            checkedAdd(rgba8Bytes, checkedMultiply(rgba8Bytes, 3L), rgba8Bytes, prefixNativeBytes), // hard producer: target + three masks + D24S8 + prefix V/I
             checkedAdd(rgba8Bytes, rgba8Bytes, rgba8Bytes, payloadReservationsBytes), // inverse producer: target + mask + D24S8 + V/I/U
             checkedAdd(rgba8Bytes, readbackBytes(widthI32, heightI32), payloadReservationsBytes),
         )
@@ -114,8 +115,46 @@ class W6InverseScanSpanSurfacePixelTest {
         val failure = assertFailsWith<IllegalStateException> {
             surface.readPixels(RectF32.ofLTRB(0f, 0f, widthI32.toFloat(), heightI32.toFloat()), sentinel)
         }
-        assertTrue(failure.message?.startsWith("w4e.clip.budget.frame-local-exceeded:") == true,
+        assertTrue(failure.message?.startsWith(
+            "w4e.clip.budget.frame-local-exceeded: W4e pooled clip resources require $laneBudgetBytes bytes",
+        ) == true,
             failure.message ?: "missing diagnostic")
+        assertContentEquals(before, sentinel)
+    }
+
+    @Test
+    fun `inverse scan span lane budget at B reaches native submission`() {
+        // This is the positive side of the Task 2 budget boundary.  Task 3 owns the native
+        // scan-span execution, so at B the current public terminal may reach that later refusal,
+        // but must not be rejected by W4e's frame-local budget gate.
+        val widthI32 = 700
+        val heightI32 = 700
+        val rgba8Bytes = rgba8Bytes(widthI32, heightI32)
+        val payloadReservationsBytes = checkedAdd(16L * 1_024L, 4L * 1_024L, 4L * 1_024L)
+        val prefixNativeBytes = checkedAdd(16L * 1_024L, 4L * 1_024L)
+        val laneBudgetBytes = maxOf(
+            checkedAdd(rgba8Bytes, checkedMultiply(rgba8Bytes, 3L), prefixNativeBytes),
+            checkedAdd(rgba8Bytes, checkedMultiply(rgba8Bytes, 3L), rgba8Bytes, prefixNativeBytes),
+            checkedAdd(rgba8Bytes, rgba8Bytes, rgba8Bytes, payloadReservationsBytes),
+            checkedAdd(rgba8Bytes, readbackBytes(widthI32, heightI32), payloadReservationsBytes),
+        )
+        val sentinel = UByteArray(widthI32 * heightI32 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val surface = Surface(widthI32, heightI32, config = RenderConfig(frameLocalBudgetBytes = laneBudgetBytes))
+        surface.canvas {
+            clipPath(targetClipPath(widthI32, heightI32), antiAlias = false)
+            drawPath(inverseTriangle(-700f, -700f, 3_500f, -700f, -700f, 3_500f),
+                Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
+        }
+
+        val failure = assertFailsWith<IllegalStateException> {
+            surface.readPixels(RectF32.ofLTRB(0f, 0f, widthI32.toFloat(), heightI32.toFloat()), sentinel)
+        }
+        assertTrue(failure.message ==
+            "w3.execution.submit_failure: GPU submission was refused. " +
+                "unsupported.frame_memory.aggregate_budget_exceeded: " +
+                "Frame aggregate memory exceeds the configured budget.",
+            failure.message ?: "missing native terminal refusal")
         assertContentEquals(before, sentinel)
     }
 
