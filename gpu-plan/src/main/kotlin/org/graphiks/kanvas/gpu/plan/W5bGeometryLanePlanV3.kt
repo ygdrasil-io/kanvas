@@ -16,8 +16,17 @@ internal fun PlanDraw.withW5dCoordinates(coordinates: MaterialCoordinatePlanV2):
         copyGeometryF32(), strategy, copyScissorI32(), blend, coordinatesV2 = coordinates)
     is PathStrokeDraw -> PathStrokeDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
         copyGeometryF32(), copyScissorI32(), mode, styleF64, blend, coordinatesV2 = coordinates)
-    is GeneralPathDraw -> GeneralPathDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
-        copyPathGeometry(), strategy, copyScissorI32(), coverage, sample, blend, coordinatesV2 = coordinates)
+    is GeneralPathDraw -> {
+        val geometry = copyPathGeometry()
+        when (geometry) {
+            is PathDrawGeometry.InverseDomainSource,
+            PathDrawGeometry.Empty,
+            -> rebindW4eSealedInverseMaterialV1(
+                PlanDrawMaterialAuthority.MaterialV2(materialAuthority.materialPlanRef(), coordinates))
+            else -> GeneralPathDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+                geometry, strategy, copyScissorI32(), coverage, sample, blend, coordinatesV2 = coordinates)
+        }
+    }
     else -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
 }
 }

@@ -170,7 +170,8 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
 private fun nativeSourcePacketV3(packets: List<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket>,
     ordinalI32: Int, source: W5aPacketMaterialSourceV2) =
     packets.singleOrNull()?.takeIf { packet ->
-        packet.w5bFinalFrameWitnessV3?.w4eLane?.owns(packet) == true &&
+        (packet.w5bFinalFrameWitnessV3?.w4eLane?.owns(packet) == true ||
+            packet.w4ePreparedClipConsumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain) &&
             packet.materialSourcePartitionV3() === source && packet.w4ePreparedFrameAuthority != null
     } ?: packets.getOrNull(ordinalI32)
 

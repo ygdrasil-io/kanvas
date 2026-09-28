@@ -419,14 +419,19 @@ public class W4eNativePayloadPlan private constructor(
             }
 
             val direct = geometry?.copyDirectTriangleF32OrNull()
-            val inverseMask = consumer is ClipPlanStrategy.InverseMask
+            val inverseMask = consumer as? ClipPlanStrategy.InverseMask
+            // Zero has no finite producer geometry to invert. Its one fullscreen consumer
+            // therefore samples the already-built hard mask normally, rather than applying
+            // the inverse-mask shader policy reserved for finite Geometry sources.
+            val inverseMaskZero = inverseMask?.geometryF32?.interiorCoverageF32 ==
+                InverseInteriorCoverageF32.Zero
             if (!addUniform(
                     pass.id.value,
                     CONSUMER_UNIFORM,
                     if (consumer == null) {
                         color4(materialColor() ?: return false)
                     } else {
-                        color8(materialColor() ?: return false, inverseMask)
+                        color8(materialColor() ?: return false, inverseMask != null && !inverseMaskZero)
                     },
                 )
             ) return false

@@ -168,6 +168,161 @@ class W6aLayerW4W5SurfacePixelTest {
     }
 
     @Test
+    fun `inverse even odd hole remains visible under a hard concave clip in a W6 layer`() {
+        // The two contours share their winding, so EVEN_ODD makes the inner 2x2 square part
+        // of the inverse result.  This literal oracle is the clipped complement, not either
+        // contour's direct coverage; it precedes Surface construction deliberately.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue, blue, blue, blue, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, blue, blue, clear, clear, blue,
+            blue, clear, clear, blue, blue, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, blue,
+            blue, clear, clear, clear, clear, clear, clear, clear,
+            blue, blue, blue, blue, blue, blue, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(0f, 0f); lineTo(8f, 0f); lineTo(8f, 6f); lineTo(6f, 6f)
+            lineTo(6f, 8f); lineTo(0f, 8f); close()
+        }
+        val inverseEvenOdd = Path().apply {
+            moveTo(1f, 1f); lineTo(7f, 1f); lineTo(7f, 7f); lineTo(1f, 7f); close()
+            moveTo(3f, 3f); lineTo(5f, 3f); lineTo(5f, 5f); lineTo(3f, 5f); close()
+            fillType = FillType.INVERSE_EVEN_ODD
+        }
+
+        val surface = Surface(8, 8)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseEvenOdd, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `inverse masked fill rebases once in a translated W6 layer`() {
+        // This is the 6x6 L witness shifted by exactly (1,1): only the translated L column is
+        // blue.  A second device-to-layer translation moves it, while no rebase leaves it at x=1.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val inverseTriangle = Path().apply {
+            moveTo(2f, 1f); lineTo(5f, 1f); lineTo(2f, 4f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(8, 8)
+        surface.canvas {
+            saveLayer()
+            translate(1f, 1f)
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseTriangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `successive inverse masked fills reset their W6 stencil`() {
+        // The second inverse fill must see an empty stencil, not the first triangle's producer.
+        // These four causally distinct literal samples cover outside both interiors, each
+        // triangle's interior, and the concave clip exterior.
+        val blue = rgba(17, 61, 211)
+        val red = rgba(239, 51, 73)
+        val clear = rgba(0, 0, 0, 0)
+        val expectedAtOneOne = blue
+        val expectedAtFourFour = red
+        val expectedAtZeroZero = blue
+        val expectedAtSevenSeven = clear
+        val clip = Path().apply {
+            moveTo(0f, 0f); lineTo(8f, 0f); lineTo(8f, 6f); lineTo(6f, 6f)
+            lineTo(6f, 8f); lineTo(0f, 8f); close()
+        }
+        val firstInverse = Path().apply {
+            moveTo(1f, 1f); lineTo(4f, 1f); lineTo(1f, 4f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+        val secondInverse = Path().apply {
+            moveTo(4f, 4f); lineTo(7f, 4f); lineTo(4f, 7f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(8, 8)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(firstInverse, opaque(RED))
+            drawPath(secondInverse, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        fun pixel(xI32: Int, yI32: Int): UByteArray = actual.pixels.copyOfRange((yI32 * 8 + xI32) * 4, (yI32 * 8 + xI32 + 1) * 4)
+        assertContentEquals(expectedAtOneOne, pixel(1, 1))
+        assertContentEquals(expectedAtFourFour, pixel(4, 4))
+        assertContentEquals(expectedAtZeroZero, pixel(0, 0))
+        assertContentEquals(expectedAtSevenSeven, pixel(7, 7))
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `empty inverse masked fill colors only its hard L clip in a W6 layer`() {
+        // An empty inverse path is the normal clip coverage itself.  It must not allocate or
+        // read a synthetic stencil producer; the public result is the literal hard L.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear,
+            clear, blue, blue, blue, blue, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val inverseEmpty = Path().apply { fillType = FillType.INVERSE_WINDING }
+
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseEmpty, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `even odd path clip preserves its stencil cover hole in a W6 layer`() {
         // The inner contour has the same winding as the exterior.  Only the frozen EVEN_ODD
         // stencil edge plus its non-zero cover test leaves this center pixel transparent.

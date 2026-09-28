@@ -1418,3 +1418,29 @@ témoin AA n'affirme ni pixels ni succès global de sa route multisample, seulem
 l'absence du plafond propre au producer scan-span. Ce sous-lot inverse-mask est review-clean, mais cette
 extension ne ferme pas 2A0c, 2A1 ni 2B ; ces gates restent ouverts pour les
 sous-lots ultérieurs.
+
+### 2A0c.IIIa4b — InverseMask W6 : fan, origine, reset et Zero
+
+Les quatre témoins `Surface` publics Task 2 emploient des oracles littéraux :
+le fan concave `INVERSE_EVEN_ODD` avec deux contours de même winding, le
+rebase d'une couche W6 translatée, deux fills inverses successifs qui exigent
+le reset du stencil, et `InverseMask.Zero` sous un clip L hard. Chaque
+sélecteur donne XML `1/0/0/0`. Les quatre runs GPU finissent avec Gradle exit
+1 seulement après l'exit GLFW natif macOS 133 : ce dernier reste **UNKNOWN**
+et séparé du verdict JUnit.
+
+Le source W4e scellé peut maintenant conserver sa géométrie
+`InverseDomainSource`/`Empty` lorsque les phases W5/W6 rebindent seulement le
+material ou le blend ; les constructeurs publics continuent de la refuser.
+`InverseMask.Zero` publie son unique consumer color fullscreen avec le mask
+sampled normal (`inverse=false`) : le planner exclut Zero de
+`inverseMaskDirectGeometryCommands`, donc aucun producer, D24S8 ou bytes V/I
+ne sont créés pour ce cas. La vérification W4e public empty/non-empty a aussi
+mis en évidence une sélection W5a trop étroite : le paquet `InverseDomain`
+scellé sans lane W5b est désormais associé à son unique source material.
+
+Les compilations `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0. La préservation W6 hard-mask donne XML
+`1/0/0/0`, avec le même exit 133 **UNKNOWN** ; la préservation W4e public
+empty/non-empty donne XML `1/0/0/0`, Gradle exit 0. Ce sous-lot ne lance ni GM,
+ni dashboard Skia, ni suite globale ; les gates ultérieurs demeurent ouverts.

@@ -196,8 +196,16 @@ public class GeneralPathDraw private constructor(
 
     /** Pre-publication target rebinding retains this already selected General path contract. */
     internal fun rebindGeometryV6(geometry: PathDrawGeometry, scissorI32: RectI32,
-        material: PlanDrawMaterialAuthority = materialAuthority): GeneralPathDraw =
+        material: PlanDrawMaterialAuthority = materialAuthority, blend: BlendPlan = this.blend): GeneralPathDraw =
         GeneralPathDraw(commandIndex, material, geometry, strategy, scissorI32, coverage, sample, blend)
+
+    /** W4e may rebind material facts for its sealed inverse source without reopening path selection. */
+    internal fun rebindW4eSealedInverseMaterialV1(material: PlanDrawMaterialAuthority,
+        blend: BlendPlan = this.blend): GeneralPathDraw {
+        val geometry = copyPathGeometry()
+        require(geometry is PathDrawGeometry.InverseDomainSource || geometry == PathDrawGeometry.Empty)
+        return rebindGeometryV6(geometry, copyScissorI32(), material, blend)
+    }
 
     /** Legacy-only compatibility view. W5 path draws carry no reconstructed colour. */
     override public val color: ColorF32
@@ -289,12 +297,20 @@ public class GeneralPathDraw private constructor(
 }
 
 /** Retains the same immutable General geometry without projecting it into a narrow path lane. */
-public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw = GeneralPathDraw.ofMaterial(
-    commandIndex, materialAuthority.materialPlanRef(), copyPathGeometry(), strategy,
-    copyScissorI32(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
-    (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
-    materialAuthority is PlanDrawMaterialAuthority.MaterialV5,
-)
+public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw {
+    val geometry = copyPathGeometry()
+    return when (geometry) {
+        is PathDrawGeometry.InverseDomainSource,
+        PathDrawGeometry.Empty,
+        -> rebindW4eSealedInverseMaterialV1(materialAuthority, blend)
+        else -> GeneralPathDraw.ofMaterial(
+            commandIndex, materialAuthority.materialPlanRef(), geometry, strategy,
+            copyScissorI32(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
+            (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+            materialAuthority is PlanDrawMaterialAuthority.MaterialV5,
+        )
+    }
+}
 
 /** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */
 public class ClippedGeneralPathDraw private constructor(
