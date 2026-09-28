@@ -1635,4 +1635,5 @@ Les compiles séparées `:gpu-plan:compileKotlin`,
 run public final donne XML W6a `35/0/0/0`, scan-span `14/0/0/0` et les deux
 sélecteurs W4e `2/0/0/0`. Gradle se termine ensuite sur GLFW macOS 133 après
 JUnit : état natif **UNKNOWN**, pas PASS. `git diff --check` est propre. La
-revue Sol Task 2 reste requise ; 2A0c.IV, 2A0d, 2A1 et 2B restent ouverts.
+revue Sol indépendante du commit `9dcaf822f` est clean, sans finding
+Critical/Important ; 2A0c.IV, 2A0d, 2A1 et 2B restent ouverts.
