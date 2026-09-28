@@ -10,6 +10,10 @@ public enum class W6InverseDomainZeroShaderFamilyV1 { UnmaskedDomainCover }
 public enum class W6InverseDomainZeroTopologyV1 { FullscreenTriangle }
 public enum class W6InverseDomainZeroGroupZeroAbiV1 { InverseDomainZeroUniform }
 public enum class W6InverseDomainDirectBundleV1 { DomainStencil, InteriorZero, ColorCover }
+public enum class W6InverseDomainDirectShaderV1 { PathGeometry, InverseDomainCover }
+public enum class W6InverseDomainDirectTopologyV1 { TriangleList, FullscreenTriangle }
+public enum class W6InverseDomainDirectGroupZeroAbiV1 { NoBindings, InverseDomainUniform }
+public enum class W6InverseDomainDirectStencilV1 { ClearReplaceOne, ClearZeroOrReplaceWhenDomainOmitted, TestZeroKeep }
 
 /**
  * One final W6 inverse-domain Zero packet.  This deliberately owns no mask, V/I, or D24S8:
@@ -112,6 +116,14 @@ public class W6InverseDomainDirectRecipeV1 internal constructor(
     public fun copyQuadVerticesF32(): FloatArray = quadVertices.copyOf(); public fun copyQuadIndicesI32(): IntArray = quadIndices.copyOf()
     public fun copyInteriorVerticesF32(): FloatArray = interiorVertices.copyOf(); public fun copyInteriorIndicesI32(): IntArray = interiorIndices.copyOf()
     public fun copyUniformBytes(): ByteArray = bytes.copyOf()
+    public fun shader(bundle: W6InverseDomainDirectBundleV1): W6InverseDomainDirectShaderV1 = if (bundle == W6InverseDomainDirectBundleV1.ColorCover) W6InverseDomainDirectShaderV1.InverseDomainCover else W6InverseDomainDirectShaderV1.PathGeometry
+    public fun topology(bundle: W6InverseDomainDirectBundleV1): W6InverseDomainDirectTopologyV1 = if (bundle == W6InverseDomainDirectBundleV1.ColorCover) W6InverseDomainDirectTopologyV1.FullscreenTriangle else W6InverseDomainDirectTopologyV1.TriangleList
+    public fun groupZeroAbi(bundle: W6InverseDomainDirectBundleV1): W6InverseDomainDirectGroupZeroAbiV1 = if (bundle == W6InverseDomainDirectBundleV1.ColorCover) W6InverseDomainDirectGroupZeroAbiV1.InverseDomainUniform else W6InverseDomainDirectGroupZeroAbiV1.NoBindings
+    public fun stencil(bundle: W6InverseDomainDirectBundleV1): W6InverseDomainDirectStencilV1 = when (bundle) {
+        W6InverseDomainDirectBundleV1.DomainStencil -> W6InverseDomainDirectStencilV1.ClearReplaceOne
+        W6InverseDomainDirectBundleV1.InteriorZero -> W6InverseDomainDirectStencilV1.ClearZeroOrReplaceWhenDomainOmitted
+        W6InverseDomainDirectBundleV1.ColorCover -> W6InverseDomainDirectStencilV1.TestZeroKeep
+    }
     init {
         require(packetOrdinalI32 >= 0 && !domain.isEmpty && !sourceScissor.isEmpty)
         require(target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
@@ -150,6 +162,7 @@ public class W6InverseDomainDirectNativeSiteRecipeV1 internal constructor(
         }
         text("owner", host.ownerPassId.value); int("packet", host.packetOrdinalI32); int("bundle", bundle.ordinal)
         text("predicate", "Geometry"); enum("bundle.role", bundle); enum("fill", host.fillRule)
+        enum("shader", host.shader(bundle)); enum("topology", host.topology(bundle)); enum("abi", host.groupZeroAbi(bundle)); enum("stencil", host.stencil(bundle))
         operand("target", host.target); operand("depth", host.depthStencil); operand("vertex", host.vertex); operand("index", host.index); operand("uniform", host.uniform)
         rect("domain", host.copyDomainI32()); rect("source.scissor", host.copySourceScissorI32())
         long("uniform.offset", host.uniformSlice.offsetBytes); long("uniform.bytes", host.uniformSlice.byteSize)
@@ -161,7 +174,7 @@ public class W6InverseDomainDirectNativeSiteRecipeV1 internal constructor(
         int("quad.first", host.quadSlice.firstIndex); int("quad.count", host.quadSlice.indexCount); int("quad.base", host.quadSlice.baseVertex)
         int("interior.first", host.interiorSlice.firstIndex); int("interior.count", host.interiorSlice.indexCount); int("interior.base", host.interiorSlice.baseVertex)
         enum("load", host.load); enum("store", host.store); blend("blend", host.blend)
-        text("scene.depth", "D24S8"); text("domain.draw.omitted.commonSource", "true")
+        text("scene.depth", "D24S8"); text("depth.clear", "1"); text("stencil.clear", "0"); text("depth.load", "Clear"); text("depth.store", "Store"); text("stencil.load", "Clear"); text("stencil.store", "Store"); text("domain.draw.omitted.commonSource", "true")
     }
 }
 

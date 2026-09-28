@@ -778,8 +778,25 @@ internal fun encodeW4eNativePasses(
             PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
             else -> throw refusal("invalid.native-core-primitive.w4e-inverse-domain-direct", "W6 Direct requires final scene color target.")
         }
+        require(recipe.shader(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.DomainStencil) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectShaderV1.PathGeometry &&
+            recipe.topology(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.DomainStencil) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectTopologyV1.TriangleList &&
+            recipe.groupZeroAbi(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.DomainStencil) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectGroupZeroAbiV1.NoBindings &&
+            recipe.stencil(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.DomainStencil) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectStencilV1.ClearReplaceOne &&
+            recipe.shader(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.ColorCover) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectShaderV1.InverseDomainCover &&
+            recipe.topology(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.ColorCover) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectTopologyV1.FullscreenTriangle &&
+            recipe.groupZeroAbi(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.ColorCover) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectGroupZeroAbiV1.InverseDomainUniform &&
+            recipe.stencil(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.ColorCover) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectStencilV1.TestZeroKeep) {
+            "W6 InverseDomain.Geometry Direct recipe selected unsupported shader, topology, ABI, or stencil state."
+        }
         val domainStencil = createW4ePathGeometryPipeline(device, format, 1, 0f, stencil = w4eStencilReplaceState(), colorWrite = false,
             label = "Kanvas.frame.w6.inverseDomain.domainStencil", owned = owned)
+        val interiorStencil = recipe.stencil(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero)
+        require(recipe.shader(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectShaderV1.PathGeometry &&
+            recipe.topology(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectTopologyV1.TriangleList &&
+            recipe.groupZeroAbi(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.InteriorZero) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectGroupZeroAbiV1.NoBindings &&
+            interiorStencil == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectStencilV1.ClearZeroOrReplaceWhenDomainOmitted) {
+            "W6 InverseDomain.Geometry Direct interior recipe selected unsupported shader, topology, ABI, or stencil state."
+        }
         val interiorZero = createW4ePathGeometryPipeline(device, format, 1, 0f,
             stencil = if (commonSource) w4eStencilReplaceState() else w4eStencilZeroState(), colorWrite = false,
             label = "Kanvas.frame.w6.inverseDomain.interiorZero", owned = owned)
@@ -1086,7 +1103,8 @@ internal fun encodeW4eNativePasses(
                 ) throw refusal("invalid.native-core-primitive.w4e-inverse-domain-zero", "W6 Zero packet lacks its sealed native-site recipe.")
                 if (inverseDomainDirectRecipesByPassId.isNotEmpty() &&
                     consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain &&
-                    consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry
+                    (consumer.interiorCoverage as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry)
+                        ?.copyGeometryF32()?.copyDirectTriangleF32OrNull() != null
                 ) throw refusal("invalid.native-core-primitive.w4e-inverse-domain-direct", "W6 Direct packet lacks its sealed native-site recipe.")
                 val retainedInverse = retainedConsumerFor(entry.packet.passId) as?
                     org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain

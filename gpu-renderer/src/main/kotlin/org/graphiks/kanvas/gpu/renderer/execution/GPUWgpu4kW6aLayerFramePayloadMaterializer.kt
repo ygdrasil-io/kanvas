@@ -347,14 +347,44 @@ private fun preflightW4eClipMaskInitializes(
             val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().singleOrNull { step ->
                 step.w6aPassV1?.id in binding.graphPassIds() && step.drawPackets.singleOrNull()?.passId == pass.id.value
             }
-            val expectedUses = listOf(recipe.target.id, recipe.vertex.id, recipe.index.id, recipe.uniform.id, recipe.depthStencil.id).map(frame.refs::getValue)
-            val actualUses = render?.resourceUses?.map { it.resource.value }
+            val rows = frame.graph.resources().associateBy { it.id }
+            val target = rows.getValue(recipe.target.id); val depth = rows.getValue(recipe.depthStencil.id)
+            val vertex = rows.getValue(recipe.vertex.id); val index = rows.getValue(recipe.index.id); val uniformRow = rows.getValue(recipe.uniform.id)
+            val targetRole = when (target.role) {
+                PlanResourceRole.LogicalTarget -> GPUFrameResourceRole.SceneTarget
+                PlanResourceRole.MultisampleColorTarget, PlanResourceRole.LayerTarget -> GPUFrameResourceRole.LayerTarget
+                else -> GPUFrameResourceRole.ClipMask
+            }
+            val expectedUses = listOf(
+                GPUFrameResourceUse(frame.refs.getValue(recipe.target.id), targetRole, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true),
+                GPUFrameResourceUse(frame.refs.getValue(recipe.vertex.id), GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, GPUFrameResourceLifetime.FrameLocal, false),
+                GPUFrameResourceUse(frame.refs.getValue(recipe.index.id), GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, GPUFrameResourceLifetime.FrameLocal, false),
+                GPUFrameResourceUse(frame.refs.getValue(recipe.uniform.id), GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false),
+                GPUFrameResourceUse(frame.refs.getValue(recipe.depthStencil.id), GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true),
+            )
+            val packet = render?.drawPackets?.singleOrNull(); val path = packet?.w4ePreparedPath
+            val retained = authority.consumerFor(pass.id.value) as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+            val interiorGeometry = (retained?.interiorCoverage as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry)
+                ?.copyGeometryF32()
+            val interior = interiorGeometry?.copyDirectTriangleF32OrNull()
+            fun vertexSlice(slice: W4eNativeGeometrySlice): FloatArray = payload.copyVertexData().copyOfRange(slice.baseVertex * 2, (slice.baseVertex + slice.vertexCount) * 2)
+            fun indexSlice(slice: W4eNativeGeometrySlice): IntArray = payload.copyIndexData().copyOfRange(slice.firstIndex, slice.firstIndex + slice.indexCount)
+            val domain = recipe.copyDomainI32(); val scissor = recipe.copySourceScissorI32()
             require(catalogs.all { it?.host === recipe } && recipe.ownerPassId == pass.id && recipe.packetOrdinalI32 == pass.ordinal &&
                 pass.phase == PathRenderPhase.SingleSampleDirectColor && pass.target == recipe.target.id && pass.depthStencil == recipe.depthStencil.id &&
                 pass.draw.sample == SamplePlan.SingleSample && pass.resolveTarget == null && pass.load == recipe.load && pass.store == recipe.store &&
                 pass.draw.blend == recipe.blend && payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_QUAD) == recipe.quadSlice &&
                 payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_INTERIOR) == recipe.interiorSlice &&
-                uniform == recipe.uniformSlice && bytes?.contentEquals(recipe.copyUniformBytes()) == true && render != null && actualUses == expectedUses.map { it.value }) {
+                uniform == recipe.uniformSlice && bytes?.contentEquals(recipe.copyUniformBytes()) == true &&
+                vertexSlice(recipe.quadSlice).contentEquals(recipe.copyQuadVerticesF32()) && indexSlice(recipe.quadSlice).contentEquals(recipe.copyQuadIndicesI32()) &&
+                vertexSlice(recipe.interiorSlice).contentEquals(recipe.copyInteriorVerticesF32()) && indexSlice(recipe.interiorSlice).contentEquals(recipe.copyInteriorIndicesI32()) &&
+                operandMatches(target, recipe.target) && operandMatches(depth, recipe.depthStencil) && operandMatches(vertex, recipe.vertex) && operandMatches(index, recipe.index) && operandMatches(uniformRow, recipe.uniform) &&
+                interior != null && interiorGeometry?.fillRule == recipe.fillRule && retained?.domain == GPUPixelBounds(domain.left, domain.top, domain.right, domain.bottom) &&
+                pass.draw.copyScissorI32() == scissor && packet?.role == GPUDrawPacketRole.W4ePrepared && packet.passId == pass.id.value &&
+                path?.commandIdValue == pass.draw.commandIndex && path.phase == PathRenderPhase.SingleSampleDirectColor && path.targetResourceId == recipe.target.id.value &&
+                path.depthStencilResourceId == recipe.depthStencil.id.value && path.uniformResourceId == recipe.uniform.id.value &&
+                path.depthStencilAccess == null && path.depthStencilLoadStore == null && path.load == recipe.load && path.store == recipe.store && path.blend == recipe.blend &&
+                render != null && render.resourceUses == expectedUses) {
                 "W6 InverseDomain.Geometry Direct packet, uses, slices, or ordered catalog diverged before allocation."
             }
         }
