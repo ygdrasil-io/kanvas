@@ -1399,7 +1399,7 @@ Les compilations `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
 Gradle exit 1 uniquement après le worker GLFW macOS 133; ce gap demeure
 **UNKNOWN** et séparé des XML. Le refus W4e 4 097 pré-allocation sort Gradle 0.
 
-Commit d'implémentation Task 4 : ce checkpoint est inclus dans le commit local
-Task 4. Cette
+Commit d'implémentation Task 4 : `687d1a7` (`feat(w6): seal inverse scan-span
+occurrences`). Cette
 extension ne ferme pas 2A0c, 2A1 ni 2B; ces gates restent ouverts pour la
 revue Sol et les sous-lots ultérieurs.
