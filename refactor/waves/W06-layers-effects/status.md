@@ -1476,3 +1476,12 @@ empty/non-empty `1/0/0/0`. Les deux classes GPU ont Gradle exit 1 seulement
 après l'exit GLFW natif macOS 133, donc **UNKNOWN** séparé des XML ; les deux
 sélecteurs W4e sortent Gradle 0. Task 3 est prêt pour revue Sol ; 2A0c.IV,
 2A0d, 2A1 et 2B restent ouverts.
+
+### 2A0c.IIIb/c — correctif revue Sol, round 1
+
+Le scan-span gèle son `load/store` natif réel. Les usages W4e sont tirés de la
+phase scellée : scan-span sans V/I/U, fan avec V/I sans U, covers avec U sans
+V/I. Le préflight vérifie catalogue/owner, operands, load/store, blend et ordre
+d’usages avant allocation. L’encodeur W6 sélectionne le stencil fan et le
+pipeline cover depuis la recette, puis confronte les données préparées. Aucun
+lease 2A1 ni claim 2B n’est créé.

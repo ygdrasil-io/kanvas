@@ -57,8 +57,10 @@ public sealed class W6InverseMaskPathRecipeV1 protected constructor(
             domainDeviceI32: RectI32,
             domainLocalI32: RectI32,
             scissorsLocalI32: List<RectI32>,
+            load: AttachmentLoadPlan,
+            store: AttachmentStorePlan,
         ) : GeometryProducer(ownerPassId, packetOrdinalI32, target, depthStencil, null, null,
-            AttachmentLoadPlan.Load, AttachmentStorePlan.Store,
+            load, store,
             W6InverseMaskPathProducerStencilV1.ClearZeroReplaceOne,
             W6InverseMaskPathProducerPipelineV1.FullscreenNoBindings) {
             private val origin = Point2I32(originDeviceI32.x, originDeviceI32.y)
@@ -81,16 +83,17 @@ public sealed class W6InverseMaskPathRecipeV1 protected constructor(
             public class NonEmpty internal constructor(
                 ownerPassId: PlanPassId, packetOrdinalI32: Int, target: W4eClipMaskProducerPhysicalOperandV1,
                 depthStencil: W4eClipMaskProducerPhysicalOperandV1, originDeviceI32: Point2I32,
-                domainDeviceI32: RectI32, domainLocalI32: RectI32, scissorsLocalI32: List<RectI32>,
+                domainDeviceI32: RectI32, domainLocalI32: RectI32, scissorsLocalI32: List<RectI32>, load: AttachmentLoadPlan,
+                store: AttachmentStorePlan,
             ) : ScanSpans(ownerPassId, packetOrdinalI32, target, depthStencil, originDeviceI32, domainDeviceI32,
-                domainLocalI32, scissorsLocalI32) { init { require(drawCountI32 > 0) } }
+                domainLocalI32, scissorsLocalI32, load, store) { init { require(drawCountI32 > 0) } }
 
             public class Empty internal constructor(
                 ownerPassId: PlanPassId, packetOrdinalI32: Int, target: W4eClipMaskProducerPhysicalOperandV1,
                 depthStencil: W4eClipMaskProducerPhysicalOperandV1, originDeviceI32: Point2I32,
-                domainDeviceI32: RectI32, domainLocalI32: RectI32,
+                domainDeviceI32: RectI32, domainLocalI32: RectI32, load: AttachmentLoadPlan, store: AttachmentStorePlan,
             ) : ScanSpans(ownerPassId, packetOrdinalI32, target, depthStencil, originDeviceI32, domainDeviceI32,
-                domainLocalI32, emptyList())
+                domainLocalI32, emptyList(), load, store)
         }
 
         public class Fan internal constructor(
@@ -232,9 +235,9 @@ public fun freezeW6InverseMaskPathRecipesV1(
                         val local = requireNotNull(spans.localScissorsI32OrNull(binding.copyMaterialDeviceOriginI32(), binding.copyExtentI32()))
                         add(if (spans.spanCountI32 == 0)
                             W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.Empty(pass.id, pass.ordinal, target, depth,
-                                local.copyOriginDeviceI32(), spans.copyDomainI32(), local.copyDomainI32())
+                                local.copyOriginDeviceI32(), spans.copyDomainI32(), local.copyDomainI32(), pass.load, pass.store)
                         else W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.NonEmpty(pass.id, pass.ordinal, target, depth,
-                            local.copyOriginDeviceI32(), spans.copyDomainI32(), local.copyDomainI32(), local.copyScissorsI32()))
+                            local.copyOriginDeviceI32(), spans.copyDomainI32(), local.copyDomainI32(), local.copyScissorsI32(), pass.load, pass.store))
                     } else {
                         val geometry = interior.copyGeometryF32()
                         if (geometry.copyStencilEdgeFanF32OrNull() != null) {

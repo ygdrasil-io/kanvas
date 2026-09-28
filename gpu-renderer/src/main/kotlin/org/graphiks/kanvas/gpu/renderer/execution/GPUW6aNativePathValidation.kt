@@ -32,6 +32,9 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
                     recipe.copyDomainDeviceI32() != spans.copyDomainI32() ||
                     recipe.copyScissorsLocalI32() != expected ||
                     recipe.drawCountI32 != spans.spanCountI32 || recipe.hasVertexIndexSlices ||
+                    recipe.load != w4e.load || recipe.store != w4e.store ||
+                    native.pass.loadOperation != (if (recipe.load == AttachmentLoadPlan.ClearTransparent)
+                        GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load) ||
                     (recipe is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.NonEmpty) != (spans.spanCountI32 > 0) ||
                     native.semanticPayloads.singleOrNull() !is GPUDrawSemanticPayload.PathStencilProducer
                 ) return false

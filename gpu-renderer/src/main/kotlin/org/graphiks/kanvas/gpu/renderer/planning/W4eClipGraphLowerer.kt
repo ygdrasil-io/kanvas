@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.renderer.planning
 
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.PathDrawGeometry
+import org.graphiks.kanvas.gpu.plan.PathRenderPhase
 import org.graphiks.kanvas.gpu.plan.PlanPassDependency
 import org.graphiks.kanvas.gpu.plan.PlanResource
 import org.graphiks.kanvas.gpu.plan.PlanResourceKind
@@ -386,9 +388,22 @@ internal class W4eClipGraphLowerer {
                     "W4e path target must reference a declared resource"
                 })
                 add(use(path.targetResourceId, targetRole, GPUFrameResourceUsage.RenderAttachment, true))
-                add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
-                add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
-                add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                when (pass.phase) {
+                    PathRenderPhase.SingleSampleStencilProducer -> if (pass.scanSpansDeviceI32 == null) {
+                        add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
+                        add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
+                    }
+                    PathRenderPhase.SingleSampleStencilColorCover ->
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    PathRenderPhase.SingleSampleDirectColor -> if (pass.draw.copyPathGeometry() == PathDrawGeometry.Empty) {
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    } else {
+                        add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
+                        add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    }
+                    else -> error("Unadmitted W4e PathRenderPass phase")
+                }
                 path.depthStencilResourceId?.let { depth ->
                     add(use(depth, GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, true))
                 }

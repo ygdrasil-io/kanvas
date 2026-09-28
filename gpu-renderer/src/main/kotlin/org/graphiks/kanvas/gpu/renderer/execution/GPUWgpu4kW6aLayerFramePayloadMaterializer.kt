@@ -16,6 +16,8 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dDistantDiffusePass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dLightingPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dPictureSamplingPass
 import org.graphiks.kanvas.gpu.renderer.recording.*
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
@@ -172,6 +174,33 @@ private fun preflightW4eClipMaskInitializes(
     framePlan: GPUFramePlan,
 ): Map<PlanW4eGeometryBindingV1, W4eClipMaskInitializeNativePreflight> =
     frame.w4eAuthorities.map { (binding, authority) ->
+        fun operandMatches(row: PlanResource, operand: W4eClipMaskProducerPhysicalOperandV1): Boolean =
+            row.id == operand.id && row.role == operand.role && row.format == operand.format &&
+                row.copyExtent() == operand.copyExtentI32() && row.sampleCountI32 == operand.sampleCountI32 &&
+                row.byteSize == operand.byteSizeI64 && row.lifetime == operand.lifetime && row.usages() == operand.usages()
+        fun inverseUsesMatch(render: GPUFrameStep.RenderPassStep, recipe: W6InverseMaskPathRecipeV1): Boolean {
+            val uses = render.resourceUses
+            if (uses.firstOrNull()?.resource !== frame.refs[recipe.target.id] || uses.first().usage != GPUFrameResourceUsage.RenderAttachment || !uses.first().write) return false
+            val tail = uses.drop(1).map { it.role to it.usage }
+            val expected = when (recipe) {
+                is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans -> listOf(GPUFrameResourceRole.PathDepthStencil to GPUFrameResourceUsage.RenderAttachment)
+                is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> listOf(
+                    GPUFrameResourceRole.VertexData to GPUFrameResourceUsage.Vertex,
+                    GPUFrameResourceRole.IndexData to GPUFrameResourceUsage.Index,
+                    GPUFrameResourceRole.PathDepthStencil to GPUFrameResourceUsage.RenderAttachment,
+                )
+                is W6InverseMaskPathRecipeV1.GeometryCover -> listOf(
+                    GPUFrameResourceRole.UniformData to GPUFrameResourceUsage.Uniform,
+                    GPUFrameResourceRole.PathDepthStencil to GPUFrameResourceUsage.RenderAttachment,
+                    GPUFrameResourceRole.ClipMask to GPUFrameResourceUsage.TextureBinding,
+                )
+                is W6InverseMaskPathRecipeV1.ZeroCover -> listOf(
+                    GPUFrameResourceRole.UniformData to GPUFrameResourceUsage.Uniform,
+                    GPUFrameResourceRole.ClipMask to GPUFrameResourceUsage.TextureBinding,
+                )
+            }
+            return tail == expected
+        }
         val entries = framePlan.steps.mapIndexedNotNull { index, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
             if (render.w6aPassV1?.id !in binding.graphPassIds()) return@mapIndexedNotNull null
@@ -196,6 +225,9 @@ private fun preflightW4eClipMaskInitializes(
                     recipe.copyDomainLocalI32() == sealedPath.scanScissorsLocalI32?.copyDomainI32() &&
                     recipe.copyScissorsLocalI32() == sealedPath.scanScissorsLocalI32?.copyScissorsI32() &&
                     recipe.drawCountI32 == spans.spanCountI32 &&
+                    recipe.load == bound.load && recipe.store == bound.store &&
+                    render.loadStore.loadOp == (if (recipe.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load") &&
+                    render.loadStore.storePlan == GPUStorePlan.Store &&
                     !recipe.hasVertexIndexSlices &&
                     (recipe is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.NonEmpty) ==
                         (spans.spanCountI32 > 0)) {
@@ -243,6 +275,27 @@ private fun preflightW4eClipMaskInitializes(
                     is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans,
                     null,
                     -> Unit
+                }
+                val inverseRecipe = frame.inverseMaskPathRecipesByNativePassId[bound.id]
+                if (inverseRecipe != null) {
+                    val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(inverseRecipe.owner)
+                        as? W6InverseMaskPathNativeSiteRecipeV1
+                    val rows = frame.graph.resources().associateBy { it.id }
+                    require(catalog?.host === inverseRecipe && inverseRecipe.ownerPassId == bound.id &&
+                        inverseRecipe.packetOrdinalI32 == bound.ordinal && inverseRecipe.load == bound.load &&
+                        inverseRecipe.store == bound.store && inverseRecipe.blend == bound.draw.blend &&
+                        operandMatches(rows.getValue(inverseRecipe.target.id), inverseRecipe.target) &&
+                        render.loadStore.loadOp == (if (inverseRecipe.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load") &&
+                        render.loadStore.storePlan == GPUStorePlan.Store && inverseUsesMatch(render, inverseRecipe)) {
+                        "W6 inverse-mask native packet diverged from its catalog recipe before allocation."
+                    }
+                    when (inverseRecipe) {
+                        is W6InverseMaskPathRecipeV1.GeometryProducer -> require(operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil))
+                        is W6InverseMaskPathRecipeV1.GeometryCover -> require(operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil) &&
+                            operandMatches(rows.getValue(inverseRecipe.mask.id), inverseRecipe.mask) && operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform))
+                        is W6InverseMaskPathRecipeV1.ZeroCover -> require(operandMatches(rows.getValue(inverseRecipe.mask.id), inverseRecipe.mask) &&
+                            operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform))
+                    }
                 }
             }
             GPUW4eNativePassEntry(index, render, render.drawPackets.single())

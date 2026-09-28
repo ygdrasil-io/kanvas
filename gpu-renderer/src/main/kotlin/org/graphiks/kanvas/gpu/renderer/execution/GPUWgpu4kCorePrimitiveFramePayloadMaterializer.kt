@@ -92,6 +92,7 @@ import org.graphiks.kanvas.gpu.plan.W6PathRenderDirectColorGroupZeroAbiV1
 import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathRecipeV1
 import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathGroupZeroAbiV1
 import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathProducerPipelineV1
+import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathProducerStencilV1
 import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathCoverStencilV1
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
@@ -972,10 +973,11 @@ internal fun encodeW4eNativePasses(
                         "W4e stencil producer has no sealed drawable geometry.",
                     )
                     val frozenFanRecipe = inverseMaskPathRecipesByPassId[entry.packet.passId]
+                        as? W6InverseMaskPathRecipeV1.GeometryProducer.Fan
                     if (inverseMaskPathRecipesByPassId.isNotEmpty() && fan != null &&
                         consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
                     ) {
-                        val recipe = frozenFanRecipe as? W6InverseMaskPathRecipeV1.GeometryProducer.Fan ?: throw refusal(
+                        val recipe = frozenFanRecipe ?: throw refusal(
                             "invalid.native-core-primitive.w4e-fan", "W4e inverse fan producer lacks its frozen native-site recipe.",
                         )
                         require(recipe.ownerPassId.value == entry.packet.passId &&
@@ -988,8 +990,14 @@ internal fun encodeW4eNativePasses(
                     val format = if (maskTarget) GPUTextureFormat.RGBA8Unorm else GPUTextureFormat.RGBA8UnormSrgb
                     val depth = sealedPath.depthStencilResourceId?.let(attachment)
                         ?: throw refusal("invalid.native-core-primitive.w4e-path-depth", "W4e stencil producer lacks its sealed D24S8 attachment.")
-                    val evenOdd = producerGeometry.fillRule == org.graphiks.math.geometry.FillRule.EVEN_ODD ||
-                        producerGeometry.fillRule == org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD
+                    val evenOdd = when (frozenFanRecipe?.stencil) {
+                        W6InverseMaskPathProducerStencilV1.ClearZeroEvenOdd -> true
+                        W6InverseMaskPathProducerStencilV1.ClearZeroWinding -> false
+                        null -> producerGeometry.fillRule == org.graphiks.math.geometry.FillRule.EVEN_ODD ||
+                            producerGeometry.fillRule == org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD
+                        else -> throw refusal("invalid.native-core-primitive.w4e-fan", "W6 inverse fan stencil recipe is invalid.")
+                    }
+                    if (frozenFanRecipe != null) require(direct == null && fan != null && frozenFanRecipe.pipeline == W6InverseMaskPathProducerPipelineV1.FanGeometry)
                     val pipeline = createW4ePathGeometryPipeline(
                         device,
                         format,
@@ -1037,11 +1045,12 @@ internal fun encodeW4eNativePasses(
                         ?: throw refusal("invalid.native-core-primitive.w4e-path-depth", "W4e stencil cover lacks its sealed D24S8 attachment.")
                     val inverseDomain = consumer as? org.graphiks.kanvas.gpu.renderer.passes
                         .GPUW4ePreparedClipConsumerAuthority.InverseDomain
+                    val frozenGeometryCover = inverseMaskPathRecipesByPassId[entry.packet.passId]
+                        as? W6InverseMaskPathRecipeV1.GeometryCover
                     if (inverseMaskPathRecipesByPassId.isNotEmpty() &&
                         consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
                     ) {
-                        val recipe = inverseMaskPathRecipesByPassId[entry.packet.passId]
-                            as? W6InverseMaskPathRecipeV1.GeometryCover ?: throw refusal(
+                        val recipe = frozenGeometryCover ?: throw refusal(
                                 "invalid.native-core-primitive.w4e-inverse-cover",
                                 "W4e inverse Geometry cover lacks its frozen native-site recipe.",
                             )
@@ -1109,10 +1118,12 @@ internal fun encodeW4eNativePasses(
                                 val inverseMask = consumer as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
                                 val mask = if (inverseMask != null) inverseMask.maskResourceId
                                 else (consumer as org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask).maskResourceId
-                                val cover = if (inverseMask == null) {
-                                    stencilConsumerPipeline(format, sampleCount, entry.packet.blendPlan.takeIf { commonSource })
-                                } else {
+                                val cover = if (frozenGeometryCover != null || inverseMask != null) {
+                                    require(frozenGeometryCover == null || frozenGeometryCover.mask.id.value == mask &&
+                                        frozenGeometryCover.uniformSlice.purpose == W4eNativePayloadPlan.STENCIL_COVER_UNIFORM)
                                     inverseMaskStencilConsumerPipeline(format, sampleCount, entry.packet.blendPlan.takeIf { commonSource })
+                                } else {
+                                    stencilConsumerPipeline(format, sampleCount, entry.packet.blendPlan.takeIf { commonSource })
                                 }
                                 val bindings = owned.own(device.createBindGroup(BindGroupDescriptor(
                                     label = "Kanvas.frame.w4e.pathPhase.consumerBindGroup", layout = cover.layout,
