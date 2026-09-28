@@ -37,6 +37,28 @@ import org.junit.jupiter.api.Test
  */
 class W6aLayerW4W5SurfacePixelTest {
     @Test
+    fun `two ordinary solid material rects retain distinct W6 owners`() {
+        // Both public solid paints lower through the ordinary W5 material path.  Their expected
+        // pixels are deliberately fixed before Surface: current W6 creates one RenderPass per
+        // draw, so this witnesses two owners at ordinal zero rather than a made-up ordinal one.
+        val red = rgba(239, 51, 73)
+        val blue = rgba(17, 61, 211)
+        val expected = red + red + blue + blue
+
+        val surface = Surface(4, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), opaque(RED))
+            drawRect(RectF32.ofLTRB(2f, 0f, 4f, 1f), opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `precision collapsed butt stroke remains a public W6 direct path witness`() {
         // The F64 outline has four corners; at 2^24 its two terminal F32 corners coincide,
         // leaving Winding's line-only direct triangle.  The literal oracle precedes Surface.

@@ -3257,6 +3257,8 @@ internal class W6aLayerGraphConstruction(
             binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
         }
         val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes)
+        val w5aOrdinarySolidSourceRecipes = freezeW5aSourceNativeSiteRecipesV1(
+            passes, table, resources + source.resources, source.uniforms, solidRectHostRecipes)
         val corePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes)
         val preparedVerticesHostRecipes = if (passes.asSequence().filterIsInstance<PlanPass.RenderPass>()
                 .any { render -> render.draws().any { it is W5bVerticesDraw } })
@@ -3330,6 +3332,7 @@ internal class W6aLayerGraphConstruction(
             inverseDomainZeroCovers = inverseDomainZeroCoverRecipes,
             inverseDomainDirects = inverseDomainDirectRecipes,
             inverseDomainFans = inverseDomainFanRecipes,
+            w5aOrdinarySolidSources = w5aOrdinarySolidSourceRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3391,6 +3394,7 @@ internal class W6aLayerGraphConstruction(
             w6FilterMaterializedSourceRecipes = w6FilterMaterializedSourceRecipes,
             w6FilterDropShadowColorizeRecipes = w6FilterDropShadowColorizeRecipes,
             w6FilterDropShadowCompositeRecipes = w6FilterDropShadowCompositeRecipes,
+            w5aOrdinarySolidSourceRecipes = w5aOrdinarySolidSourceRecipes,
             nativeSiteRecipeCatalogV1 = nativeSiteRecipeCatalog,
         )
         val allResources = resources + finalSource.resources

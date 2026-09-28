@@ -104,6 +104,8 @@ internal class SourcePhysicalConstructionV1(
     val w6FilterMaterializedSourceRecipes: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1> = emptyMap(),
     val w6FilterDropShadowColorizeRecipes: Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1> = emptyMap(),
     val w6FilterDropShadowCompositeRecipes: Map<PlanPassId, W6FilterDropShadowCompositeRecipeV1> = emptyMap(),
+    /** Bounded 2A0d ordinary MaterialV1 source sites; other W5a forms remain absent. */
+    val w5aOrdinarySolidSourceRecipes: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = emptyMap(),
     /** Versioned catalog derived exclusively from the preceding final planner recipes. */
     val nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1.Empty,
 )
@@ -204,6 +206,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     filterMaterializedSourceRecipes: Map<PlanPassId, W6FilterMaterializedSourceRecipeV1>,
     filterDropShadowColorizeRecipes: Map<PlanPassId, W6FilterDropShadowColorizeRecipeV1>,
     filterDropShadowCompositeRecipes: Map<PlanPassId, W6FilterDropShadowCompositeRecipeV1>,
+    w5aOrdinarySolidSourceRecipes: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1>,
     nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1,
     pathRenderDirectColorRecipes: Map<PlanPassId, W6PathRenderDirectColorRecipeV1> = emptyMap(),
     inverseMaskPathRecipes: Map<PlanPassId, W6InverseMaskPathRecipeV1> = emptyMap(),
@@ -271,6 +274,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val materializedSources = java.util.Collections.unmodifiableMap(LinkedHashMap(filterMaterializedSourceRecipes))
     private val dropShadowColorizes = java.util.Collections.unmodifiableMap(LinkedHashMap(filterDropShadowColorizeRecipes))
     private val dropShadowComposites = java.util.Collections.unmodifiableMap(LinkedHashMap(filterDropShadowCompositeRecipes))
+    private val w5aOrdinarySolidSources = java.util.Collections.unmodifiableMap(LinkedHashMap(w5aOrdinarySolidSourceRecipes))
     private val colorFilters = java.util.Collections.unmodifiableMap(LinkedHashMap(filterColorFilterRecipes))
     private val nativeSiteRecipes = nativeSiteRecipeCatalogV1
     private val slots = immutableList(buildList {
@@ -300,6 +304,10 @@ public class PlanPhysicalLayoutV1 private constructor(
         return resources.single { it.id == resourceId }
     }
     public fun sourceUniform(commandIndexI32: Int): PlanResource = resource(uniforms.getValue(commandIndexI32))
+    public fun w5aOrdinarySolidSourceRecipe(owner: NativeSiteOwnerV1): W5aSourceNativeSiteRecipeV1 =
+        (nativeSiteRecipes.recipe(owner) as? W5aSourceNativeSiteNativeRecipeV1)?.host
+            ?: error("Missing frozen W5a ordinary-solid source recipe for ${owner.ownerPassId.value}/${owner.drawOrPacketOrdinalI32}/${owner.bundleOrdinalI32}.")
+    public fun w5aOrdinarySolidSourceRecipes(): Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = w5aOrdinarySolidSources
     public fun geometryBinding(passId: PlanPassId): PlanGeometryBufferBindingV1? = geometry[passId]
     /** The semantic terminal and physical binding share this exact sealed operand, without renderer derivation. */
     public fun pictureCompositeBinding(passId: PlanPassId): PictureCompositeOperandsV1? = pictures[passId]
@@ -511,6 +519,16 @@ public class PlanPhysicalLayoutV1 private constructor(
             source.w6SolidRectHostRecipes.forEach { (site, recipe) ->
                 require(recipe.site == site && recipe == expectedSolidRectHosts.getValue(site)) {
                     "W6 SolidRect host recipe changed after final pass binding."
+                }
+            }
+            val expectedW5aOrdinarySolidSources = freezeW5aSourceNativeSiteRecipesV1(
+                graph.passes(), graph.materialPlanTableOrNull(), rows, source.uniforms, expectedSolidRectHosts)
+            require(source.w5aOrdinarySolidSourceRecipes.keys == expectedW5aOrdinarySolidSources.keys) {
+                "W5a ordinary source recipes differ from the final material table/site catalogue"
+            }
+            source.w5aOrdinarySolidSourceRecipes.forEach { (owner, recipe) ->
+                require(recipe.canonicalLogicalEncodingV1() == expectedW5aOrdinarySolidSources.getValue(owner).canonicalLogicalEncodingV1()) {
+                    "W5a ordinary source recipe changed after final pass/table/uniform sealing: ${owner.ownerPassId.value}/${owner.drawOrPacketOrdinalI32}/${owner.bundleOrdinalI32}"
                 }
             }
             val expectedCorePrimitiveHosts = freezeW6CorePrimitiveHostsV1(graph.passes())
@@ -827,6 +845,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 inverseDomainZeroCovers = expectedInverseDomainZeroCovers,
                 inverseDomainDirects = expectedInverseDomainDirects,
                 inverseDomainFans = expectedInverseDomainFans,
+                w5aOrdinarySolidSources = expectedW5aOrdinarySolidSources,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -860,6 +879,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 inverseDomainZeroCovers = source.w6InverseDomainZeroCoverRecipes,
                 inverseDomainDirects = source.w6InverseDomainDirectRecipes,
                 inverseDomainFans = source.w6InverseDomainFanRecipes,
+                w5aOrdinarySolidSources = source.w5aOrdinarySolidSourceRecipes,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
@@ -1091,6 +1111,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w6FilterMaterializedSourceRecipes,
                 source.w6FilterDropShadowColorizeRecipes,
                 source.w6FilterDropShadowCompositeRecipes,
+                source.w5aOrdinarySolidSourceRecipes,
                 source.nativeSiteRecipeCatalogV1, source.w6PathRenderDirectColorRecipes, source.w6InverseMaskPathRecipes,
                 source.w6InverseDomainZeroCoverRecipes, source.w6InverseDomainDirectRecipes)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
