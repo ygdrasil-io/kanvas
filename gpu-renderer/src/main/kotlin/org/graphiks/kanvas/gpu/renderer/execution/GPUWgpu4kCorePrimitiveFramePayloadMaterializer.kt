@@ -102,6 +102,7 @@ import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathCoverStencilV1
 import org.graphiks.kanvas.gpu.plan.W6InverseDomainZeroCoverRecipeV1
 import org.graphiks.kanvas.gpu.plan.W6InverseDomainZeroGroupZeroAbiV1
 import org.graphiks.kanvas.gpu.plan.W6InverseDomainZeroSourceFormV1
+import org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectRecipeV1
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -419,6 +420,7 @@ internal fun encodeW4eNativePasses(
     pathRenderDirectColorsByPassId: Map<String, W6PathRenderDirectColorRecipeV1> = emptyMap(),
     inverseMaskPathRecipesByPassId: Map<String, W6InverseMaskPathRecipeV1> = emptyMap(),
     inverseDomainZeroCoverRecipesByPassId: Map<String, W6InverseDomainZeroCoverRecipeV1> = emptyMap(),
+    inverseDomainDirectRecipesByPassId: Map<String, W6InverseDomainDirectRecipeV1> = emptyMap(),
 ): List<GPUPreparedNativeScopeOperand.Render> {
     requireW4eClipMaskInitializeRecipes(entries, clipMaskInitializeRecipesByPassId)
     val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
@@ -747,7 +749,72 @@ internal fun encodeW4eNativePasses(
             GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.fullscreenVertexCountI32)),
         ))
     }
+    fun encodeInverseDomainDirectRecipe(entry: GPUW4eNativePassEntry, recipe: W6InverseDomainDirectRecipeV1): GPUPreparedNativeScopeOperand.Render {
+        val path = requireNotNull(entry.packet.w4ePreparedPath)
+        val consumer = entry.packet.w4ePreparedClipConsumer as?
+            org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+            ?: throw refusal("invalid.native-core-primitive.w4e-inverse-domain-direct", "W6 Direct recipe requires inverse-domain consumer.")
+        val direct = (consumer.interiorCoverage as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry)
+            ?.copyGeometryF32()?.copyDirectTriangleF32OrNull()
+        val directNdc = direct?.copyVerticesF32()?.also { values -> values.indices.step(2).forEach { offset ->
+            values[offset] = values[offset] * 2f / recipe.target.copyExtentI32()!!.width - 1f
+            values[offset + 1] = 1f - values[offset + 1] * 2f / recipe.target.copyExtentI32()!!.height
+        } }
+        require(direct != null && path.phase == PathRenderPhase.SingleSampleDirectColor && path.sample == SamplePlan.SingleSample &&
+            path.targetResourceId == recipe.target.id.value && path.depthStencilResourceId == recipe.depthStencil.id.value &&
+            path.uniformResourceId == recipe.uniform.id.value && path.load == recipe.load && path.store == recipe.store &&
+            path.blend == recipe.blend && directNdc!!.contentEquals(recipe.copyInteriorVerticesF32()) &&
+            direct.copyIndicesI32().contentEquals(recipe.copyInteriorIndicesI32())) {
+            "W6 InverseDomain.Geometry Direct prepared packet differs from its frozen recipe."
+        }
+        val uniform = nativePayload.uniformSlice(recipe.ownerPassId.value, W4eNativePayloadPlan.INVERSE_DOMAIN_UNIFORM)
+        val bytes = uniform?.let { nativePayload.copyUniformData().copyOfRange(Math.toIntExact(it.offsetBytes), Math.toIntExact(it.offsetBytes + it.byteSize)) }
+        require(uniform == recipe.uniformSlice && bytes?.contentEquals(recipe.copyUniformBytes()) == true &&
+            nativePayload.geometrySlice(recipe.ownerPassId.value, W4eNativePayloadPlan.INVERSE_DOMAIN_QUAD) == recipe.quadSlice &&
+            nativePayload.geometrySlice(recipe.ownerPassId.value, W4eNativePayloadPlan.INVERSE_DOMAIN_INTERIOR) == recipe.interiorSlice) {
+            "W6 InverseDomain.Geometry Direct payload diverged from its sealed triplet."
+        }
+        val format = when (recipe.target.format) {
+            PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+            else -> throw refusal("invalid.native-core-primitive.w4e-inverse-domain-direct", "W6 Direct requires final scene color target.")
+        }
+        val domainStencil = createW4ePathGeometryPipeline(device, format, 1, 0f, stencil = w4eStencilReplaceState(), colorWrite = false,
+            label = "Kanvas.frame.w6.inverseDomain.domainStencil", owned = owned)
+        val interiorZero = createW4ePathGeometryPipeline(device, format, 1, 0f,
+            stencil = if (commonSource) w4eStencilReplaceState() else w4eStencilZeroState(), colorWrite = false,
+            label = "Kanvas.frame.w6.inverseDomain.interiorZero", owned = owned)
+        val cover = if (commonSource) inverseWindingDomainPipeline(format, 1, entry.packet.blendPlan)
+            else inverseDomainPipeline(format, 1, null)
+        val bindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
+            label = "Kanvas.frame.w6.inverseDomainBindGroup", layout = cover.layout,
+            entries = listOf(BindGroupEntry(0u, uniformBinding(recipe.ownerPassId.value, recipe.uniformSlice.purpose, recipe.uniformSlice))),
+        )))
+        val domain = recipe.copyDomainI32()
+        val load = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load
+        return GPUPreparedNativeScopeOperand.Render(entry.index, GPUPreparedNativeRenderPassConfig(
+            colorTarget = attachment(recipe.target.id.value), depthStencilTarget = attachment(recipe.depthStencil.id.value),
+            loadOperation = load, storeOperation = GPUPreparedNativeStoreOperation.Store,
+            clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0).takeIf { load == GPUPreparedNativeLoadOperation.Clear },
+            depthClearValue = 1f, depthLoadOperation = GPUPreparedNativeLoadOperation.Clear, depthStoreOperation = GPUPreparedNativeStoreOperation.Store,
+            depthReadOnly = false, stencilClearValue = 0u, stencilLoadOperation = GPUPreparedNativeLoadOperation.Clear,
+            stencilStoreOperation = GPUPreparedNativeStoreOperation.Store, stencilReadOnly = false,
+        ), buildList {
+            add(GPUPreparedNativeRenderCommand.SetStencilReference(1u))
+            if (!commonSource) {
+                add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(domainStencil, generation)))
+                addAll(indexedGeometryCommands(recipe.ownerPassId.value, recipe.quadSlice.purpose, GPUPixelBounds(domain.left, domain.top, domain.right, domain.bottom), recipe.quadSlice))
+            }
+            add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(interiorZero, generation)))
+            addAll(indexedGeometryCommands(recipe.ownerPassId.value, recipe.interiorSlice.purpose, GPUPixelBounds(domain.left, domain.top, domain.right, domain.bottom), recipe.interiorSlice))
+            add(GPUPreparedNativeRenderCommand.SetStencilReference(0u))
+            add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(cover.pipeline, generation)))
+            add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generation)))
+            add(GPUPreparedNativeRenderCommand.SetScissor(domain.left, domain.top, domain.width(), domain.height()))
+            add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))
+        })
+    }
     return entries.map { entry -> try {
+        inverseDomainDirectRecipesByPassId[entry.packet.passId]?.let { recipe -> return@map encodeInverseDomainDirectRecipe(entry, recipe) }
         inverseDomainZeroCoverRecipesByPassId[entry.packet.passId]?.let { recipe ->
             return@map encodeInverseDomainZeroRecipe(entry, recipe)
         }
@@ -1017,6 +1084,10 @@ internal fun encodeW4eNativePasses(
                     consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain &&
                     consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero
                 ) throw refusal("invalid.native-core-primitive.w4e-inverse-domain-zero", "W6 Zero packet lacks its sealed native-site recipe.")
+                if (inverseDomainDirectRecipesByPassId.isNotEmpty() &&
+                    consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain &&
+                    consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry
+                ) throw refusal("invalid.native-core-primitive.w4e-inverse-domain-direct", "W6 Direct packet lacks its sealed native-site recipe.")
                 val retainedInverse = retainedConsumerFor(entry.packet.passId) as?
                     org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
                 val retainedInverseInterior = retainedInverse?.interiorCoverage is

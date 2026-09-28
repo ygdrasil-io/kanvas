@@ -3286,6 +3286,7 @@ internal class W6aLayerGraphConstruction(
         val pathRenderDirectColorRecipes = freezeW6PathRenderDirectColorRecipesV1(finalW4eBindings, resources + source.resources)
         val inverseMaskPathRecipes = freezeW6InverseMaskPathRecipesV1(w4eBindings, resources + source.resources)
         val inverseDomainZeroCoverRecipes = freezeW6InverseDomainZeroCoverRecipesV1(finalW4eBindings, resources + source.resources)
+        val inverseDomainDirectRecipes = freezeW6InverseDomainDirectRecipesV1(finalW4eBindings, resources + source.resources)
         val clipMaskFoldRecipes = freezeW4eClipMaskFoldRecipesV1(finalW4eBindings, resources + source.resources)
         val w6bCoverageRasterGeometry = freezeW6bCoverageRasterGeometryV1(passes, resources + source.resources, caps)
         val w6bCoverageRasterHostRecipes = freezeW6bCoverageRasterHostsV1(passes, resources + source.resources, w6bCoverageRasterGeometry)
@@ -3326,6 +3327,7 @@ internal class W6aLayerGraphConstruction(
             pathRenderDirectColors = pathRenderDirectColorRecipes,
             inverseMaskPaths = inverseMaskPathRecipes,
             inverseDomainZeroCovers = inverseDomainZeroCoverRecipes,
+            inverseDomainDirects = inverseDomainDirectRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3361,6 +3363,7 @@ internal class W6aLayerGraphConstruction(
             w6PathRenderDirectColorRecipes = pathRenderDirectColorRecipes,
             w6InverseMaskPathRecipes = inverseMaskPathRecipes,
             w6InverseDomainZeroCoverRecipes = inverseDomainZeroCoverRecipes,
+            w6InverseDomainDirectRecipes = inverseDomainDirectRecipes,
             w4eClipMaskFoldRecipes = clipMaskFoldRecipes,
             w6bCoverageRasterGeometry = w6bCoverageRasterGeometry,
             w6bCoverageRasterHostRecipes = w6bCoverageRasterHostRecipes,

@@ -143,6 +143,19 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                 }
             }
         }
+    /** Geometry Direct owns three catalog sites under one final PathRenderPass packet. */
+    internal val inverseDomainDirectRecipesByNativePassId: Map<PlanPassId, W6InverseDomainDirectRecipeV1> =
+        physical.w6InverseDomainDirectRecipes().also { recipes ->
+            recipes.forEach { (nativePassId, recipe) ->
+                val binding = physical.w4eGeometryBindings().singleOrNull { b -> b.nativePasses().any { it.id == nativePassId } }
+                    ?: error("W6 InverseDomain.Geometry Direct recipe has no unique final W4e binding.")
+                val native = requireNotNull(binding.nativePasses().singleOrNull { it.id == nativePassId } as? PlanPass.PathRenderPass)
+                require(recipe.ownerPassId == native.id && recipe.packetOrdinalI32 == native.ordinal &&
+                    W6InverseDomainDirectBundleV1.entries.all { bundle ->
+                        physical.nativeSiteRecipeCatalogV1().recipe(recipe.owner(bundle.ordinal)) is W6InverseDomainDirectNativeSiteRecipeV1
+                    }) { "W6 InverseDomain.Geometry Direct recipe lost one ordered native bundle." }
+            }
+        }
     /**
      * The graph has already issued each mask occurrence's W5 row and uniform resource.  This
      * is a handle-free native projection of that exact row; it neither compiles a public Shader

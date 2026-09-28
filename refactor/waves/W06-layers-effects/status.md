@@ -1637,3 +1637,31 @@ sélecteurs W4e `2/0/0/0`. Gradle se termine ensuite sur GLFW macOS 133 après
 JUnit : état natif **UNKNOWN**, pas PASS. `git diff --check` est propre. La
 revue Sol indépendante du commit `9dcaf822f` est clean, sans finding
 Critical/Important ; 2A0c.IV, 2A0d, 2A1 et 2B restent ouverts.
+
+### 2A0c.IV Task 3 — `InverseDomain.Geometry` DirectTriangle, triplet natif
+
+`W6InverseDomainDirectRecipeV1` fige le seul owner `PathRenderPass.id` et
+`ordinal` sous trois sites ordonnés : `0=domainStencil`, `1=interiorZero`,
+`2=colorCover`. La forme est strictement `DirectTriangle`; le fan reste pour
+Task 4. La recette porte target, D24S8 scene-local, V/I/U, domaine I32 et
+scissor source distincts, load/store/blend, fill rule, les deux slices et les
+snapshots exacts NDC des V/I quad et intérieur, ainsi que les 16 bytes U16.
+Le catalogue/seal reconstruit le triplet depuis `finalW4eBindings`; aucun
+owner Geometry n'est créé depuis le proxy W6 et aucun lease 2A1/claim 2B n'est
+émis.
+
+La projection W6 et le préflight exigent les trois recettes de catalogue, le
+packet propriétaire, operands, slices/bytes et les cinq usages ordonnés
+target/V/I/U/D24S8 avant `device.create*`. L'encodeur construit toujours les
+trois pipelines catalogués; avec `commonSource=true`, seule la commande draw
+de `domainStencil` est omise. Le `DirectTriangle` préparé est confronté au
+snapshot NDC, sans triangulation renderer. Le RED public initial a révélé que
+le payload V/I est scellé en NDC alors que `:math` expose des coordonnées
+device; la comparaison applique maintenant la projection existante avant
+l'assertion, sans changer l'oracle.
+
+Compiles séparées : `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`
+et `:kanvas:compileTestKotlin` sorties 0. Le sélecteur DirectTriangle est XML
+`1/0/0/0`; Gradle finit à 1 seulement après GLFW macOS 133, donc natif
+**UNKNOWN** distinct. Task 3 attend encore les sélecteurs de préservation et
+la revue Sol; IV, fan Task 4, 2A1 et 2B restent ouverts.

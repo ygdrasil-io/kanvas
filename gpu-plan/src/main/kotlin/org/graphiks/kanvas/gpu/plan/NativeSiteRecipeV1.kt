@@ -38,6 +38,9 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6InverseMaskGeometryCover,
     W6InverseMaskZeroCover,
     W6InverseDomainZeroCover,
+    W6InverseDomainGeometryDomainStencil,
+    W6InverseDomainGeometryInteriorZero,
+    W6InverseDomainGeometryColorCover,
     W4eClipMaskFold,
     W6bCoverageRaster,
     W6FullscreenEmpty,
@@ -1259,6 +1262,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         pathRenderDirectColors: Map<PlanPassId, W6PathRenderDirectColorRecipeV1> = emptyMap(),
         inverseMaskPaths: Map<PlanPassId, W6InverseMaskPathRecipeV1> = emptyMap(),
         inverseDomainZeroCovers: Map<PlanPassId, W6InverseDomainZeroCoverRecipeV1> = emptyMap(),
+        inverseDomainDirects: Map<PlanPassId, W6InverseDomainDirectRecipeV1> = emptyMap(),
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -1291,6 +1295,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6PathRenderDirectColorNativeSiteRecipeV1 -> pathRenderDirectColors[recipe.host.passId] === recipe.host
             is W6InverseMaskPathNativeSiteRecipeV1 -> inverseMaskPaths[recipe.host.ownerPassId] === recipe.host
             is W6InverseDomainZeroNativeSiteRecipeV1 -> inverseDomainZeroCovers[recipe.host.ownerPassId] === recipe.host
+            is W6InverseDomainDirectNativeSiteRecipeV1 -> inverseDomainDirects[recipe.host.ownerPassId] === recipe.host
             is W4eClipMaskFoldNativeSiteRecipeV1 -> clipMaskFolds[recipe.host.passId] === recipe.host
             is W6bCoverageRasterNativeSiteRecipeV1 -> coverageRasters[recipe.host.ownerPassId]?.bundle(recipe.host.bundleOrdinalI32) === recipe.host
             is W6FullscreenEmptyNativeSiteRecipeV1 -> fullscreenEmpties[recipe.host.ownerPassId] === recipe.host
@@ -1376,6 +1381,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     pathRenderDirectColors: Map<PlanPassId, W6PathRenderDirectColorRecipeV1> = emptyMap(),
     inverseMaskPaths: Map<PlanPassId, W6InverseMaskPathRecipeV1> = emptyMap(),
     inverseDomainZeroCovers: Map<PlanPassId, W6InverseDomainZeroCoverRecipeV1> = emptyMap(),
+    inverseDomainDirects: Map<PlanPassId, W6InverseDomainDirectRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -1404,6 +1410,9 @@ public fun freezeNativeSiteRecipeCatalogV1(
     } }
     inverseDomainZeroCovers.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) {
         "W6 inverse-domain Zero catalog key must be its final native W4e owner."
+    } }
+    inverseDomainDirects.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) {
+        "W6 inverse-domain Geometry Direct catalog key must be its final native W4e owner."
     } }
     clipMaskFolds.forEach { (passId, recipe) -> require(passId == recipe.passId) }
     coverageRasters.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
@@ -1456,6 +1465,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingPathRenderDirectColors = pathRenderDirectColors.toMutableMap()
     val remainingInverseMaskPaths = inverseMaskPaths.toMutableMap()
     val remainingInverseDomainZeroCovers = inverseDomainZeroCovers.toMutableMap()
+    val remainingInverseDomainDirects = inverseDomainDirects.toMutableMap()
     val remainingClipFolds = clipMaskFolds.toMutableMap()
     val remainingCoverageRasters = coverageRasters.toMutableMap()
     val remainingEmpties = fullscreenEmpties.toMutableMap()
@@ -1516,6 +1526,11 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingInverseDomainZeroCovers.remove(pass.id)?.let {
                     add(W6InverseDomainZeroNativeSiteRecipeV1(it))
                 }
+                remainingInverseDomainDirects.remove(pass.id)?.let { direct ->
+                    W6InverseDomainDirectBundleV1.entries.forEach { bundle ->
+                        add(W6InverseDomainDirectNativeSiteRecipeV1(direct, bundle))
+                    }
+                }
             }
             is PlanPass.FilterCoverageSourcePass -> {
                 remainingCoverageRasters.remove(pass.id)?.bundles()?.forEach { add(W6bCoverageRasterNativeSiteRecipeV1(it)) }
@@ -1569,7 +1584,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingFilteredComposites.isEmpty() && remainingLayerCompositeDestinations.isEmpty() && remainingLayerCompositeFilteredDestinations.isEmpty() && remainingPictureCompositeGraphs.isEmpty() && remainingPictureCompositeGraphFiltered.isEmpty() && remainingPictureCompositeGraphDestinations.isEmpty() && remainingClipInitializes.isEmpty() && remainingClipProducers.isEmpty() && remainingClipProducerDirectTriangles.isEmpty() && remainingClipProducerStencilEdges.isEmpty() && remainingClipFolds.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingPathRenderDirectColors.isEmpty() && remainingInverseMaskPaths.isEmpty() && remainingInverseDomainZeroCovers.isEmpty() && remainingFilterCompositeDraws.isEmpty() && remainingFilterCompositeLayerPlains.isEmpty() && remainingFilterCompositeLayerFiltered.isEmpty() && remainingFilterCompositeLayerDestinations.isEmpty() && remainingFilterCompositeLayerFilteredDestinations.isEmpty() && remainingFilterCompositePicturePlains.isEmpty() && remainingFilterCompositePictureGraphs.isEmpty() && remainingFilterCompositePictureGraphFiltered.isEmpty() && remainingFilterCompositePictureGraphDestination.isEmpty() && remainingFilterCompositePictureGraphFilteredDestination.isEmpty() && remainingFilterCompositePictureDestinations.isEmpty() && remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty() && remainingMaterializedSources.isEmpty() && remainingDropShadowColorizes.isEmpty() && remainingDropShadowComposites.isEmpty()) {
+        remainingPathRenderDirectColors.isEmpty() && remainingInverseMaskPaths.isEmpty() && remainingInverseDomainZeroCovers.isEmpty() && remainingInverseDomainDirects.isEmpty() && remainingFilterCompositeDraws.isEmpty() && remainingFilterCompositeLayerPlains.isEmpty() && remainingFilterCompositeLayerFiltered.isEmpty() && remainingFilterCompositeLayerDestinations.isEmpty() && remainingFilterCompositeLayerFilteredDestinations.isEmpty() && remainingFilterCompositePicturePlains.isEmpty() && remainingFilterCompositePictureGraphs.isEmpty() && remainingFilterCompositePictureGraphFiltered.isEmpty() && remainingFilterCompositePictureGraphDestination.isEmpty() && remainingFilterCompositePictureGraphFilteredDestination.isEmpty() && remainingFilterCompositePictureDestinations.isEmpty() && remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty() && remainingPictureSourceGraphs.isEmpty() && remainingSpatialCrops.isEmpty() && remainingSpatialOffsets.isEmpty() && remainingSpatialTiles.isEmpty() && remainingMorphologies.isEmpty() && remainingColorFilters.isEmpty() && remainingMerges.isEmpty() && remainingBlends.isEmpty() && remainingSeparableBlurs.isEmpty() && remainingMaskBlurNormals.isEmpty() && remainingMaskBlurDualSources.isEmpty() && remainingMaskShaders.isEmpty() && remainingMaskTables.isEmpty() && remainingMaterializedSources.isEmpty() && remainingDropShadowColorizes.isEmpty() && remainingDropShadowComposites.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
