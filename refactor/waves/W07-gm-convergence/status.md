@@ -3,7 +3,19 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
-## Checkpoint AA W6/W7
+## Pilotage et mesure fraîche — 29 septembre 2026
+
+Le [pilotage](pilotage.md) remplace le comptage de rendus comme indicateur
+unique : **123/443** GMs éligibles produisent une image, **105** peuvent être
+comparées aux références actuelles ; **20** de ces comparaisons atteignent
+99 % de pixels à ±2 par canal. Les défauts de port et de dimensions restent
+visibles. Les scores historiques et les références ne sont pas modifiés.
+
+Les suites publiques W6/W7 disposent explicitement du runtime GPU à leur
+fin : **49/49 tests passent, Gradle exit 0**. Le crash `133` décrit ci-dessous
+est historique pour ces deux suites. W7 et les gates W6 ne sont pas clos.
+
+## Checkpoint AA W6/W7 — historique
 
 Les phases `PathRenderPass` AA W6 sont maintenant reconnues par leur autorité
 `W4dAaSource`, séparément des anciens seals de paire stencil W4c/W4d. Le
