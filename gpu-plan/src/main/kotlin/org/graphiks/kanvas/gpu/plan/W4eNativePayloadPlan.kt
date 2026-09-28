@@ -6,6 +6,7 @@ import java.util.Collections
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.SizeI32
 
 /**
@@ -86,12 +87,14 @@ public class W4eNativePayloadPlan private constructor(
             targetExtent: SizeI32,
             capabilities: PlanCapabilitySnapshot,
             materialPlanTable: MaterialPlanTable?,
-        ): W4eNativePayloadPlan? = build(passes, resources, targetExtent, capabilities, materialPlanTable, null)
+        ): W4eNativePayloadPlan? = build(passes, resources, targetExtent, capabilities, materialPlanTable, null,
+            originDeviceI32 = Point2I32.Origin)
 
         /** Geometry bytes only; symbolic source refs are authenticated, never evaluated here. */
         internal fun fromDeferred(passes: List<PlanPass>,resources: List<PlanResource>,targetExtent: SizeI32,
-            capabilities: PlanCapabilitySnapshot,sources: MaterialSourceConstructionTableV4): W4eNativePayloadPlan? =
-            build(passes,resources,targetExtent,capabilities,null,null,sources)
+            capabilities: PlanCapabilitySnapshot,sources: MaterialSourceConstructionTableV4,
+            originDeviceI32: Point2I32 = Point2I32.Origin): W4eNativePayloadPlan? =
+            build(passes,resources,targetExtent,capabilities,null,null,sources,originDeviceI32)
 
         /** W4e producer-only payload. No color/path draw or material may enter this authority. */
         internal fun fromClipPrefix(
@@ -103,7 +106,8 @@ public class W4eNativePayloadPlan private constructor(
         ): W4eNativePayloadPlan? {
             require(passes.isNotEmpty() && passes.all { it is PlanPass.ClipMaskInitialize ||
                 it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold })
-            return build(passes, resources, targetExtent, capabilities, null, data)
+            return build(passes, resources, targetExtent, capabilities, null, data,
+                originDeviceI32 = Point2I32.Origin)
         }
 
         private fun build(
@@ -114,6 +118,7 @@ public class W4eNativePayloadPlan private constructor(
             materialPlanTable: MaterialPlanTable?,
             clipOnlyData: PlanDrawDataResources?,
             deferredSources: MaterialSourceConstructionTableV4? = null,
+            originDeviceI32: Point2I32,
         ): W4eNativePayloadPlan? = try {
             if (targetExtent.isEmpty()) return null
             val pathPasses = passes.filterIsInstance<PlanPass.PathRenderPass>()
@@ -129,6 +134,12 @@ public class W4eNativePayloadPlan private constructor(
                 !index.isExactW4eBuffer(PlanResourceRole.IndexData, PlanResourceUsage.Index) ||
                 !uniform.isExactW4eBuffer(PlanResourceRole.UniformData, PlanResourceUsage.Uniform)
             ) return null
+            // A scan-span producer owns no V/I slice, but the same published integer rebase must
+            // already fit this payload target before resources are materialized.
+            if (pathPasses.any { pass -> pass.scanSpansDeviceI32?.let { spans ->
+                    spans.localScissorsI32OrNull(originDeviceI32, targetExtent) == null
+                } == true
+            }) return null
 
             val vertices = ArrayList<Float>()
             val indices = ArrayList<Int>()

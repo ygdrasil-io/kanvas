@@ -902,6 +902,19 @@ public class PlanPhysicalLayoutV1 private constructor(
                         lane.payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.STENCIL_PRODUCER) == null) {
                         "W4e scan-span producers must not acquire a fallback indexed V/I slice."
                     }
+                    val graphPassId = lane.graphPassIds().single { id -> lane.nativePass(id) === pass }
+                    val proxy = graph.passes().single { it.id == graphPassId } as? PlanPass.StencilGeometryProducerV3
+                        ?: error("W4e scan-span producer lost its W6 stencil proxy.")
+                    val expected = requireNotNull(pass.scanSpansDeviceI32.localScissorsI32OrNull(
+                        lane.copyMaterialDeviceOriginI32(), lane.copyExtentI32(),
+                    ))
+                    val actual = requireNotNull(proxy.scanScissorsLocalI32)
+                    require(proxy.scanSpansDeviceI32 === pass.scanSpansDeviceI32 &&
+                        expected.copyOriginDeviceI32() == actual.copyOriginDeviceI32() &&
+                        expected.copyDomainI32() == actual.copyDomainI32() &&
+                        expected.copyScissorsI32() == actual.copyScissorsI32()) {
+                        "W6 scan-span proxy diverged from the sealed W4e device authority."
+                    }
                 }
                 require(lane.graphPassIds().all { id -> when (val pass = graph.passes().single { it.id == id }) {
                     is PlanPass.RenderPass -> pass.target == lane.target

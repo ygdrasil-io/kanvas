@@ -29,6 +29,10 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.PathFillScanScissorsI32
+import org.graphiks.math.geometry.PathFillScanSpansI32
+import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.geometry.ClipGeometryF32
 
 /**
@@ -165,8 +169,13 @@ public sealed interface GPUW4ePreparedClipPassAuthority {
         public val depthStencilLoadStore: PlanDepthStencilLoadStore?,
         public val atomicGroupId: String?,
         geometry: PathDrawGeometry,
+        public val scanSpansDeviceI32: PathFillScanSpansI32?,
+        public val scanScissorsLocalI32: PathFillScanScissorsI32?,
     ) {
         private val geometrySnapshot: PathDrawGeometry = geometry
+        init {
+            require((scanSpansDeviceI32 == null) == (scanScissorsLocalI32 == null))
+        }
         public fun copyGeometry(): PathDrawGeometry = geometrySnapshot
     }
 }
@@ -278,7 +287,9 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                     consumerFact(pass, domainFor(graph))
                 }.associateBy(GPUW4ePreparedClipConsumerAuthority::consumerPassId),
                 graph.passes().mapNotNull(::clipPassFact).associateBy(GPUW4ePreparedClipPassAuthority::passId),
-                graph.passes().filterIsInstance<PlanPass.PathRenderPass>().associate { it.id.value to pathFact(it) },
+                graph.passes().filterIsInstance<PlanPass.PathRenderPass>().associate {
+                    it.id.value to pathFact(it, Point2I32.Origin, graph.targetExtent)
+                },
                 nativePayload,
             )
         }
@@ -296,10 +307,21 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                 passes.filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { consumerFact(it, domain) }
                     .associateBy { it.consumerPassId },
                 passes.mapNotNull(::clipPassFact).associateBy { it.passId },
-                passes.filterIsInstance<PlanPass.PathRenderPass>().associate { it.id.value to pathFact(it) }, binding.payload)
+                passes.filterIsInstance<PlanPass.PathRenderPass>().associate {
+                    it.id.value to pathFact(it, binding.copyMaterialDeviceOriginI32(), extent)
+                }, binding.payload)
         }
 
-        private fun pathFact(pass: PlanPass.PathRenderPass): GPUW4ePreparedClipPassAuthority.Path = GPUW4ePreparedClipPassAuthority.Path(
+        private fun pathFact(
+            pass: PlanPass.PathRenderPass,
+            originDeviceI32: Point2I32,
+            targetExtentI32: SizeI32,
+        ): GPUW4ePreparedClipPassAuthority.Path {
+            val scanSpans = pass.scanSpansDeviceI32
+            val scanScissors = scanSpans?.let { spans -> requireNotNull(
+                spans.localScissorsI32OrNull(originDeviceI32, targetExtentI32),
+            ) }
+            return GPUW4ePreparedClipPassAuthority.Path(
                         pass.id.value,
                         pass.draw.commandIndex,
                         pass.phase,
@@ -324,7 +346,10 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                         pass.depthStencilLoadStore,
                         pass.atomicGroup?.value,
                         pass.draw.copyPathGeometry(),
+                        scanSpans,
+                        scanScissors,
                     )
+        }
 
         private fun versionForCapability(capabilityId: String): String =
             if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(capabilityId)) W5A_VERSION else VERSION

@@ -19,6 +19,135 @@ import org.junit.jupiter.api.Test
  */
 class W6InverseScanSpanSurfacePixelTest {
     @Test
+    fun `inverse scan spans rebase once in a translated W6 layer`() {
+        // This 8x8 literal is the 6x6 L witness translated once by (1,1).  A second rebase
+        // would move the blue vertical arm away from x=2, while no rebase would leave it at x=1.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, blue, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val inverseTriangle = inverseTriangle(2f, 1f, 5f, 1f, 2f, 4f)
+
+        val surface = Surface(8, 8)
+        surface.canvas {
+            saveLayer()
+            translate(1f, 1f)
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseTriangle, opaqueBlue())
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertRenderReadback(actual.nativeEvidenceScopeKinds)
+    }
+
+    @Test
+    fun `subpixel inverse triangle keeps a clear only W6 producer`() {
+        // The finite triangle covers no pixel centre, so Geometry remains selected but its
+        // producer must only clear stencil before the inverse cover paints the literal L.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear,
+            clear, blue, blue, blue, blue, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val inverseTriangle = inverseTriangle(2.1f, 1.1f, 2.2f, 1.1f, 2.1f, 1.2f)
+
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseTriangle, opaqueBlue())
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertRenderReadback(actual.nativeEvidenceScopeKinds)
+    }
+
+    @Test
+    fun `inverse scan span fullscreen producer covers 700 corners`() {
+        // All four literal corner oracles are inside the finite triangle.  The inverse cover
+        // must therefore leave them transparent; (699,0) is near the fullscreen hypotenuse.
+        val widthI32 = 700
+        val heightI32 = 700
+        val transparent = rgba(0, 0, 0, 0)
+        val corners = listOf(0 to 0, 699 to 0, 0 to 699, 699 to 699)
+        val surface = Surface(widthI32, heightI32)
+        surface.canvas {
+            saveLayer()
+            clipPath(targetClipPath(widthI32, heightI32), antiAlias = false)
+            drawPath(inverseTriangle(-700f, -700f, 3_500f, -700f, -700f, 3_500f), opaqueBlue())
+            restore()
+        }
+        val actual = surface.render()
+        corners.forEach { (xI32, yI32) -> assertPixel(transparent, actual.pixels, widthI32, xI32, yI32) }
+        assertRenderReadback(actual.nativeEvidenceScopeKinds)
+    }
+
+    @Test
+    fun `inverse scan span frame budget at B keeps its W6 pixels`() {
+        // This positive side is intentionally a public W6 budget/pixel witness.  Its L clip
+        // leaves (0,699) outside the finite triangle, while (1,1) is inside it and (699,699)
+        // is outside the L.  All three values are fixed before Surface construction.
+        val widthI32 = 700
+        val heightI32 = 700
+        val rgba8Bytes = rgba8Bytes(widthI32, heightI32)
+        val readbackBytes = readbackBytes(widthI32, heightI32)
+        val frameBudgetBytes = checkedAdd(
+            rgba8Bytes,
+            rgba8Bytes,
+            readbackBytes,
+            checkedMultiply(rgba8Bytes, 3L),
+            rgba8Bytes,
+            rgba8Bytes,
+            16L * 1_024L,
+            4L * 1_024L,
+            4L * 1_024L,
+            16L, // legacy solid-color SourceUniformData lease
+            16L, // W6 layer restore uniform
+        )
+        val blue = rgba(17, 61, 211)
+        val transparent = rgba(0, 0, 0, 0)
+        val lClip = Path().apply {
+            moveTo(0f, 0f); lineTo(700f, 0f); lineTo(700f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 700f); lineTo(0f, 700f); close()
+        }
+        val surface = Surface(widthI32, heightI32, config = RenderConfig(frameLocalBudgetBytes = frameBudgetBytes))
+        surface.canvas {
+            saveLayer()
+            clipPath(lClip, antiAlias = false)
+            drawPath(inverseTriangle(1f, 1f, 700f, 1f, 1f, 700f), opaqueBlue())
+            restore()
+        }
+        val actual = surface.render()
+        assertPixel(blue, actual.pixels, widthI32, 0, 699)
+        assertPixel(transparent, actual.pixels, widthI32, 1, 1)
+        assertPixel(transparent, actual.pixels, widthI32, 699, 699)
+        assertRenderReadback(actual.nativeEvidenceScopeKinds)
+    }
+
+    @Test
     fun `inverse scan span 4097 draws refuse before readback`() {
         val sentinel = UByteArray(4_097 * 4) { 0x5au }
         val before = sentinel.copyOf()
@@ -57,6 +186,7 @@ class W6InverseScanSpanSurfacePixelTest {
             16L * 1_024L, // VertexData physical minimum; zero useful bytes for this producer
             4L * 1_024L, // IndexData physical minimum; zero useful bytes for this producer
             4L * 1_024L, // W4e UniformData physical minimum
+            16L, // legacy solid-color SourceUniformData lease
             16L, // W6 layer restore uniform
         )
         val sentinel = UByteArray(widthI32 * heightI32 * 4) { 0x5au }
@@ -165,6 +295,20 @@ class W6InverseScanSpanSurfacePixelTest {
 
     private fun inverseTriangle(x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float): Path = Path().apply {
         moveTo(x0, y0); lineTo(x1, y1); lineTo(x2, y2); close(); fillType = FillType.INVERSE_WINDING
+    }
+
+    private fun opaqueBlue(): Paint = Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)
+
+    private fun rgba(red: Int, green: Int, blue: Int, alpha: Int = 255): UByteArray =
+        ubyteArrayOf(red.toUByte(), green.toUByte(), blue.toUByte(), alpha.toUByte())
+
+    private fun assertPixel(expected: UByteArray, pixels: UByteArray, widthI32: Int, xI32: Int, yI32: Int) {
+        val offsetI32 = Math.multiplyExact(Math.addExact(Math.multiplyExact(yI32, widthI32), xI32), 4)
+        assertContentEquals(expected, pixels.copyOfRange(offsetI32, Math.addExact(offsetI32, 4)), "($xI32,$yI32)")
+    }
+
+    private fun assertRenderReadback(scopes: Collection<String>) {
+        assertTrue(scopes.containsAll(listOf("Render", "Readback")), scopes.toString())
     }
 
     private fun checkedAdd(vararg values: Long): Long = values.fold(0L, Math::addExact)

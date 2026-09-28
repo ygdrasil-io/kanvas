@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import org.graphiks.kanvas.gpu.plan.*
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.*
 
 /** Verify native W4 stencil operands against the same W6 physical IDs before encoding. */
@@ -17,6 +18,29 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
             val stepI32 = ordinalI32 + 1
             val native = byStep[stepI32] as? GPUPreparedNativeScopeOperand.Render ?: return false
             if (native.w6aPassV1 !== pass) return false
+            if (w4e is PlanPass.PathRenderPass && w4e.scanSpansDeviceI32 != null) {
+                val spans = requireNotNull(w4e.scanSpansDeviceI32)
+                val proxy = pass as? PlanPass.StencilGeometryProducerV3 ?: return false
+                val expected = proxy.scanScissorsLocalI32?.copyScissorsI32() ?: return false
+                if (proxy.scanSpansDeviceI32 !== spans ||
+                    expected.size != spans.spanCountI32 ||
+                    native.semanticPayloads.singleOrNull() !is GPUDrawSemanticPayload.PathStencilProducer ||
+                    native.commands.any { it is GPUPreparedNativeRenderCommand.SetVertexBuffer ||
+                        it is GPUPreparedNativeRenderCommand.SetIndexBuffer ||
+                        it is GPUPreparedNativeRenderCommand.DrawIndexed
+                    }
+                ) return false
+                val actual = native.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetScissor>().map {
+                    listOf(it.x, it.y, it.width, it.height)
+                }
+                val expectedRows = expected.map { listOf(it.left, it.top, it.width(), it.height()) }
+                val draws = native.commands.filterIsInstance<GPUPreparedNativeRenderCommand.Draw>()
+                val evidence = runCatching { preparedNativeScanSpanEvidence(native) }.getOrNull() ?: return false
+                if (actual != expectedRows || draws.size != expected.size ||
+                    draws.any { it.drawCall.vertexCount != 3 } ||
+                    evidence.size != expected.size
+                ) return false
+            }
             val depthId = when (w4e) {
                 is PlanPass.PathRenderPass -> w4e.depthStencil
                 is PlanPass.ClipMaskProducer -> w4e.depthStencil

@@ -31,6 +31,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskResolveAction
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawPayloadRef
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveW4ePreparedFrameTaskListAssembler
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
@@ -285,6 +287,11 @@ internal class W4eClipGraphLowerer {
         role = GPUDrawPacketRole.W4ePrepared,
         blendPlan = W5bBlendPlanLowerer.lower(finalBlend),
         bindingLayoutHash = "w4e.prepared-path.sealed-bindings",
+        semanticPayload = preparedPath.scanSpansDeviceI32?.let {
+            GPUDrawSemanticPayload.PathStencilProducer(
+                GPUDrawPayloadRef(preparedPath.commandIdValue, "w4e.prepared-path.stencil-producer"),
+            )
+        },
         vertexSourceLabel = "w4e.prepared-path.sealed-geometry",
         targetStateHash = "w4e.prepared-path.attachments",
         originalPaintOrder = index,

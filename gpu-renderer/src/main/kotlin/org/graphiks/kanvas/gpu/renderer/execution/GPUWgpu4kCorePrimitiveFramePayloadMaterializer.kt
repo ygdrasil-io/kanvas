@@ -416,6 +416,7 @@ internal fun encodeW4eNativePasses(
     val maskedPathPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val inverseDomainPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val inverseWindingDomainPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
+    val scanSpanStencilPipelines = mutableMapOf<GPUTextureFormat, GPURenderPipeline>()
     fun inverseWindingDomainPipeline(format: GPUTextureFormat, sampleCount: Int, finalBlend: GPUBlendPlan?) =
         inverseWindingDomainPipelines.getOrPut(Triple(format, sampleCount, finalBlend)) {
             createW4eUnmaskedCoverPipeline(device, format, sampleCount, stencil = w4eStencilZeroReadState(),
@@ -426,6 +427,9 @@ internal fun encodeW4eNativePasses(
     }
     fun clearPipeline(coverage: Float) = clearPipelines.getOrPut(coverage) {
         createW4eClearPipeline(device, coverage, owned)
+    }
+    fun scanSpanStencilPipeline(format: GPUTextureFormat) = scanSpanStencilPipelines.getOrPut(format) {
+        createW4eScanSpanStencilPipeline(device, format, owned)
     }
     fun frozenDepthStencilLoad(operation: org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1) = when (operation) {
         org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1.Clear -> GPUPreparedNativeLoadOperation.Clear
@@ -869,6 +873,63 @@ internal fun encodeW4eNativePasses(
                 } else if ((consumer !is org.graphiks.kanvas.gpu.renderer.passes
                         .GPUW4ePreparedClipConsumerAuthority.InverseDomain || preservesZeroInverseSource) && isStencilProducer
                 ) {
+                    val scanSpans = sealedPath.scanSpansDeviceI32
+                    val scanScissors = sealedPath.scanScissorsLocalI32
+                    if (scanSpans != null || scanScissors != null) {
+                        if (scanSpans == null || scanScissors == null ||
+                            phase != org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilProducer
+                        ) throw refusal(
+                            "invalid.native-core-primitive.w4e-scan-spans",
+                            "W4e scan spans require one single-sample stencil producer.",
+                        )
+                        val scissors = scanScissors.copyScissorsI32()
+                        if (scissors.size != scanSpans.spanCountI32 || scissors.any { scissor ->
+                                scissor.left < 0 || scissor.top < 0 || scissor.right > targetBounds.right ||
+                                    scissor.bottom > targetBounds.bottom || scissor.height64() != 1L
+                            }) throw refusal(
+                            "invalid.native-core-primitive.w4e-scan-spans",
+                            "W4e scan-span scissors differ from their sealed local target domain.",
+                        )
+                        val depth = sealedPath.depthStencilResourceId?.let(attachment)
+                            ?: throw refusal("invalid.native-core-primitive.w4e-path-depth", "W4e scan-span producer lacks its sealed D24S8 attachment.")
+                        val sampleCount = if (sealedPath.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
+                        val format = if (isCoverageMaskResource(sealedPath.targetResourceId)) GPUTextureFormat.RGBA8Unorm else GPUTextureFormat.RGBA8UnormSrgb
+                        val load = if (entry.render.loadStore.loadOp == "clear") GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load
+                        if (sealedPath.depthStencilLoadStore != PlanDepthStencilLoadStore.ClearZeroStore) throw refusal(
+                            "invalid.native-core-primitive.w4e-path-depth",
+                            "W4e scan-span producer must clear stencil zero.",
+                        )
+                        val semantic = requireNotNull(entry.packet.semanticPayload) {
+                            "W4e scan-span producer requires its one frozen semantic packet payload."
+                        }
+                        GPUPreparedNativeScopeOperand.Render(entry.index,
+                            GPUPreparedNativeRenderPassConfig(
+                                colorTarget = if (sampleCount == 4) requireNotNull(sceneMsaa) else scene,
+                                resolveTarget = scene.takeIf { sampleCount == 4 && sealedPath.resolveTargetResourceId != null },
+                                depthStencilTarget = depth,
+                                loadOperation = load,
+                                storeOperation = GPUPreparedNativeStoreOperation.Store,
+                                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0).takeIf { load == GPUPreparedNativeLoadOperation.Clear },
+                                depthReadOnly = true,
+                                stencilClearValue = 0u,
+                                stencilLoadOperation = GPUPreparedNativeLoadOperation.Clear,
+                                stencilStoreOperation = GPUPreparedNativeStoreOperation.Store,
+                                stencilReadOnly = false,
+                            ), buildList {
+                                if (scissors.isNotEmpty()) {
+                                    add(GPUPreparedNativeRenderCommand.SetStencilReference(1u))
+                                    add(GPUPreparedNativeRenderCommand.SetPipeline(
+                                        GPUPreparedNativeRenderPipelineOperand.noBindings(scanSpanStencilPipeline(format), generation),
+                                    ))
+                                    scissors.forEach { scissor ->
+                                        add(GPUPreparedNativeRenderCommand.SetScissor(
+                                            scissor.left, scissor.top, scissor.width(), scissor.height(),
+                                        ))
+                                        add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))
+                                    }
+                                }
+                            }, listOf(semantic))
+                    } else {
                     val fillGeometry = when (val geometry = sealedPath.copyGeometry()) {
                         is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill -> geometry.valueF32
                         is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
@@ -930,6 +991,7 @@ internal fun encodeW4eNativePasses(
                                 if (retainedInverseInterior) W4eNativePayloadPlan.INVERSE_DOMAIN_INTERIOR else W4eNativePayloadPlan.STENCIL_PRODUCER,
                                 if (retainedInverseInterior) requireNotNull(retainedInverse).domain else sealedPath.scissor))
                         })
+                    }
                 } else if ((consumer !is org.graphiks.kanvas.gpu.renderer.passes
                         .GPUW4ePreparedClipConsumerAuthority.InverseDomain || preservesZeroInverseSource || retainedInverseInterior) && isStencilCover
                 ) {
@@ -1869,6 +1931,35 @@ private fun createW4ePathGeometryPipeline(
                 writeMask = if (colorWrite) GPUColorWrite.All else GPUColorWrite.None,
             )),
         ),
+    ))
+}
+
+/** Fullscreen stencil writer used by the sealed I32 scan-span producer; it owns no V/I binding. */
+private fun createW4eScanSpanStencilPipeline(
+    device: GPUDevice,
+    format: GPUTextureFormat,
+    owned: GPUW4eNativeOwnedHandles,
+): GPURenderPipeline {
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
+        label = "Kanvas.frame.w4e.scanSpanStencil.shader",
+        code = w4eFullscreenVertexShader() + """
+            @fragment fn fs_main() -> @location(0) vec4f { return vec4f(0.0); }
+        """.trimIndent(),
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
+        label = "Kanvas.frame.w4e.scanSpanStencil.pipelineLayout", bindGroupLayouts = emptyList(),
+    ))
+    return owned.createRenderPipeline(device, RenderPipelineDescriptor(
+        label = "Kanvas.frame.w4e.scanSpanStencil.pipeline",
+        layout = pipelineLayout,
+        vertex = VertexState(module = shader, entryPoint = "vs_main"),
+        primitive = PrimitiveState(),
+        depthStencil = w4eStencilReplaceState(),
+        multisample = MultisampleState(count = 1u),
+        fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
+            format = format,
+            writeMask = GPUColorWrite.None,
+        ))),
     ))
 }
 

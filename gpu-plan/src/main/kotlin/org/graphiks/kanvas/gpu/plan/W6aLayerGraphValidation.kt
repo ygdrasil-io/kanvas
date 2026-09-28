@@ -146,6 +146,19 @@ internal fun validateW6aLayerTopology(
                 cover.atomicGroup == pass.atomicGroup && cover.drawDataResources == pass.drawDataResources &&
                 cover.draw.commandIndex == pass.commandIndexI32 && cover.draw.copyPathGeometry() == pass.copyGeometry() &&
                 cover.draw.copyScissorI32() == pass.copyScissorI32())
+            val spans = pass.scanSpansDeviceI32
+            val scissors = pass.scanScissorsLocalI32
+            require((spans == null) == (scissors == null))
+            if (spans != null) {
+                val actual = requireNotNull(scissors)
+                val expected = requireNotNull(spans.localScissorsI32OrNull(
+                    actual.copyOriginDeviceI32(), requireNotNull(target.copyExtent()),
+                ))
+                require(expected.copyDomainI32() == actual.copyDomainI32() &&
+                    expected.copyScissorsI32() == actual.copyScissorsI32() &&
+                    cover.draw is W5bW4ePathDraw &&
+                    (cover.draw as W5bW4ePathDraw).hasW4eInverseMaskStencilPair())
+            }
         }
         is PlanPass.StencilCover -> {
             val inverseMaskPair = (pass.draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true

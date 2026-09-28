@@ -192,12 +192,50 @@ internal data class GPUPreparedNativeRenderCommandEvidence(
 internal fun preparedNativeRenderCommandEvidence(
     render: GPUPreparedNativeScopeOperand.Render,
 ): List<GPUPreparedNativeRenderCommandEvidence> =
-    preparedNativeRenderCommandEvidence(render.commands, render.semanticPayloads)
+    if (render.semanticPayloads.singleOrNull() is GPUDrawSemanticPayload.PathStencilProducer) {
+        preparedNativeScanSpanEvidence(render)
+    } else {
+        preparedNativeRenderCommandEvidence(render.commands, render.semanticPayloads)
+    }
 
 internal fun preparedNativeRenderCommandEvidence(
     render: GPUPreparedNativeScopeOperand.PreparedTextRenderRun,
 ): List<GPUPreparedNativeRenderCommandEvidence> =
     preparedNativeRenderCommandEvidence(render.commands, render.semanticPayloads)
+
+/**
+ * Evidence for one scan-span producer.  A single prepared packet may intentionally expand into
+ * N fullscreen Draw(3) commands while retaining exactly one semantic per prepared packet.
+ * Empty is the unique zero-draw case and must not be represented by a dummy draw.
+ */
+internal fun preparedNativeScanSpanEvidence(
+    render: GPUPreparedNativeScopeOperand.Render,
+): List<GPUPreparedNativeRenderCommandEvidence> {
+    require(render.commands.none { it is GPUPreparedNativeRenderCommand.DrawIndexed })
+    val draws = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.Draw>()
+    require(draws.all { it.drawCall.vertexCount == 3 })
+    val semantic = render.semanticPayloads.singleOrNull() as? GPUDrawSemanticPayload.PathStencilProducer
+        ?: error("A scan-span native render must retain its single producer semantic packet")
+    val evidence = ArrayList<GPUPreparedNativeRenderCommandEvidence>(draws.size)
+    var bindGroupsSinceDraw = 0
+    render.commands.forEach { command ->
+        when (command) {
+            is GPUPreparedNativeRenderCommand.SetBindGroup -> bindGroupsSinceDraw += 1
+            is GPUPreparedNativeRenderCommand.Draw -> {
+                evidence += GPUPreparedNativeRenderCommandEvidence(
+                    commandIdValue = semantic.payloadRef.commandIdValue,
+                    draws = 1,
+                    drawIndexed = 0,
+                    bindGroups = bindGroupsSinceDraw,
+                )
+                bindGroupsSinceDraw = 0
+            }
+            else -> Unit
+        }
+    }
+    require(bindGroupsSinceDraw == 0) { "A scan-span native render has an unconsumed bind group" }
+    return immutableList(evidence)
+}
 
 private fun preparedNativeRenderCommandEvidence(
     commands: List<GPUPreparedNativeRenderCommand>,
@@ -1406,7 +1444,17 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         }
 
         init {
-            require(if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass && w6aPassV1.draws().isEmpty())
+            val scanSpanEmptyProducer = this.semanticPayloads.singleOrNull() is
+                GPUDrawSemanticPayload.PathStencilProducer && this.commands.none { command ->
+                    command is GPUPreparedNativeRenderCommand.Draw ||
+                        command is GPUPreparedNativeRenderCommand.DrawIndexed
+                }
+            require(if (scanSpanEmptyProducer)
+                this.commands.isEmpty() && pass.depthStencilTarget != null &&
+                pass.stencilLoadOperation == GPUPreparedNativeLoadOperation.Clear &&
+                pass.stencilStoreOperation == GPUPreparedNativeStoreOperation.Store &&
+                !pass.stencilReadOnly
+                else if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass && w6aPassV1.draws().isEmpty())
                 this.commands.isEmpty() && this.semanticPayloads.isEmpty() && pass.loadOperation == GPUPreparedNativeLoadOperation.Clear
                 else if (w5bInitialClearV3 != null) this.commands.isEmpty() && this.semanticPayloads.isEmpty() &&
                 this.w5aSourceBindingsV2.isEmpty() && pass.loadOperation == GPUPreparedNativeLoadOperation.Clear &&

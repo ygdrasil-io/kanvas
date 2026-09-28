@@ -178,6 +178,16 @@ private fun preflightW4eClipMaskInitializes(
             val bound = binding.nativePass(requireNotNull(render.w6aPassV1).id)
             require(bound != null)
             if (bound is PlanPass.ClipMaskInitialize) require(bound === render.w6aPassV1)
+            if (bound is PlanPass.PathRenderPass && bound.scanSpansDeviceI32 != null) {
+                val proxy = requireNotNull(render.w6aPassV1 as? PlanPass.StencilGeometryProducerV3)
+                val sealedPath = requireNotNull(render.drawPackets.single().w4ePreparedPath)
+                require(proxy.scanSpansDeviceI32 === bound.scanSpansDeviceI32 &&
+                    proxy.scanScissorsLocalI32?.copyOriginDeviceI32() == sealedPath.scanScissorsLocalI32?.copyOriginDeviceI32() &&
+                    proxy.scanScissorsLocalI32?.copyDomainI32() == sealedPath.scanScissorsLocalI32?.copyDomainI32() &&
+                    proxy.scanScissorsLocalI32?.copyScissorsI32() == sealedPath.scanScissorsLocalI32?.copyScissorsI32()) {
+                    "W6 scan-span packet lost the sealed proxy rebase before native allocation."
+                }
+            }
             GPUW4eNativePassEntry(index, render, render.drawPackets.single())
         }
         require(entries.isNotEmpty() && entries.first().packet.w4ePreparedFrameAuthority?.validatesRenderSteps(

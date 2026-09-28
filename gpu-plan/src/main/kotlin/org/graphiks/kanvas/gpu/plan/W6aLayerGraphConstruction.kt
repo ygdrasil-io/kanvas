@@ -1662,10 +1662,18 @@ internal class W6aLayerGraphConstruction(
                     val data = dataByCommand.getValue(draw.commandIndex)
                     val depth = planResourceId(PlanResourceRole.DepthStencil, laneI32 + 1)
                     val group = canonicalPathAtomicGroup(draw)
+                    val producerNative = geometry?.passes()?.filterIsInstance<PlanPass.PathRenderPass>()?.singleOrNull {
+                        it.phase == PathRenderPhase.SingleSampleStencilProducer
+                    }?.let { nativePass(it, passes.size) as PlanPass.PathRenderPass }
+                    val scanSpans = producerNative?.scanSpansDeviceI32
+                    val localScissors = scanSpans?.let { spans -> requireNotNull(
+                        spans.localScissorsI32OrNull(targetOriginDevice(target), targetExtent(target)),
+                    ) }
                     val producer = PlanPass.StencilGeometryProducerV3(passes.size, target, depth, draw.commandIndex,
                         draw.copyPathGeometry(), draw.copyScissorI32(), data, group,
-                        AttachmentLoadPlan.Load, AttachmentStorePlan.Store)
+                        AttachmentLoadPlan.Load, AttachmentStorePlan.Store, scanSpans, localScissors)
                     passes += producer
+                    producerNative?.let { requireNotNull(native)[producer.id] = it }
                     val after = DestinationVersionI64(Math.addExact(versions.getValue(target), 1L))
                     versions[target] = after.valueI64
                     PlanPass.StencilCover(passes.size, target, depth, draw, data, group, AttachmentLoadPlan.Load,
@@ -1673,9 +1681,7 @@ internal class W6aLayerGraphConstruction(
                         PlanDepthStencilLoadStore.LoadStoreTestReset, after, coverage, entry.plannedCommandId).also { pass ->
                         passes += pass
                         geometry?.passes()?.filterIsInstance<PlanPass.PathRenderPass>()?.let { originals ->
-                            requireNotNull(native)[producer.id] = nativePass(originals.single {
-                                it.phase == PathRenderPhase.SingleSampleStencilProducer }, producer.ordinal)
-                            native[pass.id] = nativePass(originals.single {
+                            requireNotNull(native)[pass.id] = nativePass(originals.single {
                                 it.phase == PathRenderPhase.SingleSampleStencilColorCover }, pass.ordinal)
                         }
                     }
@@ -2680,10 +2686,23 @@ internal class W6aLayerGraphConstruction(
                             val data = dataByCommand.getValue(draw.commandIndex)
                             val depth = requireNotNull(sourceDepth)
                             val group = canonicalPathAtomicGroup(draw)
+                            val producerNative = when {
+                                w4e != null -> localNative(w4e.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                                    .single { it.phase == PathRenderPhase.SingleSampleStencilProducer }, passes.size)
+                                general != null -> localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                                    .single { it.draw.commandIndex == draw.commandIndex &&
+                                        it.phase == PathRenderPhase.SingleSampleStencilProducer }, passes.size)
+                                else -> null
+                            } as? PlanPass.PathRenderPass
+                            val scanSpans = producerNative?.scanSpansDeviceI32
+                            val localScissors = scanSpans?.let { spans -> requireNotNull(
+                                spans.localScissorsI32OrNull(targetOriginDevice(target), targetExtent(target)),
+                            ) }
                             val producer = PlanPass.StencilGeometryProducerV3(passes.size, target, depth, draw.commandIndex,
                                 draw.copyPathGeometry(), draw.copyScissorI32(), data, group,
-                                AttachmentLoadPlan.Load, AttachmentStorePlan.Store)
+                                AttachmentLoadPlan.Load, AttachmentStorePlan.Store, scanSpans, localScissors)
                             passes += producer
+                            producerNative?.let { requireNotNull(native)[producer.id] = it }
                             val after = DestinationVersionI64(Math.addExact(versions.getValue(target), 1L))
                             versions[target] = after.valueI64
                             // The isolated source is transparent: the selected parent blend is
@@ -2697,14 +2716,9 @@ internal class W6aLayerGraphConstruction(
                                 PlanDepthStencilLoadStore.LoadStoreTestReset, after, maskCoverage)
                             passes += cover
                             if (w4e != null) {
-                                requireNotNull(native)[producer.id] = localNative(w4e.passes().filterIsInstance<PlanPass.PathRenderPass>()
-                                    .single { it.phase == PathRenderPhase.SingleSampleStencilProducer }, producer.ordinal)
-                                native[cover.id] = localNative((selectedDraw as W5bW4ePathDraw).nativeColorPass, cover.ordinal)
+                                requireNotNull(native)[cover.id] = localNative((selectedDraw as W5bW4ePathDraw).nativeColorPass, cover.ordinal)
                             } else if (general != null) {
-                                requireNotNull(native)[producer.id] = localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
-                                    .single { it.draw.commandIndex == draw.commandIndex &&
-                                        it.phase == PathRenderPhase.SingleSampleStencilProducer }, producer.ordinal)
-                                native[cover.id] = localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                                requireNotNull(native)[cover.id] = localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
                                     .single { it.draw.commandIndex == draw.commandIndex &&
                                         it.phase == PathRenderPhase.SingleSampleStencilColorCover }, cover.ordinal)
                             }
@@ -2968,7 +2982,7 @@ internal class W6aLayerGraphConstruction(
             val target = physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)
             val targetExtent = targetExtents.getValue(target)
             val payload = requireNotNull(W4eNativePayloadPlan.fromDeferred(native.values.toList(), resources, targetExtent,
-                caps, lanes[laneI32].sourceTable())) { "w6a.layer.w4e_payload" }
+                caps, lanes[laneI32].sourceTable(), targetOriginDevice(target))) { "w6a.layer.w4e_payload" }
             w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload, targetOriginDevice(target))
         }
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes, caps, budget)
@@ -3138,7 +3152,8 @@ internal class W6aLayerGraphConstruction(
                 is PlanPass.StencilGeometryProducerV3 -> {
                     val draw = boundDraw(pass.commandIndexI32, pass.target) as PathDraw
                     PlanPass.StencilGeometryProducerV3(pass.ordinal, pass.target, pass.depthStencil, pass.commandIndexI32,
-                        draw.copyPathGeometry(), draw.copyScissorI32(), pass.drawDataResources, pass.atomicGroup, pass.load, pass.store)
+                        draw.copyPathGeometry(), draw.copyScissorI32(), pass.drawDataResources, pass.atomicGroup, pass.load, pass.store,
+                        pass.scanSpansDeviceI32, pass.scanScissorsLocalI32)
                 }
                 is PlanPass.StencilCover -> PlanPass.StencilCover(pass.ordinal, pass.target, pass.depthStencil,
                     boundDraw(pass.draw.commandIndex, pass.target) as PathDraw, pass.drawDataResources, pass.atomicGroup,

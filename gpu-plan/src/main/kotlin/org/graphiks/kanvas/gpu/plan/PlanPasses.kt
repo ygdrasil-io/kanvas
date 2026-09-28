@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.PathFillScanScissorsI32
 import org.graphiks.math.geometry.PathFillScanSpansI32
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokeGeometryF32
@@ -1036,11 +1037,18 @@ public sealed interface PlanPass {
         public val atomicGroup: PlanAtomicGroupId,
         public val load: AttachmentLoadPlan,
         public val store: AttachmentStorePlan,
+        /** W4e Geometry authority retained in device coordinates for this W6 producer. */
+        public val scanSpansDeviceI32: PathFillScanSpansI32? = null,
+        /** The one checked device-to-target rebase paired with [scanSpansDeviceI32]. */
+        public val scanScissorsLocalI32: PathFillScanScissorsI32? = null,
     ) : PlanPass {
         override public val role: PlanPassRole = PlanPassRole.StencilProducer
         override public val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedGeometry = geometry
         private val storedScissorI32 = scissorI32.copy()
+        init {
+            require((scanSpansDeviceI32 == null) == (scanScissorsLocalI32 == null))
+        }
         public fun copyGeometry(): PathDrawGeometry = storedGeometry
         public fun copyScissorI32(): RectI32 = storedScissorI32.copy()
     }

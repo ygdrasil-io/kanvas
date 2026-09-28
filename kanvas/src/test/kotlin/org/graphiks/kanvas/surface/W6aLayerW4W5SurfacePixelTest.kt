@@ -130,6 +130,44 @@ class W6aLayerW4W5SurfacePixelTest {
     }
 
     @Test
+    fun `inverse winding direct fill remains clipped by a hard concave path in a W6 layer`() {
+        // Pixel centres in the L clip are (1.5, 1.5..4.5) and its top arm.  The finite inverse
+        // triangle excludes the entire top arm, leaving only x=1 inside the clip.  Thus this
+        // differs from an unclipped inverse (which colors outside the L) and a non-inverse fill
+        // (which colors the top-right arm).  Keep the literal oracle before Surface creation.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val inverseTriangle = Path().apply {
+            moveTo(2f, 1f); lineTo(5f, 1f); lineTo(2f, 4f); close()
+            fillType = FillType.INVERSE_WINDING
+        }
+
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(inverseTriangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `even odd path clip preserves its stencil cover hole in a W6 layer`() {
         // The inner contour has the same winding as the exterior.  Only the frozen EVEN_ODD
         // stencil edge plus its non-zero cover test leaves this center pixel transparent.

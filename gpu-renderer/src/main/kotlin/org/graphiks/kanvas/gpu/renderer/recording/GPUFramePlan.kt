@@ -1639,6 +1639,7 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
     nullable("resourceBlock", ref.resourceBlock) { block -> string("fingerprint", block.fingerprint.value) }
     when (value) {
         is GPUDrawSemanticPayload.SolidRect -> Unit
+        is GPUDrawSemanticPayload.PathStencilProducer -> Unit
         is GPUDrawSemanticPayload.MaskBlur -> {
             string("canonicalHash", value.canonicalHash)
             string("sourceFamily", value.sourceFamily)
@@ -2430,6 +2431,7 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
         } ?: "none"}"
     return when (this) {
         is GPUDrawSemanticPayload.SolidRect -> "$common)"
+        is GPUDrawSemanticPayload.PathStencilProducer -> "$common)"
         is GPUDrawSemanticPayload.MaskBlur ->
             "$common,family=$sourceFamily,bounds=$deviceBounds,local=${localWidth}x$localHeight," +
                 "scale=$scale,style=${style.name},sigma=$effectiveSigma,taps=$tapCount," +

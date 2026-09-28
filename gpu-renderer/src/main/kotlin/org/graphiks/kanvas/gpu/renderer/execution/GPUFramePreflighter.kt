@@ -7722,6 +7722,20 @@ internal class GPUFramePreflighter(
         }
         return when (semantic) {
             is GPUDrawSemanticPayload.SolidRect -> validateSolidRectSemanticPayload(packet, semantic)
+            is GPUDrawSemanticPayload.PathStencilProducer ->
+                if (
+                    packet.role != GPUDrawPacketRole.W4ePrepared ||
+                    packet.w4ePreparedPath?.scanSpansDeviceI32 == null ||
+                    semantic.payloadRef.commandIdValue != packet.commandIdValue ||
+                    semantic.payloadRef.renderStepIdentity != "w4e.prepared-path.stencil-producer"
+                ) {
+                    diagnostic(
+                        "invalid.preflight.path_stencil_producer_semantic_payload",
+                        "A scan-span stencil producer requires its exact frozen W4e producer semantic payload.",
+                    )
+                } else {
+                    null
+                }
             is GPUDrawSemanticPayload.CorePrimitive ->
                 validateCorePrimitiveSemanticPayload(
                     framePlan,
