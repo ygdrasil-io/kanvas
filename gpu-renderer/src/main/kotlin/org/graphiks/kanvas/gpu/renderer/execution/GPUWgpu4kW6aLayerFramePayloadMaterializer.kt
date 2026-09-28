@@ -407,6 +407,52 @@ private fun preflightW4eClipMaskInitializes(
                 "W6 InverseDomain.Geometry Direct packet, uses, slices, or ordered catalog diverged before allocation."
             }
         }
+        val fanRecipes = frame.inverseDomainFanRecipesByProducerNativePassId.values.filter { recipe ->
+            binding.nativePasses().any { it.id == recipe.producerOwnerPassId }
+        }
+        fanRecipes.forEach { recipe ->
+            val pair = framePlan.steps.mapIndexedNotNull { sourceStep, step ->
+                val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+                val graphOwner = render.w6aPassV1 ?: return@mapIndexedNotNull null
+                val native = binding.nativePass(graphOwner.id) as? PlanPass.PathRenderPass ?: return@mapIndexedNotNull null
+                if (native.id == recipe.producerOwnerPassId || native.id == recipe.coverOwnerPassId) sourceStep to (native to render) else null
+            }
+            require(pair.size == 2 && pair[0].first + 1 == pair[1].first && pair[0].second.first.id == recipe.producerOwnerPassId && pair[1].second.first.id == recipe.coverOwnerPassId) {
+                "W6 InverseDomain.Geometry fan must project to two adjacent producer/cover source steps before allocation."
+            }
+            val producer = pair[0].second.first; val cover = pair[1].second.first
+            val producerRender = pair[0].second.second; val coverRender = pair[1].second.second
+            val producerPacket = producerRender.drawPackets.singleOrNull(); val coverPacket = coverRender.drawPackets.singleOrNull()
+            val producerPath = producerPacket?.w4ePreparedPath; val coverPath = coverPacket?.w4ePreparedPath
+            val retained = authority.consumerFor(producer.id.value) as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+            val consumer = coverPacket?.w4ePreparedClipConsumer as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+            val rows = frame.graph.resources().associateBy { it.id }
+            fun used(render: GPUFrameStep.RenderPassStep, id: PlanResourceId, usage: GPUFrameResourceUsage) = render.resourceUses.any { it.resource == frame.refs.getValue(id) && it.usage == usage }
+            val uniform = binding.payload.uniformSlice(cover.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_UNIFORM)
+            val bytes = uniform?.let { binding.payload.copyUniformData().copyOfRange(Math.toIntExact(it.offsetBytes), Math.toIntExact(it.offsetBytes + it.byteSize)) }
+            val vertexStart = recipe.interiorSlice.baseVertex * 2
+            val payloadVertices = binding.payload.copyVertexData().copyOfRange(vertexStart, vertexStart + recipe.interiorSlice.vertexCount * 2)
+            val payloadIndices = binding.payload.copyIndexData().copyOfRange(recipe.interiorSlice.firstIndex, recipe.interiorSlice.firstIndex + recipe.interiorSlice.indexCount)
+            val producerCatalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(recipe.owner(W6InverseDomainFanSiteV1.FanStencil)) as? W6InverseDomainFanNativeSiteRecipeV1
+            val coverCatalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(recipe.owner(W6InverseDomainFanSiteV1.ColorCover)) as? W6InverseDomainFanNativeSiteRecipeV1
+            fun bounds(rect: RectI32) = GPUPixelBounds(rect.left, rect.top, rect.right, rect.bottom)
+            require(producer.ordinal == recipe.producerPacketOrdinalI32 && cover.ordinal == recipe.coverPacketOrdinalI32 &&
+                producer.phase == PathRenderPhase.SingleSampleStencilProducer && cover.phase == PathRenderPhase.SingleSampleStencilColorCover &&
+                producer.target == recipe.target.id && cover.target == recipe.target.id && producer.depthStencil == recipe.depthStencil.id && cover.depthStencil == recipe.depthStencil.id &&
+                producerCatalog?.host === recipe && coverCatalog?.host === recipe && producerCatalog.owner == recipe.owner(W6InverseDomainFanSiteV1.FanStencil) && coverCatalog.owner == recipe.owner(W6InverseDomainFanSiteV1.ColorCover) &&
+                producer.load == recipe.producerLoad && producer.store == recipe.producerStore && cover.load == recipe.coverLoad && cover.store == recipe.coverStore && producer.draw.blend == recipe.blend && cover.draw.blend == recipe.blend &&
+                producerPacket?.role == GPUDrawPacketRole.W4ePrepared && producerPacket.w4ePreparedClipConsumer == null && retained != null &&
+                coverPacket?.role == GPUDrawPacketRole.W4ePrepared && consumer != null && consumer.consumerPassId == cover.id.value &&
+                binding.payload.geometrySlice(producer.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_INTERIOR) == recipe.interiorSlice && uniform == recipe.uniformSlice && bytes?.contentEquals(recipe.copyUniformBytes()) == true && payloadVertices.rawBitsEqual(recipe.copyPayloadVerticesF32()) && payloadIndices.contentEquals(recipe.copyPayloadIndicesI32()) &&
+                operandMatches(rows.getValue(recipe.target.id), recipe.target) && operandMatches(rows.getValue(recipe.depthStencil.id), recipe.depthStencil) && operandMatches(rows.getValue(recipe.vertex.id), recipe.vertex) && operandMatches(rows.getValue(recipe.index.id), recipe.index) && operandMatches(rows.getValue(recipe.uniform.id), recipe.uniform) &&
+                producerPath?.passId == producer.id.value && coverPath?.passId == cover.id.value && producerPath?.commandIdValue == producer.draw.commandIndex && coverPath?.commandIdValue == cover.draw.commandIndex && producerPath?.phase == PathRenderPhase.SingleSampleStencilProducer && coverPath?.phase == PathRenderPhase.SingleSampleStencilColorCover &&
+                producerPath?.scissor == bounds(recipe.copyProducerScissorI32()) && coverPath?.scissor == bounds(recipe.copyCoverScissorI32()) && producerPath?.targetResourceId == recipe.target.id.value && coverPath?.targetResourceId == recipe.target.id.value && producerPath?.depthStencilResourceId == recipe.depthStencil.id.value && coverPath?.depthStencilResourceId == recipe.depthStencil.id.value &&
+                producerPath?.vertexResourceId == recipe.vertex.id.value && coverPath?.vertexResourceId == recipe.vertex.id.value && producerPath?.indexResourceId == recipe.index.id.value && coverPath?.indexResourceId == recipe.index.id.value && producerPath?.uniformResourceId == recipe.uniform.id.value && coverPath?.uniformResourceId == recipe.uniform.id.value && producerPath?.load == recipe.producerLoad && producerPath?.store == recipe.producerStore && coverPath?.load == recipe.coverLoad && coverPath?.store == recipe.coverStore && producerPath?.blend == recipe.blend && coverPath?.blend == recipe.blend &&
+                used(producerRender, recipe.target.id, GPUFrameResourceUsage.RenderAttachment) && used(producerRender, recipe.depthStencil.id, GPUFrameResourceUsage.RenderAttachment) && used(producerRender, recipe.vertex.id, GPUFrameResourceUsage.Vertex) && used(producerRender, recipe.index.id, GPUFrameResourceUsage.Index) &&
+                used(coverRender, recipe.target.id, GPUFrameResourceUsage.RenderAttachment) && used(coverRender, recipe.depthStencil.id, GPUFrameResourceUsage.RenderAttachment) && used(coverRender, recipe.uniform.id, GPUFrameResourceUsage.Uniform)) {
+                "W6 InverseDomain.Geometry fan pair, retained authority, operands, or consumed resource uses diverged before allocation."
+            }
+        }
         val entries = framePlan.steps.mapIndexedNotNull { index, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
             if (render.w6aPassV1?.id !in binding.graphPassIds()) return@mapIndexedNotNull null
@@ -2376,6 +2422,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val inverseDomainDirectRecipes = binding.nativePasses().filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { pass ->
                     frame.inverseDomainDirectRecipesByNativePassId[pass.id]?.let { pass.id.value to it }
                 }.toMap()
+                val inverseDomainFanRecipes = frame.inverseDomainFanRecipesByProducerNativePassId.values
+                    .filter { recipe -> binding.nativePasses().any { it.id == recipe.producerOwnerPassId } }
+                    .flatMap { recipe -> listOf(recipe.producerOwnerPassId.value to recipe, recipe.coverOwnerPassId.value to recipe) }
+                    .toMap()
                 val childOwned = owned.own(GPUW4eNativeOwnedHandles())
                 encodeW4eNativePasses(device, generation, entries, payload, buffer(payload.vertexResourceId),
                     buffer(payload.indexResourceId), buffer(payload.uniformResourceId), childOwned,
@@ -2393,7 +2443,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     pathRenderDirectColorsByPassId = w6PathRenderDirectColors,
                     inverseMaskPathRecipesByPassId = inverseMaskPathRecipes,
                     inverseDomainZeroCoverRecipesByPassId = inverseDomainZeroCoverRecipes,
-                    inverseDomainDirectRecipesByPassId = inverseDomainDirectRecipes)
+                    inverseDomainDirectRecipesByPassId = inverseDomainDirectRecipes,
+                    inverseDomainFanRecipesByPassId = inverseDomainFanRecipes)
                     .map { native ->
                         val pass = graph.passes()[native.sourceStepIndex - 1]
                         native.pass.depthStencilTarget?.let { pathViews[native.sourceStepIndex] = it.view }

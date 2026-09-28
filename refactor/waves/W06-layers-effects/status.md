@@ -1715,3 +1715,42 @@ payloads distincts avant allocation. Le plan global 2A0c est corrigé aussi,
 pour que les futures leases 2A1 n'utilisent pas l'ancien compte de trois
 bundles pour Fan. Le triplet Direct reste review-clean ;
 Task 4 Fan, 2A1 et 2B restent ouverts, sans nouveau B/B−1 revendiqué.
+
+### 2A0c.IV Task 4 — `InverseDomain.Geometry.StencilEdgeFan`, paire native scellée
+
+Task 4 conserve strictement la paire W4e native : le producer
+`SingleSampleStencilProducer` publie le site
+`(producer.id, producer.ordinal, 0)` `fanStencil`, et son cover adjacent
+`SingleSampleStencilColorCover` publie `(cover.id, cover.ordinal, 0)`
+`colorCover`. Le host `W6InverseDomainFanRecipeV1` gèle leurs IDs/ordinals,
+ordre adjacent, command index, atomic group, target, D24S8, domaines/scissors,
+load/store et blend. Il prend ses snapshots F32/I32 directement depuis
+`:math:geometry` (vertices, indices et contour starts), les confronte au
+payload NDC déjà scellé, et porte les 16 bytes U16 du cover. Ainsi deux fans
+de tailles identiques et de contenu différent ont des encodages canoniques
+différents. EVEN_ODD sélectionne un stencil parity concret; WINDING sélectionne
+le winding concret; le cover est exactement TestZero, group 0 et draw 3.
+
+Le catalogue, le seal et la projection W6 reconnaissent exactement ces deux
+sites à owner distinct. Le préflight, avant `device.create*`, exige les deux
+packets et leurs source steps adjacents, le consumer absent du producer mais
+retenu par authority, le consumer InverseDomain présent du cover, les operands
+et slices/bytes, ainsi que les usages réellement consommés target/D24S8/V/I/U.
+Il ne déduit aucune absence des autres slices d'un slab W4e. L'encodeur route
+d'abord par recette : pipeline stencil Fan sur producer, puis pipeline
+InverseDomain/TestZero + groupe U16 sur cover. Direct, Zero, InverseMask et le
+fallback W4e sans recettes restent séparés. Aucun lease 2A1, claim 2B,
+géométrie renderer, changement W4e/RenderGraph, infrastructure de tests, GM,
+font ou codec n'est introduit.
+
+Les compiles séparées `:gpu-plan:compileKotlin` et
+`:gpu-renderer:compileKotlin` sortent 0; `git diff --check` est propre. Le
+sélecteur public Fan EVEN_ODD donne XML `1/0/0/0`; les témoins existants
+WINDING et inverses successifs donnent XML `2/0/0/0`. Chaque invocation
+Gradle termine néanmoins après JUnit sur GLFW macOS 133 : statut process/natif
+**UNKNOWN**, jamais PASS. Le premier RED Task 4 était
+`W6 InverseDomain.Geometry fan producer/cover must retain one draw and atomic group` :
+il a révélé que le freezer parcourait aussi la cover comme candidate. Le filtre
+strict producer corrige ce problème sans normaliser la paire; un RED catalogue
+subséquent a été fermé en incluant la map Fan dans la reconstruction attendue.
+Task 4 attend encore la revue Sol, puis les gates 2A1/2B restent ouverts.

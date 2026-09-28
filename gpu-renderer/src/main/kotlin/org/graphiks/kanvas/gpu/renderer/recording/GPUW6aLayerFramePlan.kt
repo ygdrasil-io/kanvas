@@ -156,6 +156,24 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     }) { "W6 InverseDomain.Geometry Direct recipe lost one ordered native bundle." }
             }
         }
+    /** Geometry edge-fans retain their adjacent W4e producer/cover owners, one catalog site each. */
+    internal val inverseDomainFanRecipesByProducerNativePassId: Map<PlanPassId, W6InverseDomainFanRecipeV1> =
+        physical.w6InverseDomainFanRecipes().also { recipes ->
+            recipes.forEach { (producerId, recipe) ->
+                val binding = physical.w4eGeometryBindings().singleOrNull { b -> b.nativePasses().any { it.id == producerId } }
+                    ?: error("W6 InverseDomain.Geometry fan recipe has no unique final W4e binding.")
+                val producerIndex = binding.nativePasses().indexOfFirst { it.id == producerId }
+                val producer = binding.nativePasses().getOrNull(producerIndex) as? PlanPass.PathRenderPass
+                val cover = binding.nativePasses().getOrNull(producerIndex + 1) as? PlanPass.PathRenderPass
+                require(producer != null && cover != null && recipe.producerOwnerPassId == producer.id &&
+                    recipe.producerPacketOrdinalI32 == producer.ordinal && recipe.coverOwnerPassId == cover.id &&
+                    recipe.coverPacketOrdinalI32 == cover.ordinal &&
+                    physical.nativeSiteRecipeCatalogV1().recipe(recipe.owner(W6InverseDomainFanSiteV1.FanStencil)) is W6InverseDomainFanNativeSiteRecipeV1 &&
+                    physical.nativeSiteRecipeCatalogV1().recipe(recipe.owner(W6InverseDomainFanSiteV1.ColorCover)) is W6InverseDomainFanNativeSiteRecipeV1) {
+                    "W6 InverseDomain.Geometry fan recipe lost one adjacent ordered native site."
+                }
+            }
+        }
     /**
      * The graph has already issued each mask occurrence's W5 row and uniform resource.  This
      * is a handle-free native projection of that exact row; it neither compiles a public Shader

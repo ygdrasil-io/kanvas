@@ -103,6 +103,7 @@ import org.graphiks.kanvas.gpu.plan.W6InverseDomainZeroCoverRecipeV1
 import org.graphiks.kanvas.gpu.plan.W6InverseDomainZeroGroupZeroAbiV1
 import org.graphiks.kanvas.gpu.plan.W6InverseDomainZeroSourceFormV1
 import org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectRecipeV1
+import org.graphiks.kanvas.gpu.plan.W6InverseDomainFanRecipeV1
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -421,6 +422,7 @@ internal fun encodeW4eNativePasses(
     inverseMaskPathRecipesByPassId: Map<String, W6InverseMaskPathRecipeV1> = emptyMap(),
     inverseDomainZeroCoverRecipesByPassId: Map<String, W6InverseDomainZeroCoverRecipeV1> = emptyMap(),
     inverseDomainDirectRecipesByPassId: Map<String, W6InverseDomainDirectRecipeV1> = emptyMap(),
+    inverseDomainFanRecipesByPassId: Map<String, W6InverseDomainFanRecipeV1> = emptyMap(),
 ): List<GPUPreparedNativeScopeOperand.Render> {
     requireW4eClipMaskInitializeRecipes(entries, clipMaskInitializeRecipesByPassId)
     val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
@@ -830,7 +832,64 @@ internal fun encodeW4eNativePasses(
             add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.fullscreenVertexCountI32)))
         })
     }
+    fun encodeInverseDomainFanRecipe(entry: GPUW4eNativePassEntry, recipe: W6InverseDomainFanRecipeV1): GPUPreparedNativeScopeOperand.Render {
+        val path = requireNotNull(entry.packet.w4ePreparedPath)
+        val producer = entry.packet.passId == recipe.producerOwnerPassId.value
+        val cover = entry.packet.passId == recipe.coverOwnerPassId.value
+        require(producer || cover) { "W6 InverseDomain.Geometry fan recipe reached an unrelated native packet." }
+        val retained = retainedConsumerFor(entry.packet.passId) as?
+            org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+        val geometry = (retained?.interiorCoverage as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry)
+            ?.copyGeometryF32()
+        val fan = geometry?.copyStencilEdgeFanF32OrNull()
+        require(geometry?.fillRule == recipe.fillRule && fan != null && fan.copyVerticesF32().contentEquals(recipe.copyFanVerticesF32()) &&
+            fan.copyIndicesI32().contentEquals(recipe.copyFanIndicesI32()) && fan.copyContourStartsI32().contentEquals(recipe.copyContourStartsI32()) &&
+            path.sample == SamplePlan.SingleSample && path.targetResourceId == recipe.target.id.value && path.depthStencilResourceId == recipe.depthStencil.id.value) {
+            "W6 InverseDomain.Geometry fan packet diverged from its frozen producer/cover recipe."
+        }
+        val format = when (recipe.target.format) {
+            PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+            else -> throw refusal("invalid.native-core-primitive.w4e-inverse-domain-fan", "W6 fan requires final scene color target.")
+        }
+        val domain = recipe.copyDomainI32()
+        val load = if ((if (producer) recipe.producerLoad else recipe.coverLoad) == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load
+        if (producer) {
+            require(entry.packet.w4ePreparedClipConsumer == null && recipe.stencil(org.graphiks.kanvas.gpu.plan.W6InverseDomainFanSiteV1.FanStencil) in setOf(org.graphiks.kanvas.gpu.plan.W6InverseDomainFanStencilV1.ClearZeroParity, org.graphiks.kanvas.gpu.plan.W6InverseDomainFanStencilV1.ClearZeroWinding)) {
+                "W6 InverseDomain.Geometry fan producer must retain authority without a consumer packet."
+            }
+            val evenOdd = recipe.fillRule == org.graphiks.math.geometry.FillRule.EVEN_ODD
+            val pipeline = createW4ePathGeometryPipeline(device, format, 1, 0f, stencil = w4ePathStencilProducerState(evenOdd), colorWrite = false,
+                label = "Kanvas.frame.w6.inverseDomain.fanStencil", owned = owned)
+            return GPUPreparedNativeScopeOperand.Render(entry.index, GPUPreparedNativeRenderPassConfig(
+                colorTarget = attachment(recipe.target.id.value), depthStencilTarget = attachment(recipe.depthStencil.id.value), loadOperation = load,
+                storeOperation = GPUPreparedNativeStoreOperation.Store, clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0).takeIf { load == GPUPreparedNativeLoadOperation.Clear },
+                depthReadOnly = true, stencilClearValue = 0u, stencilLoadOperation = GPUPreparedNativeLoadOperation.Clear,
+                stencilStoreOperation = GPUPreparedNativeStoreOperation.Store, stencilReadOnly = false,
+            ), buildList {
+                add(GPUPreparedNativeRenderCommand.SetStencilReference(1u)); add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generation)))
+                addAll(indexedGeometryCommands(entry.packet.passId, recipe.interiorSlice.purpose, GPUPixelBounds(domain.left, domain.top, domain.right, domain.bottom), recipe.interiorSlice))
+            })
+        }
+        val consumer = entry.packet.w4ePreparedClipConsumer as?
+            org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+        require(consumer != null && recipe.stencil(org.graphiks.kanvas.gpu.plan.W6InverseDomainFanSiteV1.ColorCover) == org.graphiks.kanvas.gpu.plan.W6InverseDomainFanStencilV1.TestZeroKeep) {
+            "W6 InverseDomain.Geometry fan cover requires its TestZero consumer packet."
+        }
+        val pipeline = if (commonSource) inverseWindingDomainPipeline(format, 1, entry.packet.blendPlan) else inverseDomainPipeline(format, 1, entry.packet.blendPlan)
+        val bindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(label = "Kanvas.frame.w6.inverseDomain.fanBindGroup", layout = pipeline.layout,
+            entries = listOf(BindGroupEntry(0u, uniformBinding(entry.packet.passId, recipe.uniformSlice.purpose, recipe.uniformSlice))))))
+        return GPUPreparedNativeScopeOperand.Render(entry.index, GPUPreparedNativeRenderPassConfig(
+            colorTarget = attachment(recipe.target.id.value), depthStencilTarget = attachment(recipe.depthStencil.id.value), loadOperation = load,
+            storeOperation = GPUPreparedNativeStoreOperation.Store, clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0).takeIf { load == GPUPreparedNativeLoadOperation.Clear },
+            depthReadOnly = true, stencilLoadOperation = GPUPreparedNativeLoadOperation.Load, stencilStoreOperation = GPUPreparedNativeStoreOperation.Store, stencilReadOnly = true,
+        ), listOf(
+            GPUPreparedNativeRenderCommand.SetStencilReference(0u), GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generation)),
+            GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generation)),
+            GPUPreparedNativeRenderCommand.SetScissor(domain.left, domain.top, domain.width(), domain.height()), GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.fullscreenVertexCountI32)),
+        ))
+    }
     return entries.map { entry -> try {
+        inverseDomainFanRecipesByPassId[entry.packet.passId]?.let { recipe -> return@map encodeInverseDomainFanRecipe(entry, recipe) }
         inverseDomainDirectRecipesByPassId[entry.packet.passId]?.let { recipe -> return@map encodeInverseDomainDirectRecipe(entry, recipe) }
         inverseDomainZeroCoverRecipesByPassId[entry.packet.passId]?.let { recipe ->
             return@map encodeInverseDomainZeroRecipe(entry, recipe)

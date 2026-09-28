@@ -73,6 +73,8 @@ internal class SourcePhysicalConstructionV1(
     val w6InverseDomainZeroCoverRecipes: Map<PlanPassId, W6InverseDomainZeroCoverRecipeV1> = emptyMap(),
     /** Final W6 InverseDomain.Geometry DirectTriangle triplets; fan remains intentionally open. */
     val w6InverseDomainDirectRecipes: Map<PlanPassId, W6InverseDomainDirectRecipeV1> = emptyMap(),
+    /** Final W6 InverseDomain.Geometry edge-fan producer/cover pairs. */
+    val w6InverseDomainFanRecipes: Map<PlanPassId, W6InverseDomainFanRecipeV1> = emptyMap(),
     val w4eClipMaskFoldRecipes: Map<PlanPassId, W4eClipMaskFoldRecipeV1> = emptyMap(),
     /** Final W6b V/I/U coverage-raster bundles; renderer selection remains intentionally open until 2P7b. */
     val w6bCoverageRasterGeometry: Map<PlanPassId, W6bCoverageRasterGeometryV1> = emptyMap(),
@@ -207,6 +209,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     inverseMaskPathRecipes: Map<PlanPassId, W6InverseMaskPathRecipeV1> = emptyMap(),
     inverseDomainZeroCoverRecipes: Map<PlanPassId, W6InverseDomainZeroCoverRecipeV1> = emptyMap(),
     inverseDomainDirectRecipes: Map<PlanPassId, W6InverseDomainDirectRecipeV1> = emptyMap(),
+    inverseDomainFanRecipes: Map<PlanPassId, W6InverseDomainFanRecipeV1> = emptyMap(),
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
@@ -244,6 +247,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val inverseMaskPaths = java.util.Collections.unmodifiableMap(LinkedHashMap(inverseMaskPathRecipes))
     private val inverseDomainZeroCovers = java.util.Collections.unmodifiableMap(LinkedHashMap(inverseDomainZeroCoverRecipes))
     private val inverseDomainDirects = java.util.Collections.unmodifiableMap(LinkedHashMap(inverseDomainDirectRecipes))
+    private val inverseDomainFans = java.util.Collections.unmodifiableMap(LinkedHashMap(inverseDomainFanRecipes))
     private val clipMaskFolds = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskFoldRecipes))
     private val coverageRasterGeometry = java.util.Collections.unmodifiableMap(LinkedHashMap(w6bCoverageRasterGeometry))
     private val coverageRasterHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(w6bCoverageRasterHostRecipes))
@@ -404,6 +408,9 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6InverseDomainDirectRecipe(passId: PlanPassId): W6InverseDomainDirectRecipeV1 =
         requireNotNull(inverseDomainDirects[passId]) { "Missing frozen W6 InverseDomain.Geometry Direct recipe for ${passId.value}." }
     public fun w6InverseDomainDirectRecipes(): Map<PlanPassId, W6InverseDomainDirectRecipeV1> = inverseDomainDirects
+    public fun w6InverseDomainFanRecipe(passId: PlanPassId): W6InverseDomainFanRecipeV1 =
+        requireNotNull(inverseDomainFans[passId]) { "Missing frozen W6 InverseDomain.Geometry fan recipe for ${passId.value}." }
+    public fun w6InverseDomainFanRecipes(): Map<PlanPassId, W6InverseDomainFanRecipeV1> = inverseDomainFans
     /** Bundle one is frozen beside edge bundle zero under the same packet owner. */
     public fun w4eClipMaskProducerStencilCoverRecipe(passId: PlanPassId): W4eClipMaskProducerStencilCoverRecipeV1 {
         val edge = clipMaskProducerStencilEdges.getValue(passId)
@@ -681,6 +688,17 @@ public class PlanPhysicalLayoutV1 private constructor(
                         W6InverseDomainDirectNativeSiteRecipeV1(expected, bundle).canonicalLogicalEncodingV1
                 }) { "W6 InverseDomain.Geometry Direct recipe changed after final pass binding." }
             }
+            val expectedInverseDomainFans = freezeW6InverseDomainFanRecipesV1(source.w4eGeometry, rows)
+            require(source.w6InverseDomainFanRecipes.keys == expectedInverseDomainFans.keys) {
+                "W6 InverseDomain.Geometry fan recipe owners changed after final pass binding."
+            }
+            source.w6InverseDomainFanRecipes.forEach { (passId, recipe) ->
+                val expected = expectedInverseDomainFans.getValue(passId)
+                require(W6InverseDomainFanSiteV1.entries.all { site ->
+                    W6InverseDomainFanNativeSiteRecipeV1(recipe, site).canonicalLogicalEncodingV1 ==
+                        W6InverseDomainFanNativeSiteRecipeV1(expected, site).canonicalLogicalEncodingV1
+                }) { "W6 InverseDomain.Geometry fan recipe changed after final pass binding." }
+            }
             val expectedStencilEdges = freezeW4eClipMaskProducerStencilEdgeRecipesV1(source.w4eGeometry, rows)
             require(source.w4eClipMaskProducerStencilEdgeRecipes.keys == expectedStencilEdges.keys)
             source.w4eClipMaskProducerStencilEdgeRecipes.forEach { (passId, recipe) ->
@@ -808,6 +826,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 inverseMaskPaths = expectedInverseMaskPaths,
                 inverseDomainZeroCovers = expectedInverseDomainZeroCovers,
                 inverseDomainDirects = expectedInverseDomainDirects,
+                inverseDomainFans = expectedInverseDomainFans,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -840,6 +859,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 inverseMaskPaths = source.w6InverseMaskPathRecipes,
                 inverseDomainZeroCovers = source.w6InverseDomainZeroCoverRecipes,
                 inverseDomainDirects = source.w6InverseDomainDirectRecipes,
+                inverseDomainFans = source.w6InverseDomainFanRecipes,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),

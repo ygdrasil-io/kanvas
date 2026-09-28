@@ -14,6 +14,9 @@ public enum class W6InverseDomainDirectShaderV1 { PathGeometry, InverseDomainCov
 public enum class W6InverseDomainDirectTopologyV1 { TriangleList, FullscreenTriangle }
 public enum class W6InverseDomainDirectGroupZeroAbiV1 { NoBindings, InverseDomainUniform }
 public enum class W6InverseDomainDirectStencilV1 { ClearReplaceOne, TestZeroKeep }
+/** The two independently-owned native sites retained by a Geometry edge-fan. */
+public enum class W6InverseDomainFanSiteV1 { FanStencil, ColorCover }
+public enum class W6InverseDomainFanStencilV1 { ClearZeroParity, ClearZeroWinding, TestZeroKeep }
 
 /**
  * One final W6 inverse-domain Zero packet.  This deliberately owns no mask, V/I, or D24S8:
@@ -260,6 +263,120 @@ public fun freezeW6InverseDomainDirectRecipesV1(
             vertices(binding.payload, quad), indices(binding.payload, quad), vertices(binding.payload, interior), indices(binding.payload, interior),
             binding.payload.copyUniformSliceBytes(uniform), geometry.copyGeometryF32().fillRule, inverse.geometryF32.copyDomainI32(), pass.draw.copyScissorI32(), pass.load, pass.store, pass.draw.blend)
         require(result.put(pass.id, recipe) == null) { "One W6 InverseDomain.Geometry Direct owner may publish only one triplet." }
+    } }
+    return java.util.Collections.unmodifiableMap(LinkedHashMap(result))
+}
+
+/**
+ * Freezes the native two-pass Geometry edge-fan without changing the W4e pair.  The producer
+ * owns the fan V/I packet and the adjacent cover owns the U16 packet; both are deliberately
+ * kept in one host so their D24S8 and atomic adjacency cannot drift independently.
+ */
+public class W6InverseDomainFanRecipeV1 internal constructor(
+    public val producerOwnerPassId: PlanPassId,
+    public val producerPacketOrdinalI32: Int,
+    public val coverOwnerPassId: PlanPassId,
+    public val coverPacketOrdinalI32: Int,
+    public val target: W4eClipMaskProducerPhysicalOperandV1,
+    public val depthStencil: W4eClipMaskProducerPhysicalOperandV1,
+    public val vertex: W4eClipMaskProducerPhysicalOperandV1,
+    public val index: W4eClipMaskProducerPhysicalOperandV1,
+    public val uniform: W4eClipMaskProducerPhysicalOperandV1,
+    public val interiorSlice: W4eNativeGeometrySlice,
+    public val uniformSlice: W4eNativeUniformSlice,
+    fanVerticesF32: FloatArray,
+    fanIndicesI32: IntArray,
+    contourStartsI32: IntArray,
+    payloadVerticesF32: FloatArray,
+    payloadIndicesI32: IntArray,
+    uniformBytes: ByteArray,
+    public val fillRule: FillRule,
+    domainI32: RectI32,
+    producerScissorI32: RectI32,
+    coverScissorI32: RectI32,
+    public val producerLoad: AttachmentLoadPlan,
+    public val producerStore: AttachmentStorePlan,
+    public val coverLoad: AttachmentLoadPlan,
+    public val coverStore: AttachmentStorePlan,
+    public val blend: BlendPlan,
+) {
+    private val fanVertices = fanVerticesF32.copyOf(); private val fanIndices = fanIndicesI32.copyOf()
+    private val contourStarts = contourStartsI32.copyOf(); private val payloadVertices = payloadVerticesF32.copyOf()
+    private val payloadIndices = payloadIndicesI32.copyOf(); private val bytes = uniformBytes.copyOf()
+    private val domain = domainI32.copy(); private val producerScissor = producerScissorI32.copy(); private val coverScissor = coverScissorI32.copy()
+    public fun owner(site: W6InverseDomainFanSiteV1): NativeSiteOwnerV1 = when (site) {
+        W6InverseDomainFanSiteV1.FanStencil -> NativeSiteOwnerV1(producerOwnerPassId, producerPacketOrdinalI32, 0)
+        W6InverseDomainFanSiteV1.ColorCover -> NativeSiteOwnerV1(coverOwnerPassId, coverPacketOrdinalI32, 0)
+    }
+    public fun stencil(site: W6InverseDomainFanSiteV1): W6InverseDomainFanStencilV1 = when (site) {
+        W6InverseDomainFanSiteV1.FanStencil -> if (fillRule == FillRule.EVEN_ODD) W6InverseDomainFanStencilV1.ClearZeroParity else W6InverseDomainFanStencilV1.ClearZeroWinding
+        W6InverseDomainFanSiteV1.ColorCover -> W6InverseDomainFanStencilV1.TestZeroKeep
+    }
+    public fun copyFanVerticesF32(): FloatArray = fanVertices.copyOf(); public fun copyFanIndicesI32(): IntArray = fanIndices.copyOf()
+    public fun copyContourStartsI32(): IntArray = contourStarts.copyOf(); public fun copyPayloadVerticesF32(): FloatArray = payloadVertices.copyOf()
+    public fun copyPayloadIndicesI32(): IntArray = payloadIndices.copyOf(); public fun copyUniformBytes(): ByteArray = bytes.copyOf()
+    public fun copyDomainI32(): RectI32 = domain.copy(); public fun copyProducerScissorI32(): RectI32 = producerScissor.copy(); public fun copyCoverScissorI32(): RectI32 = coverScissor.copy()
+    public val fullscreenVertexCountI32: Int = 3
+    init {
+        require(producerPacketOrdinalI32 >= 0 && coverPacketOrdinalI32 >= 0 && !domain.isEmpty && !producerScissor.isEmpty && !coverScissor.isEmpty)
+        require(target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
+        require(depthStencil.role == PlanResourceRole.DepthStencil && depthStencil.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) && PlanResourceUsage.DepthStencilAttachment in depthStencil.usages())
+        require(vertex.role == PlanResourceRole.VertexData && PlanResourceUsage.Vertex in vertex.usages())
+        require(index.role == PlanResourceRole.IndexData && PlanResourceUsage.Index in index.usages())
+        require(uniform.role == PlanResourceRole.UniformData && PlanResourceUsage.Uniform in uniform.usages())
+        require(interiorSlice.purpose == W4eNativePayloadPlan.INVERSE_DOMAIN_INTERIOR && uniformSlice.purpose == W4eNativePayloadPlan.INVERSE_DOMAIN_UNIFORM && uniformSlice.byteSize == 16L)
+        require(fanVertices.size % 2 == 0 && fanIndices.isNotEmpty() && contourStarts.isNotEmpty() && payloadVertices.size == interiorSlice.vertexCount * 2 && payloadIndices.size == interiorSlice.indexCount && bytes.size.toLong() == uniformSlice.byteSize)
+    }
+}
+
+public class W6InverseDomainFanNativeSiteRecipeV1 internal constructor(
+    public val host: W6InverseDomainFanRecipeV1,
+    public val site: W6InverseDomainFanSiteV1,
+) : NativeSiteRecipeV1 {
+    override val versionI32: Int = 1
+    override val owner: NativeSiteOwnerV1 = host.owner(site)
+    override val family: NativeSiteRecipeFamilyV1 = when (site) {
+        W6InverseDomainFanSiteV1.FanStencil -> NativeSiteRecipeFamilyV1.W6InverseDomainGeometryFanStencil
+        W6InverseDomainFanSiteV1.ColorCover -> NativeSiteRecipeFamilyV1.W6InverseDomainGeometryFanColorCover
+    }
+    override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
+        fun operand(name: String, value: W4eClipMaskProducerPhysicalOperandV1) { text("$name.id", value.id.value); enum("$name.role", value.role); text("$name.format", value.format.toString()); value.copyExtentI32()?.let { int("$name.width", it.width); int("$name.height", it.height) }; int("$name.samples", value.sampleCountI32); long("$name.bytes", value.byteSizeI64); enum("$name.lifetime", value.lifetime); value.usages().sortedBy { it.name }.forEachIndexed { i, use -> enum("$name.use.$i", use) } }
+        enum("site", site); text("producer.owner", host.producerOwnerPassId.value); int("producer.packet", host.producerPacketOrdinalI32); text("cover.owner", host.coverOwnerPassId.value); int("cover.packet", host.coverPacketOrdinalI32)
+        enum("fill", host.fillRule); enum("stencil", host.stencil(site)); operand("target", host.target); operand("depth", host.depthStencil); operand("vertex", host.vertex); operand("index", host.index); operand("uniform", host.uniform)
+        rect("domain", host.copyDomainI32()); rect("producer.scissor", host.copyProducerScissorI32()); rect("cover.scissor", host.copyCoverScissorI32())
+        host.copyFanVerticesF32().forEachIndexed { i, value -> float("fan.vertex.$i", value) }; host.copyFanIndicesI32().forEachIndexed { i, value -> int("fan.index.$i", value) }; host.copyContourStartsI32().forEachIndexed { i, value -> int("fan.contour.$i", value) }
+        host.copyPayloadVerticesF32().forEachIndexed { i, value -> float("payload.vertex.$i", value) }; host.copyPayloadIndicesI32().forEachIndexed { i, value -> int("payload.index.$i", value) }
+        int("interior.first", host.interiorSlice.firstIndex); int("interior.count", host.interiorSlice.indexCount); int("interior.base", host.interiorSlice.baseVertex); long("uniform.offset", host.uniformSlice.offsetBytes); long("uniform.bytes", host.uniformSlice.byteSize); host.copyUniformBytes().forEachIndexed { i, value -> int("uniform.byte.$i", value.toInt() and 0xff) }
+        enum("producer.load", host.producerLoad); enum("producer.store", host.producerStore); enum("cover.load", host.coverLoad); enum("cover.store", host.coverStore); blend("blend", host.blend); text("scene.depth", "D24S8"); if (site == W6InverseDomainFanSiteV1.ColorCover) { text("shader", "InverseDomainCover"); text("abi", "InverseDomainUniform"); int("draw.vertices", host.fullscreenVertexCountI32) } else { text("shader", "PathGeometry"); text("abi", "NoBindings") }
+    }
+}
+
+public fun freezeW6InverseDomainFanRecipesV1(bindings: List<PlanW4eGeometryBindingV1>, resources: List<PlanResource>): Map<PlanPassId, W6InverseDomainFanRecipeV1> {
+    val rows = resources.associateBy { it.id }
+    fun operand(row: PlanResource) = W4eClipMaskProducerPhysicalOperandV1(row.id, row.role, row.format, row.copyExtent(), row.sampleCountI32, row.byteSize, row.lifetime, row.usages())
+    fun vertices(payload: W4eNativePayloadPlan, slice: W4eNativeGeometrySlice) = payload.copyVertexData().copyOfRange(slice.baseVertex * 2, (slice.baseVertex + slice.vertexCount) * 2)
+    fun indices(payload: W4eNativePayloadPlan, slice: W4eNativeGeometrySlice) = payload.copyIndexData().copyOfRange(slice.firstIndex, slice.firstIndex + slice.indexCount)
+    val result = linkedMapOf<PlanPassId, W6InverseDomainFanRecipeV1>()
+    bindings.forEach { binding -> binding.nativePasses().forEachIndexed { index, candidate ->
+        val producer = candidate as? PlanPass.PathRenderPass ?: return@forEachIndexed
+        if (producer.phase != PathRenderPhase.SingleSampleStencilProducer) return@forEachIndexed
+        val inverse = producer.draw.w6InverseDomainOrNull() ?: return@forEachIndexed
+        val geometry = inverse.geometryF32.interiorCoverageF32 as? InverseInteriorCoverageF32.Geometry ?: return@forEachIndexed
+        val fan = geometry.copyGeometryF32().copyStencilEdgeFanF32OrNull() ?: return@forEachIndexed
+        val cover = binding.nativePasses().getOrNull(index + 1) as? PlanPass.PathRenderPass ?: error("W6 InverseDomain.Geometry fan producer requires its adjacent native cover.")
+        require(producer.phase == PathRenderPhase.SingleSampleStencilProducer && cover.phase == PathRenderPhase.SingleSampleStencilColorCover) { "W6 InverseDomain.Geometry fan phases must remain adjacent producer/cover." }
+        require(producer.draw.commandIndex == cover.draw.commandIndex) { "W6 InverseDomain.Geometry fan producer/cover command identity changed." }
+        require(producer.atomicGroup == cover.atomicGroup) { "W6 InverseDomain.Geometry fan producer/cover atomic group changed." }
+        require(producer.target == cover.target && producer.depthStencil != null && producer.depthStencil == cover.depthStencil) { "W6 InverseDomain.Geometry fan producer/cover must retain target and D24S8." }
+        require(producer.draw.sample == SamplePlan.SingleSample && cover.draw.sample == SamplePlan.SingleSample && producer.resolveTarget == null && cover.resolveTarget == null) { "W6 InverseDomain.Geometry fan producer/cover must remain single-sample without resolve." }
+        require(producer.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore && cover.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset) { "W6 InverseDomain.Geometry fan producer/cover depth-stencil load/store changed." }
+        val interior = requireNotNull(binding.payload.geometrySlice(producer.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_INTERIOR))
+        val uniform = requireNotNull(binding.payload.uniformSlice(cover.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_UNIFORM))
+        val extent = requireNotNull(rows.getValue(producer.target).copyExtent())
+        val fanNdc = fan.copyVerticesF32().also { values -> values.indices.step(2).forEach { offset -> values[offset] = values[offset] * 2f / extent.width - 1f; values[offset + 1] = 1f - values[offset + 1] * 2f / extent.height } }
+        require(vertices(binding.payload, interior).contentEquals(fanNdc) && indices(binding.payload, interior).contentEquals(fan.copyIndicesI32())) { "W6 InverseDomain.Geometry fan payload no longer matches :math geometry." }
+        val recipe = W6InverseDomainFanRecipeV1(producer.id, producer.ordinal, cover.id, cover.ordinal, operand(rows.getValue(producer.target)), operand(rows.getValue(requireNotNull(producer.depthStencil))), operand(rows.getValue(binding.payload.vertexResourceId)), operand(rows.getValue(binding.payload.indexResourceId)), operand(rows.getValue(binding.payload.uniformResourceId)), interior, uniform, fan.copyVerticesF32(), fan.copyIndicesI32(), fan.copyContourStartsI32(), vertices(binding.payload, interior), indices(binding.payload, interior), binding.payload.copyUniformSliceBytes(uniform), geometry.copyGeometryF32().fillRule, inverse.geometryF32.copyDomainI32(), producer.draw.copyScissorI32(), cover.draw.copyScissorI32(), producer.load, producer.store, cover.load, cover.store, producer.draw.blend)
+        require(result.put(producer.id, recipe) == null) { "One W6 InverseDomain.Geometry fan producer may publish one pair." }
     } }
     return java.util.Collections.unmodifiableMap(LinkedHashMap(result))
 }
