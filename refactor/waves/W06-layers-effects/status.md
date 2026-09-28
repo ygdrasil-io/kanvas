@@ -1844,3 +1844,25 @@ large restent hors admission et non résolus. `git show --check` est propre ;
 la revue Sol de `f09a4791e` n'a trouvé aucun finding Critical/Important.
 Task 1b et tout 2A0d restent ouverts pour les autres sources/geometry hosts,
 W4e, W6b et destination-read, puis 2A1/B/B−1 et 2B.
+
+### 2A0d Task 1b — feuilles legacy `MaterialV1` et chaînes `OpacityV1` sur `SolidRect`
+
+Le commit local `1e1bf6a5c` élargit explicitement le même site ordinaire W6
+aux cinq feuilles `Solid`, `Linear`, `Radial`, `Sweep`, `Conical` et à leurs
+chaînes contiguës `OpacityV1`. La recette scelle l'ID structural racine et
+feuille, le nombre d'alphas, les bytes uniformes exacts (bases
+16/128/96/112/192 + 16 par alpha), le manifest group 1, les stops et les
+coordonnées des gradients. La table matériau impose la topologie enfant
+`index−1`; le constructeur et W5h reconstruisent la chaîne pour authentifier
+l'ID racine. Le slab stops n'est ajouté que pour les variants gradient
+énumérés. Aucun host autre que `SolidRect`, ni W4e, W6b, destination-read,
+V2/V4/V5 ou lease 2A1 n'est admis.
+
+Le témoin `Surface` public couvre les cinq feuilles avec deux stages
+`OpacityV1` (shader et alpha de Paint) et des gradients à deux stops ; son
+oracle CPU est calculé avant `Surface` et vérifie `Render`/`Readback`. Ma
+relance de la classe W6 donne XML `39/0/0/0`, suivi de Gradle exit 133 après
+JUnit : qualification native **UNKNOWN**. `:kanvas:compileTestKotlin` est
+verte, `git show --check` propre, revue Sol sans finding Critical/Important.
+Ce lot ferme les cinq feuilles legacy **sur `SolidRect` seulement**. Task 1b,
+les autres geometry hosts/ABI, puis 2A0d/2A1/2B restent ouverts.
