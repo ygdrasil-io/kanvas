@@ -34,6 +34,9 @@ import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathPreparationResult
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.PathFillScanPreparationI32
+import org.graphiks.math.geometry.PathFillScanRefusalReasonI32
+import org.graphiks.math.geometry.PathFillScanSpansI32
 import org.graphiks.math.geometry.PathStrokeDrawMode
 import org.graphiks.math.geometry.PathStrokePolicyF64
 import org.graphiks.math.geometry.RRectF64
@@ -46,6 +49,30 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.prepareTransformedClipStackGeometryF32
 import org.graphiks.math.matrix.prepareTransformedInversePathGeometryF32
 import org.graphiks.math.matrix.toMatrix3x3F64
+import org.graphiks.math.geometry.preparePathFillScanSpansI32
+
+/** Immutable W4e ownership of every direct inverse producer's device-space scan spans. */
+internal class W4eScanSpanAdmissionV1(byCommandI32: Map<Int, PathFillScanSpansI32>) {
+    val byCommandI32: Map<Int, PathFillScanSpansI32> = Collections.unmodifiableMap(byCommandI32.toMap())
+    val producerDrawCountI32: Int = this.byCommandI32.values.fold(0) { totalI32, spansI32 ->
+        Math.addExact(totalI32, spansI32.spanCountI32)
+    }
+
+    init {
+        require(this.byCommandI32.keys.all { it >= 0 })
+        require(producerDrawCountI32 <= MAX_PRODUCER_SCAN_SPAN_DRAWS_I32)
+    }
+
+    companion object {
+        const val MAX_PRODUCER_SCAN_SPAN_DRAWS_I32: Int = 4_096
+    }
+}
+
+private sealed interface W4eScanSpanAdmissionResult {
+    data class Ready(val admission: W4eScanSpanAdmissionV1) : W4eScanSpanAdmissionResult
+    data object NumericRange : W4eScanSpanAdmissionResult
+    data object DrawLimit : W4eScanSpanAdmissionResult
+}
 
 /**
  * W4e planning authority.  Color rendering is deliberately delegated to the W4d.2 graph
@@ -284,9 +311,20 @@ public class W4eClipPlanCompiler internal constructor(
             is GpuPlanSelection.InvalidScene -> return invalid("W4d.2 rejected normalized W4e draw facts")
             is GpuPlanSelection.ResourceLimitExceeded -> return limit("W4d.2 rejected normalized W4e draw resources")
         }
+        val scanSpanAdmission = when (val result = admitScanSpanProducers(preparedByKey.values, inverseByCommand)) {
+            is W4eScanSpanAdmissionResult.Ready -> result.admission
+            W4eScanSpanAdmissionResult.NumericRange -> return limit(
+                W4ePlanDiagnostics.SizeOverflow,
+                "W4e inverse scan-span input is not representable in checked I32 arithmetic",
+            )
+            W4eScanSpanAdmissionResult.DrawLimit -> return limit(
+                W4ePlanDiagnostics.ScanSpanDrawLimit,
+                "W4e inverse scan-span producers exceed ${W4eScanSpanAdmissionV1.MAX_PRODUCER_SCAN_SPAN_DRAWS_I32} draws",
+            )
+        }
         return GpuPlanSelection.Candidate(Candidate(
             this, scene.canonicalId, target, constructionSeam, base, preparedByKey.values.toList(), inverseByCommand,
-            inverseDomainSourcesByCommand, actuallyEmptyInverseCommands, finalBlendsByCommandI32,
+            inverseDomainSourcesByCommand, actuallyEmptyInverseCommands, finalBlendsByCommandI32, scanSpanAdmission,
         ))
     }
 
@@ -331,7 +369,7 @@ public class W4eClipPlanCompiler internal constructor(
         }
         val maskStacks = selected.stacks.filter { it.realization == Realization.Mask }
         capabilityRefusal(capabilities, maskStacks, selected.inverseMaskGeometryCommands().isNotEmpty())?.let { return it }
-        val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base, capabilities, budget)) {
+        val stagedBase = when (val result = preflightBaseWithScanSpanStaging(selected, capabilities, budget)) {
             is RenderPlanResult.Ready -> result.plan
             is RenderPlanResult.GapNotMigrated -> return constructionGap(listOf(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
@@ -341,18 +379,19 @@ public class W4eClipPlanCompiler internal constructor(
             is RenderPlanResult.ResourceLimitExceeded -> return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4d.2 frame resources are exceeded")
         }
         val framePreview = try {
-            preflightCombinedFrame(selected, basePreview)
+            preflightCombinedFrame(selected, stagedBase.preview)
         } catch (_: ArithmeticException) {
             return resource(W4ePlanDiagnostics.SizeOverflow, "W4e resource accounting overflowed")
         } catch (error: IllegalArgumentException) {
             return resource(W4ePlanDiagnostics.PlanIdentityInvalid, "W4e frame preflight failed: ${error.message}")
         }
         if (framePreview.peakFrameLocalBytes > budget.maxFrameLocalBytes) {
-            return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4e pooled clip resources exceed the frame budget")
+            return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded,
+                "W4e pooled clip resources require ${framePreview.peakFrameLocalBytes} bytes; budget is ${budget.maxFrameLocalBytes}")
         }
         // Both W4d and W4e inventories are admitted above; only then is the shared seam asked
         // to issue its graph, under the caller's real budget rather than an unbounded surrogate.
-        val base = when (val result = selected.constructionSeam.plan(selected.base, capabilities, budget)) {
+        val base = when (val result = selected.constructionSeam.plan(selected.base, capabilities, stagedBase.stagingBudget)) {
             is RenderPlanResult.Ready -> result.plan
             is RenderPlanResult.GapNotMigrated -> return constructionGap(listOf(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
@@ -395,7 +434,7 @@ public class W4eClipPlanCompiler internal constructor(
             return promoted("W5b final blending requires the admitted single-sample W4e topology")
         capabilityRefusal(capabilities,selected.stacks.filter { it.realization == Realization.Mask },
             selected.inverseMaskGeometryCommands().isNotEmpty())?.let { return it }
-        val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base,capabilities,budget)) {
+        val stagedBase = when (val result = preflightBaseWithScanSpanStaging(selected,capabilities,budget)) {
             is RenderPlanResult.Ready -> result.plan
             is RenderPlanResult.GapNotMigrated -> return result
             is RenderPlanResult.GapOnPromotedScope -> return result
@@ -403,10 +442,11 @@ public class W4eClipPlanCompiler internal constructor(
             is RenderPlanResult.ResourceLimitExceeded -> return result
         }
         return try {
-            val preview = preflightCombinedFrame(selected,basePreview)
+            val preview = preflightCombinedFrame(selected,stagedBase.preview)
             if (preview.peakFrameLocalBytes > budget.maxFrameLocalBytes)
-                return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded,"W4e pooled clip resources exceed the frame budget")
-            val base = when (val result = selected.constructionSeam.constructSources(selected.base,capabilities,budget)) {
+                return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded,
+                    "W4e pooled clip resources require ${preview.peakFrameLocalBytes} bytes; budget is ${budget.maxFrameLocalBytes}")
+            val base = when (val result = selected.constructionSeam.constructSources(selected.base,capabilities,stagedBase.stagingBudget)) {
                 is RenderPlanResult.Ready -> result.plan
                 is RenderPlanResult.GapNotMigrated -> return result
                 is RenderPlanResult.GapOnPromotedScope -> return result
@@ -439,6 +479,72 @@ public class W4eClipPlanCompiler internal constructor(
 
     private class ClippedTopology(val resources: List<PlanResource>,val passes: List<PlanPass>,
         val dependencies: List<PlanPassDependency>,val peakI64: Long,val payload: W4eNativePayloadPlan)
+
+    private class W4eStagedBasePreview(
+        val preview: W4dGeneralFramePreview,
+        val stagingBudget: PlanBudget,
+    )
+
+    /**
+     * W4d is a construction seam only for W4e scan-span producers.  Its historical indexed
+     * triangle footprint may exceed B even though the final W4e payload does not contain it,
+     * so build that seam under the checked, finite `max(B, provisional W4d peak)` envelope.
+     */
+    private fun preflightBaseWithScanSpanStaging(
+        selected: Candidate,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): RenderPlanResult<W4eStagedBasePreview> {
+        val provisional = when (val result = selected.constructionSeam.preflightFrame(
+            selected.base,
+            capabilities,
+            PlanBudget(Long.MAX_VALUE, budget.materialFrameLimits),
+        )) {
+            is RenderPlanResult.Ready -> result.plan
+            is RenderPlanResult.GapNotMigrated -> return result
+            is RenderPlanResult.GapOnPromotedScope -> return result
+            is RenderPlanResult.InvalidScene -> return result
+            is RenderPlanResult.ResourceLimitExceeded -> return result
+        }
+        val provisionalPeakI64 = peakFrameLocalBytesI64(provisional.resources, provisional.passCount)
+        val stagingBudget = PlanBudget(maxOf(budget.maxFrameLocalBytes, provisionalPeakI64), budget.materialFrameLimits)
+        return when (val result = selected.constructionSeam.preflightFrame(
+            selected.base,
+            capabilities,
+            stagingBudget,
+            selected.scanSpanAdmission.byCommandI32.keys,
+        )) {
+            is RenderPlanResult.Ready -> {
+                requireOnlyScanSpanVertexIndexReplacement(provisional, result.plan)
+                RenderPlanResult.Ready(W4eStagedBasePreview(result.plan, stagingBudget))
+            }
+            is RenderPlanResult.GapNotMigrated -> result
+            is RenderPlanResult.GapOnPromotedScope -> result
+            is RenderPlanResult.InvalidScene -> result
+            is RenderPlanResult.ResourceLimitExceeded -> result
+        }
+    }
+
+    /**
+     * The W4d preview labels only its shared V/I slabs.  W4e removes the direct triangle from
+     * exactly those rows; every other byte and lifetime remains W4d's sealed construction fact.
+     */
+    private fun requireOnlyScanSpanVertexIndexReplacement(
+        provisional: W4dGeneralFramePreview,
+        final: W4dGeneralFramePreview,
+    ) {
+        require(provisional.extent == final.extent && provisional.passCount == final.passCount &&
+            provisional.resources.size == final.resources.size)
+        provisional.resources.zip(final.resources).forEach { (before, after) ->
+            require(before.role == after.role && before.firstPassIndex == after.firstPassIndex &&
+                before.lastPassIndexExclusive == after.lastPassIndexExclusive)
+            if (before.role in setOf(PlanResourceRole.VertexData, PlanResourceRole.IndexData)) {
+                require(after.byteSize <= before.byteSize)
+            } else {
+                require(after.byteSize == before.byteSize)
+            }
+        }
+    }
 
     private fun insertClips(
         basePasses: List<PlanPass>,
@@ -540,7 +646,10 @@ public class W4eClipPlanCompiler internal constructor(
         fun pathCopy(source: PlanPass.PathRenderPass, phase: PathRenderPhase, depth: PlanResourceId?, load: AttachmentLoadPlan,
             access: PlanDepthStencilAccess?, loadStore: PlanDepthStencilLoadStore?): PlanPass.PathRenderPass =
             PlanPass.PathRenderPass(pathOrdinalI32++, source.target, source.draw, phase, source.drawDataResources,
-                source.atomicGroup, depth, load, AttachmentStorePlan.Store, access, loadStore, source.resolveTarget)
+                source.atomicGroup, depth, load, AttachmentStorePlan.Store, access, loadStore, source.resolveTarget,
+                selected.scanSpanAdmission.byCommandI32[source.draw.commandIndex].takeIf {
+                    phase == PathRenderPhase.SingleSampleStencilProducer
+                })
         val phasedPasses = clippedPasses.flatMap { pass ->
             val path = pass as? PlanPass.PathRenderPass
             if (path == null) listOf(pass) else if (inverseMaskPath(path)) listOf(
@@ -751,6 +860,7 @@ public class W4eClipPlanCompiler internal constructor(
                     span.byteSize,
                     Math.addExact(remap(span.firstPassIndex), prefixPassCount),
                     Math.addExact(remap(span.lastPassIndexExclusive), prefixPassCount),
+                    span.role,
                 ))
             }
             if (inverseCountI32 > 0) {
@@ -1262,10 +1372,55 @@ public class W4eClipPlanCompiler internal constructor(
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    private fun admitScanSpanProducers(
+        stacks: Collection<PreparedStack>,
+        inverseByCommand: Map<Int, InversePathGeometryF32>,
+    ): W4eScanSpanAdmissionResult {
+        val spansByCommandI32 = linkedMapOf<Int, PathFillScanSpansI32>()
+        var drawCountI32 = 0
+        val commandsI32 = stacks.asSequence()
+            .filter { it.realization === Realization.Mask && !it.isZeroCoverage }
+            .flatMap { it.consumerIndexes.asSequence() }
+            .filter { commandIndexI32 ->
+                (inverseByCommand[commandIndexI32]?.interiorCoverageF32 as? InverseInteriorCoverageF32.Geometry)
+                    ?.copyGeometryF32()?.copyDirectTriangleF32OrNull() != null
+            }
+            .distinct()
+            .sorted()
+            .toList()
+        commandsI32.forEach { commandIndexI32 ->
+            val inverse = requireNotNull(inverseByCommand[commandIndexI32])
+            val geometry = requireNotNull(inverse.interiorCoverageF32 as? InverseInteriorCoverageF32.Geometry)
+                .copyGeometryF32()
+            val triangleF32 = requireNotNull(geometry.copyDirectTriangleF32OrNull())
+            val remainingDrawsI32 = Math.subtractExact(
+                W4eScanSpanAdmissionV1.MAX_PRODUCER_SCAN_SPAN_DRAWS_I32,
+                drawCountI32,
+            )
+            when (val preparation = preparePathFillScanSpansI32(
+                triangleF32,
+                inverse.copyDomainI32(),
+                remainingDrawsI32,
+            )) {
+                is PathFillScanPreparationI32.Ready -> {
+                    spansByCommandI32[commandIndexI32] = preparation.spansI32
+                    drawCountI32 = Math.addExact(drawCountI32, preparation.spansI32.spanCountI32)
+                }
+                is PathFillScanPreparationI32.Refused -> return when (preparation.reason) {
+                    PathFillScanRefusalReasonI32.NumericRange -> W4eScanSpanAdmissionResult.NumericRange
+                    PathFillScanRefusalReasonI32.SpanLimit -> W4eScanSpanAdmissionResult.DrawLimit
+                }
+            }
+        }
+        return W4eScanSpanAdmissionResult.Ready(W4eScanSpanAdmissionV1(spansByCommandI32))
+    }
+
     private fun gap(message: String): GpuPlanSelection.NotCandidate = GpuPlanSelection.NotCandidate(listOf(diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, message)))
     private fun legacy(message: String): GpuPlanSelection.NotCandidate = GpuPlanSelection.NotCandidate(listOf(diag(W4ePlanDiagnostics.LegacyUnavailable, RenderDiagnosticDomain.SCENE, message)))
     private fun invalid(message: String): GpuPlanSelection.InvalidScene = GpuPlanSelection.InvalidScene(listOf(diag(W4ePlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, message)))
     private fun limit(message: String): GpuPlanSelection.ResourceLimitExceeded = GpuPlanSelection.ResourceLimitExceeded(listOf(diag(W4ePlanDiagnostics.GeometryLimit, RenderDiagnosticDomain.RESOURCE, message)))
+    private fun limit(code: org.graphiks.kanvas.render.ir.RenderDiagnosticCode, message: String): GpuPlanSelection.ResourceLimitExceeded =
+        GpuPlanSelection.ResourceLimitExceeded(listOf(diag(code, RenderDiagnosticDomain.RESOURCE, message)))
     private fun resource(code: org.graphiks.kanvas.render.ir.RenderDiagnosticCode, message: String): RenderPlanResult.ResourceLimitExceeded = RenderPlanResult.ResourceLimitExceeded(listOf(diag(code, RenderDiagnosticDomain.RESOURCE, message)))
     private fun promoted(message: String): RenderPlanResult.GapOnPromotedScope = promoted(W4ePlanDiagnostics.CapabilityUnavailable, message)
     private fun promoted(code: org.graphiks.kanvas.render.ir.RenderDiagnosticCode, message: String): RenderPlanResult.GapOnPromotedScope = RenderPlanResult.GapOnPromotedScope(listOf(diag(code, RenderDiagnosticDomain.CAPABILITY, message)))
@@ -1372,6 +1527,7 @@ public class W4eClipPlanCompiler internal constructor(
         inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource>,
         actuallyEmptyInverseCommands: Set<Int>,
         finalBlendsByCommandI32: Map<Int, BlendPlan>,
+        val scanSpanAdmission: W4eScanSpanAdmissionV1,
     ) : GpuPlanCandidate {
         val finalBlendsByCommandI32 = Collections.unmodifiableMap(finalBlendsByCommandI32.toMap())
         override val capabilityId: String = if (base.capabilityId == W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID

@@ -1487,6 +1487,9 @@ public class RenderGraph private constructor(
             val pathPasses = passes.mapIndexedNotNull { index, pass ->
                 (pass as? PlanPass.PathRenderPass)?.let { index to it }
             }
+            require(pathPasses.all { (_, pass) ->
+                pass.scanSpansDeviceI32 == null || pass.phase == PathRenderPhase.SingleSampleStencilProducer
+            }) { "Only single-sample stencil producers may publish W4e scan-span authority" }
             val usesAa4 = pathPasses.any { (_, pass) -> pass.draw.sample == SamplePlan.Multisample4 } ||
                 resources.any { it.role == PlanResourceRole.MultisampleColorTarget }
             if (usesAa4) {
@@ -1565,6 +1568,7 @@ public class RenderGraph private constructor(
                             pass.draw.coverage == CoveragePlan.FullOrScissor &&
                             pass.draw.strategy == PathFillStrategy.DirectTriangle &&
                             pass.target == target.id && pass.atomicGroup == null &&
+                            pass.scanSpansDeviceI32 == null &&
                             pass.depthStencilAccess == null && pass.depthStencilLoadStore == null &&
                             if (inverseDomainInterior) {
                                 declaredInverseDepth != null &&
@@ -2065,6 +2069,15 @@ public class RenderGraph private constructor(
             val inverseMaskGeometry = inverseMask?.geometryF32?.interiorCoverageF32 is
                 org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry
             val inverseMaskDirectTriangle = inverseMaskGeometry && draw.strategy == PathFillStrategy.DirectTriangle
+            if (inverseMaskDirectTriangle) {
+                require(producer.scanSpansDeviceI32 != null && cover.scanSpansDeviceI32 == null) {
+                    "W4e inverse direct stencil pairs require producer-only scan-span authority"
+                }
+            } else {
+                require(producer.scanSpansDeviceI32 == null && cover.scanSpansDeviceI32 == null) {
+                    "Historical stencil pairs may not carry W4e scan-span authority"
+                }
+            }
             require(draw.coverage == coverage && draw.sample == sample &&
                 (draw.strategy == PathFillStrategy.StencilCover ||
                     inverseMaskDirectTriangle)) {

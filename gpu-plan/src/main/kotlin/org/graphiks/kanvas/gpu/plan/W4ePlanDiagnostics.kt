@@ -14,6 +14,7 @@ public object W4ePlanDiagnostics {
     public val CapabilityUnavailable: RenderDiagnosticCode = RenderDiagnosticCode("w4e.clip.capability-unavailable")
     public val MaskFormatUnavailable: RenderDiagnosticCode = RenderDiagnosticCode("w4e.clip.mask-format-unavailable")
     public val SampleCountUnavailable: RenderDiagnosticCode = RenderDiagnosticCode("w4e.clip.sample-count-unavailable")
+    public val ScanSpanDrawLimit: RenderDiagnosticCode = RenderDiagnosticCode("w4e.clip.scan-span-draw-limit")
     public val BudgetFrameLocalExceeded: RenderDiagnosticCode = RenderDiagnosticCode("w4e.clip.budget.frame-local-exceeded")
     public val SizeOverflow: RenderDiagnosticCode = RenderDiagnosticCode("w4e.clip.size-overflow")
     public val PlanIdentityInvalid: RenderDiagnosticCode = RenderDiagnosticCode("w4e.clip.plan-identity-invalid")

@@ -64,6 +64,8 @@ internal data class FrameResourceSpan(
     val byteSize: Long,
     val firstPassIndex: Int,
     val lastPassIndexExclusive: Int,
+    /** W4e recognizes only the shared W4d Vertex/Index preview rows for replacement. */
+    val role: PlanResourceRole? = null,
 ) {
     init {
         require(byteSize > 0L)

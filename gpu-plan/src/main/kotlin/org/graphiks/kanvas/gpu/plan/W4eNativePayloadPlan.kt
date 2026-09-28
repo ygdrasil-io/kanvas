@@ -336,6 +336,14 @@ public class W4eNativePayloadPlan private constructor(
                 if (pass.draw.copyPathGeometry() is PathDrawGeometry.Empty) return true
                 return geometry?.let { addDirectGeometry(pass.id.value, HARD_MASK_PRODUCER, it) } == true
             }
+            // The W4e inverse Geometry producer is the already admitted fullscreen primitive
+            // constrained by immutable integer scissors.  It owns no indexed triangle slice,
+            // including when its finite raster interior is Empty.  Keep the discriminator
+            // narrow here as well as at RenderGraph sealing: a historical producer must never
+            // lose its V/I payload merely by carrying an inapplicable nullable field.
+            if (pass.scanSpansDeviceI32 != null) {
+                return isStencilProducer && consumer is ClipPlanStrategy.InverseMask
+            }
             if ((consumer !is ClipPlanStrategy.InverseDomain || preservesZeroInverseSource) && isStencilProducer) {
                 return addDrawable(STENCIL_PRODUCER)
             }

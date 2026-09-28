@@ -896,6 +896,13 @@ public class PlanPhysicalLayoutV1 private constructor(
                 require(rows.single { it.id == lane.target }.copyExtent() == lane.copyExtentI32())
                 require(lane.graphPassIds().all { id -> graph.passes().any { it.id == id } })
                 require(lane.nativePasses().filterIsInstance<PlanPass.PathRenderPass>().all { it.target == lane.target })
+                lane.nativePasses().filterIsInstance<PlanPass.PathRenderPass>().forEach { pass ->
+                    if (pass.scanSpansDeviceI32 == null) return@forEach
+                    require(pass.phase == PathRenderPhase.SingleSampleStencilProducer &&
+                        lane.payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.STENCIL_PRODUCER) == null) {
+                        "W4e scan-span producers must not acquire a fallback indexed V/I slice."
+                    }
+                }
                 require(lane.graphPassIds().all { id -> when (val pass = graph.passes().single { it.id == id }) {
                     is PlanPass.RenderPass -> pass.target == lane.target
                     is PlanPass.StencilGeometryProducerV3 -> pass.target == lane.target

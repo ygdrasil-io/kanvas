@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.PathFillScanSpansI32
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokeGeometryF32
 import org.graphiks.math.geometry.PathStrokeDrawMode
@@ -1000,6 +1001,8 @@ public sealed interface PlanPass {
         public val depthStencilAccess: PlanDepthStencilAccess?,
         public val depthStencilLoadStore: PlanDepthStencilLoadStore?,
         public val resolveTarget: PlanResourceId?,
+        /** W4e Geometry producer authority; null preserves the historical indexed path route. */
+        public val scanSpansDeviceI32: PathFillScanSpansI32? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.PathRender
         override val id: PlanPassId = checkedPassId(role, ordinal)
