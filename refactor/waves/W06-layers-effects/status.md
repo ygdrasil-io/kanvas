@@ -1590,3 +1590,16 @@ scene-local `InverseDomain.Geometry` comme cover, alors que l'encodeur le
 clear/initialise dans son pass `SingleSampleDirectColor`. La correction
 phase-aware de cette validation précède les recettes IV ; elle ne généralise
 pas l'acceptation des covers sans producer.
+
+Le bridge `GPUW6aNativePathValidation` reconnaît maintenant uniquement le
+`PathRenderPass SingleSampleDirectColor` W4e dont le consumer scellé est
+`InverseDomain.Geometry` et dont l'accès/load-store stencil ordinaire est
+absent. Il exige que la passe native initialise vraiment le D24S8 scene-local
+(depth/stencil writable, depth clear à 1, stencil clear à 0, stores) ; les
+autres covers conservent la règle du producer préalable. Après ce changement,
+le DirectTriangle corrigé est XML `1/0/0/0`. Le run public groupé est W6a
+`35/0/0/0`, scan-span `14/0/0/0`, W4e `2/0/0/0`. Les compiles renderer et
+tests Kanvas sortent 0 ; Gradle finit à 1 uniquement après GLFW 133
+post-JUnit, donc la terminaison native demeure **UNKNOWN**. La revue Sol
+ciblée du bridge est clean, sans finding Critical/Important ; les recettes IV
+et gates 2A1/2B restent ouverts.

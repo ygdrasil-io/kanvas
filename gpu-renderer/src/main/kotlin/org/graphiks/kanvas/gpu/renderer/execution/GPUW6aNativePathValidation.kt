@@ -59,8 +59,22 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
                 view.ownership != GPUPreparedNativeOperandOwnership.Borrowed) return false
             val prior = depthViews[depthId]
             if (prior != null && prior !== view.view || depthViews.any { (id, other) -> id != depthId && other === view.view }) return false
+            // W4e seals an unmasked inverse-domain Geometry draw as one direct-color pass.
+            // Its scene-local D24S8 is initialized by that pass even though the ordinary
+            // stencil-producer load/store marker is intentionally absent from the path phase.
+            val inverseDomain = (w4e as? PlanPass.PathRenderPass)?.draw
+                ?.let { it as? ClippedGeneralPathDraw }?.clip as? ClipPlanStrategy.InverseDomain
+            val inverseDomainSceneInitializer = w4e is PlanPass.PathRenderPass &&
+                w4e.phase == PathRenderPhase.SingleSampleDirectColor &&
+                w4e.depthStencilAccess == null && w4e.depthStencilLoadStore == null &&
+                inverseDomain?.geometryF32?.interiorCoverageF32 is
+                    org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry
+            if (inverseDomainSceneInitializer &&
+                (native.pass.depthReadOnly || native.pass.depthLoadOperation != GPUPreparedNativeLoadOperation.Clear ||
+                    native.pass.depthClearValue != 1f ||
+                    native.pass.depthStoreOperation != GPUPreparedNativeStoreOperation.Store)) return false
             val producer = w4e is PlanPass.ClipMaskProducer || w4e is PlanPass.PathRenderPass &&
-                w4e.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore
+                w4e.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore || inverseDomainSceneInitializer
             if (producer) {
                 if (native.pass.stencilReadOnly || native.pass.stencilLoadOperation != GPUPreparedNativeLoadOperation.Clear ||
                     native.pass.stencilClearValue != 0u || native.pass.stencilStoreOperation != GPUPreparedNativeStoreOperation.Store) return false
