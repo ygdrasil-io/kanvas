@@ -2,6 +2,7 @@
 
 package org.graphiks.kanvas.surface
 
+import kotlin.test.assertContentEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.math.color.ColorARGB
@@ -67,27 +68,41 @@ class W7AaPathLayerSurfacePixelTest {
     @Test
     fun `aa translated layer keeps source alignment`() {
         // The layer has a non-zero device origin, while the child has a fractional
-        // translation. The fully covered, AA-edge, and exterior observations are
-        // fixed before Surface and expose any second mapping or implicit sampling.
+        // translation. These literals precede Surface; the complete 5x5 layer
+        // region must also equal the origin-zero control at its known (2, 1) offset.
         val blue = ColorARGB.of(255, 17, 61, 211)
         val localTriangle = Path().apply {
             moveTo(2f, 1f); lineTo(5f, 1f); lineTo(2f, 4f); close()
         }
+        val originZeroTriangle = Path().apply {
+            moveTo(0f, 0f); lineTo(3f, 0f); lineTo(0f, 3f); close()
+        }
 
-        val surface = Surface(8, 7)
-        surface.canvas {
+        val translated = Surface(8, 7)
+        translated.canvas {
             saveLayer(RectF32.ofLTRB(2f, 1f, 7f, 6f))
             translate(.5f, .5f)
             drawPath(localTriangle, Paint(blue, antiAlias = true))
             restore()
         }
-        val result = renderOrAcceptExactAaCapabilityRefusal(surface) ?: return
-        assertPixel(result.pixels, 8, 3, 2, 17, 61, 211, 255)
-        assertPixel(result.pixels, 8, 7, 6, 0, 0, 0, 0)
-        val edgeAlpha = result.pixels[((2 * 8 + 4) * 4) + 3].toInt()
+        val originZero = Surface(5, 5)
+        originZero.canvas {
+            saveLayer(RectF32.ofLTRB(0f, 0f, 5f, 5f))
+            translate(.5f, .5f)
+            drawPath(originZeroTriangle, Paint(blue, antiAlias = true))
+            restore()
+        }
+        val translatedResult = renderOrAcceptExactAaCapabilityRefusal(translated) ?: return
+        val originZeroResult = renderOrAcceptExactAaCapabilityRefusal(originZero) ?: return
+        assertPixel(translatedResult.pixels, 8, 3, 2, 17, 61, 211, 255)
+        assertPixel(translatedResult.pixels, 8, 7, 6, 0, 0, 0, 0)
+        val edgeAlpha = translatedResult.pixels[((2 * 8 + 4) * 4) + 3].toInt()
         assertTrue(edgeAlpha in 1..254, "expected translated AA edge alpha, got $edgeAlpha")
-        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
-            result.nativeEvidenceScopeKinds.toString())
+        assertContentEquals(originZeroResult.pixels, copyPixelRegion(translatedResult.pixels, 8, 2, 1, 5, 5))
+        assertTrue(translatedResult.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            translatedResult.nativeEvidenceScopeKinds.toString())
+        assertTrue(originZeroResult.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            originZeroResult.nativeEvidenceScopeKinds.toString())
     }
 
     @Test
@@ -231,6 +246,21 @@ class W7AaPathLayerSurfacePixelTest {
         assertTrue(pixels[offset].toInt() == red && pixels[offset + 1].toInt() == green &&
             pixels[offset + 2].toInt() == blue && pixels[offset + 3].toInt() == alpha,
             "pixel ($x,$y) was ${pixels.copyOfRange(offset, offset + 4).toList()}")
+    }
+
+    private fun copyPixelRegion(
+        pixels: UByteArray,
+        sourceWidth: Int,
+        left: Int,
+        top: Int,
+        width: Int,
+        height: Int,
+    ): UByteArray = UByteArray(width * height * 4).also { result ->
+        for (row in 0 until height) {
+            val sourceOffset = ((top + row) * sourceWidth + left) * 4
+            val destinationOffset = row * width * 4
+            pixels.copyInto(result, destinationOffset, sourceOffset, sourceOffset + width * 4)
+        }
     }
 
     private fun renderOrAcceptExactAaCapabilityRefusal(surface: Surface): RenderResult? = try {
