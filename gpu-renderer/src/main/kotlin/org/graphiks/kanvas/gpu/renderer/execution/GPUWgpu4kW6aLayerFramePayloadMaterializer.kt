@@ -422,10 +422,11 @@ private fun preflightW4eClipMaskInitializes(
                             operandMatches(rows.getValue(inverseRecipe.mask.id), inverseRecipe.mask) && operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform) &&
                             binding.payload.uniformSlice(bound.id.value, W4eNativePayloadPlan.STENCIL_COVER_UNIFORM) == inverseRecipe.uniformSlice &&
                             binding.payload.hasInverseFalseUniform(inverseRecipe.uniformSlice) &&
+                            packet.w4ePreparedClipConsumer === authority.consumerFor(bound.id.value) &&
                             consumer != null && consumer.consumerPassId == bound.id.value && consumer.maskResourceId == inverseRecipe.mask.id.value &&
                             consumer.domain == bounds(inverseRecipe.copyDomainI32()) &&
                             consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry &&
-                            path.scanSpansDeviceI32 == null &&
+                            path.scissor == bounds(bound.draw.copyScissorI32()) && path.scanSpansDeviceI32 == null &&
                             path.scanScissorsLocalI32 == null && path.depthStencilResourceId == inverseRecipe.depthStencil.id.value &&
                             path.depthStencilAccess == PlanDepthStencilAccess.ReadWrite &&
                             path.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset &&
@@ -436,9 +437,11 @@ private fun preflightW4eClipMaskInitializes(
                             operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform) &&
                             binding.payload.uniformSlice(bound.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM) == inverseRecipe.uniformSlice &&
                             binding.payload.hasInverseFalseUniform(inverseRecipe.uniformSlice) &&
+                            packet.w4ePreparedClipConsumer === authority.consumerFor(bound.id.value) &&
                             consumer != null && consumer.consumerPassId == bound.id.value && consumer.maskResourceId == inverseRecipe.mask.id.value &&
                             consumer.domain == bounds(inverseRecipe.copyDomainI32()) &&
                             consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero &&
+                            path.scissor == bounds(bound.draw.copyScissorI32()) && path.copyGeometry() == PathDrawGeometry.Empty &&
                             path.scanSpansDeviceI32 == null &&
                             path.scanScissorsLocalI32 == null && path.depthStencilResourceId == null &&
                             path.depthStencilAccess == null && path.depthStencilLoadStore == null &&

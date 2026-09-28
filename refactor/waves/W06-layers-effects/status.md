@@ -1520,3 +1520,16 @@ scan-span `14/0/0/0`, W6a `31/0/0/0`, D24S8 distinct `1/0/0/0` et
 empty/non-empty `1/0/0/0`. Les deux classes GPU terminent encore après JUnit
 par GLFW 133 (**UNKNOWN**), tandis que les deux sélecteurs W4e sortent 0.
 Cette note ne ferme pas la revue Sol, 2A0c.IV, 2A0d, 2A1 ou 2B.
+
+### 2A0c.IIIc — correctif revue Sol, round 4/5
+
+Avant la première allocation, les deux covers confrontent désormais l'identité
+du consumer porté par le packet à `authority.consumerFor(passId)` ; l'égalité
+des champs ne suffit donc plus. Le gate contrôle aussi le `scissor` de la
+source (`bound.draw`), distinct du domaine de couverture, et le ZeroCover
+exige `PathDrawGeometry.Empty`. Ces trois contrôles reproduisent les
+assertions auparavant tardives de l'encodeur sans créer de géométrie.
+Les trois compiles ciblées sortent 0. Le lancement groupé des sélecteurs
+publics produit les XML W6a `31/0/0/0`, scan-span `14/0/0/0` et W4e
+`2/0/0/0`; Gradle s'arrête ensuite avec GLFW 133, après JUnit (**UNKNOWN**
+pour la couche native, sans échec JUnit).
