@@ -1400,6 +1400,13 @@ Gradle exit 1 uniquement après le worker GLFW macOS 133; ce gap demeure
 **UNKNOWN** et séparé des XML. Le refus W4e 4 097 pré-allocation sort Gradle 0.
 
 Commit d'implémentation Task 4 : `687d1a7` (`feat(w6): seal inverse scan-span
-occurrences`). Cette
-extension ne ferme pas 2A0c, 2A1 ni 2B; ces gates restent ouverts pour la
-revue Sol et les sous-lots ultérieurs.
+occurrences`). Les corrections `d98de2b4f`, `3521f98cd` et `a387979e7`
+scellent la séquence native exacte et la provenance du pipeline fullscreen :
+le témoin est créé avec ce pipeline dédié, non à partir d'un handle arbitraire,
+et le préflight vérifie identité, génération et format de cible. La relecture
+Sol ciblée du dernier correctif ne relève aucun Critical/Important. À
+`a387979e7`, la compilation `:gpu-renderer:compileKotlin` sort 0 et la classe
+Surface W6 donne XML `13/0/0/0` ; Gradle sort 1 uniquement après l'exit natif
+GLFW 133 post-JUnit. Ce sous-lot inverse-mask est review-clean, mais cette
+extension ne ferme pas 2A0c, 2A1 ni 2B ; ces gates restent ouverts pour les
+sous-lots ultérieurs.
