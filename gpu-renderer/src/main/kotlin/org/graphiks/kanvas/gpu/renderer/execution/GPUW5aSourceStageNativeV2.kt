@@ -631,7 +631,7 @@ internal fun materializeW5aSourcePartitionV2(
             }
               GPUPreparedNativeScopeOperand.Render(operand.sourceStepIndex, operand.pass, operand.commands,
                   operand.semanticPayloads, operand.operandLayout, operand.operationKind, operand.passSegment, bindings,
-                  operand.w5bInitialClearV3, operand.w6aPassV1)
+                  operand.w5bInitialClearV3, operand.w6aPassV1, operand.w6InverseMaskScanSpanPipelineWitnessV1)
         }
         val payload = GPUPreparedNativeFramePayload(old.identity, operands, old.scopeOperandKeys,
             listOf(GPUPreparedNativeAuxiliaryHandle(owned, GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion)) + old.auxiliaryOwnedHandles,

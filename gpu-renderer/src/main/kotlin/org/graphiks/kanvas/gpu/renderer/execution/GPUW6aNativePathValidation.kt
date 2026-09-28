@@ -115,9 +115,18 @@ private fun validatesW6InverseMaskScanSpanCommandStream(
         producer.fullscreenVertexCountI32 != 3 || producer.hasVertexIndexSlices
     ) return false
     if (producer is W6InverseMaskPathRecipeV1.GeometryProducer.Empty) {
-        return expectedScissors.isEmpty() && native.commands.isEmpty()
+        return expectedScissors.isEmpty() && native.commands.isEmpty() &&
+            native.w6InverseMaskScanSpanPipelineWitnessV1 === GPUW6InverseMaskScanSpanPipelineWitnessV1.Empty
     }
     if (producer !is W6InverseMaskPathRecipeV1.GeometryProducer.NonEmpty || expectedScissors.isEmpty()) return false
+
+    val expectedPipelineWitness = native.w6InverseMaskScanSpanPipelineWitnessV1
+        as? GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty ?: return false
+    if (expectedPipelineWitness.vertexProgram != GPUW6InverseMaskScanSpanPipelineWitnessV1.VertexProgram.FullscreenTriangle ||
+        expectedPipelineWitness.stencil != GPUW6InverseMaskScanSpanPipelineWitnessV1.Stencil.ReplaceOne ||
+        expectedPipelineWitness.colorWrite != GPUW6InverseMaskScanSpanPipelineWitnessV1.ColorWrite.None ||
+        expectedPipelineWitness.bindingPolicy != GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
+    ) return false
 
     val commands = native.commands
     var commandIndexI32 = 0
@@ -126,7 +135,11 @@ private fun validatesW6InverseMaskScanSpanCommandStream(
     if (stencilReference.reference != 1u) return false
     val pipeline = (commands.getOrNull(commandIndexI32++) as? GPUPreparedNativeRenderCommand.SetPipeline)
         ?.pipeline ?: return false
-    if (pipeline.bindingPolicy != GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings) return false
+    if (pipeline.bindingPolicy != GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings ||
+        pipeline.w6InverseMaskScanSpanPipelineWitnessV1 !== expectedPipelineWitness ||
+        pipeline.pipeline !== expectedPipelineWitness.pipeline ||
+        pipeline.deviceGeneration != expectedPipelineWitness.deviceGeneration
+    ) return false
 
     expectedScissors.forEach { expected ->
         val scissor = commands.getOrNull(commandIndexI32++) as? GPUPreparedNativeRenderCommand.SetScissor

@@ -1949,7 +1949,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         val pass = graph.passes()[native.sourceStepIndex - 1]
                         native.pass.depthStencilTarget?.let { pathViews[native.sourceStepIndex] = it.view }
                         native.sourceStepIndex to GPUPreparedNativeScopeOperand.Render(native.sourceStepIndex, native.pass, native.commands,
-                            native.semanticPayloads, native.operandLayout, passSegment = native.passSegment, w6aPassV1 = pass)
+                            native.semanticPayloads, native.operandLayout, passSegment = native.passSegment, w6aPassV1 = pass,
+                            w6InverseMaskScanSpanPipelineWitnessV1 = native.w6InverseMaskScanSpanPipelineWitnessV1)
                     }
             }.toMap()
             graph.passes().forEachIndexed { ordinal, pass ->

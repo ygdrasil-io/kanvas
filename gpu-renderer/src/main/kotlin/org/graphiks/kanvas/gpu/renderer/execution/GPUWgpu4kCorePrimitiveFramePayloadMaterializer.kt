@@ -428,9 +428,14 @@ internal fun encodeW4eNativePasses(
     fun clearPipeline(coverage: Float) = clearPipelines.getOrPut(coverage) {
         createW4eClearPipeline(device, coverage, owned)
     }
-    fun scanSpanStencilPipeline(format: GPUTextureFormat) = scanSpanStencilPipelines.getOrPut(format) {
-        createW4eScanSpanStencilPipeline(device, format, owned)
-    }
+    fun scanSpanStencilPipelineWitness(format: GPUTextureFormat) =
+        GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty.fromW4eScanSpanStencilCreator(
+            scanSpanStencilPipelines.getOrPut(format) {
+                createW4eScanSpanStencilPipeline(device, format, owned)
+            },
+            generation,
+            format,
+        )
     fun frozenDepthStencilLoad(operation: org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1) = when (operation) {
         org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1.Clear -> GPUPreparedNativeLoadOperation.Clear
     }
@@ -902,6 +907,11 @@ internal fun encodeW4eNativePasses(
                         val semantic = requireNotNull(entry.packet.semanticPayload) {
                             "W4e scan-span producer requires its one frozen semantic packet payload."
                         }
+                        val pipelineWitness = if (scissors.isEmpty()) {
+                            GPUW6InverseMaskScanSpanPipelineWitnessV1.Empty
+                        } else {
+                            scanSpanStencilPipelineWitness(format)
+                        }
                         GPUPreparedNativeScopeOperand.Render(entry.index,
                             GPUPreparedNativeRenderPassConfig(
                                 colorTarget = if (sampleCount == 4) requireNotNull(sceneMsaa) else scene,
@@ -916,10 +926,10 @@ internal fun encodeW4eNativePasses(
                                 stencilStoreOperation = GPUPreparedNativeStoreOperation.Store,
                                 stencilReadOnly = false,
                             ), buildList {
-                                if (scissors.isNotEmpty()) {
+                                if (pipelineWitness is GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty) {
                                     add(GPUPreparedNativeRenderCommand.SetStencilReference(1u))
                                     add(GPUPreparedNativeRenderCommand.SetPipeline(
-                                        GPUPreparedNativeRenderPipelineOperand.noBindings(scanSpanStencilPipeline(format), generation),
+                                        GPUPreparedNativeRenderPipelineOperand.w6InverseMaskScanSpanProducer(pipelineWitness),
                                     ))
                                     scissors.forEach { scissor ->
                                         add(GPUPreparedNativeRenderCommand.SetScissor(
@@ -928,7 +938,8 @@ internal fun encodeW4eNativePasses(
                                         add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))
                                     }
                                 }
-                            }, listOf(semantic))
+                            }, semanticPayloads = listOf(semantic),
+                            w6InverseMaskScanSpanPipelineWitnessV1 = pipelineWitness)
                     } else {
                     val fillGeometry = when (val geometry = sealedPath.copyGeometry()) {
                         is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill -> geometry.valueF32
@@ -2188,7 +2199,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         old.storeOperation, if (clear) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null,
                         old.depthClearValue, old.depthLoadOperation, old.depthStoreOperation, old.depthReadOnly,
                         old.stencilClearValue, old.stencilLoadOperation, old.stencilStoreOperation, old.stencilReadOnly),
-                    operand.commands, operand.semanticPayloads, operand.operandLayout, operand.operationKind, operand.passSegment)
+                    operand.commands, operand.semanticPayloads, operand.operandLayout, operand.operationKind, operand.passSegment,
+                    w5bInitialClearV3 = operand.w5bInitialClearV3,
+                    w6aPassV1 = operand.w6aPassV1,
+                    w6InverseMaskScanSpanPipelineWitnessV1 = operand.w6InverseMaskScanSpanPipelineWitnessV1)
             } + drafts.last().payload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>()
             val byStep = operands.associateBy { it.sourceStepIndex }
             val keys = encoderPlan.scopes.map { GPUPreparedNativeScopeKey(it.sourceStepIndex, it.operationKind, it.resourceGenerationLabels, it.nativeOperandKeys) }

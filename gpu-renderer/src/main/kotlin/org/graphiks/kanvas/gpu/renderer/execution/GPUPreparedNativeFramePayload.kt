@@ -630,6 +630,39 @@ internal enum class GPUPreparedNativeRenderPipelineBindingPolicy {
     NoBindings,
 }
 
+/**
+ * Opaque authority created only alongside the dedicated W6 scan-span stencil pipeline.
+ *
+ * It stays outside the render-command stream so a different no-bindings pipeline cannot
+ * authenticate itself by merely carrying a compatible operand policy.
+ */
+internal sealed class GPUW6InverseMaskScanSpanPipelineWitnessV1 {
+    data object Empty : GPUW6InverseMaskScanSpanPipelineWitnessV1()
+
+    class NonEmpty private constructor(
+        internal val pipeline: GPURenderPipeline,
+        internal val deviceGeneration: GPUDeviceGenerationID,
+        internal val colorFormat: GPUTextureFormat,
+    ) : GPUW6InverseMaskScanSpanPipelineWitnessV1() {
+        internal val vertexProgram = VertexProgram.FullscreenTriangle
+        internal val stencil = Stencil.ReplaceOne
+        internal val colorWrite = ColorWrite.None
+        internal val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
+
+        companion object {
+            internal fun fromW4eScanSpanStencilCreator(
+                pipeline: GPURenderPipeline,
+                deviceGeneration: GPUDeviceGenerationID,
+                colorFormat: GPUTextureFormat,
+            ): NonEmpty = NonEmpty(pipeline, deviceGeneration, colorFormat)
+        }
+    }
+
+    internal enum class VertexProgram { FullscreenTriangle }
+    internal enum class Stencil { ReplaceOne }
+    internal enum class ColorWrite { None }
+}
+
 internal class GPUPreparedNativeRenderPipelineOperand private constructor(
     val pipeline: GPURenderPipeline,
     override val deviceGeneration: GPUDeviceGenerationID,
@@ -643,6 +676,9 @@ internal class GPUPreparedNativeRenderPipelineOperand private constructor(
     internal val hasPreparedTextAcquisitionAuthority: Boolean
         get() = bindingAuthority is
             GPUPreparedNativeRenderPipelineBindingAuthority.PreparedTextAcquired
+    internal val w6InverseMaskScanSpanPipelineWitnessV1: GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty?
+        get() = (bindingAuthority as? GPUPreparedNativeRenderPipelineBindingAuthority.W6InverseMaskScanSpanProducer)
+            ?.witness
 
     internal constructor(
         pipeline: GPURenderPipeline,
@@ -665,6 +701,15 @@ internal class GPUPreparedNativeRenderPipelineOperand private constructor(
             deviceGeneration,
             ownership,
             GPUPreparedNativeRenderPipelineBindingAuthority.NoBindings,
+        )
+
+        internal fun w6InverseMaskScanSpanProducer(
+            witness: GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty,
+        ) = GPUPreparedNativeRenderPipelineOperand(
+            witness.pipeline,
+            witness.deviceGeneration,
+            GPUPreparedNativeOperandOwnership.Borrowed,
+            GPUPreparedNativeRenderPipelineBindingAuthority.W6InverseMaskScanSpanProducer(witness),
         )
 
         internal fun fromCorePrimitiveAcquisition(
@@ -715,6 +760,12 @@ private sealed interface GPUPreparedNativeRenderPipelineBindingAuthority {
     }
 
     data object NoBindings : GPUPreparedNativeRenderPipelineBindingAuthority {
+        override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
+    }
+
+    class W6InverseMaskScanSpanProducer(
+        val witness: GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty,
+    ) : GPUPreparedNativeRenderPipelineBindingAuthority {
         override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
     }
 
@@ -1102,6 +1153,7 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         w5aSourceBindingsV2: List<GPUW5aNativeSourceBindingV2> = emptyList(),
         val w5bInitialClearV3: org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3? = null,
         val w6aPassV1: org.graphiks.kanvas.gpu.plan.PlanPass? = null,
+        val w6InverseMaskScanSpanPipelineWitnessV1: GPUW6InverseMaskScanSpanPipelineWitnessV1? = null,
     ) : GPUPreparedNativeScopeOperand {
         val commands = immutableList(commands)
         val semanticPayloads = immutableList(semanticPayloads)

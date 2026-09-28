@@ -453,6 +453,9 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                         commands = operand.commands,
                         semanticPayloads = operand.semanticPayloads,
                         operandLayout = operand.operandLayout,
+                        w5bInitialClearV3 = operand.w5bInitialClearV3,
+                        w6aPassV1 = operand.w6aPassV1,
+                        w6InverseMaskScanSpanPipelineWitnessV1 = operand.w6InverseMaskScanSpanPipelineWitnessV1,
                     )
                 }
             }
