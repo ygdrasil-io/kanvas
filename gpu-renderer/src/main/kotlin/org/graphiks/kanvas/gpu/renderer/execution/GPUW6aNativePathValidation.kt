@@ -23,20 +23,21 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
                 val spans = requireNotNull(w4e.scanSpansDeviceI32)
                 val proxy = pass as? PlanPass.StencilGeometryProducerV3 ?: return false
                 val expected = proxy.scanScissorsLocalI32?.copyScissorsI32() ?: return false
-                val recipe = runCatching { physical.w6InverseMaskPathRecipe(proxy.id) }.getOrNull() ?: return false
+                val recipe = inverseMaskPathRecipesByNativePassId[w4e.id]
+                    as? W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans ?: return false
                 if (proxy.scanSpansDeviceI32 !== spans ||
                     expected.size != spans.spanCountI32 ||
-                    recipe.producer.ownerPassId != proxy.id || recipe.producer.target.id != proxy.target ||
-                    recipe.producer.depthStencil.id != proxy.depthStencil ||
-                    recipe.producer.copyDomainDeviceI32() != spans.copyDomainI32() ||
-                    recipe.producer.copyScissorsLocalI32() != expected ||
-                    recipe.producer.drawCountI32 != spans.spanCountI32 || recipe.producer.hasVertexIndexSlices ||
-                    (recipe.producer is W6InverseMaskPathRecipeV1.GeometryProducer.NonEmpty) != (spans.spanCountI32 > 0) ||
+                    recipe.ownerPassId != w4e.id || recipe.target.id != proxy.target ||
+                    recipe.depthStencil.id != proxy.depthStencil ||
+                    recipe.copyDomainDeviceI32() != spans.copyDomainI32() ||
+                    recipe.copyScissorsLocalI32() != expected ||
+                    recipe.drawCountI32 != spans.spanCountI32 || recipe.hasVertexIndexSlices ||
+                    (recipe is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.NonEmpty) != (spans.spanCountI32 > 0) ||
                     native.semanticPayloads.singleOrNull() !is GPUDrawSemanticPayload.PathStencilProducer
                 ) return false
                 val evidence = runCatching { preparedNativeScanSpanEvidence(native) }.getOrNull() ?: return false
                 if (!validatesW6InverseMaskScanSpanCommandStream(native, recipe, expected) ||
-                    evidence.size != recipe.producer.drawCountI32
+                    evidence.size != recipe.drawCountI32
                 ) return false
             }
             val depthId = when (w4e) {
@@ -107,23 +108,22 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
  */
 private fun validatesW6InverseMaskScanSpanCommandStream(
     native: GPUPreparedNativeScopeOperand.Render,
-    recipe: W6InverseMaskPathRecipeV1,
+    producer: W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans,
     expectedScissors: List<org.graphiks.math.geometry.RectI32>,
 ): Boolean {
-    val producer = recipe.producer
     if (producer.pipeline != W6InverseMaskPathProducerPipelineV1.FullscreenNoBindings ||
         producer.stencil != W6InverseMaskPathProducerStencilV1.ClearZeroReplaceOne ||
         producer.fullscreenVertexCountI32 != 3 || producer.hasVertexIndexSlices
     ) return false
-    if (producer is W6InverseMaskPathRecipeV1.GeometryProducer.Empty) {
+    if (producer is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.Empty) {
         return expectedScissors.isEmpty() && native.commands.isEmpty() &&
             native.w6InverseMaskScanSpanPipelineWitnessV1 === GPUW6InverseMaskScanSpanPipelineWitnessV1.Empty
     }
-    if (producer !is W6InverseMaskPathRecipeV1.GeometryProducer.NonEmpty || expectedScissors.isEmpty()) return false
+    if (producer !is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.NonEmpty || expectedScissors.isEmpty()) return false
 
     val expectedPipelineWitness = native.w6InverseMaskScanSpanPipelineWitnessV1
         as? GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty ?: return false
-    val expectedColorFormat = when (val format = recipe.producer.target.format) {
+    val expectedColorFormat = when (val format = producer.target.format) {
         PlanTextureFormat.CoverageMask -> GPUTextureFormat.RGBA8Unorm
         is PlanTextureFormat.Color -> when (format.value) {
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> GPUTextureFormat.RGBA8UnormSrgb

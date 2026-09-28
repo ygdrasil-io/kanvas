@@ -182,29 +182,67 @@ private fun preflightW4eClipMaskInitializes(
                 val proxy = requireNotNull(render.w6aPassV1 as? PlanPass.StencilGeometryProducerV3)
                 val sealedPath = requireNotNull(render.drawPackets.single().w4ePreparedPath)
                 val spans = requireNotNull(bound.scanSpansDeviceI32)
-                val recipe = frame.physical.w6InverseMaskPathRecipe(proxy.id)
+                val recipe = frame.inverseMaskPathRecipesByNativePassId.getValue(bound.id)
+                    as? W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans
+                    ?: error("W6 scan-span producer lacks its native-site recipe.")
                 require(proxy.scanSpansDeviceI32 === bound.scanSpansDeviceI32 &&
                     proxy.scanScissorsLocalI32?.copyOriginDeviceI32() == sealedPath.scanScissorsLocalI32?.copyOriginDeviceI32() &&
                     proxy.scanScissorsLocalI32?.copyDomainI32() == sealedPath.scanScissorsLocalI32?.copyDomainI32() &&
                     proxy.scanScissorsLocalI32?.copyScissorsI32() == sealedPath.scanScissorsLocalI32?.copyScissorsI32() &&
-                    recipe.producer.ownerPassId == proxy.id && recipe.producer.target.id == proxy.target &&
-                    recipe.producer.depthStencil.id == proxy.depthStencil &&
-                    recipe.producer.copyDomainDeviceI32() == spans.copyDomainI32() &&
-                    recipe.producer.copyOriginDeviceI32() == sealedPath.scanScissorsLocalI32?.copyOriginDeviceI32() &&
-                    recipe.producer.copyDomainLocalI32() == sealedPath.scanScissorsLocalI32?.copyDomainI32() &&
-                    recipe.producer.copyScissorsLocalI32() == sealedPath.scanScissorsLocalI32?.copyScissorsI32() &&
-                    recipe.producer.drawCountI32 == spans.spanCountI32 &&
-                    !recipe.producer.hasVertexIndexSlices &&
-                    (recipe.producer is W6InverseMaskPathRecipeV1.GeometryProducer.NonEmpty) ==
+                    recipe.ownerPassId == bound.id && recipe.target.id == proxy.target &&
+                    recipe.depthStencil.id == proxy.depthStencil &&
+                    recipe.copyDomainDeviceI32() == spans.copyDomainI32() &&
+                    recipe.copyOriginDeviceI32() == sealedPath.scanScissorsLocalI32?.copyOriginDeviceI32() &&
+                    recipe.copyDomainLocalI32() == sealedPath.scanScissorsLocalI32?.copyDomainI32() &&
+                    recipe.copyScissorsLocalI32() == sealedPath.scanScissorsLocalI32?.copyScissorsI32() &&
+                    recipe.drawCountI32 == spans.spanCountI32 &&
+                    !recipe.hasVertexIndexSlices &&
+                    (recipe is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.NonEmpty) ==
                         (spans.spanCountI32 > 0)) {
                     "W6 scan-span packet lost the sealed proxy rebase before native allocation."
                 }
                 val coverRender = framePlan.steps.getOrNull(index + 1) as? GPUFrameStep.RenderPassStep
                 val cover = coverRender?.w6aPassV1 as? PlanPass.StencilCover
-                require(cover?.id == recipe.cover.ownerPassId && cover.target == proxy.target &&
-                    cover.depthStencil == proxy.depthStencil &&
-                    recipe.cover.copyScissorLocalI32() == cover.draw.copyScissorI32()) {
+                val coverNative = cover?.let { binding.nativePass(it.id) }
+                val coverRecipe = coverNative?.let { frame.inverseMaskPathRecipesByNativePassId[it.id] }
+                    as? W6InverseMaskPathRecipeV1.GeometryCover
+                require(cover != null && coverNative is PlanPass.PathRenderPass && coverRecipe != null && coverRecipe.target.id == proxy.target &&
+                    coverRecipe.depthStencil.id == proxy.depthStencil &&
+                    coverRecipe.copyDomainI32() == coverNative.draw.copyScissorI32()) {
                     "W6 inverse scan-span recipe lost its distinct cover before native allocation."
+                }
+            }
+            if (bound is PlanPass.PathRenderPass) {
+                when (val inverseRecipe = frame.inverseMaskPathRecipesByNativePassId[bound.id]) {
+                    is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> {
+                        val proxy = render.w6aPassV1 as? PlanPass.StencilGeometryProducerV3
+                        require(proxy != null && proxy.target == inverseRecipe.target.id &&
+                            proxy.depthStencil == inverseRecipe.depthStencil.id &&
+                            inverseRecipe.ownerPassId == bound.id && inverseRecipe.packetOrdinalI32 == bound.ordinal &&
+                            inverseRecipe.geometrySlice.purpose == W4eNativePayloadPlan.STENCIL_PRODUCER) {
+                            "W6 inverse fan producer diverged from its native-site recipe before allocation."
+                        }
+                    }
+                    is W6InverseMaskPathRecipeV1.GeometryCover -> {
+                        val proxy = render.w6aPassV1 as? PlanPass.StencilCover
+                        require(proxy != null && proxy.target == inverseRecipe.target.id &&
+                            proxy.depthStencil == inverseRecipe.depthStencil.id && inverseRecipe.ownerPassId == bound.id &&
+                            inverseRecipe.packetOrdinalI32 == bound.ordinal && inverseRecipe.uniformSlice.byteSize == 32L &&
+                            inverseRecipe.groupZeroAbi == W6InverseMaskPathGroupZeroAbiV1.MaskTextureThenConsumerUniform) {
+                            "W6 inverse Geometry cover diverged from its native-site recipe before allocation."
+                        }
+                    }
+                    is W6InverseMaskPathRecipeV1.ZeroCover -> {
+                        require(render.w6aPassV1 is PlanPass.RenderPass && bound.depthStencil == null &&
+                            inverseRecipe.ownerPassId == bound.id && inverseRecipe.packetOrdinalI32 == bound.ordinal &&
+                            inverseRecipe.uniformSlice.byteSize == 32L &&
+                            inverseRecipe.groupZeroAbi == W6InverseMaskPathGroupZeroAbiV1.MaskTextureThenConsumerUniform) {
+                            "W6 InverseMask.Zero cover diverged from its native-site recipe before allocation."
+                        }
+                    }
+                    is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans,
+                    null,
+                    -> Unit
                 }
             }
             GPUW4eNativePassEntry(index, render, render.drawPackets.single())
@@ -1930,6 +1968,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val clipMaskProducerStencilCoverRecipes = preflight.producerStencilCoverRecipesByPassId
                 val clipMaskFoldRecipes = preflight.foldRecipesByPassId
                 val extent = binding.copyExtentI32()
+                val inverseMaskPathRecipes = binding.nativePasses().filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { pass ->
+                    frame.inverseMaskPathRecipesByNativePassId[pass.id]?.let { pass.id.value to it }
+                }.toMap()
                 val childOwned = owned.own(GPUW4eNativeOwnedHandles())
                 encodeW4eNativePasses(device, generation, entries, payload, buffer(payload.vertexResourceId),
                     buffer(payload.indexResourceId), buffer(payload.uniformResourceId), childOwned,
@@ -1944,7 +1985,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     clipMaskProducerStencilEdgeRecipesByPassId = clipMaskProducerStencilEdgeRecipes,
                     clipMaskProducerStencilCoverRecipesByPassId = clipMaskProducerStencilCoverRecipes,
                     clipMaskFoldRecipesByPassId = clipMaskFoldRecipes,
-                    pathRenderDirectColorsByPassId = w6PathRenderDirectColors)
+                    pathRenderDirectColorsByPassId = w6PathRenderDirectColors,
+                    inverseMaskPathRecipesByPassId = inverseMaskPathRecipes)
                     .map { native ->
                         val pass = graph.passes()[native.sourceStepIndex - 1]
                         native.pass.depthStencilTarget?.let { pathViews[native.sourceStepIndex] = it.view }

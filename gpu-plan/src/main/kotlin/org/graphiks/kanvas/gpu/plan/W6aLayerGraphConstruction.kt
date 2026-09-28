@@ -3284,7 +3284,7 @@ internal class W6aLayerGraphConstruction(
         val clipMaskProducerDirectTriangleRecipes = freezeW4eClipMaskProducerDirectTriangleRecipesV1(finalW4eBindings, resources + source.resources)
         val clipMaskProducerStencilEdgeRecipes = freezeW4eClipMaskProducerStencilEdgeRecipesV1(finalW4eBindings, resources + source.resources)
         val pathRenderDirectColorRecipes = freezeW6PathRenderDirectColorRecipesV1(finalW4eBindings, resources + source.resources)
-        val inverseMaskPathRecipes = freezeW6InverseMaskPathRecipesV1(passes, resources + source.resources)
+        val inverseMaskPathRecipes = freezeW6InverseMaskPathRecipesV1(w4eBindings, resources + source.resources)
         val clipMaskFoldRecipes = freezeW4eClipMaskFoldRecipesV1(finalW4eBindings, resources + source.resources)
         val w6bCoverageRasterGeometry = freezeW6bCoverageRasterGeometryV1(passes, resources + source.resources, caps)
         val w6bCoverageRasterHostRecipes = freezeW6bCoverageRasterHostsV1(passes, resources + source.resources, w6bCoverageRasterGeometry)

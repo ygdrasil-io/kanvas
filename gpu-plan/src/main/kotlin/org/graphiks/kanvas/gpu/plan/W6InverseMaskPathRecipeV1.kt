@@ -1,63 +1,54 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.math.geometry.FillRule
+import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectI32
 
-/** The sealed native producer form for an inverse Geometry path with integer scan spans. */
-public enum class W6InverseMaskPathProducerPipelineV1 { FullscreenNoBindings }
-public enum class W6InverseMaskPathProducerStencilV1 { ClearZeroReplaceOne }
-public enum class W6InverseMaskPathCoverStencilV1 { TestZero }
+/** The final W4e native site is either the finite inverse interior or its color cover. */
+public enum class W6InverseMaskPathPredicateV1 { Geometry, Zero }
+public enum class W6InverseMaskPathProducerPipelineV1 { FullscreenNoBindings, FanGeometry }
+public enum class W6InverseMaskPathProducerStencilV1 { ClearZeroReplaceOne, ClearZeroWinding, ClearZeroEvenOdd }
+public enum class W6InverseMaskPathCoverStencilV1 { TestZeroKeep }
+public enum class W6InverseMaskPathGroupZeroAbiV1 { NoBindings, MaskTextureThenConsumerUniform }
 
-/**
- * Final physical recipe for one W6 inverse-mask scan-span pair.  It intentionally freezes
- * a producer and cover as distinct owners: the producer may be Empty while the cover remains
- * the normal fullscreen inverse-mask consumer.
- */
-public class W6InverseMaskPathRecipeV1 internal constructor(
-    public val producer: GeometryProducer,
-    public val cover: GeometryCover,
+/** One physical native W4e site; W6 IDs prove binding but never select the pipeline. */
+public sealed class W6InverseMaskPathRecipeV1 protected constructor(
+    public val ownerPassId: PlanPassId,
+    public val packetOrdinalI32: Int,
+    public val predicate: W6InverseMaskPathPredicateV1,
+    public val target: W4eClipMaskProducerPhysicalOperandV1,
+    public val load: AttachmentLoadPlan,
+    public val store: AttachmentStorePlan,
+    public val blend: BlendPlan,
 ) {
+    public val owner: NativeSiteOwnerV1 get() = NativeSiteOwnerV1(ownerPassId, packetOrdinalI32, 0)
+    init {
+        require(packetOrdinalI32 >= 0 && target.sampleCountI32 == 1 &&
+            PlanResourceUsage.RenderAttachment in target.usages())
+    }
+
     public sealed class GeometryProducer protected constructor(
-        public val ownerPassId: PlanPassId,
-        public val packetOrdinalI32: Int,
-        public val target: W4eClipMaskProducerPhysicalOperandV1,
+        ownerPassId: PlanPassId,
+        packetOrdinalI32: Int,
+        target: W4eClipMaskProducerPhysicalOperandV1,
         public val depthStencil: W4eClipMaskProducerPhysicalOperandV1,
-        originDeviceI32: Point2I32,
-        domainDeviceI32: RectI32,
-        domainLocalI32: RectI32,
-        scissorsLocalI32: List<RectI32>,
-        public val drawCountI32: Int,
-    ) {
-        private val originSnapshotI32 = Point2I32(originDeviceI32.x, originDeviceI32.y)
-        private val deviceDomainSnapshotI32 = domainDeviceI32.copy()
-        private val localDomainSnapshotI32 = domainLocalI32.copy()
-        private val scissorsSnapshotI32 = java.util.Collections.unmodifiableList(scissorsLocalI32.map { it.copy() })
-
-        public fun copyOriginDeviceI32(): Point2I32 = Point2I32(originSnapshotI32.x, originSnapshotI32.y)
-        public fun copyDomainDeviceI32(): RectI32 = deviceDomainSnapshotI32.copy()
-        public fun copyDomainLocalI32(): RectI32 = localDomainSnapshotI32.copy()
-        public fun copyScissorsLocalI32(): List<RectI32> = scissorsSnapshotI32.map { it.copy() }
-
+        public val vertex: W4eClipMaskProducerPhysicalOperandV1?,
+        public val index: W4eClipMaskProducerPhysicalOperandV1?,
+        load: AttachmentLoadPlan,
+        store: AttachmentStorePlan,
+        public val stencil: W6InverseMaskPathProducerStencilV1,
+        public val pipeline: W6InverseMaskPathProducerPipelineV1,
+    ) : W6InverseMaskPathRecipeV1(ownerPassId, packetOrdinalI32, W6InverseMaskPathPredicateV1.Geometry,
+        target, load, store, BlendPlan.LegacySrcOverV1) {
         init {
-            require(packetOrdinalI32 >= 0 && drawCountI32 >= 0) { "W6 inverse scan-span producer needs a non-negative owner ordinal and draw count." }
-            require(target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages()) {
-                "W6 inverse scan-span producer target must be a single-sample render attachment."
-            }
             require(depthStencil.role == PlanResourceRole.DepthStencil &&
                 depthStencil.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
-                depthStencil.sampleCountI32 == 1 && PlanResourceUsage.DepthStencilAttachment in depthStencil.usages()) {
-                "W6 inverse scan-span producer must use a single-sample D24S8 render attachment."
-            }
-            require(!localDomainSnapshotI32.isEmpty) { "W6 inverse scan-span local domain must be non-empty." }
-            require(scissorsSnapshotI32.size == drawCountI32) { "W6 inverse scan-span draw count must equal its scissor count." }
-            require(scissorsSnapshotI32.all { scissor ->
-                !scissor.isEmpty && scissor.height64() == 1L &&
-                    scissor.left >= localDomainSnapshotI32.left && scissor.top >= localDomainSnapshotI32.top &&
-                    scissor.right <= localDomainSnapshotI32.right && scissor.bottom <= localDomainSnapshotI32.bottom
-            }) { "W6 inverse scan-span scissors must be ordered unit rows inside the sealed local domain." }
+                depthStencil.sampleCountI32 == 1 && PlanResourceUsage.DepthStencilAttachment in depthStencil.usages())
+            require(target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
         }
 
-        public class NonEmpty internal constructor(
+        public sealed class ScanSpans protected constructor(
             ownerPassId: PlanPassId,
             packetOrdinalI32: Int,
             target: W4eClipMaskProducerPhysicalOperandV1,
@@ -66,135 +57,210 @@ public class W6InverseMaskPathRecipeV1 internal constructor(
             domainDeviceI32: RectI32,
             domainLocalI32: RectI32,
             scissorsLocalI32: List<RectI32>,
-        ) : GeometryProducer(
-            ownerPassId, packetOrdinalI32, target, depthStencil, originDeviceI32, domainDeviceI32,
-            domainLocalI32, scissorsLocalI32, scissorsLocalI32.size,
-        ) {
-            init { require(drawCountI32 > 0) { "NonEmpty W6 inverse scan-span producer must draw at least one row." } }
+        ) : GeometryProducer(ownerPassId, packetOrdinalI32, target, depthStencil, null, null,
+            AttachmentLoadPlan.Load, AttachmentStorePlan.Store,
+            W6InverseMaskPathProducerStencilV1.ClearZeroReplaceOne,
+            W6InverseMaskPathProducerPipelineV1.FullscreenNoBindings) {
+            private val origin = Point2I32(originDeviceI32.x, originDeviceI32.y)
+            private val deviceDomain = domainDeviceI32.copy()
+            private val localDomain = domainLocalI32.copy()
+            private val scissors = java.util.Collections.unmodifiableList(scissorsLocalI32.map { it.copy() })
+            public fun copyOriginDeviceI32(): Point2I32 = Point2I32(origin.x, origin.y)
+            public fun copyDomainDeviceI32(): RectI32 = deviceDomain.copy()
+            public fun copyDomainLocalI32(): RectI32 = localDomain.copy()
+            public fun copyScissorsLocalI32(): List<RectI32> = scissors.map { it.copy() }
+            public val drawCountI32: Int get() = scissors.size
+            public val fullscreenVertexCountI32: Int = 3
+            public val hasVertexIndexSlices: Boolean = false
+            init {
+                require(!localDomain.isEmpty && scissors.all { value -> !value.isEmpty && value.height64() == 1L &&
+                    value.left >= localDomain.left && value.top >= localDomain.top &&
+                    value.right <= localDomain.right && value.bottom <= localDomain.bottom })
+            }
+
+            public class NonEmpty internal constructor(
+                ownerPassId: PlanPassId, packetOrdinalI32: Int, target: W4eClipMaskProducerPhysicalOperandV1,
+                depthStencil: W4eClipMaskProducerPhysicalOperandV1, originDeviceI32: Point2I32,
+                domainDeviceI32: RectI32, domainLocalI32: RectI32, scissorsLocalI32: List<RectI32>,
+            ) : ScanSpans(ownerPassId, packetOrdinalI32, target, depthStencil, originDeviceI32, domainDeviceI32,
+                domainLocalI32, scissorsLocalI32) { init { require(drawCountI32 > 0) } }
+
+            public class Empty internal constructor(
+                ownerPassId: PlanPassId, packetOrdinalI32: Int, target: W4eClipMaskProducerPhysicalOperandV1,
+                depthStencil: W4eClipMaskProducerPhysicalOperandV1, originDeviceI32: Point2I32,
+                domainDeviceI32: RectI32, domainLocalI32: RectI32,
+            ) : ScanSpans(ownerPassId, packetOrdinalI32, target, depthStencil, originDeviceI32, domainDeviceI32,
+                domainLocalI32, emptyList())
         }
 
-        public class Empty internal constructor(
-            ownerPassId: PlanPassId,
-            packetOrdinalI32: Int,
-            target: W4eClipMaskProducerPhysicalOperandV1,
-            depthStencil: W4eClipMaskProducerPhysicalOperandV1,
-            originDeviceI32: Point2I32,
-            domainDeviceI32: RectI32,
-            domainLocalI32: RectI32,
-        ) : GeometryProducer(
-            ownerPassId, packetOrdinalI32, target, depthStencil, originDeviceI32, domainDeviceI32,
-            domainLocalI32, emptyList(), 0,
-        )
-
-        public val pipeline: W6InverseMaskPathProducerPipelineV1 = W6InverseMaskPathProducerPipelineV1.FullscreenNoBindings
-        public val stencil: W6InverseMaskPathProducerStencilV1 = W6InverseMaskPathProducerStencilV1.ClearZeroReplaceOne
-        public val fullscreenVertexCountI32: Int = 3
-        public val hasVertexIndexSlices: Boolean = false
-    }
-
-    public class GeometryCover internal constructor(
-        public val ownerPassId: PlanPassId,
-        public val packetOrdinalI32: Int,
-        public val target: W4eClipMaskProducerPhysicalOperandV1,
-        public val depthStencil: W4eClipMaskProducerPhysicalOperandV1,
-        scissorLocalI32: RectI32,
-    ) {
-        private val scissorSnapshotI32 = scissorLocalI32.copy()
-        public val stencil: W6InverseMaskPathCoverStencilV1 = W6InverseMaskPathCoverStencilV1.TestZero
-        public val fullscreenVertexCountI32: Int = 3
-
-        public fun copyScissorLocalI32(): RectI32 = scissorSnapshotI32.copy()
-
-        init {
-            require(packetOrdinalI32 >= 0 && !scissorSnapshotI32.isEmpty) { "W6 inverse scan-span cover must have an owner and non-empty scissor." }
-            require(target.sampleCountI32 == 1 && target.id != depthStencil.id) { "W6 inverse scan-span cover target must differ from D24S8." }
-            require(depthStencil.role == PlanResourceRole.DepthStencil &&
-                depthStencil.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
-                depthStencil.sampleCountI32 == 1 && PlanResourceUsage.DepthStencilAttachment in depthStencil.usages()) {
-                "W6 inverse scan-span cover must use single-sample D24S8."
+        public class Fan internal constructor(
+            ownerPassId: PlanPassId, packetOrdinalI32: Int, target: W4eClipMaskProducerPhysicalOperandV1,
+            depthStencil: W4eClipMaskProducerPhysicalOperandV1, vertex: W4eClipMaskProducerPhysicalOperandV1,
+            index: W4eClipMaskProducerPhysicalOperandV1, public val geometrySlice: W4eNativeGeometrySlice,
+            public val fillRule: FillRule, scissorI32: RectI32, load: AttachmentLoadPlan, store: AttachmentStorePlan,
+        ) : GeometryProducer(ownerPassId, packetOrdinalI32, target, depthStencil, vertex, index, load, store,
+            if (fillRule in setOf(FillRule.EVEN_ODD, FillRule.INVERSE_EVEN_ODD))
+                W6InverseMaskPathProducerStencilV1.ClearZeroEvenOdd else W6InverseMaskPathProducerStencilV1.ClearZeroWinding,
+            W6InverseMaskPathProducerPipelineV1.FanGeometry) {
+            private val scissor = scissorI32.copy()
+            public fun copyScissorI32(): RectI32 = scissor.copy()
+            init {
+                require(geometrySlice.purpose == W4eNativePayloadPlan.STENCIL_PRODUCER && !scissor.isEmpty)
+                require(vertex.role == PlanResourceRole.VertexData && PlanResourceUsage.Vertex in vertex.usages())
+                require(index.role == PlanResourceRole.IndexData && PlanResourceUsage.Index in index.usages())
             }
         }
     }
 
-    init {
-        require(producer.ownerPassId != cover.ownerPassId && producer.target.id == cover.target.id &&
-            producer.depthStencil.id == cover.depthStencil.id) {
-            "W6 inverse scan-span producer and cover must be distinct owners over the same target and D24S8."
+    public class GeometryCover internal constructor(
+        ownerPassId: PlanPassId, packetOrdinalI32: Int, target: W4eClipMaskProducerPhysicalOperandV1,
+        public val depthStencil: W4eClipMaskProducerPhysicalOperandV1, public val mask: W4eClipMaskProducerPhysicalOperandV1,
+        public val uniform: W4eClipMaskProducerPhysicalOperandV1, public val uniformSlice: W4eNativeUniformSlice,
+        domainI32: RectI32, load: AttachmentLoadPlan, store: AttachmentStorePlan, blend: BlendPlan,
+    ) : W6InverseMaskPathRecipeV1(ownerPassId, packetOrdinalI32, W6InverseMaskPathPredicateV1.Geometry,
+        target, load, store, blend) {
+        private val domain = domainI32.copy()
+        public val stencil: W6InverseMaskPathCoverStencilV1 = W6InverseMaskPathCoverStencilV1.TestZeroKeep
+        public val groupZeroAbi: W6InverseMaskPathGroupZeroAbiV1 = W6InverseMaskPathGroupZeroAbiV1.MaskTextureThenConsumerUniform
+        public val fullscreenVertexCountI32: Int = 3
+        public fun copyDomainI32(): RectI32 = domain.copy()
+        init {
+            require(!domain.isEmpty && uniformSlice.purpose == W4eNativePayloadPlan.STENCIL_COVER_UNIFORM &&
+                uniformSlice.byteSize == 32L && mask.format == PlanTextureFormat.CoverageMask &&
+                PlanResourceUsage.Sampled in mask.usages() && uniform.role == PlanResourceRole.UniformData &&
+                PlanResourceUsage.Uniform in uniform.usages() && depthStencil.role == PlanResourceRole.DepthStencil &&
+                depthStencil.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                PlanResourceUsage.DepthStencilAttachment in depthStencil.usages())
+        }
+    }
+
+    public class ZeroCover internal constructor(
+        ownerPassId: PlanPassId, packetOrdinalI32: Int, target: W4eClipMaskProducerPhysicalOperandV1,
+        public val mask: W4eClipMaskProducerPhysicalOperandV1, public val uniform: W4eClipMaskProducerPhysicalOperandV1,
+        public val uniformSlice: W4eNativeUniformSlice, domainI32: RectI32, load: AttachmentLoadPlan,
+        store: AttachmentStorePlan, blend: BlendPlan,
+    ) : W6InverseMaskPathRecipeV1(ownerPassId, packetOrdinalI32, W6InverseMaskPathPredicateV1.Zero,
+        target, load, store, blend) {
+        private val domain = domainI32.copy()
+        public val groupZeroAbi: W6InverseMaskPathGroupZeroAbiV1 = W6InverseMaskPathGroupZeroAbiV1.MaskTextureThenConsumerUniform
+        public val fullscreenVertexCountI32: Int = 3
+        public fun copyDomainI32(): RectI32 = domain.copy()
+        init {
+            require(!domain.isEmpty && uniformSlice.purpose == W4eNativePayloadPlan.CONSUMER_UNIFORM &&
+                uniformSlice.byteSize == 32L && mask.format == PlanTextureFormat.CoverageMask &&
+                PlanResourceUsage.Sampled in mask.usages() && uniform.role == PlanResourceRole.UniformData &&
+                PlanResourceUsage.Uniform in uniform.usages())
         }
     }
 }
 
-/** Versioned catalog entry for the entire producer/cover pair. */
-public class W6InverseMaskPathNativeSiteRecipeV1 internal constructor(
-    public val host: W6InverseMaskPathRecipeV1,
-) : NativeSiteRecipeV1 {
+/** One catalog entry per native W4e path pass, never one wrapper for a W6 proxy pair. */
+public class W6InverseMaskPathNativeSiteRecipeV1 internal constructor(public val host: W6InverseMaskPathRecipeV1) : NativeSiteRecipeV1 {
     override val versionI32: Int = 1
-    override val owner: NativeSiteOwnerV1 = NativeSiteOwnerV1(
-        host.producer.ownerPassId, host.producer.packetOrdinalI32, 0,
-    )
-    override val family: NativeSiteRecipeFamilyV1 = NativeSiteRecipeFamilyV1.W6InverseMaskPath
+    override val owner: NativeSiteOwnerV1 = host.owner
+    override val family: NativeSiteRecipeFamilyV1 = when (host) {
+        is W6InverseMaskPathRecipeV1.GeometryProducer -> NativeSiteRecipeFamilyV1.W6InverseMaskGeometryProducer
+        is W6InverseMaskPathRecipeV1.GeometryCover -> NativeSiteRecipeFamilyV1.W6InverseMaskGeometryCover
+        is W6InverseMaskPathRecipeV1.ZeroCover -> NativeSiteRecipeFamilyV1.W6InverseMaskZeroCover
+    }
     override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
         fun operand(prefix: String, value: W4eClipMaskProducerPhysicalOperandV1) {
             text("$prefix.id", value.id.value); enum("$prefix.role", value.role); text("$prefix.format", value.format.toString())
             value.copyExtentI32()?.let { extent -> int("$prefix.width", extent.width); int("$prefix.height", extent.height) }
             int("$prefix.samples", value.sampleCountI32); long("$prefix.bytes", value.byteSizeI64); enum("$prefix.lifetime", value.lifetime)
-            value.usages().sortedBy { it.name }.forEachIndexed { indexI32, usage -> enum("$prefix.usage.$indexI32", usage) }
+            value.usages().sortedBy { it.name }.forEachIndexed { index, usage -> enum("$prefix.usage.$index", usage) }
         }
-        val producer = host.producer
-        text("producer.owner", producer.ownerPassId.value); int("producer.packet", producer.packetOrdinalI32)
-        text("producer.kind", producer::class.simpleName ?: "unknown")
-        operand("producer.target", producer.target); operand("producer.depth", producer.depthStencil)
-        point("producer.origin", producer.copyOriginDeviceI32()); rect("producer.domain-device", producer.copyDomainDeviceI32())
-        rect("producer.domain-local", producer.copyDomainLocalI32()); int("producer.draw-count", producer.drawCountI32)
-        producer.copyScissorsLocalI32().forEachIndexed { indexI32, scissor -> rect("producer.scissor.$indexI32", scissor) }
-        enum("producer.pipeline", producer.pipeline); enum("producer.stencil", producer.stencil)
-        int("producer.vertices", producer.fullscreenVertexCountI32); int("producer.has-vi", if (producer.hasVertexIndexSlices) 1 else 0)
-        val cover = host.cover
-        text("cover.owner", cover.ownerPassId.value); int("cover.packet", cover.packetOrdinalI32)
-        operand("cover.target", cover.target); operand("cover.depth", cover.depthStencil); rect("cover.scissor", cover.copyScissorLocalI32())
-        enum("cover.stencil", cover.stencil); int("cover.vertices", cover.fullscreenVertexCountI32)
+        text("owner", host.ownerPassId.value); int("packet", host.packetOrdinalI32); enum("predicate", host.predicate)
+        operand("target", host.target); enum("load", host.load); enum("store", host.store); blend("blend", host.blend)
+        when (host) {
+            is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans -> {
+                operand("depth", host.depthStencil); enum("pipeline", host.pipeline); enum("stencil", host.stencil)
+                point("origin", host.copyOriginDeviceI32()); rect("domain.device", host.copyDomainDeviceI32()); rect("domain.local", host.copyDomainLocalI32())
+                int("draw.count", host.drawCountI32); int("vertices", host.fullscreenVertexCountI32); int("has-vi", 0)
+                host.copyScissorsLocalI32().forEachIndexed { index, scissor -> rect("scissor.$index", scissor) }
+            }
+            is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> {
+                operand("depth", host.depthStencil); operand("vertex", requireNotNull(host.vertex)); operand("index", requireNotNull(host.index))
+                enum("pipeline", host.pipeline); enum("stencil", host.stencil); enum("fill", host.fillRule); rect("scissor", host.copyScissorI32())
+                int("vertex.first", host.geometrySlice.baseVertex); int("vertex.count", host.geometrySlice.vertexCount)
+                int("index.first", host.geometrySlice.firstIndex); int("index.count", host.geometrySlice.indexCount); int("max-index", host.geometrySlice.maxLocalIndex)
+            }
+            is W6InverseMaskPathRecipeV1.GeometryCover -> {
+                operand("depth", host.depthStencil); operand("mask", host.mask); operand("uniform", host.uniform); rect("domain", host.copyDomainI32())
+                long("uniform.offset", host.uniformSlice.offsetBytes); long("uniform.bytes", host.uniformSlice.byteSize)
+                enum("abi", host.groupZeroAbi); enum("stencil", host.stencil); int("vertices", host.fullscreenVertexCountI32)
+            }
+            is W6InverseMaskPathRecipeV1.ZeroCover -> {
+                operand("mask", host.mask); operand("uniform", host.uniform); rect("domain", host.copyDomainI32())
+                long("uniform.offset", host.uniformSlice.offsetBytes); long("uniform.bytes", host.uniformSlice.byteSize)
+                enum("abi", host.groupZeroAbi); int("vertices", host.fullscreenVertexCountI32); text("depth.present", "false"); text("vi.present", "false")
+            }
+        }
     }
 }
 
-private fun scanSpanPhysicalOperandV1(row: PlanResource): W4eClipMaskProducerPhysicalOperandV1 =
-    W4eClipMaskProducerPhysicalOperandV1(
-        row.id, row.role, row.format, row.copyExtent(), row.sampleCountI32, row.byteSize, row.lifetime, row.usages(),
-    )
+private fun inverseMaskOperandV1(row: PlanResource): W4eClipMaskProducerPhysicalOperandV1 =
+    W4eClipMaskProducerPhysicalOperandV1(row.id, row.role, row.format, row.copyExtent(), row.sampleCountI32, row.byteSize, row.lifetime, row.usages())
 
-/** Freezes final W6 scan-span occurrences, never source identities. */
+private fun PathRenderDraw.inverseMaskOrNullV1(): ClipPlanStrategy.InverseMask? = when (this) {
+    is ClippedGeneralPathDraw -> clip as? ClipPlanStrategy.InverseMask
+    is ClippedBinaryMaskedPathDraw -> clip as? ClipPlanStrategy.InverseMask
+    is GeneralPathDraw, is BinaryMaskedPathDraw -> null
+}
+
+/** Freezes every published native W4e inverse-mask path site, including fan and Zero. */
 public fun freezeW6InverseMaskPathRecipesV1(
-    passes: List<PlanPass>,
-    resources: List<PlanResource>,
+    bindings: List<PlanW4eGeometryBindingV1>, resources: List<PlanResource>,
 ): Map<PlanPassId, W6InverseMaskPathRecipeV1> {
     val rows = resources.associateBy { it.id }
-    val recipes = linkedMapOf<PlanPassId, W6InverseMaskPathRecipeV1>()
-    passes.forEachIndexed { indexI32, raw ->
-        val producer = raw as? PlanPass.StencilGeometryProducerV3 ?: return@forEachIndexed
-        val spans = producer.scanSpansDeviceI32 ?: return@forEachIndexed
-        val scissors = requireNotNull(producer.scanScissorsLocalI32)
-        val cover = passes.getOrNull(indexI32 + 1) as? PlanPass.StencilCover ?: error(
-            "W6 inverse scan-span producer must be followed by its cover.",
-        )
-        require(cover.target == producer.target && cover.depthStencil == producer.depthStencil) {
-            "W6 inverse scan-span producer and following cover must share target and D24S8."
-        }
-        val target = scanSpanPhysicalOperandV1(rows.getValue(producer.target))
-        val depthStencil = scanSpanPhysicalOperandV1(rows.getValue(producer.depthStencil))
-        val producerRecipe = if (spans.spanCountI32 == 0) {
-            W6InverseMaskPathRecipeV1.GeometryProducer.Empty(
-                producer.id, producer.ordinal, target, depthStencil, scissors.copyOriginDeviceI32(),
-                spans.copyDomainI32(), scissors.copyDomainI32(),
-            )
-        } else {
-            W6InverseMaskPathRecipeV1.GeometryProducer.NonEmpty(
-                producer.id, producer.ordinal, target, depthStencil, scissors.copyOriginDeviceI32(),
-                spans.copyDomainI32(), scissors.copyDomainI32(), scissors.copyScissorsI32(),
-            )
-        }
-        val coverRecipe = W6InverseMaskPathRecipeV1.GeometryCover(
-            cover.id, cover.ordinal, target, depthStencil, cover.draw.copyScissorI32(),
-        )
-        require(recipes.put(producer.id, W6InverseMaskPathRecipeV1(producerRecipe, coverRecipe)) == null)
+    val result = linkedMapOf<PlanPassId, W6InverseMaskPathRecipeV1>()
+    fun add(value: W6InverseMaskPathRecipeV1) {
+        require(result.put(value.ownerPassId, value) == null) { "One native W4e inverse-mask owner may publish only one recipe." }
     }
-    return java.util.Collections.unmodifiableMap(recipes)
+    bindings.forEach { binding -> binding.nativePasses().forEach { candidate ->
+        val pass = candidate as? PlanPass.PathRenderPass ?: return@forEach
+        val inverse = pass.draw.inverseMaskOrNullV1() ?: return@forEach
+        val target = inverseMaskOperandV1(rows.getValue(pass.target))
+        val mask = inverseMaskOperandV1(rows.getValue(inverse.resource))
+        val uniform = inverseMaskOperandV1(rows.getValue(binding.payload.uniformResourceId))
+        when (val interior = inverse.geometryF32.interiorCoverageF32) {
+            is InverseInteriorCoverageF32.Geometry -> when (pass.phase) {
+                PathRenderPhase.SingleSampleStencilProducer -> {
+                    val depth = inverseMaskOperandV1(rows.getValue(requireNotNull(pass.depthStencil)))
+                    val spans = pass.scanSpansDeviceI32
+                    if (spans != null) {
+                        val local = requireNotNull(spans.localScissorsI32OrNull(binding.copyMaterialDeviceOriginI32(), binding.copyExtentI32()))
+                        add(if (spans.spanCountI32 == 0)
+                            W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.Empty(pass.id, pass.ordinal, target, depth,
+                                local.copyOriginDeviceI32(), spans.copyDomainI32(), local.copyDomainI32())
+                        else W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans.NonEmpty(pass.id, pass.ordinal, target, depth,
+                            local.copyOriginDeviceI32(), spans.copyDomainI32(), local.copyDomainI32(), local.copyScissorsI32()))
+                    } else {
+                        val geometry = interior.copyGeometryF32()
+                        if (geometry.copyStencilEdgeFanF32OrNull() != null) {
+                            val slice = requireNotNull(binding.payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.STENCIL_PRODUCER))
+                            add(W6InverseMaskPathRecipeV1.GeometryProducer.Fan(pass.id, pass.ordinal, target, depth,
+                                inverseMaskOperandV1(rows.getValue(binding.payload.vertexResourceId)),
+                                inverseMaskOperandV1(rows.getValue(binding.payload.indexResourceId)), slice, geometry.fillRule,
+                                pass.draw.copyScissorI32(), pass.load, pass.store))
+                        }
+                    }
+                }
+                PathRenderPhase.SingleSampleStencilColorCover -> {
+                    val slice = requireNotNull(binding.payload.uniformSlice(pass.id.value, W4eNativePayloadPlan.STENCIL_COVER_UNIFORM))
+                    add(W6InverseMaskPathRecipeV1.GeometryCover(pass.id, pass.ordinal, target,
+                        inverseMaskOperandV1(rows.getValue(requireNotNull(pass.depthStencil))), mask, uniform, slice,
+                        pass.draw.copyScissorI32(), pass.load, pass.store, pass.draw.blend))
+                }
+                else -> Unit
+            }
+            InverseInteriorCoverageF32.Zero -> if (pass.phase == PathRenderPhase.SingleSampleDirectColor &&
+                pass.draw.copyPathGeometry() == PathDrawGeometry.Empty) {
+                val slice = requireNotNull(binding.payload.uniformSlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM))
+                add(W6InverseMaskPathRecipeV1.ZeroCover(pass.id, pass.ordinal, target, mask, uniform, slice,
+                    pass.draw.copyScissorI32(), pass.load, pass.store, pass.draw.blend))
+            }
+        }
+    } }
+    return java.util.Collections.unmodifiableMap(LinkedHashMap(result))
 }

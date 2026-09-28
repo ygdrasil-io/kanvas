@@ -105,6 +105,28 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     internal val graph: RenderGraph = request.graph
     private val framePlan = requireNotNull(graph.layerFramePlanOrNull())
     internal val physical = requireNotNull(graph.physicalLayoutOrNull())
+    /** Each entry belongs to its final native W4e path pass, never to its W6 binding witness. */
+    internal val inverseMaskPathRecipesByNativePassId: Map<PlanPassId, W6InverseMaskPathRecipeV1> =
+        physical.w6InverseMaskPathRecipes().also { recipes ->
+            recipes.forEach { (nativePassId, recipe) ->
+                val binding = physical.w4eGeometryBindings().singleOrNull { binding ->
+                    binding.nativePasses().any { it.id == nativePassId }
+                }
+                    ?: error("W6 inverse-mask native path recipe has no unique W4e binding.")
+                val w6Pass = binding.graphPassIds().asSequence()
+                    .map { passId -> graph.passes().single { it.id == passId } }
+                    .single { binding.nativePass(it.id)?.id == nativePassId }
+                require(recipe.ownerPassId == nativePassId && recipe.packetOrdinalI32 ==
+                    requireNotNull(binding.nativePass(w6Pass.id)).ordinal) {
+                    "W6 inverse-mask native path recipe lost its final W4e owner."
+                }
+                require(when (recipe) {
+                    is W6InverseMaskPathRecipeV1.GeometryProducer -> w6Pass is PlanPass.StencilGeometryProducerV3
+                    is W6InverseMaskPathRecipeV1.GeometryCover -> w6Pass is PlanPass.StencilCover
+                    is W6InverseMaskPathRecipeV1.ZeroCover -> w6Pass is PlanPass.RenderPass
+                }) { "W6 inverse-mask native path recipe no longer projects to its W6 phase." }
+            }
+        }
     /**
      * The graph has already issued each mask occurrence's W5 row and uniform resource.  This
      * is a handle-free native projection of that exact row; it neither compiles a public Shader

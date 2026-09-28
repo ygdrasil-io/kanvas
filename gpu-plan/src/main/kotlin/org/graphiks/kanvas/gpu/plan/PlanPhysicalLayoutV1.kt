@@ -386,7 +386,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6PathRenderDirectColorRecipes(): Map<PlanPassId, W6PathRenderDirectColorRecipeV1> = pathRenderDirectColors
     /** Exact final producer/cover recipe for one W6 scan-span Geometry occurrence. */
     public fun w6InverseMaskPathRecipe(passId: PlanPassId): W6InverseMaskPathRecipeV1 =
-        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, inverseMaskPaths.getValue(passId).producer.packetOrdinalI32, 0)) as? W6InverseMaskPathNativeSiteRecipeV1)?.host
+        (nativeSiteRecipes.recipe(inverseMaskPaths.getValue(passId).owner) as? W6InverseMaskPathNativeSiteRecipeV1)?.host
             ?: error("Missing frozen W6 inverse scan-span recipe for ${passId.value}.")
     public fun w6InverseMaskPathRecipes(): Map<PlanPassId, W6InverseMaskPathRecipeV1> = inverseMaskPaths
     /** Bundle one is frozen beside edge bundle zero under the same packet owner. */
@@ -629,7 +629,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 require(W6PathRenderDirectColorNativeSiteRecipeV1(recipe).canonicalLogicalEncodingV1 ==
                     W6PathRenderDirectColorNativeSiteRecipeV1(expectedPathRenderDirectColors.getValue(passId)).canonicalLogicalEncodingV1)
             }
-            val expectedInverseMaskPaths = freezeW6InverseMaskPathRecipesV1(graph.passes(), rows)
+            val expectedInverseMaskPaths = freezeW6InverseMaskPathRecipesV1(source.w4eGeometry, rows)
             require(source.w6InverseMaskPathRecipes.keys == expectedInverseMaskPaths.keys) {
                 "W6 inverse scan-span recipe owners changed after final pass binding."
             }
@@ -638,13 +638,11 @@ public class PlanPhysicalLayoutV1 private constructor(
                     W6InverseMaskPathNativeSiteRecipeV1(expectedInverseMaskPaths.getValue(passId)).canonicalLogicalEncodingV1) {
                     "W6 inverse scan-span recipe changed after final pass binding."
                 }
-                val bound = source.w4eGeometry.singleOrNull { passId in it.graphPassIds() }?.nativePass(passId)
-                val path = bound as? PlanPass.PathRenderPass
-                require(path?.scanSpansDeviceI32 != null &&
-                    recipe.producer.copyDomainDeviceI32() == path.scanSpansDeviceI32.copyDomainI32() &&
-                    recipe.producer.drawCountI32 == path.scanSpansDeviceI32.spanCountI32 &&
-                    !recipe.producer.hasVertexIndexSlices) {
-                    "W6 inverse scan-span recipe lost the W4e producer authority."
+                val bound = source.w4eGeometry.asSequence().flatMap { it.nativePasses().asSequence() }
+                    .singleOrNull { it.id == passId }
+                require(bound is PlanPass.PathRenderPass && bound.id == recipe.ownerPassId &&
+                    bound.ordinal == recipe.packetOrdinalI32) {
+                    "W6 inverse-mask recipe lost its native W4e owner."
                 }
             }
             val expectedStencilEdges = freezeW4eClipMaskProducerStencilEdgeRecipesV1(source.w4eGeometry, rows)

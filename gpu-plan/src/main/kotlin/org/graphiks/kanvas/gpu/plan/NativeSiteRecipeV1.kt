@@ -34,7 +34,9 @@ public enum class NativeSiteRecipeFamilyV1 {
     W4eClipMaskProducerStencilEdge,
     W4eClipMaskProducerStencilCover,
     W6PathRenderDirectColor,
-    W6InverseMaskPath,
+    W6InverseMaskGeometryProducer,
+    W6InverseMaskGeometryCover,
+    W6InverseMaskZeroCover,
     W4eClipMaskFold,
     W6bCoverageRaster,
     W6FullscreenEmpty,
@@ -1285,7 +1287,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W4eClipMaskProducerStencilCoverNativeSiteRecipeV1 ->
                 clipMaskProducerStencilEdges[recipe.host.passId] === recipe.host.edge
             is W6PathRenderDirectColorNativeSiteRecipeV1 -> pathRenderDirectColors[recipe.host.passId] === recipe.host
-            is W6InverseMaskPathNativeSiteRecipeV1 -> inverseMaskPaths[recipe.host.producer.ownerPassId] === recipe.host
+            is W6InverseMaskPathNativeSiteRecipeV1 -> inverseMaskPaths[recipe.host.ownerPassId] === recipe.host
             is W4eClipMaskFoldNativeSiteRecipeV1 -> clipMaskFolds[recipe.host.passId] === recipe.host
             is W6bCoverageRasterNativeSiteRecipeV1 -> coverageRasters[recipe.host.ownerPassId]?.bundle(recipe.host.bundleOrdinalI32) === recipe.host
             is W6FullscreenEmptyNativeSiteRecipeV1 -> fullscreenEmpties[recipe.host.ownerPassId] === recipe.host
@@ -1393,8 +1395,8 @@ public fun freezeNativeSiteRecipeCatalogV1(
     clipMaskProducerDirectTriangles.forEach { (passId, recipe) -> require(passId == recipe.passId) }
     clipMaskProducerStencilEdges.forEach { (passId, recipe) -> require(passId == recipe.passId) }
     pathRenderDirectColors.forEach { (passId, recipe) -> require(passId == recipe.passId) }
-    inverseMaskPaths.forEach { (passId, recipe) -> require(passId == recipe.producer.ownerPassId) {
-        "W6 inverse scan-span catalog key must be its producer owner."
+    inverseMaskPaths.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) {
+        "W6 inverse-mask catalog key must be its native W4e owner."
     } }
     clipMaskFolds.forEach { (passId, recipe) -> require(passId == recipe.passId) }
     coverageRasters.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
@@ -1496,11 +1498,13 @@ public fun freezeNativeSiteRecipeCatalogV1(
             is PlanPass.ClipMaskFold -> remainingClipFolds.remove(pass.id)?.let {
                 add(W4eClipMaskFoldNativeSiteRecipeV1(it))
             }
-            is PlanPass.PathRenderPass -> remainingPathRenderDirectColors.remove(pass.id)?.let {
-                add(W6PathRenderDirectColorNativeSiteRecipeV1(it))
-            }
-            is PlanPass.StencilGeometryProducerV3 -> remainingInverseMaskPaths.remove(pass.id)?.let {
-                add(W6InverseMaskPathNativeSiteRecipeV1(it))
+            is PlanPass.PathRenderPass -> {
+                remainingPathRenderDirectColors.remove(pass.id)?.let {
+                    add(W6PathRenderDirectColorNativeSiteRecipeV1(it))
+                }
+                remainingInverseMaskPaths.remove(pass.id)?.let {
+                    add(W6InverseMaskPathNativeSiteRecipeV1(it))
+                }
             }
             is PlanPass.FilterCoverageSourcePass -> {
                 remainingCoverageRasters.remove(pass.id)?.bundles()?.forEach { add(W6bCoverageRasterNativeSiteRecipeV1(it)) }

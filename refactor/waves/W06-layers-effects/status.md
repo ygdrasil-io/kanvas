@@ -1448,3 +1448,31 @@ sur GLFW natif 133. La revue Sol du commit ne relève aucun Critical/Important,
 y compris sur l'association W5a du packet scellé. Ce sous-lot ne lance ni GM,
 ni dashboard Skia, ni suite globale ; les recettes natives fan/Zero de Task 3,
 2A0c.IV et les gates 2A1/2B demeurent ouverts.
+
+### 2A0c.IIIb/c — recettes natives par site Geometry/Zero
+
+Le gel Task 3 remplace le wrapper producer/cover par une recette scellée par
+`PathRenderPass` W4e natif, avec `NativeSiteOwnerV1(nativePass.id,
+nativePass.ordinal, 0)`. Les variantes sont `GeometryProducer.ScanSpans`
+(`NonEmpty`/`Empty` sans V/I), `GeometryProducer.Fan` (fill rule, V/I,
+D24S8 et clear stencil), `GeometryCover` (mask/U 32, `TestZeroKeep`,
+`LoadStoreTestReset`) et `ZeroCover` (mask/U 32, sans depth/V/I). Les IDs W6
+restent exclusivement des témoins de binding ; la recette Zero est l'unique
+site `SingleSampleDirectColor` sous son `RenderPass` W6.
+
+Le catalogue, le seal et le packet utilisent les IDs natifs et parcourent les
+bindings W4e finals ; la branche catalogue proxy `StencilGeometryProducerV3`
+a été retirée. `GPUW6aLayerFramePlan` projette chaque recette vers sa phase W6,
+le préflight compare les ressources et packets avant `device.create*`, et
+l'appel W6 de `encodeW4eNativePasses` sélectionne son ABI/pipeline par cette
+map catalog-first. L'appel W4e autonome conserve son chemin déjà scellé quand
+aucune projection W6 ne fournit cette map. Aucun lease 2A1 ni claim 2B n'a été
+créé.
+
+Vérification finale : `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`
+et `:kanvas:compileTestKotlin` sortent 0. Les XML publics sont scan-span
+`14/0/0/0`, W6a `31/0/0/0`, D24S8 distinct `1/0/0/0` et inverse
+empty/non-empty `1/0/0/0`. Les deux classes GPU ont Gradle exit 1 seulement
+après l'exit GLFW natif macOS 133, donc **UNKNOWN** séparé des XML ; les deux
+sélecteurs W4e sortent Gradle 0. Task 3 est prêt pour revue Sol ; 2A0c.IV,
+2A0d, 2A1 et 2B restent ouverts.
