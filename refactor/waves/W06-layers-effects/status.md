@@ -1407,6 +1407,14 @@ et le préflight vérifie identité, génération et format de cible. La relectu
 Sol ciblée du dernier correctif ne relève aucun Critical/Important. À
 `a387979e7`, la compilation `:gpu-renderer:compileKotlin` sort 0 et la classe
 Surface W6 donne XML `13/0/0/0` ; Gradle sort 1 uniquement après l'exit natif
-GLFW 133 post-JUnit. Ce sous-lot inverse-mask est review-clean, mais cette
+GLFW 133 post-JUnit. La revue transversale a ensuite trouvé que l'admission
+comptait aussi les triangles inverses AA, pourtant publiés sous
+`MultisampleDirectColor`. Le correctif `cdbbd7f80` borne l'admission et la
+substitution V/I aux commandes hard-edge éligibles ; son témoin Surface public
+de 4 097 lignes a d'abord reproduit le faux diagnostic puis ne le reçoit plus.
+La revue Sol ciblée ne relève aucun Critical/Important. À ce commit, la classe
+Surface W6 est XML `14/0/0/0`, avec le même exit natif 133 post-JUnit ; le
+témoin AA n'affirme ni pixels ni succès global de sa route multisample, seulement
+l'absence du plafond propre au producer scan-span. Ce sous-lot inverse-mask est review-clean, mais cette
 extension ne ferme pas 2A0c, 2A1 ni 2B ; ces gates restent ouverts pour les
 sous-lots ultérieurs.
