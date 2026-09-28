@@ -1419,7 +1419,7 @@ l'absence du plafond propre au producer scan-span. Ce sous-lot inverse-mask est 
 extension ne ferme pas 2A0c, 2A1 ni 2B ; ces gates restent ouverts pour les
 sous-lots ultérieurs.
 
-### 2A0c.IIIa4b — InverseMask W6 : fan, origine, reset et Zero
+### 2A0c.IIIb/c — InverseMask W6 : fan, origine, reset et Zero
 
 Les quatre témoins `Surface` publics Task 2 emploient des oracles littéraux :
 le fan concave `INVERSE_EVEN_ODD` avec deux contours de même winding, le
@@ -1442,5 +1442,9 @@ scellé sans lane W5b est désormais associé à son unique source material.
 Les compilations `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
 `:kanvas:compileTestKotlin` sortent 0. La préservation W6 hard-mask donne XML
 `1/0/0/0`, avec le même exit 133 **UNKNOWN** ; la préservation W4e public
-empty/non-empty donne XML `1/0/0/0`, Gradle exit 0. Ce sous-lot ne lance ni GM,
-ni dashboard Skia, ni suite globale ; les gates ultérieurs demeurent ouverts.
+empty/non-empty donne XML `1/0/0/0`, Gradle exit 0. Une relance indépendante
+de la classe W6a entière à `3c2660739` donne XML `31/0/0/0`, puis Gradle exit 1
+sur GLFW natif 133. La revue Sol du commit ne relève aucun Critical/Important,
+y compris sur l'association W5a du packet scellé. Ce sous-lot ne lance ni GM,
+ni dashboard Skia, ni suite globale ; les recettes natives fan/Zero de Task 3,
+2A0c.IV et les gates 2A1/2B demeurent ouverts.
