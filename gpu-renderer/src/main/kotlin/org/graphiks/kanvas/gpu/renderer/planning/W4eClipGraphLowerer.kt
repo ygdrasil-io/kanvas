@@ -395,7 +395,16 @@ internal class W4eClipGraphLowerer {
                     }
                     PathRenderPhase.SingleSampleStencilColorCover ->
                         add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
-                    PathRenderPhase.SingleSampleDirectColor -> if (pass.draw.copyPathGeometry() == PathDrawGeometry.Empty) {
+                    PathRenderPhase.SingleSampleDirectColor -> if (
+                        consumer is GPUW4ePreparedClipConsumerAuthority.InverseDomain && when (pass.draw.copyPathGeometry()) {
+                            PathDrawGeometry.Empty,
+                            is PathDrawGeometry.InverseDomainSource,
+                            -> true
+                            else -> false
+                        }
+                    ) {
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    } else if (pass.draw.copyPathGeometry() == PathDrawGeometry.Empty) {
                         add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
                     } else {
                         add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))

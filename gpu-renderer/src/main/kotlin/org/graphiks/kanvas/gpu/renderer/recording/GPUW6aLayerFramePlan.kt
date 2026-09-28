@@ -127,6 +127,22 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                 }) { "W6 inverse-mask native path recipe no longer projects to its W6 phase." }
             }
         }
+    /** Zero is one final direct-colour packet; Geometry remains on its historical route until Task 3. */
+    internal val inverseDomainZeroCoverRecipesByNativePassId: Map<PlanPassId, W6InverseDomainZeroCoverRecipeV1> =
+        physical.w6InverseDomainZeroCoverRecipes().also { recipes ->
+            recipes.forEach { (nativePassId, recipe) ->
+                val binding = physical.w4eGeometryBindings().singleOrNull { binding ->
+                    binding.nativePasses().any { it.id == nativePassId }
+                } ?: error("W6 InverseDomain.Zero recipe has no unique final W4e binding.")
+                val w6Pass = binding.graphPassIds().asSequence()
+                    .map { passId -> graph.passes().single { it.id == passId } }
+                    .single { binding.nativePass(it.id)?.id == nativePassId }
+                require(w6Pass is PlanPass.RenderPass && recipe.ownerPassId == nativePassId &&
+                    recipe.packetOrdinalI32 == requireNotNull(binding.nativePass(w6Pass.id)).ordinal) {
+                    "W6 InverseDomain.Zero recipe lost its final direct-colour owner."
+                }
+            }
+        }
     /**
      * The graph has already issued each mask occurrence's W5 row and uniform resource.  This
      * is a handle-free native projection of that exact row; it neither compiles a public Shader

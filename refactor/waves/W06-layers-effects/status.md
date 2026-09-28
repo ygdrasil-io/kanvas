@@ -1603,3 +1603,36 @@ tests Kanvas sortent 0 ; Gradle finit à 1 uniquement après GLFW 133
 post-JUnit, donc la terminaison native demeure **UNKNOWN**. La revue Sol
 ciblée du bridge est clean, sans finding Critical/Important ; les recettes IV
 et gates 2A1/2B restent ouverts.
+
+### 2A0c.IV Task 2 — `InverseDomain.Zero`, bundle natif unique
+
+`W6InverseDomainZeroCoverRecipeV1` gèle depuis le `PathRenderPass` final un
+seul owner `NativeSiteOwnerV1(path.id, path.ordinal, 0)` : predicate `Zero`,
+source `Empty` ou `InverseDomainSource`, domaine I32, scissor source, target,
+load/store/blend, draw fullscreen 3 et ABI bind group 0. Le canonique contient
+les operands physiques et chacun des 16 octets du
+`INVERSE_DOMAIN_ZERO_UNIFORM` U16. Tout `InverseDomain.Zero` final qui ne
+serait pas `SingleSampleDirectColor` sans resolve/D24S8, ou qui porterait
+`Fill`/`Stroke`, est refusé ; la slice V/I
+`INVERSE_DOMAIN_ZERO_SOURCE` est également refusée. La géométrie reste dans
+`:math:geometry` et `InverseDomain.Geometry` garde sa route historique : cette
+tâche ne revendique aucune fermeture IV.
+
+La famille dédiée entre dans catalogue, seal et projection W6. Le seal
+recalcule les recettes depuis les bindings finaux, et le layout physique
+transporte explicitement cette map. Le préflight, avant tout `device.create*`,
+authentifie owner/catalogue, operands physiques, slice et bytes U, identity du
+packet/consumer, forme source, domaine/scissor, phase/sample/load/store/blend
+et les deux `resourceUses` exacts target+U. Il vérifie aussi les owners de
+bindings sans draw émis (cache hit/draw omis), afin que l'absence d'une
+commande ne retire pas le site du catalogue. L'encodeur W6 reçoit la map
+typée, sélectionne la recette Zero avant le fallback `InverseDomain`, puis
+utilise son pipeline unmasked, groupe 0, U et domaine ; l'appel W4e autonome
+reste inchangé quand aucune map W6 n'est fournie.
+
+Les compiles séparées `:gpu-plan:compileKotlin`,
+`:gpu-renderer:compileKotlin` et `:kanvas:compileTestKotlin` sortent 0. Le
+run public final donne XML W6a `35/0/0/0`, scan-span `14/0/0/0` et les deux
+sélecteurs W4e `2/0/0/0`. Gradle se termine ensuite sur GLFW macOS 133 après
+JUnit : état natif **UNKNOWN**, pas PASS. `git diff --check` est propre. La
+revue Sol Task 2 reste requise ; 2A0c.IV, 2A0d, 2A1 et 2B restent ouverts.

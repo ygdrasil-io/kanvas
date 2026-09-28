@@ -261,6 +261,66 @@ private fun preflightW4eClipMaskInitializes(
             }
             return render.resourceUses == expected
         }
+        fun inverseDomainZeroUsesMatch(render: GPUFrameStep.RenderPassStep, recipe: W6InverseDomainZeroCoverRecipeV1): Boolean {
+            val target = frame.physical.resource(recipe.target.id)
+            val targetRole = when (target.role) {
+                PlanResourceRole.LogicalTarget -> GPUFrameResourceRole.SceneTarget
+                PlanResourceRole.MultisampleColorTarget, PlanResourceRole.LayerTarget -> GPUFrameResourceRole.LayerTarget
+                else -> GPUFrameResourceRole.ClipMask
+            }
+            return render.resourceUses == listOf(
+                GPUFrameResourceUse(frame.refs.getValue(recipe.target.id), targetRole, GPUFrameResourceUsage.RenderAttachment,
+                    GPUFrameResourceLifetime.FrameLocal, true),
+                GPUFrameResourceUse(frame.refs.getValue(recipe.uniform.id), GPUFrameResourceRole.UniformData,
+                    GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false),
+            )
+        }
+        val zeroOwners = binding.nativePasses().filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { pass ->
+            val inverse = when (val draw = pass.draw) {
+                is ClippedGeneralPathDraw -> draw.clip as? ClipPlanStrategy.InverseDomain
+                is ClippedBinaryMaskedPathDraw -> draw.clip as? ClipPlanStrategy.InverseDomain
+                else -> null
+            }
+            pass.takeIf {
+                inverse?.geometryF32?.interiorCoverageF32 == org.graphiks.math.geometry.InverseInteriorCoverageF32.Zero
+            }?.let { it to requireNotNull(inverse) }
+        }
+        val zeroRecipes = frame.inverseDomainZeroCoverRecipesByNativePassId.filterKeys { nativePassId ->
+            binding.nativePasses().any { it.id == nativePassId }
+        }
+        require(zeroRecipes.keys == zeroOwners.map { it.first.id }.toSet()) {
+            "W6 InverseDomain.Zero catalog must retain every final owner, including omitted draws."
+        }
+        zeroOwners.forEach { (pass, inverse) ->
+            val recipe = zeroRecipes.getValue(pass.id)
+            val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(recipe.owner)
+                as? W6InverseDomainZeroNativeSiteRecipeV1
+            val sourceMatches = when (recipe.sourceForm) {
+                W6InverseDomainZeroSourceFormV1.Empty -> pass.draw.copyPathGeometry() == PathDrawGeometry.Empty
+                W6InverseDomainZeroSourceFormV1.InverseDomainSource -> pass.draw.copyPathGeometry() is PathDrawGeometry.InverseDomainSource
+            }
+            val uniform = binding.payload.uniformSlice(pass.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_ZERO_UNIFORM)
+            val bytes = uniform?.let { slice -> binding.payload.copyUniformData().copyOfRange(
+                Math.toIntExact(slice.offsetBytes), Math.toIntExact(slice.offsetBytes + slice.byteSize),
+            ) }
+            val retained = authority.consumerFor(pass.id.value) as?
+                org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+            val domain = recipe.copyDomainI32()
+            val target = requireNotNull(frame.graph.resources().singleOrNull { it.id == recipe.target.id })
+            val uniformResource = requireNotNull(frame.graph.resources().singleOrNull { it.id == recipe.uniform.id })
+            require(catalog?.host === recipe && recipe.ownerPassId == pass.id && recipe.packetOrdinalI32 == pass.ordinal &&
+                sourceMatches && pass.phase == PathRenderPhase.SingleSampleDirectColor && pass.target == recipe.target.id &&
+                pass.draw.sample == SamplePlan.SingleSample && pass.resolveTarget == null && pass.depthStencil == null &&
+                pass.load == recipe.load && pass.store == recipe.store && pass.draw.blend == recipe.blend &&
+                inverse.geometryF32.copyDomainI32() == domain && pass.draw.copyScissorI32() == recipe.copySourceScissorI32() &&
+                retained?.consumerPassId == pass.id.value && retained.domain == GPUPixelBounds(domain.left, domain.top, domain.right, domain.bottom) &&
+                retained.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero &&
+                operandMatches(target, recipe.target) && operandMatches(uniformResource, recipe.uniform) &&
+                uniform == recipe.uniformSlice && bytes?.contentEquals(recipe.copyUniformBytes()) == true &&
+                binding.payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_ZERO_SOURCE) == null) {
+                "W6 InverseDomain.Zero omitted-draw preflight diverged from its frozen catalog recipe."
+            }
+        }
         val entries = framePlan.steps.mapIndexedNotNull { index, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
             if (render.w6aPassV1?.id !in binding.graphPassIds()) return@mapIndexedNotNull null
@@ -308,6 +368,55 @@ private fun preflightW4eClipMaskInitializes(
                 }
             }
             if (bound is PlanPass.PathRenderPass) {
+                frame.inverseDomainZeroCoverRecipesByNativePassId[bound.id]?.let { zeroRecipe ->
+                    val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(zeroRecipe.owner)
+                        as? W6InverseDomainZeroNativeSiteRecipeV1
+                    val rows = frame.graph.resources().associateBy { it.id }
+                    val packet = render.drawPackets.single()
+                    val path = requireNotNull(packet.w4ePreparedPath)
+                    val consumer = packet.w4ePreparedClipConsumer as?
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+                    val retained = authority.consumerFor(bound.id.value) as?
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+                    val sourceMatches = when (zeroRecipe.sourceForm) {
+                        W6InverseDomainZeroSourceFormV1.Empty -> path.copyGeometry() == PathDrawGeometry.Empty
+                        W6InverseDomainZeroSourceFormV1.InverseDomainSource -> path.copyGeometry() is PathDrawGeometry.InverseDomainSource
+                    }
+                    val bytes = binding.payload.copyUniformData().copyOfRange(
+                        Math.toIntExact(zeroRecipe.uniformSlice.offsetBytes),
+                        Math.toIntExact(zeroRecipe.uniformSlice.offsetBytes + zeroRecipe.uniformSlice.byteSize),
+                    )
+                    fun bounds(rect: RectI32) = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(
+                        rect.left, rect.top, rect.right, rect.bottom,
+                    )
+                    require(render.w6aPassV1 is PlanPass.RenderPass && catalog?.host === zeroRecipe &&
+                        zeroRecipe.ownerPassId == bound.id && zeroRecipe.packetOrdinalI32 == bound.ordinal &&
+                        zeroRecipe.uniformSlice.purpose == W4eNativePayloadPlan.INVERSE_DOMAIN_ZERO_UNIFORM &&
+                        zeroRecipe.uniformSlice.byteSize == 16L && zeroRecipe.copyUniformBytes().contentEquals(bytes) &&
+                        operandMatches(rows.getValue(zeroRecipe.target.id), zeroRecipe.target) &&
+                        operandMatches(rows.getValue(zeroRecipe.uniform.id), zeroRecipe.uniform) &&
+                        packet.role == GPUDrawPacketRole.W4ePrepared && packet.passId == bound.id.value &&
+                        packet.w4ePreparedClipPass == null && path.passId == bound.id.value &&
+                        path.commandIdValue == bound.draw.commandIndex && path.phase == PathRenderPhase.SingleSampleDirectColor &&
+                        path.targetResourceId == zeroRecipe.target.id.value && path.uniformResourceId == zeroRecipe.uniform.id.value &&
+                        path.vertexResourceId == binding.payload.vertexResourceId.value && path.indexResourceId == binding.payload.indexResourceId.value &&
+                        path.sample == SamplePlan.SingleSample && path.resolveTargetResourceId == null &&
+                        path.depthStencilResourceId == null && path.depthStencilAccess == null && path.depthStencilLoadStore == null &&
+                        path.load == zeroRecipe.load && path.store == zeroRecipe.store && path.blend == zeroRecipe.blend &&
+                        packet.blendPlan == org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(zeroRecipe.blend) &&
+                        packet.w4ePreparedClipConsumer === retained && consumer != null &&
+                        consumer.consumerPassId == bound.id.value && consumer.domain == bounds(zeroRecipe.copyDomainI32()) &&
+                        consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero &&
+                        sourceMatches && path.scissor == bounds(zeroRecipe.copySourceScissorI32()) &&
+                        binding.payload.uniformSlice(bound.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_ZERO_UNIFORM) == zeroRecipe.uniformSlice &&
+                        binding.payload.geometrySlice(bound.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_ZERO_SOURCE) == null &&
+                        render.target == frame.refs.getValue(zeroRecipe.target.id) && render.samplePlan == GPUSamplePlan.SingleSampleFrame &&
+                        render.loadStore.loadOp == (if (zeroRecipe.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load") &&
+                        render.loadStore.storePlan == GPUStorePlan.Store && render.depthStencilLoadStore == null &&
+                        inverseDomainZeroUsesMatch(render, zeroRecipe)) {
+                        "W6 InverseDomain.Zero packet diverged from its catalog recipe before allocation."
+                    }
+                }
                 when (val inverseRecipe = frame.inverseMaskPathRecipesByNativePassId[bound.id]) {
                     is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> {
                         val proxy = render.w6aPassV1 as? PlanPass.StencilGeometryProducerV3
@@ -2175,6 +2284,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val inverseMaskPathRecipes = binding.nativePasses().filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { pass ->
                     frame.inverseMaskPathRecipesByNativePassId[pass.id]?.let { pass.id.value to it }
                 }.toMap()
+                val inverseDomainZeroCoverRecipes = binding.nativePasses().filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { pass ->
+                    frame.inverseDomainZeroCoverRecipesByNativePassId[pass.id]?.let { pass.id.value to it }
+                }.toMap()
                 val childOwned = owned.own(GPUW4eNativeOwnedHandles())
                 encodeW4eNativePasses(device, generation, entries, payload, buffer(payload.vertexResourceId),
                     buffer(payload.indexResourceId), buffer(payload.uniformResourceId), childOwned,
@@ -2190,7 +2302,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     clipMaskProducerStencilCoverRecipesByPassId = clipMaskProducerStencilCoverRecipes,
                     clipMaskFoldRecipesByPassId = clipMaskFoldRecipes,
                     pathRenderDirectColorsByPassId = w6PathRenderDirectColors,
-                    inverseMaskPathRecipesByPassId = inverseMaskPathRecipes)
+                    inverseMaskPathRecipesByPassId = inverseMaskPathRecipes,
+                    inverseDomainZeroCoverRecipesByPassId = inverseDomainZeroCoverRecipes)
                     .map { native ->
                         val pass = graph.passes()[native.sourceStepIndex - 1]
                         native.pass.depthStencilTarget?.let { pathViews[native.sourceStepIndex] = it.view }

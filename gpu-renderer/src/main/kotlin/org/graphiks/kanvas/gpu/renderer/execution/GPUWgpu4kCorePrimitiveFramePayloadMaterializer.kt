@@ -99,6 +99,9 @@ import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathGroupZeroAbiV1
 import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathProducerPipelineV1
 import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathProducerStencilV1
 import org.graphiks.kanvas.gpu.plan.W6InverseMaskPathCoverStencilV1
+import org.graphiks.kanvas.gpu.plan.W6InverseDomainZeroCoverRecipeV1
+import org.graphiks.kanvas.gpu.plan.W6InverseDomainZeroGroupZeroAbiV1
+import org.graphiks.kanvas.gpu.plan.W6InverseDomainZeroSourceFormV1
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -415,6 +418,7 @@ internal fun encodeW4eNativePasses(
     clipMaskFoldRecipesByPassId: Map<String, W4eClipMaskFoldRecipeV1> = emptyMap(),
     pathRenderDirectColorsByPassId: Map<String, W6PathRenderDirectColorRecipeV1> = emptyMap(),
     inverseMaskPathRecipesByPassId: Map<String, W6InverseMaskPathRecipeV1> = emptyMap(),
+    inverseDomainZeroCoverRecipesByPassId: Map<String, W6InverseDomainZeroCoverRecipeV1> = emptyMap(),
 ): List<GPUPreparedNativeScopeOperand.Render> {
     requireW4eClipMaskInitializeRecipes(entries, clipMaskInitializeRecipesByPassId)
     val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
@@ -692,7 +696,61 @@ internal fun encodeW4eNativePasses(
             }
         }
     }
+    fun encodeInverseDomainZeroRecipe(entry: GPUW4eNativePassEntry, recipe: W6InverseDomainZeroCoverRecipeV1): GPUPreparedNativeScopeOperand.Render {
+        val path = requireNotNull(entry.packet.w4ePreparedPath)
+        val consumer = entry.packet.w4ePreparedClipConsumer as?
+            org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+            ?: throw refusal("invalid.native-core-primitive.w4e-inverse-domain-zero", "W6 Zero recipe requires its inverse-domain consumer.")
+        val sourceMatches = when (recipe.sourceForm) {
+            W6InverseDomainZeroSourceFormV1.Empty -> path.copyGeometry() == PathDrawGeometry.Empty
+            W6InverseDomainZeroSourceFormV1.InverseDomainSource -> path.copyGeometry() is PathDrawGeometry.InverseDomainSource
+        }
+        require(sourceMatches && consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero &&
+            path.phase == PathRenderPhase.SingleSampleDirectColor && path.depthStencilResourceId == null &&
+            path.depthStencilLoadStore == null && path.targetResourceId == recipe.target.id.value &&
+            path.uniformResourceId == recipe.uniform.id.value && path.sample == SamplePlan.SingleSample &&
+            path.load == recipe.load && path.store == recipe.store && path.blend == recipe.blend &&
+            entry.packet.w4ePreparedClipPass == null && entry.packet.blendPlan ==
+                org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(recipe.blend)) {
+            "W6 InverseDomain.Zero prepared packet differs from its frozen recipe."
+        }
+        val slice = nativePayload.uniformSlice(recipe.ownerPassId.value, W4eNativePayloadPlan.INVERSE_DOMAIN_ZERO_UNIFORM)
+            ?: throw refusal("invalid.native-core-primitive.w4e-inverse-domain-zero", "W6 Zero uniform slice is absent.")
+        require(slice == recipe.uniformSlice && nativePayload.copyUniformData().copyOfRange(
+            Math.toIntExact(slice.offsetBytes), Math.toIntExact(slice.offsetBytes + slice.byteSize),
+        ).contentEquals(recipe.copyUniformBytes()) &&
+            nativePayload.geometrySlice(recipe.ownerPassId.value, W4eNativePayloadPlan.INVERSE_DOMAIN_ZERO_SOURCE) == null &&
+            recipe.groupZeroAbi == W6InverseDomainZeroGroupZeroAbiV1.InverseDomainZeroUniform) {
+            "W6 InverseDomain.Zero payload diverged from its canonical U16 recipe."
+        }
+        val format = when (recipe.target.format) {
+            PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+            else -> throw refusal("invalid.native-core-primitive.w4e-inverse-domain-zero", "W6 Zero requires its final RGBA8 scene target.")
+        }
+        val blend = org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(recipe.blend)
+        val pipeline = createW4eUnmaskedCoverPipeline(device, format, recipe.target.sampleCountI32, owned = owned,
+            finalBlend = blend.takeIf { commonSource })
+        val bindings = owned.own(device.createBindGroup(BindGroupDescriptor(
+            label = "Kanvas.frame.w6.inverseDomainZeroBindGroup", layout = pipeline.layout,
+            entries = listOf(BindGroupEntry(0u, uniformBinding(recipe.ownerPassId.value, recipe.uniformSlice.purpose, recipe.uniformSlice))),
+        )))
+        val domain = recipe.copyDomainI32()
+        val load = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load
+        return GPUPreparedNativeScopeOperand.Render(entry.index, GPUPreparedNativeRenderPassConfig(
+            colorTarget = attachment(recipe.target.id.value), loadOperation = load,
+            storeOperation = GPUPreparedNativeStoreOperation.Store,
+            clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0).takeIf { load == GPUPreparedNativeLoadOperation.Clear },
+        ), listOf(
+            GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generation)),
+            GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindings, generation)),
+            GPUPreparedNativeRenderCommand.SetScissor(domain.left, domain.top, domain.width(), domain.height()),
+            GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.fullscreenVertexCountI32)),
+        ))
+    }
     return entries.map { entry -> try {
+        inverseDomainZeroCoverRecipesByPassId[entry.packet.passId]?.let { recipe ->
+            return@map encodeInverseDomainZeroRecipe(entry, recipe)
+        }
         inverseMaskPathRecipesByPassId[entry.packet.passId]?.let { recipe ->
             return@map encodeInverseMaskRecipe(entry, recipe)
         }
@@ -955,6 +1013,10 @@ internal fun encodeW4eNativePasses(
                 if (inverseMaskPathRecipesByPassId.isNotEmpty() &&
                     consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
                 ) throw refusal("invalid.native-core-primitive.w4e-inverse-recipe", "W6 inverse packet lacks its sealed native-site recipe.")
+                if (inverseDomainZeroCoverRecipesByPassId.isNotEmpty() &&
+                    consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain &&
+                    consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero
+                ) throw refusal("invalid.native-core-primitive.w4e-inverse-domain-zero", "W6 Zero packet lacks its sealed native-site recipe.")
                 val retainedInverse = retainedConsumerFor(entry.packet.passId) as?
                     org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
                 val retainedInverseInterior = retainedInverse?.interiorCoverage is
