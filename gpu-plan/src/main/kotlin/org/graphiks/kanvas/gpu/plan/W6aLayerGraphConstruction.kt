@@ -119,7 +119,11 @@ internal class W6aLayerGraphConstruction(
     private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot = RuntimeEffectSemanticCatalogSnapshot.Unbound,
 ) {
     private val occurrences = immutableList(occurrences)
-    private val bindings = sourceBindings.toMutableList()
+    /**
+     * One binding represents one recorded child occurrence.  W6 owns their publication order;
+     * do not inherit an incidental compiler/map iteration order into the resolved-colour stream.
+     */
+    private val bindings = sourceBindings.sortedBy(W6aLayerSourceBinding::firstCommandIndexI32).toMutableList()
     val lanes: List<SourceDeferredRenderConstructionV4> get() = immutableList(bindings.map { it.source })
     private val root = planResourceId(PlanResourceRole.LogicalTarget, 0)
     private val staging = planResourceId(PlanResourceRole.ReadbackStaging, 0)
@@ -160,6 +164,9 @@ internal class W6aLayerGraphConstruction(
         require(occurrences.indices.all { indexI32 -> occurrences[indexI32].idI32 == indexI32 })
         require(bindings.all { binding -> binding.scopeI32 == null || binding.scopeI32 in occurrenceById })
         require(bindings.map { it.firstCommandIndexI32 }.distinct().size == bindings.size)
+        require(bindings.zipWithNext().all { (before, after) ->
+            before.firstCommandIndexI32 < after.firstCommandIndexI32
+        }) { "W6 child occurrences must be published in recorded command order." }
         require(lanes.all { source ->
             source.topology == DeferredLaneTopologyV4.AaResolvedColor && source.passes().let { aa ->
                 aa.all { pass -> pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw &&
@@ -2678,20 +2685,28 @@ internal class W6aLayerGraphConstruction(
                             val source = remapped.entries.single { (original, _) ->
                                 binding.source.resources().single { it.id == original }.role == PlanResourceRole.PathAaResolvedColor
                             }.value
-                            val destination = targetFor(binding.scopeI32)
-                            val extent = targetExtent(destination)
-                            val after = DestinationVersionI64(Math.addExact(versions[destination] ?: 0L, 1L))
+                            val scopeI32 = requireNotNull(binding.scopeI32)
+                            val destination = targetFor(scopeI32)
+                            val aaGeometry = activeByScope.getValue(scopeI32)
+                            val sourceBounds = requireNotNull(requireNotNull(aaGeometry.mapping)
+                                .mapDeviceRectToLayerI32OrNull(requireNotNull(aaGeometry.compositeDomainDeviceI32)))
+                            val destinationExtent = targetExtent(destination)
+                            require(sourceBounds == RectI32(0, 0, destinationExtent.width, destinationExtent.height)) {
+                                "W6 AA source/domain mapping must publish the exact local target extent."
+                            }
+                            val destinationOrigin = Point2I32(sourceBounds.left, sourceBounds.top)
+                            val after = DestinationVersionI64(Math.addExact(versions.getValue(destination), 1L))
                             versions[destination] = after.valueI64
                             val composite = PlanPass.PathAaColorComposite(
                                 passes.size,
                                 source,
                                 destination,
-                                RectI32(0, 0, extent.width, extent.height),
-                                Point2I32.Origin,
+                                sourceBounds,
+                                destinationOrigin,
                                 after,
                             )
                             passes += composite
-                            steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(requireNotNull(binding.scopeI32)), composite.id)
+                            steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(scopeI32), composite.id)
                             return@bindingLoop
                         }
                         if (directFilterSource != null) physicalTargetByLane[laneI32] = target

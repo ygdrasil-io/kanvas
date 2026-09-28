@@ -27,6 +27,7 @@ internal fun validateW6aLayerTopology(
     val sealedPictureSources = mutableSetOf<PlanResourceId>()
     val resolvedAaSources = mutableSetOf<PlanResourceId>()
     val consumedAaSources = mutableSetOf<PlanResourceId>()
+    var lastAaCompositeCommandI32: Int? = null
     fun validatePictureTerminal(operand: PictureCompositeOperandsV1, source: PlanResourceId,
         destination: PlanResourceId, indexI32: Int): Long {
         require(operand.source == source && operand.sourceGenerationI64 == versions[source] &&
@@ -293,6 +294,11 @@ internal fun validateW6aLayerTopology(
             val after = Math.addExact(versions.getValue(destination.id), 1L)
             versions[destination.id] = after
             require(pass.destinationVersionAfter.valueI64 == after)
+            val commandIndexI32 = requireNotNull(producer).draw.commandIndex
+            require(lastAaCompositeCommandI32 == null || requireNotNull(lastAaCompositeCommandI32) < commandIndexI32) {
+                "AA resolved-colour composites must preserve recorded child order."
+            }
+            lastAaCompositeCommandI32 = commandIndexI32
         }
         is PlanPass.FilterSourceClear -> {
             val output = byId.getValue(pass.output)

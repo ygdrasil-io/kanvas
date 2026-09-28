@@ -14,6 +14,83 @@ import org.junit.jupiter.api.Test
 /** Public W7 witness for a resolved AA path colour source inside a W6 layer. */
 class W7AaPathLayerSurfacePixelTest {
     @Test
+    fun `aa children preserve order`() {
+        // The second opaque child must cover the first at (2, 2); (6, 6) is
+        // deliberately outside both source triangles. These literals precede Surface.
+        val first = ColorARGB.of(255, 239, 51, 73)
+        val second = ColorARGB.of(255, 17, 61, 211)
+        val firstTriangle = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
+        }
+        val secondTriangle = Path().apply {
+            moveTo(2f, 1f); lineTo(5f, 1f); lineTo(2f, 4f); close()
+        }
+
+        val surface = Surface(7, 7)
+        surface.canvas {
+            saveLayer()
+            drawPath(firstTriangle, Paint(first, antiAlias = true))
+            drawPath(secondTriangle, Paint(second, antiAlias = true))
+            restore()
+        }
+        val result = renderOrAcceptExactAaCapabilityRefusal(surface) ?: return
+        assertPixel(result.pixels, 7, 2, 2, 17, 61, 211, 255)
+        assertPixel(result.pixels, 7, 6, 6, 0, 0, 0, 0)
+        // A non-overlap interior keeps the first child, proving order rather than replacement.
+        assertPixel(result.pixels, 7, 1, 3, 239, 51, 73, 255)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `aa source alpha is composed exactly once`() {
+        // SrcOver of a fully covered alpha-128 white source on opaque black is
+        // the literal linear-sRGB attachment byte (188, 188, 188, 255). A
+        // second alpha application would instead darken this pixel.
+        val opaqueBlack = ColorARGB.Black
+        val halfWhite = ColorARGB.of(128, 255, 255, 255)
+        val fullyCovered = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 6f, 6f)) }
+
+        val surface = Surface(7, 7)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(opaqueBlack, antiAlias = false))
+            saveLayer()
+            drawPath(fullyCovered, Paint(halfWhite, antiAlias = true))
+            restore()
+        }
+        val result = renderOrAcceptExactAaCapabilityRefusal(surface) ?: return
+        assertPixel(result.pixels, 7, 3, 3, 188, 188, 188, 255)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `aa translated layer keeps source alignment`() {
+        // The layer has a non-zero device origin, while the child has a fractional
+        // translation. The fully covered, AA-edge, and exterior observations are
+        // fixed before Surface and expose any second mapping or implicit sampling.
+        val blue = ColorARGB.of(255, 17, 61, 211)
+        val localTriangle = Path().apply {
+            moveTo(2f, 1f); lineTo(5f, 1f); lineTo(2f, 4f); close()
+        }
+
+        val surface = Surface(8, 7)
+        surface.canvas {
+            saveLayer(RectF32.ofLTRB(2f, 1f, 7f, 6f))
+            translate(.5f, .5f)
+            drawPath(localTriangle, Paint(blue, antiAlias = true))
+            restore()
+        }
+        val result = renderOrAcceptExactAaCapabilityRefusal(surface) ?: return
+        assertPixel(result.pixels, 8, 3, 2, 17, 61, 211, 255)
+        assertPixel(result.pixels, 8, 7, 6, 0, 0, 0, 0)
+        val edgeAlpha = result.pixels[((2 * 8 + 4) * 4) + 3].toInt()
+        assertTrue(edgeAlpha in 1..254, "expected translated AA edge alpha, got $edgeAlpha")
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `aa concave stencil path preserves notch`() {
         // A concave winding L forces the stencil route.  These full-coverage samples and the
         // notch are literal public observations, fixed before Surface construction.
