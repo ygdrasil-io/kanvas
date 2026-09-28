@@ -8,6 +8,7 @@ import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.ClipEntry
 import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
@@ -311,7 +312,24 @@ public class W4eClipPlanCompiler internal constructor(
             is GpuPlanSelection.InvalidScene -> return invalid("W4d.2 rejected normalized W4e draw facts")
             is GpuPlanSelection.ResourceLimitExceeded -> return limit("W4d.2 rejected normalized W4e draw resources")
         }
-        val scanSpanAdmission = when (val result = admitScanSpanProducers(preparedByKey.values, inverseByCommand)) {
+        // W4e replaces only W4d's SingleSampleDirectColor pass.  In particular, an AA inverse
+        // direct path remains MultisampleDirectColor and must retain both its ordinary route and
+        // its ordinary V/I accounting; it is not a scan-span producer merely because its finite
+        // inverse interior happens to be a direct triangle.
+        val scanSpanProducerCommandIndexes = if (base.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID) {
+            scene.withIndex().mapNotNull { (commandIndexI32, command) ->
+                (command as? SceneCommand.Draw)
+                    ?.takeIf { commandIndexI32 in inverseByCommand && it.node.coverage == CoverageRequest.HARD_EDGE }
+                    ?.let { commandIndexI32 }
+            }.toSet()
+        } else {
+            emptySet()
+        }
+        val scanSpanAdmission = when (val result = admitScanSpanProducers(
+            preparedByKey.values,
+            inverseByCommand,
+            scanSpanProducerCommandIndexes,
+        )) {
             is W4eScanSpanAdmissionResult.Ready -> result.admission
             W4eScanSpanAdmissionResult.NumericRange -> return limit(
                 W4ePlanDiagnostics.SizeOverflow,
@@ -324,7 +342,8 @@ public class W4eClipPlanCompiler internal constructor(
         }
         return GpuPlanSelection.Candidate(Candidate(
             this, scene.canonicalId, target, constructionSeam, base, preparedByKey.values.toList(), inverseByCommand,
-            inverseDomainSourcesByCommand, actuallyEmptyInverseCommands, finalBlendsByCommandI32, scanSpanAdmission,
+            inverseDomainSourcesByCommand, actuallyEmptyInverseCommands, finalBlendsByCommandI32,
+            scanSpanProducerCommandIndexes, scanSpanAdmission,
         ))
     }
 
@@ -1351,6 +1370,7 @@ public class W4eClipPlanCompiler internal constructor(
     private fun admitScanSpanProducers(
         stacks: Collection<PreparedStack>,
         inverseByCommand: Map<Int, InversePathGeometryF32>,
+        scanSpanProducerCommandIndexes: Set<Int>,
     ): W4eScanSpanAdmissionResult {
         val spansByCommandI32 = linkedMapOf<Int, PathFillScanSpansI32>()
         var drawCountI32 = 0
@@ -1358,6 +1378,7 @@ public class W4eClipPlanCompiler internal constructor(
             .filter { it.realization === Realization.Mask && !it.isZeroCoverage }
             .flatMap { it.consumerIndexes.asSequence() }
             .filter { commandIndexI32 ->
+                commandIndexI32 in scanSpanProducerCommandIndexes &&
                 (inverseByCommand[commandIndexI32]?.interiorCoverageF32 as? InverseInteriorCoverageF32.Geometry)
                     ?.copyGeometryF32()?.copyDirectTriangleF32OrNull() != null
             }
@@ -1502,6 +1523,7 @@ public class W4eClipPlanCompiler internal constructor(
         inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource>,
         actuallyEmptyInverseCommands: Set<Int>,
         finalBlendsByCommandI32: Map<Int, BlendPlan>,
+        scanSpanProducerCommandIndexes: Set<Int>,
         val scanSpanAdmission: W4eScanSpanAdmissionV1,
     ) : GpuPlanCandidate {
         val finalBlendsByCommandI32 = Collections.unmodifiableMap(finalBlendsByCommandI32.toMap())
@@ -1511,6 +1533,7 @@ public class W4eClipPlanCompiler internal constructor(
         val inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource> =
             Collections.unmodifiableMap(inverseDomainSourcesByCommand.toMap())
         val actuallyEmptyInverseCommands: Set<Int> = Collections.unmodifiableSet(actuallyEmptyInverseCommands.toSet())
+        val scanSpanProducerCommandIndexes: Set<Int> = Collections.unmodifiableSet(scanSpanProducerCommandIndexes.toSet())
         private val sceneFingerprint = sceneCanonicalId
         private val targetFingerprint = target.canonicalId
         fun matches(): Boolean = sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint && isW5aMaterialCapabilityId(capabilityId)
@@ -1524,6 +1547,7 @@ public class W4eClipPlanCompiler internal constructor(
 
     /** Fan geometry is already published as a stencil pair; only direct triangles add a pass. */
     private fun Candidate.inverseMaskDirectGeometryCommands(): Set<Int> = inverseMaskGeometryCommands().filter { command ->
+        if (command !in scanSpanProducerCommandIndexes) return@filter false
         val interior = inverseByCommand.getValue(command).interiorCoverageF32 as? InverseInteriorCoverageF32.Geometry
             ?: return@filter false
         interior.copyGeometryF32().copyDirectTriangleF32OrNull() != null

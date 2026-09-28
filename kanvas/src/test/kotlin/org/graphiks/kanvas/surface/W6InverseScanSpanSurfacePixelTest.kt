@@ -268,6 +268,34 @@ class W6InverseScanSpanSurfacePixelTest {
     }
 
     @Test
+    fun `AA inverse direct over scan span limit keeps its multisample route`() {
+        // Replacing the W4e producer-admission predicate with "inverse direct triangle" would
+        // wrongly count these 4,097 AA rows.  W4d emits MultisampleDirectColor for this draw,
+        // not the SingleSampleDirectColor that W4e can replace with a scan-span producer.  This
+        // witness intentionally permits either the current terminal outcome or a successful
+        // readback; the public contract here is solely that the scan-span limit is not applied.
+        val heightI32 = 4_097
+        val sentinel = UByteArray(heightI32 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val surface = Surface(1, heightI32)
+        surface.canvas {
+            clipPath(targetClipPath(1, heightI32), antiAlias = false)
+            drawPath(
+                inverseTriangle(0f, 0f, 10_000f, 0f, 0f, heightI32.toFloat()),
+                Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = true),
+            )
+        }
+
+        val outcome = runCatching {
+            surface.readPixels(RectF32.ofLTRB(0f, 0f, 1f, heightI32.toFloat()), sentinel)
+        }
+        val failure = outcome.exceptionOrNull()
+        assertTrue(failure?.message?.startsWith("w4e.clip.scan-span-draw-limit:") != true,
+            failure?.message ?: "AA inverse direct reached readback")
+        if (failure != null) assertContentEquals(before, sentinel)
+    }
+
+    @Test
     fun `inverse scan span aggregate budget refuses B minus one before readback`() {
         // B is the aggregate W6 frame peak.  The W4e lane cannot see the parent root target or
         // the layer restore uniform, so this separate scope witness intentionally expects the
