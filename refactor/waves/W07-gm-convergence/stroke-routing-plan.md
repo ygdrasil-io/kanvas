@@ -65,4 +65,4 @@ The static diagnosis identifies `PathStrokeStyleF64.snapshot()` recreating an im
 
 - [x] Run the complete checkpoint with a fresh directory and committed renderer SHA. Resume after timed-out GM; no exclusions added.
 - [x] Compare render/refusal/timeout states and image hashes of all 123 previously rendered GMs; separately report new renders and scores, regressions and known port-fidelity limits.
-- [ ] Document results and remaining gap, push branch and create a stacked PR on `codex/w7-parity-pilot`; attach it to the chat.
+- [x] Document results and remaining gap, push branch and create a stacked PR on `codex/w7-parity-pilot`; attach it to the chat: [draft #2412](https://github.com/ygdrasil-io/kanvas/pull/2412).

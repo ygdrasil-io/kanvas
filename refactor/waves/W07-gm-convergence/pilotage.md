@@ -2,7 +2,8 @@
 
 Baseline : PR draft [#2411](https://github.com/ygdrasil-io/kanvas/pull/2411),
 empilée sur [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410).
-Lot suivant : routage standalone rect/path, renderer `718445e6e`.
+Lot suivant : PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
+empilée sur #2411, routage standalone rect/path, renderer `718445e6e`.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,

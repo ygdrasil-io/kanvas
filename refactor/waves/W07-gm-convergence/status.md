@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot standalone rect/path — 29 septembre 2026
 
-Renderer `718445e6e`, empilé sur #2411 : **164/443** rendus (+41),
+PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
+renderer `718445e6e`, empilée sur #2411 : **164/443** rendus (+41),
 **142** comparaisons (+37), **26** cas à ≥99 % de pixels ±2/canal (+6).
 Les 123 anciens rendus restent disponibles, 118 identiques bit à bit.
 Les références, scènes, seuils, exclusions et trois timeouts restent inchangés.
