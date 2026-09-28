@@ -18,6 +18,8 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dPictureSamplingPass
 import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
@@ -179,27 +181,36 @@ private fun preflightW4eClipMaskInitializes(
                 row.copyExtent() == operand.copyExtentI32() && row.sampleCountI32 == operand.sampleCountI32 &&
                 row.byteSize == operand.byteSizeI64 && row.lifetime == operand.lifetime && row.usages() == operand.usages()
         fun inverseUsesMatch(render: GPUFrameStep.RenderPassStep, recipe: W6InverseMaskPathRecipeV1): Boolean {
-            val uses = render.resourceUses
-            if (uses.firstOrNull()?.resource !== frame.refs[recipe.target.id] || uses.first().usage != GPUFrameResourceUsage.RenderAttachment || !uses.first().write) return false
-            val tail = uses.drop(1).map { it.role to it.usage }
-            val expected = when (recipe) {
-                is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans -> listOf(GPUFrameResourceRole.PathDepthStencil to GPUFrameResourceUsage.RenderAttachment)
-                is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> listOf(
-                    GPUFrameResourceRole.VertexData to GPUFrameResourceUsage.Vertex,
-                    GPUFrameResourceRole.IndexData to GPUFrameResourceUsage.Index,
-                    GPUFrameResourceRole.PathDepthStencil to GPUFrameResourceUsage.RenderAttachment,
-                )
-                is W6InverseMaskPathRecipeV1.GeometryCover -> listOf(
-                    GPUFrameResourceRole.UniformData to GPUFrameResourceUsage.Uniform,
-                    GPUFrameResourceRole.PathDepthStencil to GPUFrameResourceUsage.RenderAttachment,
-                    GPUFrameResourceRole.ClipMask to GPUFrameResourceUsage.TextureBinding,
-                )
-                is W6InverseMaskPathRecipeV1.ZeroCover -> listOf(
-                    GPUFrameResourceRole.UniformData to GPUFrameResourceUsage.Uniform,
-                    GPUFrameResourceRole.ClipMask to GPUFrameResourceUsage.TextureBinding,
-                )
+            fun targetRole(row: PlanResource): GPUFrameResourceRole = when (row.role) {
+                PlanResourceRole.LogicalTarget -> GPUFrameResourceRole.SceneTarget
+                PlanResourceRole.MultisampleColorTarget, PlanResourceRole.LayerTarget -> GPUFrameResourceRole.LayerTarget
+                else -> GPUFrameResourceRole.ClipMask
             }
-            return tail == expected
+            fun use(id: PlanResourceId, role: GPUFrameResourceRole, usage: GPUFrameResourceUsage, write: Boolean) =
+                GPUFrameResourceUse(frame.refs.getValue(id), role, usage, GPUFrameResourceLifetime.FrameLocal, write)
+            val target = frame.physical.resource(recipe.target.id)
+            val expected = buildList {
+                add(use(recipe.target.id, targetRole(target), GPUFrameResourceUsage.RenderAttachment, true))
+                when (recipe) {
+                    is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans ->
+                        add(use(recipe.depthStencil.id, GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, true))
+                    is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> {
+                        add(use(requireNotNull(recipe.vertex).id, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
+                        add(use(requireNotNull(recipe.index).id, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
+                        add(use(recipe.depthStencil.id, GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, true))
+                    }
+                    is W6InverseMaskPathRecipeV1.GeometryCover -> {
+                        add(use(recipe.uniform.id, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                        add(use(recipe.depthStencil.id, GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, true))
+                        add(use(recipe.mask.id, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false))
+                    }
+                    is W6InverseMaskPathRecipeV1.ZeroCover -> {
+                        add(use(recipe.uniform.id, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                        add(use(recipe.mask.id, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false))
+                    }
+                }
+            }
+            return render.resourceUses == expected
         }
         val entries = framePlan.steps.mapIndexedNotNull { index, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
@@ -290,11 +301,17 @@ private fun preflightW4eClipMaskInitializes(
                         "W6 inverse-mask native packet diverged from its catalog recipe before allocation."
                     }
                     when (inverseRecipe) {
-                        is W6InverseMaskPathRecipeV1.GeometryProducer -> require(operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil))
+                        is W6InverseMaskPathRecipeV1.GeometryProducer.Fan -> require(
+                            operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil) &&
+                                binding.payload.geometrySlice(bound.id.value, W4eNativePayloadPlan.STENCIL_PRODUCER) == inverseRecipe.geometrySlice)
+                        is W6InverseMaskPathRecipeV1.GeometryProducer.ScanSpans -> require(
+                            operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil))
                         is W6InverseMaskPathRecipeV1.GeometryCover -> require(operandMatches(rows.getValue(inverseRecipe.depthStencil.id), inverseRecipe.depthStencil) &&
-                            operandMatches(rows.getValue(inverseRecipe.mask.id), inverseRecipe.mask) && operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform))
+                            operandMatches(rows.getValue(inverseRecipe.mask.id), inverseRecipe.mask) && operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform) &&
+                            binding.payload.uniformSlice(bound.id.value, W4eNativePayloadPlan.STENCIL_COVER_UNIFORM) == inverseRecipe.uniformSlice)
                         is W6InverseMaskPathRecipeV1.ZeroCover -> require(operandMatches(rows.getValue(inverseRecipe.mask.id), inverseRecipe.mask) &&
-                            operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform))
+                            operandMatches(rows.getValue(inverseRecipe.uniform.id), inverseRecipe.uniform) &&
+                            binding.payload.uniformSlice(bound.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM) == inverseRecipe.uniformSlice)
                     }
                 }
             }

@@ -1485,3 +1485,15 @@ V/I. Le préflight vérifie catalogue/owner, operands, load/store, blend et ordr
 d’usages avant allocation. L’encodeur W6 sélectionne le stencil fan et le
 pipeline cover depuis la recette, puis confronte les données préparées. Aucun
 lease 2A1 ni claim 2B n’est créé.
+
+### 2A0c.IIIb/c — correctif revue Sol, round 2
+
+Les phases W4d multisample et hard-edge restent sur leurs usages V/I/U
+historiques ; seuls les quatre sites inverse W6 réduisent leurs usages à ceux
+consommés. Le préflight inverse compare désormais chaque `GPUFrameResourceUse`
+entier (ref, rôle, usage, lifetime et écriture), ainsi que les slices scellées.
+Les sélecteurs publics AA `AA inverse direct over scan span limit keeps its
+multisample route` et hard-mask `hard path mask clips an offset direct fill
+triangle in a W6 layer` sont XML `1/0/0/0`; leurs Gradle exits 1 proviennent du
+GLFW 133 post-JUnit et restent **UNKNOWN**. Cette note ne ferme pas la revue
+Sol ni 2A1/2B.

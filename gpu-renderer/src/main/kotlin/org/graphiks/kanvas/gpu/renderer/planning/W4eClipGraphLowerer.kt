@@ -402,7 +402,18 @@ internal class W4eClipGraphLowerer {
                         add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
                         add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
                     }
-                    else -> error("Unadmitted W4e PathRenderPass phase")
+                    PathRenderPhase.MultisampleDirectColor,
+                    PathRenderPhase.MultisampleStencilProducer,
+                    PathRenderPhase.MultisampleStencilColorCover,
+                    PathRenderPhase.HardEdgeMaskProducer,
+                    PathRenderPhase.HardEdgeMaskStencilProducer,
+                    PathRenderPhase.HardEdgeMaskStencilCover,
+                    PathRenderPhase.HardEdgeBinaryColorCover,
+                    -> {
+                        add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
+                        add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
+                        add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                    }
                 }
                 path.depthStencilResourceId?.let { depth ->
                     add(use(depth, GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, true))
