@@ -1823,3 +1823,24 @@ est XML `1/0/0/0`. `git diff --check` est propre et la revue Sol de
 `b037096336` n'a trouvé aucun finding Critical/Important. Task 1b reste
 ouverte pour les autres sources ordinaires ; 2A0d entier, W4e, W6b,
 destination-read, 2A1/B/B−1 et 2B restent ouverts.
+
+### 2A0d Task 1b — deuxième sous-lot `RadialGradientClampSrgbV1`
+
+Le commit local `f09a4791e` admet uniquement le radial legacy non composé
+`MaterialV1` sur un `SolidRectDraw` W6 ordinaire. Il scelle les 96 octets
+uniformes (en-tête 16 + radial 80), group 1 uniform `0`/storage stops `1`,
+les coordonnées et la même row `GradientStopData` frame-local que le linear.
+Le prédicat de consommation du slab reste fermé explicitement sur
+`Linear|Radial`, sans admettre par négation un futur image/noise. Solid U16 et
+Linear U128 restent inchangés, et aucune lease 2A1 n'est ajoutée.
+
+Un témoin `Surface` radial non composé, rayon strictement positif, fixe
+l'expected avant `Surface` et exige `Render`/`Readback`. La compilation
+ciblée `gpu-plan`/`gpu-renderer`/`kanvas:compileTestKotlin` est verte ; ma
+relance indépendante de la classe W6 donne XML `38/0/0/0`, puis Gradle exit
+133 après JUnit (natif **UNKNOWN**). Le témoin W5c radial simple avait
+également passé en JUnit avant ce sous-lot ; les refus composed du run plus
+large restent hors admission et non résolus. `git show --check` est propre ;
+la revue Sol de `f09a4791e` n'a trouvé aucun finding Critical/Important.
+Task 1b et tout 2A0d restent ouverts pour les autres sources/geometry hosts,
+W4e, W6b et destination-read, puis 2A1/B/B−1 et 2B.
