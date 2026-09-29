@@ -202,6 +202,14 @@ class GmCanvas(
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawRect(rect, paint)
+            } else if (currentTransform.isScaleTranslate()) {
+                inner.save()
+                try {
+                    inner.concat(currentTransform)
+                    inner.drawRect(rect, paint)
+                } finally {
+                    inner.restore()
+                }
             } else {
                 val t = currentTransform
                 val p0 = t.transform(Point2F32(rect.left, rect.top))
