@@ -3,6 +3,19 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot couverture AA filtrée — en cours
+
+Sur #2418, [design](aa-mask-design.md) et [plan](aa-mask-plan.md) relus par
+Astra : source de couverture blanche MSAA4/resolve1 distincte de la source
+couleur, blur NORMAL puis peinture appliquée une fois sur le halo complet.
+Deux étapes séquentielles : triangle direct, puis stencil/trous/frontières et
+budget exact. La verticale directe est implémentée et sa revue Sol est validée
+après renforcement des oracles publics : 4/4 ciblés et 35/35 contrôles proches,
+exit 0 (`c73e5758c`). Stencil, frontières, budget exact, corpus et revue globale
+restent à faire. Aucun nouveau rendu GM ni gain de fidélité revendiqué.
+Baseline publique 22/22 ; `blur2rects` refuse encore
+`w6a.layer.unsupported_child` en 113 ms sur la base #2418.
+
 ## Lot source AA racine — 29 septembre 2026
 
 Renderer `470f62e63`, branche `codex/w7-root-aa-source`, PR draft

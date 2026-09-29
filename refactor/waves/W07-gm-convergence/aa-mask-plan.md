@@ -42,14 +42,16 @@ créé par les workers, ni push : le contrôleur gère revue et publication.
 
 **Files:**
 - Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanW4dAaCoverageSourceBindingV1.kt` — contrat fermé de couverture, native recipe sœur et commun interne de faits AA si nécessaire.
-- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanW4dAaSourceBindingV1.kt` — réutiliser le commun sans changer l'autorité couleur.
+- Reuse unchanged: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanW4dAaSourceBindingV1.kt` — conserver l'autorité couleur ; les primitives W4d communes existent déjà au lowerer.
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4dGeneralPathPlanCompiler.kt` — source deferred blanche distincte, préparation commune.
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/SourceDeferredRenderConstructionV4.kt` — topology `AaResolvedCoverage` et remapping exhaustif.
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W6aLayerPlanCompiler.kt` — sélectionner le nouveau contrat après validation de l'occurrence originale.
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W6aLayerGraphConstruction.kt` — domaine raw, binding coverage, blur et carrier W5 plein domaine.
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanPasses.kt` — variante exclusive `aaCoverageBinding` de FilterCoverageSourcePass.
-- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraph.kt`, `FrameSourceLayoutV4.kt`, `NativeSiteRecipeV1.kt`, `PlanPhysicalLayoutV1.kt` — inventaire, usages, canonical identity, catalog, layout et budget.
-- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUW4dAaSourcePreparedAuthority.kt`, `GPUPlanW4dGeneralPreparedAuthority.kt` — mécanique commune, autorité coverage séparée ; un fichier frère `GPUW4dAaCoveragePreparedAuthority.kt` est autorisé pour le contrat fermé.
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraph.kt`, `W6aLayerGraphValidation.kt`, `NativeSiteRecipeV1.kt`, `PlanPhysicalLayoutV1.kt` — inventaire, usages, canonical identity, catalog, layout et budget.
+- Reuse unchanged: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/FrameSourceLayoutV4.kt` — son remapping générique couvre la nouvelle topology.
+- Reuse unchanged: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUW4dAaSourcePreparedAuthority.kt`, `GPUPlanW4dGeneralPreparedAuthority.kt` — autorités couleur intactes ; créer le frère `GPUW4dAaCoveragePreparedAuthority.kt` et réemployer les helpers W4d existants de facts/seal/operands.
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W4dGeneralPathGraphLowerer.kt`, `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/PreparedGPUFrame.kt` — blanc canonique sous binding coverage et référence physique au nouveau bundle.
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUW6aLayerFramePlan.kt` — lowering du bundle coverage et de ses uses exacts.
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`, `GPUW6aEncoderScopesV1.kt`, `GPUW6aNativePathValidation.kt` — preflight, resolve, operands et validation native de la couverture.
 - Create: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W7AaMaskBlurSurfacePixelTest.kt`.
@@ -61,7 +63,7 @@ créé par les workers, ni push : le contrôleur gère revue et publication.
 - Produit `PlanPass.FilterCoverageSourcePass.aaCoverageBinding: PlanW4dAaCoverageSourceBindingV1?`, exclusif de rasterBinding et sealedAlphaSource. Aucun changement de sémantique des variantes existantes.
 - Task 2 consommera ce même binding avec deux phases stencil, sans changer son équation couleur/couverture ni son contrat d'origine.
 
-- [ ] **Step 1: Écrire les positifs publics et contrôles avant production.**
+- [x] **Step 1: Écrire les positifs publics et contrôles avant production.**
 
 Dans le nouveau test, créer des triangles root via Path : base `(16,16)`,
 `(80,16)`, `(16,80)` sur Surface96×96. Peinture noire opaque sur transparent
@@ -89,13 +91,13 @@ sauf indication contraire. Fixer tous les points et assertions avant Surface.
 Chaque positif exige Render/Readback et un second render identique. `@AfterAll`
 dispose le GPU, suivant les tests W7. Les tests ne lisent ni planner ni recipe.
 
-- [ ] **Step 2: RED réel, archivé sans écrasement.**
+- [x] **Step 2: RED réel, archivé sans écrasement.**
 
 Run: `rtk proxy ./gradlew :kanvas:test --offline --no-build-cache --tests org.graphiks.kanvas.surface.W7AaMaskBlurSurfacePixelTest -I /private/tmp/kanvas-w7-image-opacity.YmtXjI/isolated.init.gradle -Pw7.validationDir=/private/tmp/kanvas-w7-aa-mask.9OewPc/task1-red --console=plain`.
 Les positifs doivent échouer par la non-admission, pas par un défaut d'oracle
 ou de compilation. Les contrôles déjà verts restent identifiés comme tels.
 
-- [ ] **Step 3: Implémenter la verticale et ses contrats fermés.**
+- [x] **Step 3: Implémenter la verticale et ses contrats fermés.**
 
 Valider le draw original (root Path fill solide AA SrcOver, seul NORMAL)
 avant d'en construire une source géométrique blanche. Conserver séparément
@@ -124,7 +126,7 @@ samples4→1, usages, clear/store, scissor, géométrie et resolve exacts ; le
 materializer ne relit pas la peinture ou SceneSnapshot. Factoriser les helpers
 W4d internes nécessaires, sans deuxième renderer ni purpose public permissif.
 
-- [ ] **Step 4: GREEN ciblé puis contrôles proches.**
+- [x] **Step 4: GREEN ciblé puis contrôles proches.**
 
 Même commande avec archive unique `task1-green`. Ensuite nouvelle archive
 `task1-related` avec W7AaMaskBlurSurfacePixelTest, W6bMaskBlurAutoLayerSurfacePixelTest,
@@ -132,7 +134,7 @@ W7RootAaSurfacePixelTest et W7AaPathLayerSurfacePixelTest. Corriger la productio
 si un oracle échoue ; toute correction d'oracle exige cause indépendante
 documentée, jamais alignement sur les pixels obtenus.
 
-- [ ] **Step 5: Self-review, commit et handoff au contrôleur.**
+- [x] **Step 5: Self-review, commit et handoff au contrôleur.**
 
 `rtk git diff --check`. Commit fichiers propres à la tâche ; aucun push.
 Rapport : commandes, exits réels, XML, chaque échec/warning, détails du contrat
