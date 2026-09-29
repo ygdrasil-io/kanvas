@@ -408,6 +408,136 @@ La relecture finale indépendante Sol confirme les comptes des XML, les
 631 identités et les 164 anciennes empreintes RGBA ; elle ne relève aucun
 défaut confirmé du lot et valide sa publication draft, pas le merge.
 
+### Validation complémentaire par lots bornés
+
+Dix sélections supplémentaires de `:kanvas:test` ont été exécutées en série,
+sans modification persistante du renderer, des tests ou des oracles. Chaque
+tâche est bornée à 240 s ; cette limite d'exécution ne modifie aucun budget
+du renderer. Les résultats ci-dessous sont **par exécution, non additionnables
+en un total de tests uniques** : des reprises recouvrent des cas déjà observés.
+
+| Lot | Réussites | Échecs d'assertion | Cas interrompus | Terminaison |
+| --- | ---: | ---: | ---: | --- |
+| 01 — W5e méthodes manquantes | 14 | 3 | 0 | worker natif 133 après assertions |
+| 02 — W5e frontière cubic | 1 | 0 | 0 | worker natif 133 après assertions |
+| 03 — W5f Surface | 83 | 16 | 1 | limite 240 s |
+| 04 — W5f image filter | 92 | 0 | 0 | worker natif 133 après assertions |
+| 05 — W5g composed | 48 | 2 | 1 | limite 240 s |
+| 06 — contrats GPU, API/blend, text/types existants | 1 990 | 1 254 | 0 | Gradle 1, assertions |
+| 07 — W6/W7 Surface | 411 | 1 | 0 | Gradle 1, assertion |
+| 08 — W5g convergence/noise, W5h convergence partiel | 89 | 4 | 1 | limite 240 s |
+| 09 — W5h géométrie, image origin partiel | 671 | 0 | 1 | limite 240 s |
+| 10 — reprise W5f matrix/table | 16 | 0 | 0 | worker natif 133 après assertions |
+
+Les interruptions et erreurs synthétiques du runner ne sont pas des échecs
+d'assertion. Trois conteneurs paramétrés marqués `skipped` sont aussi exclus
+de la colonne « cas interrompus ». Les 57 réussites W5gNoise du lot 08 sont
+attestées par le listener JSONL, son XML étant vide après l'arrêt. Le lot 09
+comprend **598/598 cas de géométrie W5h réussis** ; ses six noms d'affichage
+dupliqués dans ImageOrigin désignent des invocations distinctes et ne doivent
+pas être fusionnés. Un `SUITE_END` lors d'un timeout ne certifie pas que toutes
+les méthodes de la classe ont été exécutées.
+
+La sélection W6/W7 atteint 38 classes et **411/412 réussites**. Son seul échec
+est `emptyCompositeClipDoesNotMaskUnsupportedBackdropAndSameSurfaceRecovers` :
+le test attend `IllegalStateException`, mais le rendu termine avec `true`.
+L'attente n'a pas été changée. La sélection large atteint 86 classes ;
+`GPUAllApiBlendSurfaceTest` concentre **1 071 des 1 254 échecs**, sans que cela
+prouve une cause unique. Cette dette nouvellement mesurée n'a pas de baseline
+individuelle complète : elle n'est pas présentée comme autant de régressions
+du cache. L'exécution de tests existants text/types n'élargit pas le périmètre
+de réparation, qui exclut toujours fonts et codecs.
+
+La validation globale reste **incomplète** : W5fGradientInterpolation,
+W5gComposedMaterial, W5hConvergence et W5hImageOrigin ont encore des méthodes
+ou variantes non exécutées ; W5hRuntimeEffect et W5hTextVertices ne sont pas
+atteints dans ces lots. Le rejeu du seul template matrix/table du lot 10 ne
+ferme pas la classe GradientInterpolation. Le dry-run ne fournit pas un
+dénominateur fiable pour les invocations paramétrées et les factories.
+
+Archives XML, résultats binaires et événements :
+`/private/tmp/kanvas-w7-remaining.IzRmgJ/batches/`. Les événements des lots
+06–10 sont du JSONL malgré le suffixe `.tsv` ; ceux du lot 05 sont altérés par
+un échappement du listener et ne servent pas à certifier la couverture.
+Les XML restent exploitables. Aucun test d'infrastructure n'a été ajouté,
+aucun seuil ni exclusion n'a été changé et aucun nouveau score GM n'est
+revendiqué. Ces résultats justifient un triage ciblé, pas une suite verte.
+La relecture indépendante Sol recoupe ces comptes dans les XML et le listener,
+y compris les conteneurs synthétiques et les 57 cas JSONL-only. Elle ne relève
+pas de problème important dans ce bilan et valide sa publication draft,
+sans valider le merge.
+
+La prochaine correction de comportement vise d'abord l'autorité image/opacité
+de `lattice2`, dont la cause est localisée ci-dessous ; le raffinement de preuve
+Sweep vient ensuite. Les portions de validation manquantes restent explicites,
+sans devenir un prétexte pour modifier leurs oracles ou multiplier les relances
+globales interrompues.
+
+### Diagnostic numérique AA et prochain correctif borné
+
+Le refus Sweep est reproduit par une `Surface(17, 1)` avec un RRect AA
+débordant et un Sweep de 0 à 360 degrés, sans wrapper, sur la base comme
+sur le correctif de cache. La preuve reçoit le rectangle raster conservateur,
+pas seulement les fragments de couverture non nulle. Le graph flush les
+deltas subnormaux vers zéro, puis remplace les axes nuls par un avant
+`Atan2`. Les axes sont donc normaux, mais le hull de `EagerSelect` perd cette
+disjonction et invente zéro entre les valeurs atteignables. Le rejet provient
+de la précondition de normalité d'`Atan2`, pas du GPU ou du cache.
+
+L'avis ciblé Astra recommande une analyse auxiliaire locale des classes F32
+possibles : zéro (signé inclus), subnormal non nul, normal. Le fallback reste
+l'intervalle conservateur. Seules les sélections et les comparaisons de
+`abs(v)` à zéro ou `MIN_NORMAL`, portant sur la même identité scalaire,
+raffineraient ces classes. Il ne faut jamais déduire « normal » de `v != 0`
+seul : une comparaison peut subir le FTZ (flush-to-zero).
+
+La réparation proposée conserve la validation des **deux bras eager**,
+les contextes, la réassociation des Add, le cache et tous les contrats
+numériques. Pour deux axes certifiés normaux, `Atan2` découperait leurs
+bornes en deux signes au plus, soit quatre rectangles, appliquerait à chacun
+la même enveloppe 4096 ULP, puis réunirait les résultats. Aucune modification
+du shader, de la tolérance, du raster ou des budgets n'est prévue. Ce design
+n'est pas encore implémenté et aucun gain de GM ne lui est attribué.
+
+Les témoins doivent rester publics : Sweep non uniforme en RRect AA et
+PATH_STROKE, quadrants/axes/coupure angulaire, mêmes pixels au second rendu,
+oracle existant inchangé, témoin rouge et vingt wrappers, refus précis puis
+récupération. Les limites zéro/subnormal/normal doivent être exercées via
+des transformations publiques admises ; aucun test d'infrastructure ajouté.
+
+Radial et Conical restent distincts : leur `Sqrt` guardé par égalité à zéro
+ne prouve pas l'absence de subnormaux. L'absence de subnormal dans une trace
+ne suffirait pas non plus à le démontrer. Le premier nœud fautif du Conical
+reste à capturer ; ses dénominateurs corrélés constituent une autre hypothèse.
+La réparation de ces familles n'est pas incluse dans le correctif Sweep.
+
+### Refus d'autorité de lattice2 localisé
+
+Une instrumentation temporaire, retirée après le rejeu du seul index 343,
+localise le refus dans `W5aMaterialPlanVersionWitnessV2.issue`. La commande 4
+porte `MaterialV4(ref=5, coordinates=V3)` ; son stage original et rebasé,
+leur identité canonique et les contrôles proof/structural/layout sont valides,
+avec 864 octets d'uniformes. Le programme racine déclare pourtant
+`versionI32=1`, donc le witness rejette l'autorité V4.
+
+Le producteur est `FrameSourceLayoutV4.prepareAndFinish` : il ajoute
+`MaterialProgramPlan.OpacityV1` autour de l'image V3. `OpacityV1` propage
+aujourd'hui la version 4 seulement pour un enfant V4 ; un enfant image V3
+retombe donc à V1 malgré la preuve de source V4 scellée sur le wrapper.
+La correction devra construire un programme d'opacité V4 authentique pour
+cette chaîne image V3, avec graph et bindings cohérents, puis vérifier les
+pixels et l'opacité appliquée une seule fois. Il ne s'agit pas d'admettre
+arbitrairement V1 côté renderer ni de supprimer le contrôle du witness.
+La relecture Sol confirme cette causalité. Aucun correctif de comportement
+n'est livré ici ; localiser le premier refus ne prouve pas qu'il soit unique.
+
+Le relevé instrumenté, distinct de la mesure de corpus, est conservé dans
+`/private/tmp/kanvas-w7-lattice-probe.tjMJ5N` : `[343,344)` exécute un GM,
+reproduit le refus, et termine avec Gradle 0. Le premier intervalle
+`[343,343)` était vide et n'est pas compté. Après retrait exact des logs,
+`:gpu-renderer:compileKotlin :gpu-renderer:jar` termine avec Gradle 0 ;
+aucun diff de source ou de test ne reste. Les contrôles restent stricts.
+
 ## Décisions de pilotage
 
 1. **Vérifier les scènes avant d'optimiser leurs scores.** L'audit de témoins

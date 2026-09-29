@@ -23,6 +23,21 @@ rouge. Le [bilan et ses limites](pilotage.md#lot-cache-de-preuve-cpu--29-septemb
 et le [plan](proof-evaluation-plan.md) distinguent performance, admission et
 fidélité. W7 reste ouvert, sans merge readiness.
 
+La [validation complémentaire par dix lots bornés](pilotage.md#validation-complémentaire-par-lots-bornés)
+atteint **411/412 réussites W6/W7 Surface**, **598/598 cas de géométrie W5h**
+et **92/92 cas W5f image filter**. La sélection générale GPU/API/blend observe
+**1 990 réussites et 1 254 échecs** : leur antériorité n'est pas établie
+individuellement. Six classes W5 restent partielles ou non atteintes ; les
+timeouts et sorties natives 133 restent séparés des assertions. Ces lots
+ne constituent ni une suite complète ni un nouveau gain de similarité.
+
+Le premier refus de `lattice2` est localisé : un wrapper image/opacité déclare
+un programme V1 avec une autorité V4. La prochaine correction doit produire
+une chaîne V4 authentique, sans desserrer le witness. Le diagnostic Sweep AA,
+relu avec Astra, propose ensuite de préserver localement les classes F32
+perdues par le hull des sélections. **Ces deux corrections restent à implémenter** ;
+seuls les diagnostics et la validation sont ajoutés à ce checkpoint.
+
 ## Lot pointillés — 29 septembre 2026
 
 Renderer `5f971f750`, PR draft [#2413](https://github.com/ygdrasil-io/kanvas/pull/2413)
