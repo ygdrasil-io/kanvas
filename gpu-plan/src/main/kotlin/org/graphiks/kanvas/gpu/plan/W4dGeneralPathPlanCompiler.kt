@@ -83,6 +83,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private val admitsStandaloneRectPathFrames: Boolean = false,
     /** W6-only source contract; the standalone W4d graph keeps its terminal readback. */
     private val allowAaColorSource: Boolean = false,
+    /** Closed W7 root mixture source: only an AA Rect STROKE may use the Rect projection. */
+    private val w6RootAaRectStrokeSource: Boolean = false,
     /** W4e may promote a mixed clip frame to its AA4 construction branch without rewriting draws. */
     private val forceAaFrame: Boolean = false,
     /** W4e inserts its clip consumers before promoting the shared material/resource graph. */
@@ -93,9 +95,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private val w6AaCoverageSource: Boolean = false,
 ) : GpuPlanCompiler {
     internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource)
+        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, w6RootAaRectStrokeSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource)
     internal fun withImageOriginProjection(projection: ImageOriginGeometryProjectionV6?): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource)
+        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,w6RootAaRectStrokeSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource)
     public constructor() : this(PathStrokePolicyF64())
 
     /**
@@ -222,7 +224,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             }
         }
         val historicalMember = !containsRectProjection && (requiresGeneral || acceptsNarrowTransforms)
-        val standaloneMember = admitsStandaloneRectPathFrames && standaloneFrameFacts &&
+        val standaloneMember = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource) && standaloneFrameFacts &&
             (requiresGeneral || requiresStandaloneRectRouting)
         if (outside || !(historicalMember || standaloneMember)) {
             return Preflight.Outside
@@ -236,7 +238,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         // SrcOver draws. Normalize those solids directly while retaining their original
         // draw/source authority; a deferred composed stroke source would select W5b's
         // single-sample source topology instead of this compiler's closed AA frame.
-        val standaloneAaSolids = admitsStandaloneRectPathFrames &&
+        val standaloneAaSolids = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource) &&
             scene.any { it is SceneCommand.Draw && it.node.coverage == CoverageRequest.ANTIALIASED } &&
             scene.filterIsInstance<SceneCommand.Draw>().all { standaloneFrameDraw(it.node) }
         val draws = mutableListOf<SealedDraw>()
@@ -415,12 +417,18 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     internal fun acceptsW6AaColorSourceScope(node: DrawNode): Boolean =
         allowAaColorSource && classifyDrawScope(node) is DrawScope.Ready
 
+    /** Closed W7 admission: keep the original RECT/STROKE provenance and style intact. */
+    internal fun acceptsW6RootAaRectStrokeScope(node: DrawNode): Boolean =
+        w6RootAaRectStrokeSource && node.origin == DrawOrigin.RECT && node.geometry is GeometryNode.Rect &&
+            node.paint?.style == PaintStyleNode.STROKE &&
+            classifyDrawScope(node) is DrawScope.Ready
+
     private fun classifyDrawScope(node: DrawNode): DrawScope {
         val paint = node.paint ?: return DrawScope.Gap("W4d.2 requires paint")
         val rect = (node.geometry as? GeometryNode.Rect)?.copyBounds()
         // Empty/inverted rectangles stay outside this opt-in projection so their existing
         // route retains ownership of their observable semantics.
-        val rectProjection = admitsStandaloneRectPathFrames && rect?.isEmpty == false
+        val rectProjection = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource) && rect?.isEmpty == false
         val path = (node.geometry as? GeometryNode.Path)?.path ?: if (rectProjection) {
             if (!finite(requireNotNull(rect))) return DrawScope.Invalid("Draw facts are non-finite")
             PathBuilder(FillRule.WINDING).addRect(requireNotNull(rect)).build()
@@ -446,7 +454,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             else -> return DrawScope.Gap("Clip is outside W4d.2")
         }
         if (!solid(node, paint)) return DrawScope.Gap("Material, blend, or effect is outside W4d.2")
-        if (allowAaColorSource &&
+        val rootRectStroke = w6RootAaRectStrokeSource && rectProjection
+        if (allowAaColorSource && !rootRectStroke &&
             (node.coverage != CoverageRequest.ANTIALIASED || node.material !is MaterialNode.Solid || paint.colorFilter != null ||
                 paint.style != PaintStyleNode.FILL || paint.pathEffect != null ||
                 node.effects != EffectStack.Empty || when (val blend = node.blend) {
@@ -471,6 +480,17 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             return DrawScope.Invalid("Stroke style is invalid")
         } else null
         val matrixF64 = transform.toMatrix3x3F64()
+        if (rootRectStroke && !(node.coverage == CoverageRequest.ANTIALIASED && node.material is MaterialNode.Solid &&
+                paint.shader == null && paint.colorFilter == null && paint.style == PaintStyleNode.STROKE && paint.pathEffect == null &&
+                node.effects == EffectStack.Empty && paint.strokeJoin == StrokeJoinNode.MITER && paint.strokeMiter.isFinite() &&
+                paint.strokeMiter >= 2f && matrixF64.classifyPathTransform() in setOf(PathTransformClass.Identity, PathTransformClass.AxisAlignedAffine) &&
+                matrixF64.sxF64 != 0.0 && matrixF64.syF64 != 0.0 && when (val blend = node.blend) {
+                    BlendNode.SrcOver -> true
+                    is BlendNode.Mode -> blend.mode == BlendMode.SRC_OVER
+                    is BlendNode.Paint -> blend.mode == BlendMode.SRC_OVER && blend.blender == null
+                    is BlendNode.Custom -> false
+                }
+            )) return DrawScope.Gap("W7 root AA Rect source requires a solid SrcOver MITER stroke")
         return DrawScope.Ready(
             path = path,
             matrixF64 = matrixF64,
@@ -1523,6 +1543,17 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             PathStrokePolicyF64(),
             acceptsNarrowTransforms = true,
             allowAaColorSource = true,
+            runtimeCatalog = catalog,
+        )
+
+        /** Root-only W7 source; this is deliberately not the broad W6 path source. */
+        internal fun w6RootAaRectStrokeSource(
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): W4dGeneralPathPlanCompiler = W4dGeneralPathPlanCompiler(
+            PathStrokePolicyF64(),
+            acceptsNarrowTransforms = true,
+            allowAaColorSource = true,
+            w6RootAaRectStrokeSource = true,
             runtimeCatalog = catalog,
         )
 

@@ -96,7 +96,12 @@ public class W4dAaSourceNativeSiteRecipeV1 internal constructor(public val bindi
             blend("blend", pass.draw.blend); rect("scissor", pass.draw.copyScissorI32())
             text("material.kind", pass.draw.materialAuthority.javaClass.simpleName)
             int("material.ref", pass.draw.materialAuthority.materialPlanRef().indexI32)
-            val geometry = (pass.draw.copyPathGeometry() as PathDrawGeometry.Fill).valueF32
+            val geometry = when (val path = pass.draw.copyPathGeometry()) {
+                is PathDrawGeometry.Fill -> path.valueF32
+                is PathDrawGeometry.Stroke -> path.valueF32.copyFillGeometryF32()
+                is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty ->
+                    error("W6 AA source recipe admits only sealed fill or stroke geometry")
+            }
             geometry.copyDirectTriangleF32OrNull()?.let { triangle ->
                 triangle.copyVerticesF32().forEachIndexed { j, value -> float("vertex.$j", value) }
                 triangle.copyIndicesI32().forEachIndexed { j, value -> int("index.$j", value) }

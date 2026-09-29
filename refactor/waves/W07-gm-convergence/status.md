@@ -3,6 +3,45 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Audit `alphagradients` — 29 septembre 2026
+
+[Diagnostic causal](alphagradients-audit.md) sans modification de code ni du
+corpus : interpolation premul/unpremul non exposée et domaine de composition
+différent de celui observé dans la référence (sRGB encodé contre linéaire).
+Les modèles retrouvent chacun les RGB de leurs 184 704 pixels intérieurs à un
+octet près ; ce n'est pas un nouveau score GM. AA du port différent, diagonale conforme,
+profil Rec.2020 reconnu. **15/15 tests publics natifs, Gradle 0**. Bilan inchangé,
+W7 toujours ouvert. Ordre retenu après relecture Astra : politique alpha
+explicite du LinearGradient sRGB clamp, puis domaine de composition de
+Surface, puis port corrigé avec mesure distincte du changement de scène.
+
+## Lot mélange racine Rect stroke AA — 29 septembre 2026
+
+Renderer `ff628a94d`, branche `codex/w7-mixed-root-aa-rect`, draft
+[#2420](https://github.com/ygdrasil-io/kanvas/pull/2420) empilée sur #2419.
+[Design](mixed-root-aa-rect-design.md), [plan](mixed-root-aa-rect-plan.md),
+[snapshot631](mixed-root-ff628a94d.json) et
+[bilan détaillé](pilotage.md#lot-mélange-racine-rect-stroke-aa--29-septembre-2026).
+
+**197→198 rendus /443 éligibles;175→176 comparaisons.** Les197 anciennes
+images restent pixel-identiques. Seul `alphagradients` devient rendable,
+à33,88% des pixels ±2/canal : gain fonctionnel, pas parité. Le port répète les
+deux colonnes là où la référence les différencie; audit port/interpolation
+nécessaire avant attribution complète des écarts. Aucun GM, référence, seuil,
+exclusion ou score historique modifié. Toujours36 cas à≥99%,49 à≥95%,194 échecs
+de rendu,50 de setup et1 timeout (`vertices`).
+
+**47/47 tests ciblés, Gradle0**, après correction/re-review Sol. Budget exact
+B29408 et B−1 transactionnel vérifiés, transparence/ordre/hairline/clip et
+récupération sur Surface publique. Les erreurs initiales de dérivation du
+budget et l'absence de préfixes négatifs pré-patch sont documentées, sans
+réécriture de l'historique. Globale unique240s rouge/incomplète :665 succès,
+42 échecs déjà présents,1 interrompu sur708 identités communes;16 autres cas
+du parent non atteints. Wrapper124, enfant Gradle143, XML globaux non finalisés.
+Un ancien run voisin isolé avait terminé native133 malgré ses assertions PASS.
+Revue globale Sol `1cd04aa77..cd6f923fd` validée, aucun finding C/I/M;
+W7 non clos, aucune autorisation de merge.
+
 ## Lot couverture AA filtrée — 29 septembre 2026
 
 Draft [#2419](https://github.com/ygdrasil-io/kanvas/pull/2419) empilée sur #2418,

@@ -2,7 +2,12 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.LayerDescriptor
 import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.CapturedFilterRootV1
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.ColorFilterNode
@@ -21,7 +26,11 @@ import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
+import org.graphiks.math.matrix.PathTransformClass
+import org.graphiks.math.matrix.classifyPathTransform
+import org.graphiks.math.matrix.isFinite
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
+import org.graphiks.math.matrix.toMatrix3x3F64
 
 /**
  * First layer authority. It recognizes every layer boundary before any child capability or
@@ -64,7 +73,9 @@ public class W6aLayerPlanCompiler public constructor(
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         val commands = scene.toList()
         val ownsW6b = W6bFilterGraphConstruction.owns(scene)
-        if (commands.none { it is SceneCommand.BeginLayer || it is SceneCommand.EndLayer } && !ownsW6b) {
+        val hasLayerBoundary = commands.any { it is SceneCommand.BeginLayer || it is SceneCommand.EndLayer }
+        val ownsMixedRootAaRect = !hasLayerBoundary && !ownsW6b && ownsMixedRootAaRectFrame(commands)
+        if (!hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect) {
             return GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Scene has no layer boundary.")))
         }
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
@@ -166,7 +177,7 @@ public class W6aLayerPlanCompiler public constructor(
             }
         }
         if (stack.isNotEmpty()) return invalid(W6aPlanDiagnostics.MalformedStack, "BeginLayer has no matching EndLayer.")
-        if (scopes.isEmpty() && !ownsW6b) return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
+        if (scopes.isEmpty() && !ownsW6b && !ownsMixedRootAaRect) return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
 
         val segments = mutableListOf<Segment>()
         val immutableScopes = scopes.map { occurrence -> ScopeOccurrence(
@@ -206,6 +217,7 @@ public class W6aLayerPlanCompiler public constructor(
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
             }, graphLimits)
             val aaSource = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
+            val rootAaRectSource = W4dGeneralPathPlanCompiler.w6RootAaRectStrokeSource(runtimeCatalog)
             val aaCoverageSource = W4dGeneralPathPlanCompiler.w6AaCoverageSource(runtimeCatalog)
             val originalDraw = (commands[drawIndexI32] as SceneCommand.Draw).node
             val unfilteredDraw = stripW6bPayload(commands[drawIndexI32] as SceneCommand.Draw,
@@ -215,6 +227,8 @@ public class W6aLayerPlanCompiler public constructor(
             val rootAaSource = scopeI32 == null && !ownsW6b &&
                 originalDraw.coverage == CoverageRequest.ANTIALIASED &&
                 aaSource.acceptsW6AaColorSourceScope(originalDraw)
+            val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&
+                rootAaRectSource.acceptsW6RootAaRectStrokeScope(originalDraw)
             val rootAaCoverage = scopeI32 == null && ownsW6b &&
                 originalDraw.coverage == CoverageRequest.ANTIALIASED &&
                 originalDraw.paint?.let { paint ->
@@ -224,6 +238,7 @@ public class W6aLayerPlanCompiler public constructor(
                 aaCoverageSource.acceptsW6AaColorSourceScope(unfilteredDraw)
             val generalPath = when {
                 rootAaCoverage -> aaCoverageSource
+                rootAaRectStroke -> rootAaRectSource
                 (scopeI32 != null && aaSource.acceptsW6AaColorSourceScope(originalDraw)) || rootAaSource -> aaSource
                 else -> W4dGeneralPathPlanCompiler()
             }
@@ -239,11 +254,59 @@ public class W6aLayerPlanCompiler public constructor(
                 is GpuPlanSelection.MaterialOnlyRefusal -> return selection
                 is GpuPlanSelection.InvalidScene -> return selection
                 is GpuPlanSelection.ResourceLimitExceeded -> return selection
-                is GpuPlanSelection.NotCandidate -> return invalid(W6aPlanDiagnostics.UnsupportedChild,
-                    "Layer segment is outside the admitted child geometry/source lanes.")
+                is GpuPlanSelection.NotCandidate -> return if (ownsMixedRootAaRect)
+                    GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild,
+                        "Mixed root frame is outside its complete child source lanes.")))
+                else invalid(W6aPlanDiagnostics.UnsupportedChild, "Layer segment is outside the admitted child geometry/source lanes.")
             }
         }
         return GpuPlanSelection.Candidate(Candidate(this, scene, scene.canonicalId, target, immutableScopes, segments.toList()))
+    }
+
+    /** W7 owns only a complete direct Rect frame: at least one root AA stroke and one linear gradient sibling. */
+    private fun ownsMixedRootAaRectFrame(commands: List<SceneCommand>): Boolean {
+        val rootSource = W4dGeneralPathPlanCompiler.w6RootAaRectStrokeSource(runtimeCatalog)
+        var stroke = false
+        var gradient = false
+        for (command in commands) {
+            if (command is SceneCommand.SetTransform || command is SceneCommand.SetClip || command is SceneCommand.Annotation) continue
+            val draw = (command as? SceneCommand.Draw)?.node ?: return false
+            if (rootSource.acceptsW6RootAaRectStrokeScope(draw)) {
+                stroke = true
+                continue
+            }
+            if (!acceptsMixedRootRectFill(draw)) return false
+            gradient = gradient || draw.material is MaterialNode.LinearGradient
+        }
+        return stroke && gradient
+    }
+
+    /** Root ownership is whole-frame: every non-stroke sibling is a direct, bounded Rect fill. */
+    private fun acceptsMixedRootRectFill(draw: DrawNode): Boolean {
+        val paint = draw.paint ?: return false
+        val bounds = (draw.geometry as? GeometryNode.Rect)?.copyBounds() ?: return false
+        val matrix = draw.transform.toMatrix3x3F64()
+        val srcOver = when (val blend = draw.blend) {
+            BlendNode.SrcOver -> true
+            is BlendNode.Mode -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER
+            is BlendNode.Paint -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER && blend.blender == null
+            is BlendNode.Custom -> false
+        }
+        val hardClip = when (val clip = draw.clip) {
+            ClipStackNode.Empty -> true
+            is ClipStackNode.DeviceRect -> !clip.antiAlias && clip.copyBounds().let { rect ->
+                listOf(rect.left, rect.top, rect.right, rect.bottom).all { it.isFinite() && it == it.toInt().toFloat() }
+            }
+            else -> false
+        }
+        return draw.origin == DrawOrigin.RECT && !bounds.isEmpty &&
+            listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite) &&
+            (draw.material is MaterialNode.Solid || draw.material is MaterialNode.LinearGradient) &&
+            paint.style == PaintStyleNode.FILL && draw.coverage in setOf(CoverageRequest.HARD_EDGE, CoverageRequest.ANTIALIASED) &&
+            draw.resource == null && draw.operationBlendMode == null && paint.blender == null && paint.colorFilter == null &&
+            paint.maskFilter == null && paint.imageFilter == null && paint.pathEffect == null && draw.effects == EffectStack.Empty &&
+            srcOver && matrix.isFinite() && matrix.classifyPathTransform() in setOf(PathTransformClass.Identity, PathTransformClass.AxisAlignedAffine) &&
+            matrix.sxF64 != 0.0 && matrix.syF64 != 0.0 && hardClip
     }
 
     override fun plan(
