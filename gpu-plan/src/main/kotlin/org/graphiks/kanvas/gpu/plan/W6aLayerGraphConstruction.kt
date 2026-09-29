@@ -168,7 +168,7 @@ internal class W6aLayerGraphConstruction(
             before.firstCommandIndexI32 < after.firstCommandIndexI32
         }) { "W6 child occurrences must be published in recorded command order." }
         require(lanes.all { source ->
-            source.topology == DeferredLaneTopologyV4.AaResolvedColor && source.passes().let { aa ->
+            source.topology in setOf(DeferredLaneTopologyV4.AaResolvedColor, DeferredLaneTopologyV4.AaResolvedCoverage) && source.passes().let { aa ->
                 aa.all { pass -> pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw &&
                     pass.draw.sample == SamplePlan.Multisample4 && pass.draw.coverage == CoveragePlan.StencilAA4 } &&
                     (aa.singleOrNull()?.let { (it as PlanPass.PathRenderPass).phase == PathRenderPhase.MultisampleDirectColor &&
@@ -1043,6 +1043,9 @@ internal class W6aLayerGraphConstruction(
             PlanResourceRole.DestinationSnapshot -> planResourceId(row.role, occurrences.size + laneI32)
             PlanResourceRole.VertexData, PlanResourceRole.IndexData, PlanResourceRole.UniformData, PlanResourceRole.DepthStencil ->
                 planResourceId(row.role, laneI32 + 1)
+            // A W4d coverage resolve is not the W6b occurrence raw source allocated below.
+            // Keep both identities disjoint until the typed coverage binding explicitly rebases it.
+            PlanResourceRole.CoverageSource -> planResourceId(row.role, occurrences.size + laneI32 + 1)
             else -> row.id // Replaced below by distinct per-role graph ordinals.
         } }.toMutableMap() }.toMutableList()
         val nextOrdinal = mutableMapOf<PlanResourceRole, Int>()
@@ -2612,6 +2615,19 @@ internal class W6aLayerGraphConstruction(
                             }
                         }
                         val selectedDraw = draws.single()
+                        // The direct W4d MSAA resolve is the raw W6b coverage source.  It is
+                        // one logical texture, not an intermediate W4d resource plus an
+                        // independently allocated W6b source with the same role/ordinal.
+                        // Rebind the closed lane resolve to the occurrence reservation before
+                        // either pass is frozen; the resource assembly below then publishes the
+                        // reservation exactly once.
+                        if (binding.source.topology == DeferredLaneTopologyV4.AaResolvedCoverage) {
+                            val laneI32 = bindings.indexOf(binding)
+                            val coverageResolve = binding.source.resources().single {
+                                it.role == PlanResourceRole.CoverageSource
+                            }.id
+                            laneResourceIds[laneI32][coverageResolve] = requireNotNull(directFilterSources).coverage.resourceId
+                        }
                         val sourceDepth = selectedDraw.takeIf { draw ->
                             draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
                                 (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)
@@ -3037,7 +3053,14 @@ internal class W6aLayerGraphConstruction(
             }
             lanes.forEachIndexed { laneI32, lane ->
                 if (bindings[laneI32].scopeI32 != null && bindings[laneI32].scopeI32 !in activeByScope) return@forEachIndexed
-                lane.resources().filter { it.role !in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) }.forEach { row ->
+                lane.resources().filter { row ->
+                    row.role !in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) &&
+                        // AaResolvedCoverage is published by its direct W6b occurrence
+                        // reservation.  The remapped lane row is deliberately not a second
+                        // physical allocation of that same resolve texture.
+                        !(lanes[laneI32].topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
+                            row.role == PlanResourceRole.CoverageSource)
+                }.forEach { row ->
                     val targetSized = row.kind == PlanResourceKind.Texture2D && row.role != PlanResourceRole.DestinationSnapshot
                     val boundExtent = if (targetSized)
                         targetExtents.getValue(physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)) else row.copyExtent()
