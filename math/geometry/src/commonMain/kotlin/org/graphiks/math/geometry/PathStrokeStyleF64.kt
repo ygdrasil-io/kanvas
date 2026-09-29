@@ -38,6 +38,24 @@ public class PathStrokeDashF64 private constructor(
 
     public fun copyIntervalsF64(): DoubleArray = intervalsSnapshotF64.copyOf()
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is PathStrokeDashF64) return false
+        if (phaseF64.toBits() != other.phaseF64.toBits()) return false
+        if (intervalsSnapshotF64.size != other.intervalsSnapshotF64.size) return false
+        return intervalsSnapshotF64.indices.all { indexI32 ->
+            intervalsSnapshotF64[indexI32].toBits() == other.intervalsSnapshotF64[indexI32].toBits()
+        }
+    }
+
+    override fun hashCode(): Int {
+        var resultI32 = 1
+        intervalsSnapshotF64.forEach { intervalF64 ->
+            resultI32 = 31 * resultI32 + intervalF64.toBits().hashCode()
+        }
+        return 31 * resultI32 + phaseF64.toBits().hashCode()
+    }
+
     public companion object {
         public fun of(intervalsF64: DoubleArray, phaseF64: Double): PathStrokeDashF64 {
             require(phaseF64.isFinite())
