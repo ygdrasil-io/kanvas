@@ -2,8 +2,10 @@
 
 Baseline : PR draft [#2411](https://github.com/ygdrasil-io/kanvas/pull/2411),
 empilée sur [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410).
-Lot suivant : PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
+Lot standalone : PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
 empilée sur #2411, routage standalone rect/path, renderer `718445e6e`.
+Lot courant : pointillés réparés, expérience AA retirée après mesure,
+renderer `5f971f750`, destiné à une PR draft sur #2412.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -194,6 +196,103 @@ Le rejeu avec PNG des témoins `child_sampling_rt`, `circle_sizes`,
 Les références et les scores historiques ne sont pas réécrits.
 W7, les gates W6 et la décision de merge restent ouverts.
 
+## Lot pointillés et expérience AA retirée — 29 septembre 2026
+
+Le correctif `adcf16eba` donne à `PathStrokeDashF64` une égalité structurelle
+exacte et un `hashCode` cohérent, phase et intervalles inclus. Les copies
+défensives restent inchangées ; le seal W5b n'est pas desserré. Le test public
+historique de phase négative et une matrice littérale de trois pointillés
+passent après avoir échoué avant la correction. Les 476 tests math geometry
+passent également.
+
+L'expérience AA `9d3355ec9` appliquait une précision géométrique de 1/16 de
+pixel aux seuls remplissages racine AA, sans modifier le MSAA4. Les témoins
+d'aire alpha passaient (rayon 1 : 2,008 → 2,996 ; rayon 8 : 195,043 → 199,012,
+y compris après scale 2). `circle_sizes` remontait à SSIM **0,987049** contre
+0,974624 dans #2412, encore sous les 0,987834 historiques.
+
+Mais le corpus complet inchangé perdait **deux rendus**, `parsedpaths` et
+`perspective_clip`, sur `Geometry(value=VertexLimit)` : 164 → 162. Le gate
+statique à 255 arêtes winding est le premier suspect, pas un sous-motif
+capturé : le diagnostic public agrège plusieurs limites. Après l'avis
+ciblé d'Astra, l'expérience et ses trois nouveaux tests ont été retirés en
+`5f971f750`. Leur code et leurs résultats restent récupérables dans
+`9d3355ec9` et le [plan](aa-dash-repair-plan.md).
+
+**Aucun gain AA n'est livré par ce lot.** Le retour à `.25` conserve donc la
+régression de `circle_sizes` constatée dans #2412. Une marge GPU inventée,
+une hausse de budget ou un retour silencieux à une approximation grossière
+n'ont pas été utilisés pour sauver le compteur. La prochaine reprise doit
+capturer le refus interne exact, puis traiter la borne stencil avec des
+témoins winding 1 à plus de 255 arêtes et winding réel 256, inversions et
+annulations incluses. Des tests pixels ne remplacent pas la preuve de
+classification GPU manquante.
+
+Le [snapshot final](dash-5f971f750.json), renderer
+`5f971f750f4699adb1a7fb1cbe531e9383367641`, couvre les **631 mêmes identités**
+et **443 éligibles** : **164 rendus, 142 comparaisons, 26 à ≥99 % et 36 à
+≥95 % de pixels ±2/canal**. Les 164 empreintes RGBA et tous les résultats
+terminaux sont identiques à #2412, sans gain ni perte de GM. Les trois
+timeouts (`lattice2`, `ninepatch-stretch`, `vertices`) sont conservés à 30 s.
+Les références, seuils, exclusions et scènes sont inchangés.
+
+Par rapport à la baseline `d661f10c3`, les 41 gains de #2412 sont donc
+préservés, avec les mêmes cinq anciennes images modifiées et la même médiane
+appariée de 54,64 %. La médiane des 142 comparaisons reste 65,23 %. Durée
+cumulée des cas : 189,97 s, hors démarrage Gradle/JVM, sans valeur de benchmark.
+Le gain du lot est la sémantique publique des pointillés, pas une hausse
+de la similarité du corpus.
+
+### Validation du lot et limite de la suite complète
+
+Sur le code final, **77/77 tests publics W4/W6/W7** et **476/476 tests math
+geometry** passent, zéro skipped, Gradle exit 0. Les 77 incluent les 16
+tests W7 stroke/routing, AA layer et dash, les 40 W6 layer W4/W5 et les 21
+sélecteurs W4d/W4e hard, dont le témoin historique de phase négative.
+
+```sh
+rtk proxy ./gradlew :math:geometry:jvmTest --rerun :kanvas:test --offline --console=plain \
+  --tests 'org.graphiks.kanvas.surface.W7StrokeRoutingSurfacePixelTest' \
+  --tests 'org.graphiks.kanvas.surface.W7AaPathLayerSurfacePixelTest' \
+  --tests 'org.graphiks.kanvas.surface.W7DashStrokeSurfacePixelTest' \
+  --tests 'org.graphiks.kanvas.surface.W6aLayerW4W5SurfacePixelTest' \
+  --tests 'org.graphiks.kanvas.surface.GPUPlanSurfacePixelTest.W4d*' \
+  --tests 'org.graphiks.kanvas.surface.GPUPlanSurfacePixelTest.W4e public hard*'
+```
+
+La sélection élargie de l'expérience donnait 118/119 : l'échec
+`W6aLayerBoundsSurfacePixelTest.emptyCompositeClipDoesNotMaskUnsupportedBackdropAndSameSurfaceRecovers`
+est reproduit avec les deux politiques `.25` et `.0625`, puis laissé intact.
+
+Une tentative de `:kanvas:test` complet sur `5f971f750` est **inachevée** :
+646 tests passent, 39 échouent et le test en cours est marqué skipped après
+arrêt explicite du processus. Deux lectures de pile localisent le calcul
+CPU dans `ColorRoundedGraphProofV1.prove`, appelé par
+`W5dGradientAddressingSurfacePixelTest.sweepFullCoveragePreservesRequestedTileBudgetIdentity`.
+Le worker avait consommé plus de 208 s de CPU après 263 s d'exécution ;
+l'arrêt aboutit à l'exit natif 133 et Gradle 1. Ce n'est ni une absence de
+GPU ni une suite verte. Aucun fichier de score/référence n'a changé.
+
+Les 39 échecs observés se répartissent comme suit ; leur antériorité n'a
+pas été établie individuellement dans ce lot :
+
+| Suite | Échecs |
+| --- | ---: |
+| ImageTest / PictureTest | 1 / 1 |
+| W5ePictureImageSamplingTest / W5hRuntimeEffectPictureTest | 5 / 1 |
+| W6aLayerPictureTest / W6bFilterPictureTest | 1 / 2 |
+| DisplayOpSceneAdapterTest / SceneRoundTripTest | 1 / 4 |
+| GPUPlanSurfacePixelTest / SceneRecordingScopeTest | 4 / 1 |
+| SurfaceSceneSnapshotTest / W5aMaterialSurfacePixelTest | 4 / 1 |
+| W5bBlendSurfacePixelTest / W5cGradientSurfacePixelTest | 2 / 7 |
+| W5dGradientAddressingSurfacePixelTest | 4 |
+
+Les XML de cette tentative sont conservés localement dans
+`/private/tmp/kanvas-w7-full-suite-5f971f750-20260929` ; ils contiennent aussi
+un échec synthétique du runner Gradle, distinct des 39 tests échoués.
+La pile est conservée dans `/private/tmp/kanvas-w7-w5d-stall-5f971f750.txt`.
+La PR reste draft, sans promesse de merge readiness.
+
 ## Décisions de pilotage
 
 1. **Vérifier les scènes avant d'optimiser leurs scores.** L'audit de témoins
@@ -222,9 +321,11 @@ W7, les gates W6 et la décision de merge restent ouverts.
    initiaux `width_invalid` (15 cas), `rect_anti_alias` (11) et
    `scalar_aa_not_promoted` (19) n'étaient pas des gains additionnables.
    Le bilan réel est de 41 rendus supplémentaires avec des reculs localisés.
-   Priorité suivante : expliquer et corriger les contours AA de
-   `circle_sizes`, puis réparer l'égalité des styles dash W5b ; préserver les
-   41 nouveaux rendus et leurs scores pendant ces corrections. Ne pas
+   L'égalité des styles dash W5b est réparée dans le lot suivant. La précision
+   AA seule améliore `circle_sizes` mais fait perdre deux nouveaux rendus :
+   l'expérience est retirée après revue Astra. Priorité suivante : capturer
+   le refus géométrique exact et choisir une correction bornée de la limite
+   stencil ; préserver les 41 nouveaux rendus. Ne pas
    remplacer un hairline par une largeur locale ni désactiver l'AA.
 3. **Puis composition des layers et paths généraux.** `unsupported_child`
    est le premier refus de 51 cas, `fan_budget_exceeded` de 28 cas.
