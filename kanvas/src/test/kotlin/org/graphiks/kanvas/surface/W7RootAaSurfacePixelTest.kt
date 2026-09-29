@@ -87,7 +87,7 @@ class W7RootAaSurfacePixelTest {
     }
 
     @Test
-    fun `root aa Picture playback remains unsupported transactionally`() {
+    fun `Picture playback inside layer remains unsupported transactionally`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
         val halfWhite = ColorARGB.of(128, 255, 255, 255)
         val path = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 6f, 6f)) }
@@ -221,7 +221,10 @@ class W7RootAaSurfacePixelTest {
             drawRect(RectF32.ofLTRB(2f, 2f, 3f, 3f), Paint(ColorARGB.of(255, 45, 179, 97), antiAlias = false))
             restore()
         }
-        assertPixel(hardControl.render().pixels, 7, 2, 2, 45, 179, 97, 255)
+        val hardControlResult = hardControl.render()
+        assertPixel(hardControlResult.pixels, 7, 1, 1, 17, 61, 211, 255)
+        assertPixel(hardControlResult.pixels, 7, 2, 2, 45, 179, 97, 255)
+        assertNative(hardControlResult)
     }
 
     private fun assertTerminalAndRecovers(surface: Surface, bounds: RectF32, prefix: String) {
