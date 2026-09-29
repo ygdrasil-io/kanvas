@@ -209,7 +209,10 @@ public class W6aLayerPlanCompiler public constructor(
             val originalDraw = (commands[drawIndexI32] as SceneCommand.Draw).node
             // Keep the historical ordinary general-path compiler for every other segment.
             // The AA variant proves DirectTriangle during select, before capability planning.
-            val generalPath = if (scopeI32 != null && aaSource.acceptsW6AaColorSourceScope(originalDraw))
+            val rootAaSource = scopeI32 == null && !ownsW6b &&
+                originalDraw.coverage == CoverageRequest.ANTIALIASED &&
+                aaSource.acceptsW6AaColorSourceScope(originalDraw)
+            val generalPath = if ((scopeI32 != null && aaSource.acceptsW6AaColorSourceScope(originalDraw)) || rootAaSource)
                 aaSource else W4dGeneralPathPlanCompiler()
             val child = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
                 W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),

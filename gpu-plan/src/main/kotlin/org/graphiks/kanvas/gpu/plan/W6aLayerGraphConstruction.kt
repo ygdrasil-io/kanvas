@@ -2660,36 +2660,37 @@ internal class W6aLayerGraphConstruction(
                         val laneI32 = bindings.indexOf(binding)
                         if (binding.source.topology == DeferredLaneTopologyV4.AaResolvedColor) {
                             require(!directFilter && directFilterSource == null && maskCoverage == null &&
-                                binding.scopeI32 != null && binding.scopeI32 in activeByScope) {
+                                (binding.scopeI32 == null || binding.scopeI32 in activeByScope)) {
                                 "w6a.layer.unsupported_child"
                             }
-                            val geometry = activeByScope.getValue(requireNotNull(binding.scopeI32))
                             val remapped = laneResourceIds[laneI32]
                             val native = nativeByLane.getOrPut(laneI32, ::linkedMapOf)
+                            val scopeI32 = binding.scopeI32
+                            val geometry = scopeI32?.let(activeByScope::getValue)
                             binding.source.passes().forEach { original ->
                                 val sealed = original as? PlanPass.PathRenderPass
                                     ?: error("w6a.layer.unsupported_child")
                                 val rebound = sealed.rebindW4eV6(
                                     passes.size,
                                     { originalId -> remapped.getValue(originalId) },
-                                    requireNotNull(geometry.mapping),
-                                    requireNotNull(geometry.compositeDomainDeviceI32),
+                                    geometry?.mapping,
+                                    geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32,
                                 ) as? PlanPass.PathRenderPass ?: error("w6a.layer.unsupported_child")
                                 val local = PlanPass.PathRenderPass(rebound.ordinal, rebound.target, rebound.draw,
                                     rebound.phase, rebound.drawDataResources, rebound.atomicGroup, rebound.depthStencil,
                                     sealed.load, rebound.store, rebound.depthStencilAccess, rebound.depthStencilLoadStore, rebound.resolveTarget)
                                 passes += local
                                 native[local.id] = local
-                                steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(requireNotNull(binding.scopeI32)), local.id)
+                                scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), local.id) }
                             }
                             val source = remapped.entries.single { (original, _) ->
                                 binding.source.resources().single { it.id == original }.role == PlanResourceRole.PathAaResolvedColor
                             }.value
-                            val scopeI32 = requireNotNull(binding.scopeI32)
                             val destination = targetFor(scopeI32)
-                            val aaGeometry = activeByScope.getValue(scopeI32)
-                            val sourceBounds = requireNotNull(requireNotNull(aaGeometry.mapping)
-                                .mapDeviceRectToLayerI32OrNull(requireNotNull(aaGeometry.compositeDomainDeviceI32)))
+                            val sourceBounds = geometry?.let { aaGeometry ->
+                                requireNotNull(requireNotNull(aaGeometry.mapping)
+                                    .mapDeviceRectToLayerI32OrNull(requireNotNull(aaGeometry.compositeDomainDeviceI32)))
+                            } ?: RectI32(0, 0, extent.width, extent.height)
                             val destinationExtent = targetExtent(destination)
                             require(sourceBounds == RectI32(0, 0, destinationExtent.width, destinationExtent.height)) {
                                 "W6 AA source/domain mapping must publish the exact local target extent."
@@ -2706,7 +2707,7 @@ internal class W6aLayerGraphConstruction(
                                 after,
                             )
                             passes += composite
-                            steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(scopeI32), composite.id)
+                            scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), composite.id) }
                             return@bindingLoop
                         }
                         if (directFilterSource != null) physicalTargetByLane[laneI32] = target
@@ -3054,8 +3055,10 @@ internal class W6aLayerGraphConstruction(
                 ?: physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)
             val targetExtent = resources.single { it.id == target }.copyExtent()
                 ?: targetExtents.getValue(target)
-            val origin = bindings[laneI32].scopeI32?.let { activeByScope[it]?.mapping?.copyLayerOriginDeviceI32() }
-                ?: targetOriginDevice(target)
+            val origin = if (lanes[laneI32].topology == DeferredLaneTopologyV4.AaResolvedColor &&
+                bindings[laneI32].scopeI32 == null) Point2I32.Origin else
+                bindings[laneI32].scopeI32?.let { activeByScope[it]?.mapping?.copyLayerOriginDeviceI32() }
+                    ?: targetOriginDevice(target)
             if (lanes[laneI32].topology == DeferredLaneTopologyV4.AaResolvedColor) {
                 val lane = lanes[laneI32]
                 val remapping = laneResourceIds[laneI32]
