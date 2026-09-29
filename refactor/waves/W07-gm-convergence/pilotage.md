@@ -4,9 +4,11 @@ Baseline : PR draft [#2411](https://github.com/ygdrasil-io/kanvas/pull/2411),
 empilée sur [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410).
 Lot standalone : PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
 empilée sur #2411, routage standalone rect/path, renderer `718445e6e`.
-Lot courant : pointillés réparés, expérience AA retirée après mesure,
+Lot précédent : pointillés réparés, expérience AA retirée après mesure,
 renderer `5f971f750`, PR draft [#2413](https://github.com/ygdrasil-io/kanvas/pull/2413)
 empilée sur #2412.
+Lot courant : cache de preuve CPU, renderer `b256b3d68`, branche
+`codex/w7-proof-evaluation`, empilée sur #2413.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -297,6 +299,111 @@ La relecture finale indépendante Sol ne relève aucun nouveau défaut du diff
 livré et confirme les chiffres des snapshots et XML ; elle valide la
 publication draft, pas le merge. L'origine des 39 échecs globaux, la
 réparation AA et les domaines font/codec/ports restent ouverts ou hors scope.
+
+## Lot cache de preuve CPU — 29 septembre 2026
+
+Le [plan](proof-evaluation-plan.md) borne la correction à la mémoïsation
+des évaluations scalaires. Une clé immutable conserve les identités des
+scalars, les bits exacts des bornes et le scope Noise (région/octave).
+Elle projette seulement la **clé de cache** sur les dépendances transitives
+conservatrices ; les conditions réellement évaluées restent complètes,
+y compris la présence des Add matérialisés. Les régions opaques
+Image/Noise/GradientStop et leurs parents gardent le contexte complet.
+Ni calcul numérique, ni enveloppe, budget ou règle d'admission n'est élargi.
+Les facts de la première évaluation restent présents, sans rejouer leurs
+doublons sur les hits ; la multiplicité textuelle des identités opaques
+n'est pas un contrat conservé.
+
+La première tentative, à contexte complet, dépassait encore 60 s.
+L'analyse Astra a identifié les conditions affines externes sans incidence
+sur les coordonnées antérieures ; la projection conservatrice traite
+cette redondance. La revue Sol du code et sa relecture des preuves sont
+approuvées. Les témoins permanents restent publics, sans test d'infrastructure.
+
+### Résultat mesuré à corpus constant
+
+Le [snapshot](proof-b256b3d68.json) conserve les 631 identités, 443 éligibles,
+133 exclusions font, 54 codec et une quarantaine. Scènes, références,
+empreintes, dimensions, seuils et limite de 30 s sont inchangés.
+
+| Mesure | `5f971f750` | `b256b3d68` |
+| --- | ---: | ---: |
+| Rendus disponibles | 164 | 165 |
+| Comparaisons | 142 | 143 |
+| Non comparés / dimensions incompatibles | 14 / 8 | 14 / 8 |
+| Échecs de rendu / setup | 226 / 50 | 227 / 50 |
+| Timeouts | 3 | 1 |
+| Cas à ≥99 % de pixels ±2/canal | 26 | 26 |
+| Cas à ≥95 % | 36 | 36 |
+| Médiane des comparaisons courantes | 65,23469 % | 65,410625 % |
+
+Les **164 anciens rendus gardent leur empreinte RGBA exacte** : aucune perte,
+aucun pixel modifié. La médiane appariée des 142 anciennes comparaisons
+reste **65,23469 %** ; la hausse de médiane globale vient de l'ajout d'un cas,
+pas d'une amélioration de leurs pixels.
+
+- `ninepatch-stretch` passe de timeout à rendu comparé en **26,168 s**,
+  avec **78,14951 %** de pixels ±2/canal. Il reste proche de la limite :
+  ce relevé unique ne prouve pas une marge robuste sur d'autres hôtes.
+- `lattice2` passe de timeout à refus en **0,527 s** :
+  `w5b.geometry.incompatible-plan: Invalid W5a source authority`.
+  C'est un diagnostic désormais accessible, pas un rendu gagné.
+- `vertices` reste timeout à 30 s. Son résultat est persisté, puis le
+  corpus reprend à l'index 608 ; aucune ligne n'est supprimée.
+
+Pour les deux anciens timeouts terminés, `scopeReason` et `scopeOwner`,
+absents de la ligne timeout, sont désormais explicitement `null` : quatre
+enrichissements de champs, sans changement de scope. Les journaux locaux
+sont dans `/private/tmp/kanvas-w7-proof-parity.suk2dP` ; leur agrégation
+vérifie les 631 indices uniques et le même renderer/configuration.
+
+### Tests publics et limites
+
+Les deux nouveaux tests W7 passent en **0,163 s** dans la sélection
+adjacente, qui compte **20/20 réussites**, zéro skipped, Gradle 0.
+Le Sweep hard vérifie quatre TileModes et vingt paires matrix/clamp ;
+le témoin bicolore vérifie les deux ordres non commutatifs, avec pixels
+littéraux, Render/Readback et répétition sur la même Surface.
+Ce dernier est un contrôle de non-régression, déjà vert avant projection,
+pas un RED inventé. Le Sweep fournit le RED causal (timeout de 60,047 s).
+
+Le test historique W5d auparavant bloqué termine en **1,756 s**, mais
+**échoue** sur `unsupported.material.composed.numeric-domain-unbounded` ;
+ses assertions restent intactes. Une sonde AA RRect sans wrapper,
+strictement identique sur base et correctif, reproduit ce refus dans les
+deux versions. Un premier contrôle avait accidentellement utilisé Rect
+au lieu de RRect : sa conclusion a été rétractée, et aucun correctif
+numérique n'a été fondé sur cette comparaison non équivalente.
+
+Les **476 tests math geometry passent**. La tentative Kanvas complète,
+bornée globalement à **240 s**, reste **inachevée et rouge** :
+**779 tests observés = 728 réussites + 50 échecs + 1 interrompu**.
+Le runner ajoute un échec synthétique de shutdown, distinct de ces 50.
+L'arrêt atteint `W5eImageShaderSurfacePixelTest.cubicTileBoundariesMatchOracle`,
+alors que la suite progressait ; ce n'est pas la preuve d'un nouveau stall.
+Gradle termine 1 après 4 min 1 s ; le worker est ensuite absent.
+
+Les 686 identités du relevé précédent sont toutes retrouvées :
+646 restent vertes, les 39 échecs restent rouges, et le Sweep interrompu
+atteint maintenant son refus. Aucun passage vert→rouge n'est observé dans
+cette intersection. Parmi les tests atteints en plus, dix autres échecs
+sont observés ; leur antériorité n'est pas établie individuellement.
+La répartition reprend le tableau précédent, avec **14 échecs W5d** au lieu
+de quatre, et **un W5eImageShader** supplémentaire. Ces derniers concernent
+les refus numériques/lanes, les budgets/diagnostics et l'attente historique
+de refus du hairline image shader ; ils restent ouverts, sans changement
+d'oracle. Les XML sont archivés dans
+`/private/tmp/kanvas-w7-proof-full.TzcJf8/{kanvas-test,math-geometry}`.
+
+```sh
+rtk proxy ./gradlew :kanvas:test :math:geometry:jvmTest --rerun --offline --console=plain \
+  --init-script /private/tmp/kanvas-w7-proof-full-timeout.gradle --continue
+```
+
+Le lot justifie une publication draft, pas une clôture de W7 ni une merge
+readiness. La suite doit encore être complétée par sélections bornées ;
+les refus AA de gradient, les erreurs de budget/autorité, le timeout
+`vertices` et la réparation géométrique AA restent des travaux distincts.
 
 ## Décisions de pilotage
 
