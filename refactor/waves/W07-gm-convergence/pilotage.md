@@ -538,6 +538,87 @@ reproduit le refus, et termine avec Gradle 0. Le premier intervalle
 `:gpu-renderer:compileKotlin :gpu-renderer:jar` termine avec Gradle 0 ;
 aucun diff de source ou de test ne reste. Les contrôles restent stricts.
 
+## Lot image/opacité — 29 septembre 2026
+
+Le renderer `bef3af6faabcbbd205fe711e54ba38de1c4e4ac1`, sur
+`codex/w7-image-opacity-authority` empilée sur #2414, corrige la cause localisée
+ci-dessus. `OpacityV1` propage désormais V4 lorsqu'il enveloppe précisément
+`ImageMaterialProgramV3`, comme il le faisait déjà pour un enfant V4. Le graph
+numérique V4 existant est donc sélectionné ; l'opacité V1 non-image, les bindings,
+le scellement de preuve et le witness strict du renderer sont conservés.
+Aucun shader, budget ou contrat numérique n'est assoupli.
+
+Le nouveau `W7ImageOpacitySurfacePixelTest` reproduit le refus d'autorité
+avant modification, puis passe après correction. Il utilise une image issue
+d'un snapshot public et un frame mêlant image rect, lattice opaque et lattice
+avec alpha. Les variantes AA/hard-edge, `SRC_OVER`/`SRC_ATOP`, cellules
+default/fixed/transparent et rendu répété vérifient les pixels au moyen de
+l'oracle image existant, inchangé. Aucun test d'infrastructure n'est ajouté.
+La revue Sol ne trouve pas de défaut bloquant ; elle relève une amélioration
+de couverture non bloquante : ces nouveaux bords sont entiers. Le témoin
+existant `latticeAdjacentCellsKeepFullInteriorCoverage` couvre séparément
+les bords fractionnaires, pas leur combinaison avec cette opacité.
+
+### Mesure à corpus constant
+
+Le [snapshot](image-opacity-bef3af6fa.json), comparé à `proof-b256b3d68.json`,
+conserve les 631 identités, les 443 éligibles, les 133 exclusions font,
+54 codec et la quarantaine `jpg-color-cube`. Aucun port GM, PNG de référence,
+seuil ni score historique n'est changé.
+
+| Mesure | Base #2414 | Image/opacité |
+| --- | ---: | ---: |
+| Rendus disponibles | 165 | 166 |
+| Comparaisons | 143 | 144 |
+| Échecs de rendu / setup | 227 / 50 | 226 / 50 |
+| Cas à ≥99 % / ≥95 % de pixels ±2/canal | 26 / 36 | 26 / 36 |
+| Timeouts à 30 s | 1 | 1 |
+
+`lattice2` est le seul changement d'issue : huit opérations dispatchées,
+zéro refus, **54,0875 %** de pixels à ±2/canal, 1,063 s sur ce relevé.
+Son seuil déclaré de 50 % est franchi, sans être relevé ni abaissé ; cela
+ne signifie pas une parité visuelle. **Les 165 anciens rendus conservent
+exactement leur empreinte RGBA**. La médiane appariée des 143 anciennes
+comparaisons reste 65,410625 % ; la médiane globale devient 65,23469075520833 %
+par ajout du nouveau cas, sans dégradation des anciens pixels.
+`ninepatch-stretch` reste rendu en 23,261 s ; `vertices` reste timeout.
+
+Les trois tranches `[0,607)`, `[607,608)` et `[608,631)` sont exécutées en série
+sur le commit, avec 30 s par GM. Gradle termine respectivement 0, 1 (worker124
+après persistance du timeout `vertices`), puis 0. Journaux immuables :
+`/private/tmp/kanvas-w7-image-opacity.YmtXjI/corpus`. La sonde antérieure
+`lattice2-dirty` utilise un code non committé et n'entre pas dans ce snapshot.
+
+### Validation et réserves
+
+La sélection finale isolée donne **9/9 tests publics réussis, Gradle 0** :
+nouveau témoin, deux contrôles W7 de preuve, deux W5a d'opacité, un W5f de
+filtre couleur et trois W5f de filtres image. La suite Kanvas générale est
+également rejouée isolément avec une borne de 240 s : **779 cas = 728 réussites
++ 50 échecs + 1 interrompu**, Gradle 1. Les 779 identités et résultats sont
+identiques à la tentative de la base, sans nouveau passage vert→rouge dans
+cette intersection. `cubicTileBoundariesMatchOracle` est interrompu ; la suite
+globale reste incomplète et rouge. L'échec synthétique du runner est distinct.
+
+Les XML contiennent 742 cas ; les 37 manquants, dont sept échecs, sont conservés
+dans les événements JUnit JSONL écrits directement pendant ce run. Le listener
+et le total console concordent sur 779. Archives finales :
+`/private/tmp/kanvas-w7-image-opacity.YmtXjI/isolated-focused` et `isolated-full`.
+Les avertissements JVM/Gradle et la dette de suite restent visibles.
+
+Une annonce prématurée de fin du sous-agent avait fait chevaucher sa tentative
+générale avec le début d'un contrôle ciblé. Son archive initiale était aussi
+une copie obsolète de W5e ; l'attribution du code133 à la suite générale était
+erronée. Ces deux runs sont écartés de la validation finale. Après confirmation
+de leur terminaison, les contrôles et la suite générale ont été rejoués en
+série, aux bornes inchangées, avec sorties d'archives dédiées. Les 27 assertions
+W5e suivies de133 restent une observation préliminaire, pas une suite verte.
+
+Le lot résout le refus d'autorité de `lattice2`, pas son écart de fidélité.
+La prochaine correction est la preuve Sweep AA décrite plus haut ; Radial,
+Conical, les défauts géométriques AA et les autres gates restent distincts.
+La publication demeure draft, sans clôture W7 ni autorisation de merge.
+
 ## Décisions de pilotage
 
 1. **Vérifier les scènes avant d'optimiser leurs scores.** L'audit de témoins

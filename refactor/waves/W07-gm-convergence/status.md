@@ -3,6 +3,29 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot image/opacité — 29 septembre 2026
+
+Renderer `bef3af6fa`, branche `codex/w7-image-opacity-authority`, empilée sur
+la PR draft [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414).
+`OpacityV1` reconnaît précisément l'enfant `ImageMaterialProgramV3` comme
+une chaîne V4 ; le graph numérique et la preuve existants redeviennent
+cohérents, sans modifier les contrôles d'autorité du renderer.
+
+Le [snapshot complet](image-opacity-bef3af6fa.json) mesure **166/443 rendus**
+(+1), **144 comparaisons** et toujours **26 cas à ≥99 % de pixels ±2/canal**.
+`lattice2` passe du refus à un rendu sans refus, à **54,0875 %** : la fidélité
+reste imparfaite. Les **165 anciens rendus sont identiques pixel à pixel**.
+Références, scènes, scopes, seuils et timeout `vertices` restent inchangés.
+
+Le témoin public est RED avant correction puis GREEN ; **9/9 tests publics
+ciblés passent avec Gradle 0** dans une exécution isolée. La suite générale
+isolée reste inachevée à 240 s : **728 réussites, 50 échecs, un interrompu**,
+exactement les 779 mêmes identités et résultats que la base. Les exécutions
+préliminaires ayant brièvement chevauché sont écartées au profit de ces
+rejeux sérialisés. Voir le [bilan](pilotage.md#lot-imageopacité--29-septembre-2026).
+Revue de tâche Sol : aucun défaut bloquant. Prochain lot : preuve Sweep AA ;
+W7 et les gates W6 restent ouverts, sans merge readiness.
+
 ## Lot preuve CPU — 29 septembre 2026
 
 Renderer `b256b3d68`, PR draft [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414)
