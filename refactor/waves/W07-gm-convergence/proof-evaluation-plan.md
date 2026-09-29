@@ -4,7 +4,7 @@
 
 **Goal:** Remove repeated CPU proof work that prevents deeply wrapped gradients and the broader validation from completing.
 
-**Architecture:** Memoize rounded scalar evaluation by equivalent immutable conditioning environments, not by the allocation identity of their maps. Preserve scalar object identity, exact bound values and the lexical Noise region/octave. Keep the numerical algorithm and the original conditioned maps unchanged.
+**Architecture:** Memoize rounded scalar evaluation by conditioning environments projected on conservative scalar dependencies, not by map allocation identity or irrelevant outer conditions. Preserve scalar object identity, constraint membership, exact bound values and the lexical Noise region/octave. Keep the numerical algorithm and the complete original conditioned maps unchanged during evaluation; opaque regions retain full-context keys.
 
 **Tech Stack:** Kotlin/JVM, gpu-plan, native Metal/WebGPU Surface tests.
 
@@ -44,6 +44,29 @@ unnecessary at this stage. First test exact environment memoization; if the
 same witness still times out, capture the new hotspot and return to diagnosis
 before adding another optimization.
 
+### Refinement after the first falsified hypothesis
+
+The exact full-environment candidate still times out on the new public
+witness at 60.100 s. The dump records 36.08827 s CPU / 46.80 s elapsed in
+snapshot construction; it does not quantify distinct contexts. The first
+candidate snapshots on every lookup and compares entries quadratically.
+
+Astra's focused diagnosis identifies an independent structural cause:
+matrix k adds its affine flag to a branch context when evaluating hx_k,
+while cumulative Finite(hx_k) also evaluates earlier coordinates without
+that flag. Earlier coordinate nodes do not depend on flag k, yet a complete
+context key keeps these environments distinct. The distinctions compose
+through the 20 matrix/clamp pairs.
+
+Second hypothesis: project cache keys onto a conservatively computed
+transitive dependency set. Include each node itself, all arithmetic operands,
+all predicate operands and both branch arms. Preserve explicit membership
+of every reachable Add. Image/Noise/GradientStop and other vocabulary with
+implicit or generated dependencies use a full-context marker, propagated
+to parents. Evaluation still receives the original complete map. Use
+identity-safe O(n) equality or ordered private IDs, not nested linear scans.
+Temporary counters may measure hits/misses/entries copied but must not ship.
+
 ### Task 1: Memoize equivalent proof environments
 
 **Files:**
@@ -53,11 +76,12 @@ before adding another optimization.
 
 **Interfaces:** `ColorRoundedGraphProofV1.prove(...)` and `evaluate(Scalar, Map<Scalar, ColorBoundsV1>)` retain their signatures. New cache key/entry helpers are private implementation details, local to the proof or file. No authority or shader graph API changes.
 
-- [ ] Add a public regression `twentyCoordinatePairsPreserveSweepPixels`: for each TileMode and hard/AA paint, render a 17x1 Surface with a full-circle SweepGradient centered at (0,0), two opaque red stops at 0/1, wrapped in 20 repetitions of WithLocalMatrix(CoordClamp(shader, RectF32(0,0,17,1)), identity matrix). Draw full coverage (hard Rect or AA RRect extending to (-1,-1,18,2), radius .5). Assert all 17 literal RGBA pixels are (255,0,0,255), native Render/Readback evidence, and a second render with the same output. Add @AfterAll disposal on the test thread like the existing W7 tests. No private counters, reflection or source-text assertions.
+- [ ] Add a public regression `twentyCoordinatePairsPreserveSweepPixels`: for each TileMode and **hard paint**, render a 17x1 Surface with a full-circle SweepGradient centered at (0,0), two opaque red stops at 0/1, wrapped in 20 repetitions of WithLocalMatrix(CoordClamp(shader, RectF32(0,0,17,1)), identity matrix). Draw a full hard Rect. Assert all 17 literal RGBA pixels are (255,0,0,255), native Render/Readback evidence, and a second render of the same Surface with the same output. Add @AfterAll disposal on the test thread like the existing W7 tests. No private counters, reflection or source-text assertions. The initial hard/AA witness exposed an AA numeric refusal even without wrappers; this lot does not add an admission contract unsupported by the existing renderer. Leave the historical mixed W5d test and its assertions unchanged; document its remaining refusal.
 - [ ] Run this new test RED under `/private/tmp/kanvas-w7-proof-timeout.gradle` (60 s task timeout) before production edits; retain logs. Confirm the worker is stopped before another GPU run.
-- [ ] Replace only scalar-cache environment keys. Compare entries by Scalar identity and ColorBoundsV1 value, with identity-safe hashing, and include active Noise region identity and octave. Snapshot/cache immutable maps as needed; avoid recursive Scalar data-class equals/hashCode. Retain every original condition and numerical branch. Cache equivalent results only within one prove invocation. Leave noiseResults unchanged. First evaluation supplies its branch facts; equivalent hits must not add duplicate work or erase facts already recorded.
+- [ ] Add `deepCoordinateOrderKeepsDistinctColors`: on a 4x1 Surface use a linear gradient (0,0) to (8,0) with stops (0 red, .5 red, .5 blue, 1 blue), CLAMP. Compare WithLocalMatrix(CoordClamp(leaf, [0,0,3,1]), translation(-2,0)) against CoordClamp(WithLocalMatrix(leaf, translation(-2,0)), [0,0,3,1]). Wrap each in 20 identity matrix/clamp pairs with [0,0,4,1], draw a hard full Rect. The first produces red/red/red/red; the second red/red/blue/blue (literal RGBA, no implementation-derived oracle). Assert native evidence and repeat the same Surface render. Execute before the second production attempt and record its actual result. This is an adjacent semantic non-regression witness, not the CPU-stall RED: it already passed under the first full-context candidate, and no pre-cache RED is claimed. The stalled Sweep witness supplies the causal RED.
+- [ ] Replace only scalar-cache environment keys using the conservative dependency projection described above. Compare entries by Scalar identity and exact bounds, with identity-safe non-quadratic hashing/equality, and include active Noise region identity and octave. Snapshot/cache immutable keys as needed; avoid recursive Scalar data-class equals/hashCode. Retain every original condition for evaluation, every numerical branch and every relevant materialization constraint in the key. Cache equivalent results only within one prove invocation. Leave noiseResults unchanged. First evaluation supplies its branch facts; equivalent hits must not add duplicate work or erase facts already recorded. Opaque vocabulary and parents use the full-context fallback; do not infer dependencies through opaque regions.
 - [ ] Run the new public witness and the original stalled test with the same 60 s bound. If the original now reaches an unrelated assertion failure, record it unchanged instead of changing thresholds/budgets to pass. If the new witness still times out, stop the implementation attempt and report the new stack for diagnosis.
-- [ ] Run public coordinate ordering/projective/refusal tests plus Noise and color-filter regressions; main will run the wider suites and corpus after the production commit. Report every observed failure, including pre-existing/uncertain ones. Do not claim a full green suite from the focused selection.
+- [ ] Run public coordinate ordering/projective/refusal tests (including W5d.projectiveLocalMatrixRendersBoundedPixelsAndMasksWZero), W5eImageFamiliesSurfacePixelTest.imageNineSharedBoundarySelectionDoesNotDiscardAfterCancellation, plus Noise and color-filter regressions; main will run the wider suites and corpus after the production commit. Report every observed failure, including pre-existing/uncertain ones. Do not claim a full green suite from the focused selection.
 - [ ] Self-review, commit owned code/tests, write the full report with commands, RED/GREEN timings and concerns. Independent task review verifies spec and quality; fix confirmed findings.
 
 ### Task 2: Verify and publish the bounded lot
