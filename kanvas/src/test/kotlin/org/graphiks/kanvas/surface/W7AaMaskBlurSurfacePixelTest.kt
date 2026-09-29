@@ -42,8 +42,8 @@ class W7AaMaskBlurSurfacePixelTest {
         }
         assertTrue(alphaSamples.any { it in 1..254 }, alphaSamples.toString())
 
-        val hard = triangleSurface(0.125f, Paint(ColorARGB.Black,
-            maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.1f), antiAlias = false)).render()
+        val hard = renderRepeated(triangleSurface(0.125f, Paint(ColorARGB.Black,
+            maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.1f), antiAlias = false)))
         assertNative(hard)
         assertTrue(diagonalBandAlphas(hard.pixels).none { it in 1..254 })
     }
@@ -263,10 +263,8 @@ class W7AaMaskBlurSurfacePixelTest {
         assertContentEquals(before, sentinel)
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.Black, antiAlias = false)) }
-        surface.render().also { result ->
-            assertNative(result)
-            assertPixel(result.pixels, 96, 48, 48, 0, 0, 0, 255)
-        }
+        val recovered = renderRepeated(surface)
+        assertPixel(recovered.pixels, 96, 48, 48, 0, 0, 0, 255)
     }
 
     private fun assertBudgetTerminalAndRecovers(surface: Surface, dimension: Int) {
@@ -278,8 +276,7 @@ class W7AaMaskBlurSurfacePixelTest {
         assertContentEquals(before, sentinel)
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.Black, antiAlias = false)) }
-        val recovered = surface.render()
-        assertNative(recovered)
+        val recovered = renderRepeated(surface)
         assertPixel(recovered.pixels, dimension, dimension / 2, dimension / 2, 0, 0, 0, 255)
     }
 
