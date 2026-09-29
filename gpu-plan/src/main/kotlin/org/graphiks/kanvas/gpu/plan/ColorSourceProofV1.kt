@@ -199,6 +199,54 @@ internal data class ColorBranchFactV1(val predicate: ColorOperationGraphV1.Predi
 internal object ColorRoundedGraphProofV1 {
     private val normalF64 = java.lang.Float.MIN_NORMAL.toDouble()
     private val largestDivisorF64 = Math.scalb(1.0,126)
+    private sealed interface ContextDependencies {
+        data object Full : ContextDependencies
+
+        class Selected(
+            val scalars: java.util.IdentityHashMap<ColorOperationGraphV1.Scalar, Unit>,
+        ) : ContextDependencies
+    }
+
+    private class EvaluationEnvironment(
+        conditions: Map<ColorOperationGraphV1.Scalar, ColorBoundsV1>,
+        dependencies: ContextDependencies,
+        activeNoise: Pair<NoiseOperationGraphV1, Int>?,
+    ) {
+        private val fullContext = dependencies === ContextDependencies.Full
+        private val entries = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar, ColorBoundsV1>().apply {
+            if (fullContext) {
+                conditions.forEach { (scalar, bounds) -> put(scalar, bounds) }
+            } else {
+                (dependencies as ContextDependencies.Selected).scalars.keys.forEach { scalar ->
+                    conditions[scalar]?.let { put(scalar, it) }
+                }
+            }
+        }
+        private val noiseRegion = activeNoise?.first
+        private val noiseOctave = activeNoise?.second
+        private val identityHash = entries.entries.fold(entries.size + if (fullContext) 1 else 0) { hash, entry ->
+            hash +
+                31 * System.identityHashCode(entry.key) +
+                37 * java.lang.Double.doubleToRawLongBits(entry.value.lowerF64).hashCode() +
+                41 * java.lang.Double.doubleToRawLongBits(entry.value.upperF64).hashCode()
+        } + 43 * System.identityHashCode(noiseRegion) + 47 * (noiseOctave ?: -1)
+
+        override fun hashCode(): Int = identityHash
+
+        override fun equals(other: Any?): Boolean = other is EvaluationEnvironment &&
+            fullContext == other.fullContext &&
+            noiseRegion === other.noiseRegion &&
+            noiseOctave == other.noiseOctave &&
+            entries.size == other.entries.size &&
+            entries.all { (scalar, bounds) ->
+                other.entries[scalar]?.let { candidate ->
+                    java.lang.Double.doubleToRawLongBits(bounds.lowerF64) ==
+                        java.lang.Double.doubleToRawLongBits(candidate.lowerF64) &&
+                        java.lang.Double.doubleToRawLongBits(bounds.upperF64) ==
+                        java.lang.Double.doubleToRawLongBits(candidate.upperF64)
+                } == true
+            }
+    }
     // A full binary32 ULP relative bound (2^-23), deliberately covering either
     // directed rounding choice. gamma(n) bounds any tree of n rounded operations.
     private fun gamma(operationCountI32: Int): Double {
@@ -240,14 +288,103 @@ internal object ColorRoundedGraphProofV1 {
             MutableMap<Int,List<ColorOperationGraphV1.Scalar>>>()
         val facts = mutableListOf<ColorBranchFactV1>()
         var activeNoise: Pair<NoiseOperationGraphV1,Int>? = null
-        val noiseResults=java.util.IdentityHashMap<NoiseOperationGraphV1,
-            java.util.IdentityHashMap<Map<ColorOperationGraphV1.Scalar,ColorBoundsV1>,List<ColorBoundsV1>>>()
+        val noiseResults = java.util.IdentityHashMap<NoiseOperationGraphV1,
+            java.util.IdentityHashMap<Map<ColorOperationGraphV1.Scalar, ColorBoundsV1>, List<ColorBoundsV1>>>()
         val cache = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar,
-            java.util.IdentityHashMap<Map<ColorOperationGraphV1.Scalar, ColorBoundsV1>, ColorBoundsV1>>()
+            MutableMap<EvaluationEnvironment, ColorBoundsV1>>()
+        val dependencies = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar, ContextDependencies>()
+        fun dependencyOf(node: ColorOperationGraphV1.Scalar): ContextDependencies = dependencies[node] ?: run {
+            fun predicateDependencies(
+                predicate: ColorOperationGraphV1.Predicate,
+                include: (ColorOperationGraphV1.Scalar) -> Boolean,
+            ): Boolean = when (predicate) {
+                is ColorOperationGraphV1.Predicate.UniformU32Equal -> true
+                is ColorOperationGraphV1.Predicate.Equal -> include(predicate.a) && include(predicate.b)
+                is ColorOperationGraphV1.Predicate.LessEqual -> include(predicate.a) && include(predicate.b)
+                is ColorOperationGraphV1.Predicate.Not -> predicateDependencies(predicate.value, include)
+                is ColorOperationGraphV1.Predicate.And ->
+                    predicateDependencies(predicate.a, include) && predicateDependencies(predicate.b, include)
+                is ColorOperationGraphV1.Predicate.Finite -> include(predicate.value)
+                is ColorOperationGraphV1.Predicate.ProjectiveValid -> include(predicate.division)
+            }
+
+            val selected = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar, Unit>().apply {
+                put(node, Unit)
+            }
+            fun include(child: ColorOperationGraphV1.Scalar): Boolean = when (val dependency = dependencyOf(child)) {
+                ContextDependencies.Full -> false
+                is ContextDependencies.Selected -> {
+                    selected.putAll(dependency.scalars)
+                    true
+                }
+            }
+            fun unary(value: ColorOperationGraphV1.Scalar) =
+                if (include(value)) ContextDependencies.Selected(selected) else ContextDependencies.Full
+            fun binary(a: ColorOperationGraphV1.Scalar, b: ColorOperationGraphV1.Scalar) =
+                if (include(a) && include(b)) ContextDependencies.Selected(selected) else ContextDependencies.Full
+
+            val result: ContextDependencies = when (node) {
+                is ColorOperationGraphV1.Scalar.NoiseStateF32,
+                is ColorOperationGraphV1.Scalar.NoiseComponent,
+                is ColorOperationGraphV1.Scalar.NoisePhaseComponent,
+                is ColorOperationGraphV1.Scalar.NoiseIntegralF32,
+                is ColorOperationGraphV1.Scalar.NoiseGradientU16,
+                is ColorOperationGraphV1.Scalar.ImageEncodedInput,
+                is ColorOperationGraphV1.Scalar.ImageEncodedComponent,
+                is ColorOperationGraphV1.Scalar.ImageSampleComponent,
+                is ColorOperationGraphV1.Scalar.ImageTexelValid,
+                is ColorOperationGraphV1.Scalar.ImageIntegerOffset,
+                is ColorOperationGraphV1.Scalar.StopInterpolationInput,
+                is ColorOperationGraphV1.Scalar.GradientStopComponent -> ContextDependencies.Full
+
+                is ColorOperationGraphV1.Scalar.Add -> binary(node.a, node.b)
+                is ColorOperationGraphV1.Scalar.Subtract -> binary(node.a, node.b)
+                is ColorOperationGraphV1.Scalar.Multiply -> binary(node.a, node.b)
+                is ColorOperationGraphV1.Scalar.Divide -> binary(node.a, node.b)
+                is ColorOperationGraphV1.Scalar.ProjectiveDivide -> binary(node.a, node.b)
+                is ColorOperationGraphV1.Scalar.Pow -> binary(node.a, node.b)
+                is ColorOperationGraphV1.Scalar.Min -> binary(node.a, node.b)
+                is ColorOperationGraphV1.Scalar.Max -> binary(node.a, node.b)
+
+                is ColorOperationGraphV1.Scalar.Clamp01 -> unary(node.value)
+                is ColorOperationGraphV1.Scalar.TableByte -> unary(node.scaled)
+                is ColorOperationGraphV1.Scalar.Abs -> unary(node.value)
+                is ColorOperationGraphV1.Scalar.Sqrt -> unary(node.value)
+                is ColorOperationGraphV1.Scalar.Atan2 -> binary(node.y, node.x)
+                is ColorOperationGraphV1.Scalar.Sin -> unary(node.value)
+                is ColorOperationGraphV1.Scalar.Cos -> unary(node.value)
+                is ColorOperationGraphV1.Scalar.Floor -> unary(node.value)
+                is ColorOperationGraphV1.Scalar.Round -> unary(node.value)
+                is ColorOperationGraphV1.Scalar.IntegerModulo -> unary(node.value)
+
+                is ColorOperationGraphV1.Scalar.BranchComponent ->
+                    if (predicateDependencies(node.branch.predicate, ::include) &&
+                        node.branch.yes.all(::include) && node.branch.no.all(::include)
+                    ) ContextDependencies.Selected(selected) else ContextDependencies.Full
+                is ColorOperationGraphV1.Scalar.EagerSelect ->
+                    if (predicateDependencies(node.predicate, ::include) && include(node.yes) && include(node.no)) {
+                        ContextDependencies.Selected(selected)
+                    } else ContextDependencies.Full
+                is ColorOperationGraphV1.Scalar.LazyBranch ->
+                    if (predicateDependencies(node.predicate, ::include) && include(node.yes) && include(node.no)) {
+                        ContextDependencies.Selected(selected)
+                    } else ContextDependencies.Full
+
+                is ColorOperationGraphV1.Scalar.InputLinearPremul,
+                is ColorOperationGraphV1.Scalar.PrimitiveEncodedInput,
+                ColorOperationGraphV1.Scalar.DiscardF32,
+                is ColorOperationGraphV1.Scalar.DevicePositionF32,
+                is ColorOperationGraphV1.Scalar.DynamicF32,
+                is ColorOperationGraphV1.Scalar.ConstantF32 -> ContextDependencies.Selected(selected)
+            }
+            dependencies[node] = result
+            result
+        }
         fun hull(a: ColorBoundsV1, b: ColorBoundsV1) = ColorBoundsV1(minOf(a.lowerF64,b.lowerF64), maxOf(a.upperF64,b.upperF64))
         fun evaluate(node: ColorOperationGraphV1.Scalar, conditions: Map<ColorOperationGraphV1.Scalar, ColorBoundsV1>): ColorBoundsV1 {
             conditions[node]?.let { return it }
-            cache[node]?.get(conditions)?.let { return it }
+            val environment = EvaluationEnvironment(conditions, dependencyOf(node), activeNoise)
+            cache[node]?.get(environment)?.let { return it }
             fun value(n: ColorOperationGraphV1.Scalar) = evaluate(n, conditions)
             fun imageIndex(read: ImageNumericOperationGraphV1.TexelRead,x: Boolean): IntRange {
                 val base = value(if (x) read.baseX else read.baseY)
@@ -1038,7 +1175,7 @@ internal object ColorRoundedGraphProofV1 {
                     }
                 }
             }
-            cache.getOrPut(node) { java.util.IdentityHashMap() }[conditions] = result
+            cache.getOrPut(node) { HashMap() }[environment] = result
             return result
         }
         graph.outputs.forEach { evaluate(it, emptyMap()) }
