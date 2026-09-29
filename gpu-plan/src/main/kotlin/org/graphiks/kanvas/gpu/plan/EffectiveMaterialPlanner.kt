@@ -315,7 +315,13 @@ public object EffectiveMaterialPlanner {
                 is SourceConstructionResultV4.Refused -> SourceNormalizationV4.Refused(captured.diagnosticCode)
             }
         }
-        if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild) {
+        val premultipliedLinear = leaf as? MaterialNode.LinearGradient
+        if (premultipliedLinear?.alphaMode == org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED &&
+            (domain != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
+                premultipliedLinear.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP))
+            return SourceNormalizationV4.Refused("unsupported.material.gradient.alpha-mode")
+        if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild &&
+            premultipliedLinear?.alphaMode != org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED) {
             return when (val original = normalize(draw,targetClamp,true,coverage,sample,elideNoOp=!imageMaskChild,
                 gradientDeviceBoundsI32=legacyGradientBoundsI32,imageMaskChild=imageMaskChild)) {
                 Normalization.NoOp -> SourceNormalizationV4.NoOp

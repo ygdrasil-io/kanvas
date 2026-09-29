@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.dsl
 
 import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.GradientAlphaMode
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.math.color.ColorARGB
@@ -11,9 +12,10 @@ class LinearGradientScope {
     var start: Point2F32 = Point2F32.Origin
     var end: Point2F32 = Point2F32.Origin
     var tileMode: TileMode = TileMode.CLAMP
+    var alphaMode: GradientAlphaMode = GradientAlphaMode.STRAIGHT
     private val stops = mutableListOf<GradientStop>()
     fun stop(position: Float, color: ColorARGB) { stops.add(GradientStop(position, color)) }
-    internal fun build() = Shader.LinearGradient(start, end, stops.toList(), tileMode)
+    internal fun build() = Shader.LinearGradient(start, end, stops.toList(), tileMode, alphaMode = alphaMode)
 }
 
 fun linearGradient(block: LinearGradientScope.() -> Unit): Shader.LinearGradient {

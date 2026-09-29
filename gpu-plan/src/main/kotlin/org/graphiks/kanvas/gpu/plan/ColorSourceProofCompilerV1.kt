@@ -334,7 +334,7 @@ internal object ColorSourceProofCompilerV1 {
                 else -> error(W5fPlanDiagnostics.Schema)
             }
         } }
-        val first = ColorOperationGraphV1.GradientStopSelection(zero,one,zero,0L,definition.domain,firstOnly=true)
+        val first = ColorOperationGraphV1.GradientStopSelection(zero,one,zero,0L,definition.domain,definition.metadata.alphaMode,firstOnly=true)
         fun rgba(node: Node): List<S> = when (node.operation) {
             G.VALIDITY_MASK -> vectorBranch(flag(node.inputs[1]),rgba(node.inputs[0]),List(4) { zero })
             G.SELECT -> {
@@ -357,7 +357,7 @@ internal object ColorSourceProofCompilerV1 {
                     W5fPlanDiagnostics.Schema
                 }
                 val selected = selections.getOrPut(upper) { ColorOperationGraphV1.GradientStopSelection(
-                    scalar(upper.inputs[1]),scalar(upper.inputs[2]),scalar(node.inputs[4]),0L,definition.domain) }
+                    scalar(upper.inputs[1]),scalar(upper.inputs[2]),scalar(node.inputs[4]),0L,definition.domain,definition.metadata.alphaMode) }
                 List(4) { S.GradientStopComponent(selected,it) }
             }
             else -> error(W5fPlanDiagnostics.Schema)

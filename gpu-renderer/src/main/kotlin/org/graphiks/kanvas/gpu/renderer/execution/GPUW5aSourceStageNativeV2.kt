@@ -215,9 +215,10 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
     destination: GPUBlendPlan.ShaderBlendWithDstRead? = null,
     destinationBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds? = null): String {
     val target = template.target
-    val blend = listOf(target.colorBlend, target.alphaBlend)
+    val blend = listOfNotNull(target.colorBlend, target.alphaBlend)
+    val directSrc = target.colorBlend == null && target.alphaBlend == null
     require(target.format == GPUTextureFormat.RGBA8UnormSrgb &&
-        (if (destination == null) blend.all { it.operation == GPUBlendOperation.Add }
+        (if (destination == null) directSrc || blend.size == 2 && blend.all { it.operation == GPUBlendOperation.Add }
         else blend.all {
             it.operation == GPUBlendOperation.Add && it.srcFactor == GPUBlendFactor.One && it.dstFactor == GPUBlendFactor.Zero
         } && destination.sealedW5b?.compositionAbiI32 in 3..4)) {

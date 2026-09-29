@@ -10,6 +10,9 @@ import org.graphiks.kanvas.render.ir.checkedNoiseTileI32
 
 enum class ColorSpaceInterpolation { SRGB, LINEAR, OKLAB, HSL, OKLCH }
 
+/** Selects whether a linear gradient interpolates straight or premultiplied stop colours. */
+enum class GradientAlphaMode { STRAIGHT, PREMULTIPLIED }
+
 sealed interface Shader {
     data class SolidColor(val color: ColorARGB) : Shader
     /** Applies a finite alpha in [0, 1] to the child material without changing its structure. */
@@ -25,6 +28,7 @@ sealed interface Shader {
         val stops: List<GradientStop>,
         val tileMode: TileMode = TileMode.CLAMP,
         val interpolation: ColorSpaceInterpolation = ColorSpaceInterpolation.SRGB,
+        val alphaMode: GradientAlphaMode = GradientAlphaMode.STRAIGHT,
     ) : Shader
     data class RadialGradient(
         val center: Point2F32, val radius: Float,

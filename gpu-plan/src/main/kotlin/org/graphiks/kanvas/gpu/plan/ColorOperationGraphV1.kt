@@ -229,6 +229,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public val parameter: Scalar,
         public val rangeWordOffsetU32: Long,
         public val domain: org.graphiks.kanvas.render.ir.ColorInterpolation,
+        public val alphaMode: org.graphiks.kanvas.render.ir.GradientAlphaMode = org.graphiks.kanvas.render.ir.GradientAlphaMode.STRAIGHT,
         public val firstOnly: Boolean = false,
     ) {
         public val countBoundU32: UInt = 65_538u
@@ -242,6 +243,26 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             require(left.size == 4 && right.size == 4)
             val inverse = Scalar.Subtract(constant(1f),weight)
             val channels = List(4) { Scalar.Add(Scalar.Multiply(inverse,left[it]),Scalar.Multiply(weight,right[it])) as Scalar }.toMutableList()
+            if (alphaMode == org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED) {
+                require(domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB)
+                val zero = constant(0f)
+                val leftZero = Predicate.Equal(left[3],zero)
+                val rightZero = Predicate.Equal(right[3],zero)
+                val alphaFromMinimum = Scalar.LazyBranch(Predicate.LessEqual(left[3],right[3]),
+                    Scalar.Add(left[3],Scalar.Multiply(weight,Scalar.Subtract(right[3],left[3]))),
+                    Scalar.Add(right[3],Scalar.Multiply(inverse,Scalar.Subtract(left[3],right[3]))))
+                val alpha = Scalar.LazyBranch(leftZero,Scalar.Multiply(weight,right[3]),
+                    Scalar.LazyBranch(rightZero,Scalar.Multiply(inverse,left[3]),alphaFromMinimum))
+                for (channel in 0..2) {
+                    val numerator = Scalar.Add(Scalar.Multiply(Scalar.Multiply(inverse,left[channel]),left[3]),
+                        Scalar.Multiply(Scalar.Multiply(weight,right[channel]),right[3]))
+                    channels[channel] = Scalar.LazyBranch(leftZero,
+                        Scalar.LazyBranch(rightZero,zero,right[channel]),
+                        Scalar.LazyBranch(rightZero,left[channel],Scalar.Divide(numerator,alpha)))
+                }
+                channels[3] = alpha
+                return channels
+            }
             if (domain == org.graphiks.kanvas.render.ir.ColorInterpolation.HSL ||
                 domain == org.graphiks.kanvas.render.ir.ColorInterpolation.OKLCH) {
                 val hue = if (domain == org.graphiks.kanvas.render.ir.ColorInterpolation.HSL) 0 else 2
@@ -332,7 +353,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 Scalar.DiscardF32 -> "fragment-discard"
                 is Scalar.StopInterpolationInput -> "stop-interpolation-input:${node.slotI32}"
                 is Scalar.GradientStopComponent -> node.selection.let { selected ->
-                    "gradient-upper-bound-65538-scaled-le-interpolate-v4:${selected.domain}:${selected.rangeWordOffsetU32}:first=${selected.firstOnly}:" +
+                    "gradient-upper-bound-65538-scaled-le-interpolate-v4:${selected.domain}:${selected.alphaMode}:${selected.rangeWordOffsetU32}:first=${selected.firstOnly}:" +
                         "${identity(selected.numerator)}:${identity(selected.scale)}:${identity(selected.parameter)}:${selected.interpolationGraph.canonicalIdentity}:${node.channelI32}" }
                 is Scalar.BranchComponent -> "vector-lazy:${predicate(node.branch.predicate)}:" +
                     "${node.branch.yes.joinToString(",",transform=::identity)}:${node.branch.no.joinToString(",",transform=::identity)}:${node.channelI32}"
@@ -407,7 +428,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             is Scalar.StopInterpolationInput -> value
             is Scalar.GradientStopComponent -> Scalar.GradientStopComponent(selections.getOrPut(value.selection) {
                 GradientStopSelection(bind(value.selection.numerator),bind(value.selection.scale),bind(value.selection.parameter),
-                    Math.addExact(value.selection.rangeWordOffsetU32,filterWordOffsetU32),value.selection.domain,value.selection.firstOnly)
+                    Math.addExact(value.selection.rangeWordOffsetU32,filterWordOffsetU32),value.selection.domain,value.selection.alphaMode,value.selection.firstOnly)
             },value.channelI32)
             is Scalar.BranchComponent -> Scalar.BranchComponent(vectors.getOrPut(value.branch) {
                 BranchVector(predicate(value.branch.predicate),value.branch.yes.map(::bind),value.branch.no.map(::bind))

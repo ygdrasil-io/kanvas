@@ -13,6 +13,9 @@ public enum class TileMode { CLAMP, REPEAT, MIRROR, DECAL }
 /** Interpolation color space requested by a material without selecting a backend implementation. */
 public enum class ColorInterpolation { SRGB, LINEAR, OKLAB, HSL, OKLCH }
 
+/** Linear-gradient stop interpolation policy, independent from its colour space. */
+public enum class GradientAlphaMode { STRAIGHT, PREMULTIPLIED }
+
 /** Semantic blend modes, preserving the public paint surface without importing it. */
 public enum class BlendMode {
     CLEAR, SRC, DST, SRC_OVER, DST_OVER,
@@ -46,12 +49,13 @@ public sealed interface MaterialNode : CanonicalValue {
         stops: Collection<GradientStop>,
         public val tileMode: TileMode,
         public val interpolation: ColorInterpolation,
+        public val alphaMode: GradientAlphaMode,
     ) : MaterialNode {
         private val values: List<GradientStop> = immutableList(stops)
         public fun stops(): List<GradientStop> = values
         override val canonicalId: CanonicalId = canonicalId(
             "material-linear-gradient-v1", pointId(start).value, pointId(end).value,
-            canonicalSequenceId("stops", values.map { it.canonicalId.value }).value, tileMode.name, interpolation.name,
+            canonicalSequenceId("stops", values.map { it.canonicalId.value }).value, tileMode.name, interpolation.name, alphaMode.name,
         )
         override fun equals(other: Any?): Boolean = other is LinearGradient && canonicalId == other.canonicalId
         override fun hashCode(): Int = canonicalId.hashCode()
@@ -62,7 +66,8 @@ public sealed interface MaterialNode : CanonicalValue {
                 stops: Collection<GradientStop>,
                 tileMode: TileMode = TileMode.CLAMP,
                 interpolation: ColorInterpolation = ColorInterpolation.SRGB,
-            ): LinearGradient = LinearGradient(start, end, stops, tileMode, interpolation)
+                alphaMode: GradientAlphaMode = GradientAlphaMode.STRAIGHT,
+            ): LinearGradient = LinearGradient(start, end, stops, tileMode, interpolation, alphaMode)
         }
     }
 

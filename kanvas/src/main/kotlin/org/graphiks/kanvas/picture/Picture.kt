@@ -311,8 +311,8 @@ class Picture internal constructor(
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
 private const val FORMAT_VERSION = 10
 private const val STABLE_WIRE_VERSION = 14
-private const val CURRENT_STABLE_WIRE_VERSION = 15
-private const val PREVIOUS_STABLE_WIRE_VERSION = 13
+private const val CURRENT_STABLE_WIRE_VERSION = 16
+private const val PREVIOUS_STABLE_WIRE_VERSION = 15
 private const val HISTORICAL_WIRE_VERSION_V8 = 8
 
 // type discriminators

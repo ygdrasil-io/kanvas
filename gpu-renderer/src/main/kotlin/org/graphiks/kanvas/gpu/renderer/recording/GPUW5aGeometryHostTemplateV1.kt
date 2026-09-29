@@ -22,8 +22,9 @@ internal data class GPUW5aGeometryHostTemplateV1(
 
 internal data class GPUW5aHostColorTargetV1(
     val format: GPUTextureFormat,
-    val colorBlend: GPUW5aHostBlendComponentV1,
-    val alphaBlend: GPUW5aHostBlendComponentV1,
+    /** Null is an authenticated disabled fixed-function blend, never One/Zero encoded. */
+    val colorBlend: GPUW5aHostBlendComponentV1?,
+    val alphaBlend: GPUW5aHostBlendComponentV1?,
     val writeMaskU32: UInt,
 )
 
@@ -85,10 +86,11 @@ internal fun GPUW5aHostBindGroupLayoutV1.nativeDescriptorV1(label: String): Bind
     })
 
 internal fun GPUColorTargetState.hostTargetV1(): GPUW5aHostColorTargetV1 {
-    val blend = requireNotNull(blend)
-    return GPUW5aHostColorTargetV1(format,
-        GPUW5aHostBlendComponentV1(blend.color.operation, blend.color.srcFactor, blend.color.dstFactor),
-        GPUW5aHostBlendComponentV1(blend.alpha.operation, blend.alpha.srcFactor, blend.alpha.dstFactor), writeMask.value.toUInt())
+    return GPUW5aHostColorTargetV1(format, blend?.let {
+        GPUW5aHostBlendComponentV1(it.color.operation, it.color.srcFactor, it.color.dstFactor)
+    }, blend?.let {
+        GPUW5aHostBlendComponentV1(it.alpha.operation, it.alpha.srcFactor, it.alpha.dstFactor)
+    }, writeMask.value.toUInt())
 }
 
 internal fun sealW5aGeometryHostTemplateV1(packet: GPUDrawPacket,
