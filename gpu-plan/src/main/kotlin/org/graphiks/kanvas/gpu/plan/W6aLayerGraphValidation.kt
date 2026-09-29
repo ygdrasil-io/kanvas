@@ -326,6 +326,13 @@ internal fun validateW6aLayerTopology(
         }
         is PlanPass.FilterCoverageSourcePass -> {
             val output = byId.getValue(pass.output)
+            pass.aaCoverageBinding?.let { binding ->
+                require(binding.ownerPassId == pass.id && binding.resources().all { byId[it.id] === it })
+                val phase = binding.passes().single()
+                require(phase.ordinal == pass.ordinal && phase.resolveTarget == pass.output &&
+                    initialized.add(phase.target))
+                versions[phase.target] = 0L
+            }
             require(output.role == PlanResourceRole.CoverageSource && output.kind == PlanResourceKind.Texture2D &&
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
                 PlanResourceUsage.Sampled in output.usages())

@@ -19,7 +19,9 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         val pass = graph.passes()[index - 1]
         val geometryBinding = physical.geometryBinding(pass.id)
         val aa = physical.w4dAaSourceBindings().singleOrNull { pass in it.passes() }
-        val indexedGeometry = geometryBinding != null || aa != null
+        val aaCoverage = (pass as? PlanPass.FilterCoverageSourcePass)?.aaCoverageBinding
+        val indexedAa = aa != null || aaCoverage != null
+        val indexedGeometry = geometryBinding != null || indexedAa
         // A FilterCoverage source with a frozen stencil producer replays the producer and
         // cover in this one W6b scope.  It cannot use the single-packet W4e stream shell.
         val stencilCoverage = (pass as? PlanPass.FilterCoverageSourcePass)
@@ -60,7 +62,7 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
                     add(GPUPassCommand.SetBindGroup(packet.bindingLayoutHash, packet.uniformSlot, null, packet.packetId))
                     if (indexedGeometry) {
                         add(GPUPassCommand.SetVertexBuffer(0, packet.packetId))
-                        if (aa != null || requireNotNull(geometryBinding).indexCountI32 > 0) add(GPUPassCommand.SetIndexBuffer(
+                        if (indexedAa || requireNotNull(geometryBinding).indexCountI32 > 0) add(GPUPassCommand.SetIndexBuffer(
                             if (geometryBinding?.indexElementBytesI32 == 2) "uint16" else "uint32", packet.packetId))
                     }
                     packet.scissorBoundsHash?.let { add(GPUPassCommand.SetScissor(it, packet.packetId)) }
@@ -95,7 +97,7 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             key(GPUPreparedNativeOperandRole.ReadbackDestination, GPUPreparedNativeOperandKind.Buffer, "w6a.$index.readback", GPUPreparedNativeOperandOwnership.OutputOwnedReadback))
         else buildList {
             add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.target"))
-            (pass as? PlanPass.PathRenderPass)?.resolveTarget?.let {
+            ((pass as? PlanPass.PathRenderPass)?.resolveTarget ?: aaCoverage?.passes()?.single()?.resolveTarget)?.let {
                 add(key(GPUPreparedNativeOperandRole.RenderResolveTarget,
                     GPUPreparedNativeOperandKind.TextureView, "w6a.$index.resolve"))
             }
@@ -112,7 +114,7 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
                 add(key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, "w6a.$index.bind.$draw"))
                 if (indexedGeometry) {
                     add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer, "w6a.$index.vertex.$draw"))
-                    if (aa != null || requireNotNull(geometryBinding).indexCountI32 > 0)
+                    if (indexedAa || requireNotNull(geometryBinding).indexCountI32 > 0)
                         add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer, "w6a.$index.index.$draw"))
                 }
             }

@@ -1405,7 +1405,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
         add(binding.recipe)
     }
     w4dAaCoverageSources.forEach { binding ->
-        require(binding.passes().all { pass -> passes.any { it === pass } })
+        require(passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().single { it.id == binding.ownerPassId }.aaCoverageBinding === binding)
         add(binding.recipe)
     }
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -1731,7 +1731,7 @@ public fun freezeW6FullscreenEmptyRecipesV1(
     passes.forEach { pass -> when (pass) {
         is PlanPass.PictureAggregateBeginPass -> add(pass, W6FullscreenEmptyPhaseV1.PictureAggregateBegin, pass.target, AttachmentLoadPlan.ClearTransparent)
         is PlanPass.FilterSourceClear -> add(pass, W6FullscreenEmptyPhaseV1.FilterTransparentBlack, pass.output, AttachmentLoadPlan.ClearTransparent)
-        is PlanPass.FilterCoverageSourcePass -> if (pass.rasterBinding == null && pass.sealedAlphaSource == null)
+        is PlanPass.FilterCoverageSourcePass -> if (pass.rasterBinding == null && pass.sealedAlphaSource == null && pass.aaCoverageBinding == null)
             add(pass, W6FullscreenEmptyPhaseV1.CoverageAbsent, pass.output, AttachmentLoadPlan.ClearTransparent)
         is PlanPass.PictureAggregateSealPass -> add(pass, W6FullscreenEmptyPhaseV1.PictureAggregateSeal, pass.aggregateTarget, AttachmentLoadPlan.Load)
         is PlanPass.PictureComposite -> if (pass.operands?.copyCompositeScissorTargetLocalI32() == null)

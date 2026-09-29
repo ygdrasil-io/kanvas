@@ -34,12 +34,11 @@ class W7AaMaskBlurSurfacePixelTest {
         listOf(0.125f, 0.375f, 0.625f).forEach { phase ->
             val surface = triangleSurface(phase, Paint(ColorARGB.Black,
                 maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 0.1f), antiAlias = true))
-            val result = surface.render()
+            val result = renderRepeated(surface)
             assertNative(result)
             assertPixel(result.pixels, 96, 24, 24, 0, 0, 0, 255)
             assertPixel(result.pixels, 96, 90, 90, 0, 0, 0, 0)
             alphaSamples += diagonalBandAlphas(result.pixels)
-            assertContentEquals(result.pixels, surface.render().pixels)
         }
         assertTrue(alphaSamples.any { it in 1..254 }, alphaSamples.toString())
 
@@ -53,12 +52,11 @@ class W7AaMaskBlurSurfacePixelTest {
     fun `normal aa blur preserves halo and integer translation`() {
         val baseSurface = triangleSurface(0f, Paint(ColorARGB.Black,
             maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1.5f), antiAlias = true))
-        val base = baseSurface.render()
+        val base = renderRepeated(baseSurface)
         assertNative(base)
         assertPixel(base.pixels, 96, 24, 24, 0, 0, 0, 255)
         assertAlphaIn(base.pixels, 96, 15, 32, 1..254)
         assertPixel(base.pixels, 96, 9, 32, 0, 0, 0, 0)
-        assertContentEquals(base.pixels, baseSurface.render().pixels)
 
         val translatedSurface = Surface(96, 96).also { surface ->
             surface.canvas {
@@ -67,42 +65,41 @@ class W7AaMaskBlurSurfacePixelTest {
                     maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1.5f), antiAlias = true))
             }
         }
-        val translated = translatedSurface.render()
+        val translated = renderRepeated(translatedSurface)
         assertNative(translated)
         assertPixel(translated.pixels, 96, 27, 26, 0, 0, 0, 255)
         assertAlphaIn(translated.pixels, 96, 18, 34, 1..254)
         assertPixel(translated.pixels, 96, 12, 34, 0, 0, 0, 0)
-        assertContentEquals(translated.pixels, translatedSurface.render().pixels)
     }
 
     @Test
     fun `normal aa blur applies paint alpha once`() {
         listOf(0, 128, 255).forEach { alpha ->
-            val result = triangleSurface(0f, Paint(ColorARGB.of(alpha, 0, 0, 0),
-                maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1.5f), antiAlias = true)).render()
+            val result = renderRepeated(triangleSurface(0f, Paint(ColorARGB.of(alpha, 0, 0, 0),
+                maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1.5f), antiAlias = true)))
             assertNative(result)
             assertPixelNear(result.pixels, 96, 24, 24, 0, 0, 0, alpha, 1)
         }
 
         val black = RectF32.ofLTRB(0f, 0f, 96f, 96f)
-        val halfWhite = Surface(96, 96).also { surface ->
+        val halfWhite = renderRepeated(Surface(96, 96).also { surface ->
             surface.canvas {
                 drawRect(black, Paint(ColorARGB.Black, antiAlias = false))
                 drawPath(triangle(), Paint(ColorARGB.of(128, 255, 255, 255),
                     maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1.5f), antiAlias = true))
             }
-        }.render()
+        })
         assertNative(halfWhite)
         assertPixelNear(halfWhite.pixels, 96, 24, 24, 188, 188, 188, 255, 1)
 
         val coloredBackground = ColorARGB.of(255, 23, 89, 173)
-        val alphaZero = Surface(96, 96).also { surface ->
+        val alphaZero = renderRepeated(Surface(96, 96).also { surface ->
             surface.canvas {
                 drawRect(black, Paint(coloredBackground, antiAlias = false))
                 drawPath(triangle(), Paint(ColorARGB.of(0, 255, 255, 255),
                     maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1.5f), antiAlias = true))
             }
-        }.render()
+        })
         assertNative(alphaZero)
         for (y in 0 until 96) for (x in 0 until 96) {
             assertPixel(alphaZero.pixels, 96, x, y, 23, 89, 173, 255)
@@ -127,6 +124,11 @@ class W7AaMaskBlurSurfacePixelTest {
             moveTo(16f, 16f); lineTo(80f, 16f); lineTo(80f, 80f); lineTo(48f, 48f); lineTo(16f, 80f); close()
         }
         assertTerminalAndRecovers(Surface(96, 96).also { target -> target.canvas { drawPath(stencil, base) } }, bounds)
+        assertTerminalAndRecovers(Surface(96, 96).also { target -> target.canvas {
+            saveLayer()
+            drawPath(triangle(), base)
+            restore()
+        } }, bounds)
     }
 
     private fun triangleSurface(phase: Float, paint: Paint): Surface = Surface(96, 96).also { surface ->
@@ -157,6 +159,15 @@ class W7AaMaskBlurSurfacePixelTest {
 
     private fun assertNative(result: RenderResult) {
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), result.nativeEvidenceScopeKinds.toString())
+    }
+
+    private fun renderRepeated(surface: Surface): RenderResult {
+        val first = surface.render()
+        val second = surface.render()
+        assertNative(first)
+        assertNative(second)
+        assertContentEquals(first.pixels, second.pixels)
+        return first
     }
 
     private fun assertAlphaIn(pixels: UByteArray, width: Int, x: Int, y: Int, expected: IntRange) {

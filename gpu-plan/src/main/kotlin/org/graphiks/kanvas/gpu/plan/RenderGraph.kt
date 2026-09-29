@@ -974,6 +974,7 @@ public class RenderGraph private constructor(
             is PlanPass.FilterSourceClear -> listOf(pass.output, pass.boundSourceId)
             is PlanPass.FilterCoverageSourcePass -> buildList {
                 add(pass.output)
+                pass.aaCoverageBinding?.let { binding -> addAll(binding.resources().map { it.id }) }
                 // A sealed Picture alpha source is sampled by the already-frozen coverage
                 // pass.  Retain this producer/consumer edge for physical lifetime planning;
                 // the renderer receives the published resource ID and never discovers it.

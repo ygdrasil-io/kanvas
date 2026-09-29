@@ -2151,6 +2151,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             val w6PathRenderDirectColors = preflightW6PathRenderDirectColors(frame, framePlan)
             require(frame.validatesW4dAaSources(framePlan))
+            val w4dAaCoverageMappings = frame.w4dAaCoverageAuthorities.mapValues { (binding, authority) ->
+                require(frame.physical.nativeSiteRecipeCatalogV1().recipe(binding.recipe.owner) === binding.recipe)
+                val built = authority.built
+                require(w4dGeneralEntryMatches(built.packet, authority.fact, built.structuralPipelineKey, built.structuralPipelineKey))
+                val semantic = built.packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
+                require(semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte) == authority.fact.uniformPayloadBytes &&
+                    frame.template(built.packet) == null && built.structuralPipelineKey.sampleCount == 4)
+                (mapW4dGeneralStructuralKeyToWgpu4kPipelineIdentity(built.structuralPipelineKey)
+                    as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped)?.also {
+                    require(it.componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY)
+                } ?: error("w6b.filter.aa_coverage_pipeline_unavailable")
+            }
             val w4dAaMappings = frame.w4dAaAuthorities.mapValues { (binding, authority) ->
                 require(frame.physical.nativeSiteRecipeCatalogV1().recipe(binding.recipe.owner) === binding.recipe)
                 authority.packets.zip(authority.facts).associate { (built, fact) ->
@@ -2214,7 +2226,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             }
             val drawData = graph.passes().mapNotNull { frame.physical.geometryBinding(it.id)?.data } +
                 frame.physical.w4eGeometryBindings().map { PlanDrawDataResources(it.payload.vertexResourceId, it.payload.indexResourceId, it.payload.uniformResourceId) } +
-                frame.physical.w4dAaSourceBindings().flatMap { it.passes().map { pass -> pass.drawDataResources } }
+                frame.physical.w4dAaSourceBindings().flatMap { it.passes().map { pass -> pass.drawDataResources } } +
+                frame.physical.w4dAaCoverageSourceBindings().flatMap { it.passes().map { pass -> pass.drawDataResources } }
             val drawUniformIds = drawData.map { it.uniform }.toSet()
             val geometryUniform = frame.physical.resource(graph.resources().single {
                 it.role == PlanResourceRole.UniformData && it.id !in drawUniformIds }.id)
@@ -2412,6 +2425,33 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(uniformBytes))
             val renderOperands = mutableListOf<GPUPreparedNativeScopeOperand>()
             val pathViews = mutableMapOf<Int, GPUTextureView>()
+            val w4dAaCoverageOperands = frame.w4dAaCoverageAuthorities.map { (binding, authority) ->
+                val phase = authority.phase
+                val data = phase.drawDataResources
+                val geometry = authority.geometry
+                val mapping = w4dAaCoverageMappings.getValue(binding)
+                val layout = owned.own(device.createBindGroupLayout(corePrimitiveBindGroupLayoutDescriptor(mapping.componentIdentity)))
+                val pipeline = geometryPipeline(mapping, layout, owned, null)
+                val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(geometryBuffers.getValue(data.uniform), 0uL, 32uL)),
+                ))))
+                queue.writeBuffer(geometryBuffers.getValue(data.vertex), 0uL, ArrayBuffer.of(geometry.copyVertexData()))
+                queue.writeBuffer(geometryBuffers.getValue(data.index), 0uL, ArrayBuffer.of(geometry.copyIndexData()))
+                queue.writeBuffer(geometryBuffers.getValue(data.uniform), 0uL, ArrayBuffer.of(authority.fact.uniformPayloadBytes.toByteArray()))
+                fun buffer(id: PlanResourceId) = GPUPreparedNativeBufferOperand(geometryBuffers.getValue(id), generation,
+                    byteCapacity = frame.physical.resource(id).byteSize)
+                val stepIndex = framePlan.steps.indexOfFirst { it is GPUFrameStep.RenderPassStep && it.w6aPassV1 === authority.owner }
+                stepIndex to w4dGeneralRenderOperand(stepIndex,
+                    authority.built.packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive,
+                    GPUPreparedNativeRenderPassConfig(
+                        colorTarget = GPUPreparedNativeTextureViewOperand(views.getValue(phase.target), generation),
+                        resolveTarget = GPUPreparedNativeTextureViewOperand(views.getValue(authority.owner.output), generation),
+                        loadOperation = GPUPreparedNativeLoadOperation.Clear, storeOperation = GPUPreparedNativeStoreOperation.Store,
+                        clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+                    GPUPreparedNativeRenderPipelineOperand(pipeline, generation), GPUPreparedNativeBindGroupOperand(group, generation), 0L,
+                    buffer(data.vertex), geometry.vertexUsefulBytes, buffer(data.index), geometry.indexUsefulBytes,
+                    geometry.slices.single(), authority.owner)
+            }.toMap()
             val w4dAaOperands = frame.w4dAaAuthorities.flatMap { (binding, authority) ->
                 authority.packets.zip(authority.facts).mapIndexed { index, (built, fact) ->
                     val phase = binding.passes()[index]
@@ -2524,6 +2564,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 }
                 w4eOperands[stepIndex]?.let { renderOperands += it; return@forEachIndexed }
                 w4dAaOperands[stepIndex]?.let { renderOperands += it; return@forEachIndexed }
+                w4dAaCoverageOperands[stepIndex]?.let { renderOperands += it; return@forEachIndexed }
                 when (pass) {
                     is PlanPass.RenderPass, is PlanPass.StencilGeometryProducerV3, is PlanPass.StencilCover -> {
                         val render = step as GPUFrameStep.RenderPassStep

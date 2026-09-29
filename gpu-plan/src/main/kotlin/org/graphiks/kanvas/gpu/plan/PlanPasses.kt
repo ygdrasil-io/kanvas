@@ -424,6 +424,10 @@ public class SolidRectDraw private constructor(
     }
 
     public companion object {
+        internal fun coverageMaterialCarrier(draw: PlanDraw, bounds: RectI32): SolidRectDraw =
+            SolidRectDraw(draw.commandIndex, draw.materialAuthority, bounds, bounds,
+                CoveragePlan.FullOrScissor, SamplePlan.SingleSample, BlendPlan.SrcOver)
+
         public fun of(
             commandIndex: Int,
             color: ColorF32,

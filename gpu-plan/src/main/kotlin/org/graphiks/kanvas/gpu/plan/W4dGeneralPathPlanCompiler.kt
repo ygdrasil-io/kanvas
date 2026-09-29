@@ -152,7 +152,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             )
             is Recognition.Ready -> if (allowAaColorSource && (recognized.elidedNoOpsI32 != 0 ||
                 recognized.draws.size != 1 || recognized.draws.any {
-                    !it.requestsAntiAlias || it.blend != BlendPlan.SrcOver
+                    !it.requestsAntiAlias || it.blend != BlendPlan.SrcOver ||
+                        w6AaCoverageSource && it.strategy != PathFillStrategy.DirectTriangle
                 })) gap("W6 AA colour source admits one solid SrcOver direct-triangle child")
             else GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, recognized.draws, recognized.materialPlanTable, recognized.elidedNoOpsI32, recognized.requestedAa,recognized.sources))
             is Recognition.Gap -> gap(recognized.message)

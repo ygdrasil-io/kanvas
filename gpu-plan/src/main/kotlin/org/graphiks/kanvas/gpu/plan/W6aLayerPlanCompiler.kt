@@ -217,6 +217,10 @@ public class W6aLayerPlanCompiler public constructor(
                 aaSource.acceptsW6AaColorSourceScope(originalDraw)
             val rootAaCoverage = scopeI32 == null && ownsW6b &&
                 originalDraw.coverage == CoverageRequest.ANTIALIASED &&
+                originalDraw.paint?.let { paint ->
+                    (paint.maskFilter as? org.graphiks.kanvas.render.ir.MaskFilterNode.Blur)?.style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL &&
+                        paint.imageFilter == null && paint.colorFilter == null && paint.shader == null
+                } == true &&
                 aaCoverageSource.acceptsW6AaColorSourceScope(unfilteredDraw)
             val generalPath = when {
                 rootAaCoverage -> aaCoverageSource

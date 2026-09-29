@@ -2250,6 +2250,8 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEnc
 private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep.hasW6aAaSourceBinding(
     scope: GPUCommandEncoderScopePlan,
 ): Boolean {
+    val coverage = (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)?.aaCoverageBinding
+    if (coverage != null) return scope.w6aFrameV1?.w4dAaCoverageAuthorities?.get(coverage)?.owner === w6aPassV1
     val pass = w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass ?: return false
     return scope.w6aFrameV1?.physical?.w4dAaSourceBindings()?.singleOrNull { pass in it.passes() } != null
 }

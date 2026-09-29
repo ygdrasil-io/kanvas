@@ -91,6 +91,23 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
             depthViews[depthId] = view.view
             return@forEachIndexed
         }
+        val coverageBinding = (pass as? PlanPass.FilterCoverageSourcePass)?.aaCoverageBinding
+        if (coverageBinding != null) {
+            val authority = w4dAaCoverageAuthorities[coverageBinding] ?: return false
+            val native = byStep[ordinalI32 + 1] as? GPUPreparedNativeScopeOperand.Render ?: return false
+            val resolve = native.pass.resolveTarget ?: return false
+            val color = native.pass.colorTarget
+            if (native.w6aPassV1 !== authority.owner ||
+                color.view === resolve.view || color.deviceGeneration != prepared.generationSeal.deviceGeneration ||
+                resolve.deviceGeneration != color.deviceGeneration ||
+                color.ownership != GPUPreparedNativeOperandOwnership.Borrowed || resolve.ownership != color.ownership ||
+                native.pass.loadOperation != GPUPreparedNativeLoadOperation.Clear ||
+                native.pass.storeOperation != GPUPreparedNativeStoreOperation.Store ||
+                native.pass.clearColor != GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) ||
+                native.pass.depthStencilTarget != null || ordinalI32 + 1 in payload.pathDepthStencilViewAuthority)
+                return false
+            return@forEachIndexed
+        }
         val aa = w4dAaAuthorities.keys.singleOrNull { binding ->
             binding.passes().any { it === pass }
         }
