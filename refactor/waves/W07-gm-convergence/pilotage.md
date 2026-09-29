@@ -49,6 +49,27 @@ de rendu et timeouts éligibles restent au dénominateur.
 Les gates W6 relatives à la durée de vie et aux ressources restent suivies.
 Leur fermeture et la proximité visuelle sont deux mesures distinctes.
 
+## Audit alpha et domaine de composition — 29 septembre 2026
+
+L'[audit causal de `alphagradients`](alphagradients-audit.md) distingue deux
+contrats manquants : choix premul/unpremul du gradient et domaine de
+composition de Surface. Sur les 184 704 pixels intérieurs sondés, la référence
+suit straight gauche / premul droite et SrcOver sRGB encodé ; Kanvas suit
+straight des deux côtés et SrcOver linéaire. Chaque modèle retrouve les RGB
+de son image à un octet près. Les différences d'AA du port restent distinctes.
+La diagonale est conforme, contrairement à une première hypothèse retirée.
+
+Le profil Rec.2020 de la référence est reconnu par le comparateur ; cette
+expérience ne modifie pas le codec. **15/15 contrôles natifs frais, Gradle 0**,
+mais ils valident le contrat actuel et non sa parité Skia. Aucun renderer,
+GM, référence, seuil ou score modifié : 198 rendus / 176 comparaisons demeurent
+le dernier bilan, pas un résultat amélioré par l'audit. Astra reproduit la
+sonde et recommande cet ordre borné : politique alpha du LinearGradient sRGB
+clamp d'abord, contrat de composition ensuite, correction du port séparée.
+Les critères d'arrêt figurent dans l'audit ; aucune extension implicite aux
+images/filtres ou autres familles de gradients. Ni retouche locale du gradient
+ni conversion terminale seule ne suffiront à résoudre tous les écarts.
+
 ## Lot mélange racine Rect stroke AA — 29 septembre 2026
 
 Le [design](mixed-root-aa-rect-design.md), issu d'un diagnostic Terra et d'un

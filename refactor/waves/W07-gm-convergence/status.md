@@ -3,6 +3,18 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Audit `alphagradients` — 29 septembre 2026
+
+[Diagnostic causal](alphagradients-audit.md) sans modification de code ni du
+corpus : interpolation premul/unpremul non exposée et domaine de composition
+différent de celui observé dans la référence (sRGB encodé contre linéaire).
+Les modèles retrouvent chacun les RGB de leurs 184 704 pixels intérieurs à un
+octet près ; ce n'est pas un nouveau score GM. AA du port différent, diagonale conforme,
+profil Rec.2020 reconnu. **15/15 tests publics natifs, Gradle 0**. Bilan inchangé,
+W7 toujours ouvert. Ordre retenu après relecture Astra : politique alpha
+explicite du LinearGradient sRGB clamp, puis domaine de composition de
+Surface, puis port corrigé avec mesure distincte du changement de scène.
+
 ## Lot mélange racine Rect stroke AA — 29 septembre 2026
 
 Renderer `ff628a94d`, branche `codex/w7-mixed-root-aa-rect`, draft
