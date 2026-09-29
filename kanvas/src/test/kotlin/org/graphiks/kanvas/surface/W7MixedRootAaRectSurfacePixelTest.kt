@@ -42,8 +42,8 @@ class W7MixedRootAaRectSurfacePixelTest {
     fun `mixed root ring alpha is composed once`() {
         val opaqueBackground = renderTwice(mixedBase(ring = ColorARGB.of(128, RED.red, RED.green, RED.blue)))
         assertPixel(opaqueBackground, 2, 2, 188, 0, 187, 255)
-        assertPixel(opaqueBackground, 3, 3, BLUE.red.toInt(), BLUE.green.toInt(), BLUE.blue.toInt(), 255)
-        assertPixel(opaqueBackground, 0, 0, BLUE.red.toInt(), BLUE.green.toInt(), BLUE.blue.toInt(), 255)
+        assertPixel(opaqueBackground, 3, 3, BLUE.red, BLUE.green, BLUE.blue, 255)
+        assertPixel(opaqueBackground, 0, 0, BLUE.red, BLUE.green, BLUE.blue, 255)
 
         val halfCoverageSurface = Surface(8, 8).also { target -> target.canvas {
             drawRect(FULL, gradientPaint())
@@ -51,6 +51,12 @@ class W7MixedRootAaRectSurfacePixelTest {
         } }
         val halfCoverage = renderTwice(halfCoverageSurface)
         assertPixelNear(halfCoverage, 1, 3, 137, 0, 224, 255, tolerance = 1)
+    }
+
+    @Test
+    fun `mixed root transparent visible stroke remains renderable`() {
+        val transparent = mixedBase(ColorARGB.of(0, RED.red, RED.green, RED.blue))
+        assertAll(renderTwice(transparent), BLUE)
     }
 
     @Test
@@ -64,12 +70,12 @@ class W7MixedRootAaRectSurfacePixelTest {
             drawRect(RectF32.ofLTRB(4.5f, 2.5f, 7.5f, 5.5f), ringPaint(yellow))
         }
         val first = renderTwice(surface)
-        assertPixel(first, 2, 2, GREEN.red.toInt(), GREEN.green.toInt(), GREEN.blue.toInt(), 255)
-        assertPixel(first, 2, 4, RED.red.toInt(), RED.green.toInt(), RED.blue.toInt(), 255)
-        assertPixel(first, 4, 2, yellow.red.toInt(), yellow.green.toInt(), yellow.blue.toInt(), 255)
-        assertPixel(first, 5, 3, RED.red.toInt(), RED.green.toInt(), RED.blue.toInt(), 255)
-        assertPixel(first, 6, 3, BLUE.red.toInt(), BLUE.green.toInt(), BLUE.blue.toInt(), 255)
-        assertPixel(first, 0, 0, BLUE.red.toInt(), BLUE.green.toInt(), BLUE.blue.toInt(), 255)
+        assertPixel(first, 2, 2, GREEN.red, GREEN.green, GREEN.blue, 255)
+        assertPixel(first, 2, 4, RED.red, RED.green, RED.blue, 255)
+        assertPixel(first, 4, 2, yellow.red, yellow.green, yellow.blue, 255)
+        assertPixel(first, 5, 3, RED.red, RED.green, RED.blue, 255)
+        assertPixel(first, 6, 3, BLUE.red, BLUE.green, BLUE.blue, 255)
+        assertPixel(first, 0, 0, BLUE.red, BLUE.green, BLUE.blue, 255)
     }
 
     @Test
@@ -81,12 +87,12 @@ class W7MixedRootAaRectSurfacePixelTest {
             drawRect(RectF32.ofLTRB(1.25f, 1.25f, 2.75f, 2.75f), ringPaint(RED, width = 0f)); restore()
         }
         val first = renderTwice(clipped)
-        assertPixel(first, 2, 2, RED.red.toInt(), RED.green.toInt(), RED.blue.toInt(), 255)
-        assertPixel(first, 4, 2, RED.red.toInt(), RED.green.toInt(), RED.blue.toInt(), 255)
-        assertPixel(first, 2, 4, RED.red.toInt(), RED.green.toInt(), RED.blue.toInt(), 255)
-        assertPixel(first, 5, 2, BLUE.red.toInt(), BLUE.green.toInt(), BLUE.blue.toInt(), 255)
-        assertPixel(first, 3, 3, BLUE.red.toInt(), BLUE.green.toInt(), BLUE.blue.toInt(), 255)
-        assertPixel(first, 0, 0, BLUE.red.toInt(), BLUE.green.toInt(), BLUE.blue.toInt(), 255)
+        assertPixel(first, 2, 2, RED.red, RED.green, RED.blue, 255)
+        assertPixel(first, 4, 2, RED.red, RED.green, RED.blue, 255)
+        assertPixel(first, 2, 4, RED.red, RED.green, RED.blue, 255)
+        assertPixel(first, 5, 2, BLUE.red, BLUE.green, BLUE.blue, 255)
+        assertPixel(first, 3, 3, BLUE.red, BLUE.green, BLUE.blue, 255)
+        assertPixel(first, 0, 0, BLUE.red, BLUE.green, BLUE.blue, 255)
 
         val translatedSurface = Surface(8, 8).also { target -> target.canvas {
             drawRect(FULL, gradientPaint()); save(); translate(1f, 1f)
@@ -108,7 +114,7 @@ class W7MixedRootAaRectSurfacePixelTest {
             InvalidCase("AA clip", "unsupported.stroke.rect_anti_alias") { it.canvas { drawRect(FULL, gradientPaint()); save(); clipRect(RectF32.ofLTRB(1f, 1f, 7f, 7f), antiAlias = true); drawRect(RING, ringPaint(RED)); restore() } },
             InvalidCase("Picture sibling", "unsupported.composite.paint") { it.canvas { drawRect(FULL, gradientPaint()); drawPicture(picture); drawRect(RING, ringPaint(RED)) } },
             InvalidCase("stroke image filter", "w6a.layer.unsupported_child") { it.canvas { drawRect(FULL, gradientPaint()); drawRect(RING, Paint(RED, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 1f, imageFilter = ImageFilter.Blur(1f, 1f))) } },
-            InvalidCase("transparent offscreen stroke", "w4d.general.path-resource-limit") { it.canvas { drawRect(FULL, gradientPaint()); drawRect(RectF32.ofLTRB(20f, 20f, 22f, 22f), ringPaint(ColorARGB.of(0, RED.red, RED.green, RED.blue))) } },
+            InvalidCase("opaque offscreen stroke", "w4d.general.path-resource-limit") { it.canvas { drawRect(FULL, gradientPaint()); drawRect(RectF32.ofLTRB(20f, 20f, 22f, 22f), ringPaint(RED)) } },
         )
         invalid.forEach { (label, expected, record) ->
             val surface = Surface(8, 8); record(surface)
@@ -138,12 +144,12 @@ class W7MixedRootAaRectSurfacePixelTest {
         for (y in 0 until 8) for (x in 0 until 8) {
             val onRing = x in 2..5 && y in 2..5 && (x !in 3..4 || y !in 3..4)
             val expected = if (onRing) red else blue
-            assertPixel(result, x, y, expected.red.toInt(), expected.green.toInt(), expected.blue.toInt(), expected.alpha.toInt())
+            assertPixel(result, x, y, expected.red, expected.green, expected.blue, expected.alpha)
         }
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), result.nativeEvidenceScopeKinds.toString())
     }
     private fun assertAll(result: RenderResult, color: ColorARGB) { for (y in 0 until 8) for (x in 0 until 8)
-        assertPixel(result, x, y, color.red.toInt(), color.green.toInt(), color.blue.toInt(), color.alpha.toInt()) }
+        assertPixel(result, x, y, color.red, color.green, color.blue, color.alpha) }
     private fun renderTwice(surface: Surface): RenderResult {
         val first = surface.render()
         assertTrue(first.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), first.nativeEvidenceScopeKinds.toString())
