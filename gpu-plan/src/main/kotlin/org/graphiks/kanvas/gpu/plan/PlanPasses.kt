@@ -424,6 +424,10 @@ public class SolidRectDraw private constructor(
     }
 
     public companion object {
+        internal fun coverageMaterialCarrier(draw: PlanDraw, bounds: RectI32): SolidRectDraw =
+            SolidRectDraw(draw.commandIndex, draw.materialAuthority, bounds, bounds,
+                CoveragePlan.FullOrScissor, SamplePlan.SingleSample, BlendPlan.SrcOver)
+
         public fun of(
             commandIndex: Int,
             color: ColorF32,
@@ -1218,19 +1222,30 @@ public sealed interface PlanPass {
         public val sealedAlphaSampling: FilterInputSamplingV1? = null,
         /** Exact W4 geometry producer for a direct W6b mask blur, when one is admitted. */
         public val rasterBinding: W6bRasterCoverageBindingV1? = null,
+        /** One sealed MSAA4 opaque-white W4d producer resolving directly into [output]. */
+        public val aaCoverageBinding: PlanW4dAaCoverageSourceBindingV1? = null,
     ) : PlanPass {
         init {
-            require(sealedAlphaSource == null || rasterBinding == null)
+            require(listOfNotNull(sealedAlphaSource, rasterBinding, aaCoverageBinding).size <= 1)
             require((sealedAlphaSource == null) == (sealedAlphaSampling == null))
+            aaCoverageBinding?.let { binding ->
+                require(binding.resources().single { it.role == PlanResourceRole.CoverageSource }.id == output)
+            }
         }
         override val role: PlanPassRole = PlanPassRole.FilterCoverageSource
         override val id: PlanPassId = checkedPassId(role, ordinal)
 
         /** Attaches the existing W4 producer before the graph becomes immutable. */
         public fun withRasterBinding(binding: W6bRasterCoverageBindingV1): FilterCoverageSourcePass {
-            require(sealedAlphaSource == null && rasterBinding == null)
+            require(sealedAlphaSource == null && rasterBinding == null && aaCoverageBinding == null)
             return FilterCoverageSourcePass(ordinal, output, occurrence, deferSourceDrawClip, pictureCoordinates,
-                sealedAlphaSource, sealedAlphaSampling, binding)
+                sealedAlphaSource, sealedAlphaSampling, binding, aaCoverageBinding)
+        }
+
+        public fun withAaCoverageBinding(binding: PlanW4dAaCoverageSourceBindingV1): FilterCoverageSourcePass {
+            require(sealedAlphaSource == null && rasterBinding == null && aaCoverageBinding == null)
+            return FilterCoverageSourcePass(ordinal, output, occurrence, deferSourceDrawClip, pictureCoordinates,
+                sealedAlphaSource, sealedAlphaSampling, rasterBinding, binding)
         }
     }
 

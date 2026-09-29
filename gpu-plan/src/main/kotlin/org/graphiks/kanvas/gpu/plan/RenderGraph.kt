@@ -617,10 +617,11 @@ public class RenderGraph private constructor(
             }
             require(dependencies.distinct().size == dependencies.size) { "Dependencies must be unique" }
             validatePassCapabilities(passes, capabilities)
-            if (capabilityId == W4dGeneralPathPlanCompiler.W6_AA_COLOR_SOURCE_CAPABILITY_ID) {
+            if (capabilityId in setOf(W4dGeneralPathPlanCompiler.W6_AA_COLOR_SOURCE_CAPABILITY_ID,
+                    W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID)) {
                 validateAaResolvedColorSource(
                     resources, passes, dependencies, resourcesById, capabilities, targetExtent, colorFormat,
-                    visualCommandCount,
+                    visualCommandCount, capabilityId == W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID,
                 )
                 validateVisualCommandOrder(passes)
                 val calculatedPeak = peak(resources, passes.size)
@@ -698,6 +699,7 @@ public class RenderGraph private constructor(
             targetExtent: SizeI32,
             colorFormat: PlanLogicalColorFormat,
             visualCommandCount: Int,
+            coverage: Boolean,
         ) {
             require(PlanOperationCapability.CopyUpload in capabilities.supportedOperations() &&
                 PlanOperationCapability.UniformBuffer in capabilities.supportedOperations()) {
@@ -728,7 +730,7 @@ public class RenderGraph private constructor(
             } == true
             require(direct != null || hasStencilPair) { "AA resolved-colour source must be one direct pass or one stencil pair" }
             val expectedRoles = buildSet {
-                add(PlanResourceRole.MultisampleColorTarget); add(PlanResourceRole.PathAaResolvedColor)
+                add(PlanResourceRole.MultisampleColorTarget); add(if (coverage) PlanResourceRole.CoverageSource else PlanResourceRole.PathAaResolvedColor)
                 add(PlanResourceRole.VertexData); add(PlanResourceRole.IndexData); add(PlanResourceRole.UniformData)
                 if (hasStencilPair) add(PlanResourceRole.DepthStencil)
             }
@@ -736,7 +738,7 @@ public class RenderGraph private constructor(
                 "AA resolved-colour source resource inventory is not closed"
             }
             val msaa = resources.single { it.role == PlanResourceRole.MultisampleColorTarget }
-            val resolved = resources.single { it.role == PlanResourceRole.PathAaResolvedColor }
+            val resolved = resources.single { it.role == if (coverage) PlanResourceRole.CoverageSource else PlanResourceRole.PathAaResolvedColor }
             require(msaa.kind == PlanResourceKind.Texture2D && msaa.format == PlanTextureFormat.Color(colorFormat) &&
                 msaa.copyExtent() == targetExtent && msaa.sampleCountI32 == 4 &&
                 msaa.usages() == setOf(PlanResourceUsage.RenderAttachment)) {
@@ -972,6 +974,7 @@ public class RenderGraph private constructor(
             is PlanPass.FilterSourceClear -> listOf(pass.output, pass.boundSourceId)
             is PlanPass.FilterCoverageSourcePass -> buildList {
                 add(pass.output)
+                pass.aaCoverageBinding?.let { binding -> addAll(binding.resources().map { it.id }) }
                 // A sealed Picture alpha source is sampled by the already-frozen coverage
                 // pass.  Retain this producer/consumer edge for physical lifetime planning;
                 // the renderer receives the published resource ID and never discovers it.

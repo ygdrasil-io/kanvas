@@ -17,9 +17,12 @@ Lot preuve Sweep AA : renderer `49d8224d3`, PR draft
 Lot adaptateur Rect+CTM : code `d45904e0b`, branche
 `codex/w7-layer-source-routing`, PR draft
 [#2417](https://github.com/ygdrasil-io/kanvas/pull/2417), empilée sur #2416.
-Lot courant : source AA racine, renderer `470f62e63`, branche
+Lot précédent : source AA racine, renderer `470f62e63`, branche
 `codex/w7-root-aa-source`, PR draft
 [#2418](https://github.com/ygdrasil-io/kanvas/pull/2418), empilée sur #2417.
+Lot courant : couverture AA filtrée, renderer `82893045c`, branche
+`codex/w7-aa-mask-coverage`, draft
+[#2419](https://github.com/ygdrasil-io/kanvas/pull/2419) empilée sur #2418.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -42,6 +45,75 @@ de rendu et timeouts éligibles restent au dénominateur.
 
 Les gates W6 relatives à la durée de vie et aux ressources restent suivies.
 Leur fermeture et la proximité visuelle sont deux mesures distinctes.
+
+## Lot couverture AA filtrée — 29 septembre 2026
+
+Le [design](aa-mask-design.md) relu par Astra et le [plan](aa-mask-plan.md)
+livrent une couverture blanche distincte de la source AA couleur. Les chemins
+direct et stencil producer/cover produisent leur resolve dans une seule passe
+native MSAA4. Le blur NORMAL précède l'application unique du matériau W5,
+halo compris. Les contributions hors viewport restent disponibles jusqu'au
+clip terminal. Le contrat demeure root/Path fill solide/SrcOver/NORMAL.
+
+Le [snapshot](aa-mask-82893045c.json) porte le renderer exact
+`82893045c29c0f75cf3b7a95d882b0c3c0e0562a`. Trois sessions couvrent les
+631 mêmes identités, 443 éligibles, sans changement de référence, seuil,
+scope ou exclusion ; fonts, codecs et `jpg-color-cube` restent hors périmètre.
+
+| Mesure à corpus inchangé | Parent #2418 | Après ce lot |
+| --- | ---: | ---: |
+| Rendus disponibles | 193 | 197 |
+| Comparaisons possibles | 171 | 175 |
+| Échecs de rendu | 199 | 195 |
+| Échecs de setup | 50 | 50 |
+| Rendus sans référence exploitable | 14 | 14 |
+| Dimensions incompatibles | 8 | 8 |
+| Timeouts à 30 s | 1 | 1 |
+| Cas à ≥99 % des pixels ±2/canal | 36 | 36 |
+| Cas à ≥95 % des pixels ±2/canal | 48 | 49 |
+
+| Nouveau rendu | Pixels ±2/canal | Durée du cas |
+| --- | ---: | ---: |
+| `blur2rects` | 96,1751 % | 499 ms |
+| `blur2rectsnonninepatch` | 94,8811 % | 651 ms |
+| `blur_matrix_rect` | 91,6193 % | 5 845 ms |
+| `blurcircles` | 86,2413 % | 3 281 ms |
+
+Aucun ancien rendu perdu : les **193 anciennes empreintes RGBA sont identiques**.
+Les quatre gains sont les seuls changements d'outcome/diagnostic. La médiane
+des 171 mêmes comparaisons reste **68,9011 %** ; la médiane des 175 cas passe
+à 71,8965 % par élargissement de population, pas par amélioration des anciens
+pixels. La somme des durées des cas est 161,847 s, timeout inclus, hors
+démarrage Gradle/JVM ; ce n'est pas un benchmark. `vertices` reste un timeout
+de rendu (child124/Gradle1), les deux autres sessions terminent Gradle0.
+
+Les preuves publiques couvrent AA causal à sigma0,1, alpha appliqué une fois,
+translation, trou/halos, source hors écran/clip, deux occurrences et récupération.
+Les budgets indépendants direct299104 et stencil723296 incluent MSAA4,
+resolve1, depth-stencil4, cibles W6b/W5, V/I/U et readback aligné : B passe,
+B−1 refuse sans publication puis la Surface récupère sur deux rendus identiques.
+Les revues de tâche Sol sont validées après renforcement des tests.
+
+Validation finale proche : **75/75 exit0**, puis **8/8 exit0** après correctif
+tests-only de répétition. La seule globale bornée donne 724 identités communes,
+680 succès, les 43 mêmes échecs et un test interrompu. Le wrapper Ruby240s
+envoie TERM à son enfant Gradle et retourne124 ; l'exit Gradle indépendant
+n'est pas observé. `formatsAlphaAndColorSpaceMatchOracle` (passait sur parent)
+est marqué skipped à l'interruption ; `cubicDrawImageMatchesMitchellNetravaliOracle`
+n'est pas atteint. Aucune nouvelle assertion en échec observée n'équivaut pas
+à une suite verte. Warnings JVM/Gradle et le fallback Kotlin daemon historique
+de Task1 restent signalés ; les runs finaux n'ont pas ce fallback.
+
+AA filtré en layer/Picture, autres styles/blends/strokes/clips complexes,
+réduction des écarts de pixels et fermeture des gates W6 restent des suites
+possibles, pas des propriétés livrées ici. La draft et sa revue globale ne
+doivent pas être présentées comme une clôture W7 ou une autorisation de merge.
+Revue globale Sol de `a21bb6472..70f2ff164` : **Critical 0 / Important 0 / Minor 3**,
+publication draft recevable. Restent deux commentaires trop restrictifs
+(classe de test « direct », sélection `DirectTriangle`) et les warnings/outillage.
+La revue n'a pas jugé les images spatialement, les autres GPUs/OS, toutes les
+combinaisons EVEN_ODD/transformations, les causes des échecs historiques ni les
+tests globaux non atteints. Aucune preuve correspondante n'est revendiquée.
 
 ## Mesure
 

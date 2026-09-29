@@ -3,6 +3,43 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot couverture AA filtrée — 29 septembre 2026
+
+Draft [#2419](https://github.com/ygdrasil-io/kanvas/pull/2419) empilée sur #2418,
+renderer `82893045c`, branche `codex/w7-aa-mask-coverage`.
+[Design](aa-mask-design.md), [plan](aa-mask-plan.md) et
+[snapshot complet](aa-mask-82893045c.json). La source blanche AA4/resolve1
+reste indépendante de la peinture ; stencil producer/cover partagent une
+seule passe native, puis NORMAL et le matériau W5 couvrent le halo complet.
+
+Les **631 identités / 443 éligibles** et toutes les références, scopes et
+tolérances sont inchangés : **193 → 197 rendus**, **171 → 175 comparaisons**.
+Les **193 anciennes empreintes RGBA sont identiques**, sans perte de rendu.
+Les gains sont `blur2rects` (96,18 % des pixels ±2/canal, 499 ms),
+`blur2rectsnonninepatch` (94,88 %, 651 ms), `blur_matrix_rect` (91,62 %, 5 845 ms)
+et `blurcircles` (86,24 %, 3 281 ms). Ce sont quatre rendus nouveaux, pas une
+parité globale. `vertices` reste timeout30s ; 195 échecs de rendu, 50 de setup,
+14 rendus non comparables et 8 désaccords de dimensions restent au bilan.
+
+Revues Sol des deux tâches validées après corrections des oracles publics.
+Final proche **75/75, exit 0** ; dernier correctif tests-only **8/8, exit 0**.
+Budgets dérivés avant exécution : direct B=299104, stencil B=723296 ; B−1
+refuse avant publication, sentinel intact et récupération stable sur deux rendus.
+La globale unique est **rouge/incomplète** : 680 succès, 43 échecs déjà présents,
+un test interrompu sur 724 identités communes. Le watchdog wrapper240s retourne
+124 ; l'exit propre de Gradle n'est pas observé. `formatsAlphaAndColorSpaceMatchOracle`
+est interrompu (passait sur parent), `cubicDrawImageMatchesMitchellNetravaliOracle`
+n'est pas atteint. Aucune nouvelle assertion en échec observée, sans garantie
+sur les tests non atteints. Warnings JVM/Gradle conservés ; un fallback Kotlin
+daemon avait eu lieu en Task1, absent des validations finales.
+
+Revue globale Sol de `a21bb6472..70f2ff164` : zéro Critical/Important, draft
+recevable sans merge readiness. Trois Minor suivis : deux commentaires encore
+limités au direct/DirectTriangle et les warnings/outillage historiques.
+AA+blur en
+layer/Picture, styles autres que NORMAL, strokes/blends/clips complexes et
+parité visuelle fine restent hors du contrat de ce lot ; W7 reste ouvert.
+
 ## Lot source AA racine — 29 septembre 2026
 
 Renderer `470f62e63`, branche `codex/w7-root-aa-source`, PR draft

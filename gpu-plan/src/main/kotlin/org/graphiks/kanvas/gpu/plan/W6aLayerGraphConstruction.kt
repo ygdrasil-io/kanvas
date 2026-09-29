@@ -147,6 +147,9 @@ internal class W6aLayerGraphConstruction(
     private val graphTextureMaterialSourcesByAggregate: Map<PictureStreamAggregateIdI32, MaterialSourceConstructionV4>
     private val w4eBindings = mutableListOf<PlanW4eGeometryBindingV1>()
     private val w4dAaBindings = mutableListOf<PlanW4dAaSourceBindingV1>()
+    /** Hidden W4d phases emitted as command groups by one W6 FilterCoverage native pass. */
+    private val aaCoveragePhases = linkedMapOf<Int, List<PlanPass.PathRenderPass>>()
+    private val aaCoverageOwners = linkedMapOf<Int, PlanPass.FilterCoverageSourcePass>()
     private val childSnapshots = mutableSetOf<PlanResourceId>()
     val nonUniformBytesI64: Long
     val passCountI32: Int get() = rawPasses.size
@@ -168,7 +171,7 @@ internal class W6aLayerGraphConstruction(
             before.firstCommandIndexI32 < after.firstCommandIndexI32
         }) { "W6 child occurrences must be published in recorded command order." }
         require(lanes.all { source ->
-            source.topology == DeferredLaneTopologyV4.AaResolvedColor && source.passes().let { aa ->
+            source.topology in setOf(DeferredLaneTopologyV4.AaResolvedColor, DeferredLaneTopologyV4.AaResolvedCoverage) && source.passes().let { aa ->
                 aa.all { pass -> pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw &&
                     pass.draw.sample == SamplePlan.Multisample4 && pass.draw.coverage == CoveragePlan.StencilAA4 } &&
                     (aa.singleOrNull()?.let { (it as PlanPass.PathRenderPass).phase == PathRenderPhase.MultisampleDirectColor &&
@@ -1043,6 +1046,9 @@ internal class W6aLayerGraphConstruction(
             PlanResourceRole.DestinationSnapshot -> planResourceId(row.role, occurrences.size + laneI32)
             PlanResourceRole.VertexData, PlanResourceRole.IndexData, PlanResourceRole.UniformData, PlanResourceRole.DepthStencil ->
                 planResourceId(row.role, laneI32 + 1)
+            // A W4d coverage resolve is not the W6b occurrence raw source allocated below.
+            // Keep both identities disjoint until the typed coverage binding explicitly rebases it.
+            PlanResourceRole.CoverageSource -> planResourceId(row.role, occurrences.size + laneI32 + 1)
             else -> row.id // Replaced below by distinct per-role graph ordinals.
         } }.toMutableMap() }.toMutableList()
         val nextOrdinal = mutableMapOf<PlanResourceRole, Int>()
@@ -1087,7 +1093,7 @@ internal class W6aLayerGraphConstruction(
             versions[target] = after
             return PlanPass.RenderPass(passes.size, target, draws,
                 if (clear) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
-                AttachmentStorePlan.Store, drawDataResources = draws.firstOrNull()?.let { dataByCommand[it.commandIndex] },
+                AttachmentStorePlan.Store, drawDataResources = draws.firstOrNull()?.takeUnless { it is SolidRectDraw }?.let { dataByCommand[it.commandIndex] },
                 destinationVersionAfter = DestinationVersionI64(after), coverageSource = coverageSource,
                 w6bMaskSourceBinding = w6bMaskSourceBinding, plannedCommandId = plannedCommandId,
                 materialDeviceOriginI32 = filterSource(target).originDeviceI32).also(passes::add)
@@ -2612,6 +2618,19 @@ internal class W6aLayerGraphConstruction(
                             }
                         }
                         val selectedDraw = draws.single()
+                        // The direct W4d MSAA resolve is the raw W6b coverage source.  It is
+                        // one logical texture, not an intermediate W4d resource plus an
+                        // independently allocated W6b source with the same role/ordinal.
+                        // Rebind the closed lane resolve to the occurrence reservation before
+                        // either pass is frozen; the resource assembly below then publishes the
+                        // reservation exactly once.
+                        if (binding.source.topology == DeferredLaneTopologyV4.AaResolvedCoverage) {
+                            val laneI32 = bindings.indexOf(binding)
+                            val coverageResolve = binding.source.resources().single {
+                                it.role == PlanResourceRole.CoverageSource
+                            }.id
+                            laneResourceIds[laneI32][coverageResolve] = requireNotNull(directFilterSources).coverage.resourceId
+                        }
                         val sourceDepth = selectedDraw.takeIf { draw ->
                             draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
                                 (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)
@@ -2621,8 +2640,9 @@ internal class W6aLayerGraphConstruction(
                         val materialCoverage = directFilterSources?.let { sources ->
                             val occurrence = requireNotNull(directOccurrence)
                             filterCursor.passOrdinalI32 = passes.size
-                            rasterBinding = if (occurrence.mask is MaskFilterNode.Blur ||
-                                occurrence.mask is MaskFilterNode.Shader || occurrence.mask is MaskFilterNode.Table) {
+                            val aaCoverage = binding.source.topology == DeferredLaneTopologyV4.AaResolvedCoverage
+                            rasterBinding = if (!aaCoverage && (occurrence.mask is MaskFilterNode.Blur ||
+                                occurrence.mask is MaskFilterNode.Shader || occurrence.mask is MaskFilterNode.Table)) {
                                 coverageDepth = selectedDraw.takeIf { draw ->
                                     draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
                                         (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)
@@ -2639,8 +2659,32 @@ internal class W6aLayerGraphConstruction(
                                     coverageDepth,
                                 )
                             } else null
-                            passes += PlanPass.FilterCoverageSourcePass(passes.size, sources.coverage.resourceId,
+                            val coveragePass = PlanPass.FilterCoverageSourcePass(passes.size, sources.coverage.resourceId,
                                 occurrence.source, rasterBinding = rasterBinding)
+                            if (aaCoverage) {
+                                val lane = bindings.indexOf(binding)
+                                // The raw filter demand owns raster clipping, not the ordinary
+                                // root viewport scissor retained by the selected W4d source.
+                                // Preserve the W4d pair exactly: producer then cover remain two
+                                // command groups in one native coverage pass, with the resolve
+                                // only on the terminal cover.
+                                val rawExtent = sources.coverage.copyExtentI32()
+                                aaCoveragePhases[lane] = binding.source.passes().mapIndexed { phaseIndex, original ->
+                                    val rebound = (original as PlanPass.PathRenderPass).rebindW4eV6(
+                                        passes.size + phaseIndex, { laneResourceIds[lane].getValue(it) },
+                                        sources.coverage.mapping, sources.coverage.copyDeviceBoundsI32(),
+                                    ) as PlanPass.PathRenderPass
+                                    val coverageDraw = (rebound.draw as GeneralPathDraw).rebindGeometryV6(
+                                        rebound.draw.copyPathGeometry(), RectI32(0, 0, rawExtent.width, rawExtent.height))
+                                    PlanPass.PathRenderPass(rebound.ordinal, rebound.target, coverageDraw, rebound.phase,
+                                        rebound.drawDataResources, rebound.atomicGroup, rebound.depthStencil,
+                                        if (phaseIndex == 0) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
+                                        rebound.store, rebound.depthStencilAccess, rebound.depthStencilLoadStore,
+                                        if (phaseIndex == binding.source.passes().lastIndex) sources.coverage.resourceId else null)
+                                }
+                                aaCoverageOwners[lane] = coveragePass
+                            }
+                            passes += coveragePass
                             val frozen = occurrence.mask?.let {
                                 val input = sources.coverage
                                 val evaluation = evaluatedMasksByOccurrence[occurrence] ?: W6bFilterGraphConstruction.evaluateMaskRecipe(occurrence,
@@ -2743,7 +2787,9 @@ internal class W6aLayerGraphConstruction(
                             }
                         }
                         val selectedCopy = binding.source.passes().filterIsInstance<PlanPass.TextureCopy>().singleOrNull()
-                        val draw = if (selectedDraw.blend is BlendPlan.DestinationReadV1) {
+                        val draw = if (binding.source.topology == DeferredLaneTopologyV4.AaResolvedCoverage) {
+                            SolidRectDraw.coverageMaterialCarrier(selectedDraw, requireNotNull(directFilterSource).copyDeviceBoundsI32())
+                        } else if (selectedDraw.blend is BlendPlan.DestinationReadV1) {
                             val copy = requireNotNull(selectedCopy)
                             val snapshot = planResourceId(PlanResourceRole.DestinationSnapshot, occurrences.size + bindings.indexOf(binding))
                             childSnapshots += snapshot
@@ -2952,8 +2998,7 @@ internal class W6aLayerGraphConstruction(
         passes += PlanPass.ReadbackPass(passes.size, root, staging, readbackRowBytesI64,
             Math.addExact(Math.multiplyExact(readbackRowBytesI64, (extent.height - 1).toLong()), Math.multiplyExact(extent.width.toLong(), 4L)))
         requireFrameWideScanSpanDrawLimit(passes)
-        rawPasses = immutableList(passes)
-        val consumedMaskShaderOccurrences = rawPasses.filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+        val consumedMaskShaderOccurrences = passes.filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
             ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding as?
                 FilterPassOperationV1.MaskShaderMaterialBindingV1.CapturedOccurrence)?.occurrenceIdI32
         }.toSet()
@@ -2970,7 +3015,7 @@ internal class W6aLayerGraphConstruction(
         // construction is post-order, but must not leak that implementation detail into the
         // immutable plan metadata.
         frame = LayerFramePlanV1(scopePlans.values.toList(), steps, pictureStreamAggregates,
-            frozenPassSchedule = rawPasses.map(PlanPass::id))
+            frozenPassSchedule = passes.map(PlanPass::id))
 
         val copySources = passes.filterIsInstance<PlanPass.TextureCopy>().map { it.source }.toSet()
         val copyDestinations = passes.filterIsInstance<PlanPass.TextureCopy>().map { it.destination }.toSet()
@@ -3037,9 +3082,18 @@ internal class W6aLayerGraphConstruction(
             }
             lanes.forEachIndexed { laneI32, lane ->
                 if (bindings[laneI32].scopeI32 != null && bindings[laneI32].scopeI32 !in activeByScope) return@forEachIndexed
-                lane.resources().filter { it.role !in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) }.forEach { row ->
+                lane.resources().filter { row ->
+                    row.role !in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) &&
+                        // AaResolvedCoverage is published by its direct W6b occurrence
+                        // reservation.  The remapped lane row is deliberately not a second
+                        // physical allocation of that same resolve texture.
+                        !(lanes[laneI32].topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
+                            row.role == PlanResourceRole.CoverageSource)
+                }.forEach { row ->
                     val targetSized = row.kind == PlanResourceKind.Texture2D && row.role != PlanResourceRole.DestinationSnapshot
-                    val boundExtent = if (targetSized)
+                    val boundExtent = if (targetSized && laneI32 in aaCoverageOwners)
+                        directFilterSourceByCommand.getValue(bindings[laneI32].firstCommandIndexI32).coverage.copyExtentI32()
+                    else if (targetSized)
                         targetExtents.getValue(physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)) else row.copyExtent()
                     val bytes = if (targetSized)
                         checkedTextureBytesI64(4, requireNotNull(boundExtent).width, boundExtent.height, row.sampleCountI32) else row.byteSize
@@ -3050,6 +3104,17 @@ internal class W6aLayerGraphConstruction(
                 }
             }
         })
+        aaCoveragePhases.forEach { (laneI32, phases) ->
+            val source = directFilterSourceByCommand.getValue(bindings[laneI32].firstCommandIndexI32).coverage
+            val remapping = laneResourceIds[laneI32]
+            val binding = PlanW4dAaCoverageSourceBindingV1(aaCoverageOwners.getValue(laneI32).id,
+                lanes[laneI32].capabilityId, phases.first().draw.commandIndex,
+                lanes[laneI32].passes().map { it.id }, phases, remapping,
+                resources.filter { it.id in remapping.values }, source.copyExtentI32(),
+                source.mapping.copyLayerOriginDeviceI32())
+            val owner = aaCoverageOwners.getValue(laneI32)
+            passes[owner.ordinal] = owner.withAaCoverageBinding(binding)
+        }
         nativeByLane.forEach { (laneI32, native) ->
             val target = native.values.filterIsInstance<PlanPass.PathRenderPass>().firstOrNull()?.target
                 ?: physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)
@@ -3072,6 +3137,7 @@ internal class W6aLayerGraphConstruction(
                 caps, lanes[laneI32].sourceTable(), origin)) { "w6a.layer.w4e_payload" }
             w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload, origin)
         }
+        rawPasses = immutableList(passes)
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes, caps, budget)
     }
 
@@ -3133,7 +3199,10 @@ internal class W6aLayerGraphConstruction(
             // particular, a transparent mask auto-layer shades with SRC_OVER while its
             // captured DST_OUT (or other parent blend) is applied exactly once later by
             // FilterComposite.
-            val draw = bound.withFinalBlendV1(finalBlends.getValue(command))
+            val draw = if (unbound is SolidRectDraw && bindings.any {
+                it.firstCommandIndexI32 == command && it.source.topology == DeferredLaneTopologyV4.AaResolvedCoverage
+            }) SolidRectDraw.coverageMaterialCarrier(bound, unbound.copyVisibleBounds())
+            else bound.withFinalBlendV1(finalBlends.getValue(command))
             // Lighting's Sobel neighborhood is evaluated before its terminal clip.  The
             // matching terminal FilterComposite remains the sole owner of that hard clip.
             val sourceDraw = if (command in directConsumerDemandCommands && target in filterSourceBindings)
@@ -3353,6 +3422,7 @@ internal class W6aLayerGraphConstruction(
                 binding.passes().map { phase -> passes.single { it.id == phase.id } as PlanPass.PathRenderPass },
                 binding.resourceRemapping(), binding.resources(), binding.copyExtentI32(), binding.copyOriginDeviceI32())
         }
+        val finalW4dAaCoverageBindings = passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().mapNotNull { it.aaCoverageBinding }
         val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes)
         // RenderGraph.construct publishes this same frame-local row later, after all final
         // recipes have been assembled.  The W5a recipe needs its typed logical descriptor now;
@@ -3448,6 +3518,7 @@ internal class W6aLayerGraphConstruction(
             inverseDomainFans = inverseDomainFanRecipes,
             w5aOrdinarySolidSources = w5aOrdinarySolidSourceRecipes,
             w4dAaSources = finalW4dAaBindings,
+            w4dAaCoverageSources = finalW4dAaCoverageBindings,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3456,6 +3527,7 @@ internal class W6aLayerGraphConstruction(
             w6cColorUniformBindings = source.w6cColorUniformBindings,
             w4eGeometry = finalW4eBindings,
             w4dAaSources = finalW4dAaBindings,
+            w4dAaCoverageSources = finalW4dAaCoverageBindings,
             w6SolidRectHostRecipes = solidRectHostRecipes,
             w6CorePrimitiveHostRecipes = corePrimitiveHostRecipes,
             w6PreparedVerticesHostRecipes = preparedVerticesHostRecipes,

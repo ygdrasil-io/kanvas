@@ -326,6 +326,22 @@ internal fun validateW6aLayerTopology(
         }
         is PlanPass.FilterCoverageSourcePass -> {
             val output = byId.getValue(pass.output)
+            pass.aaCoverageBinding?.let { binding ->
+                require(binding.ownerPassId == pass.id && binding.resources().all { byId[it.id] === it })
+                val phases = binding.passes()
+                val terminal = phases.last()
+                // The W6 owner is one graph pass; a stencil source preserves two hidden W4d
+                // command groups, so its terminal cover ordinal is not the owner ordinal.
+                require(terminal.resolveTarget == pass.output)
+                phases.map { it.target }.distinct().forEach { target ->
+                    require(initialized.add(target))
+                    versions[target] = 0L
+                }
+                phases.mapNotNull { it.depthStencil }.distinct().forEach { depth ->
+                    require(initialized.add(depth))
+                    versions[depth] = 0L
+                }
+            }
             require(output.role == PlanResourceRole.CoverageSource && output.kind == PlanResourceKind.Texture2D &&
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
                 PlanResourceUsage.Sampled in output.usages())

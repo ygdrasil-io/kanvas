@@ -20,7 +20,7 @@ internal fun RenderPlanResult<SourceDeferredRenderConstructionV4>.prepareAndPubl
     }
 
 /** Compiler-owned topology selection, not a claim to a material or geometry witness. */
-internal enum class DeferredLaneTopologyV4 { Ordinary, GeometryBridge, GeneralGeometryAndColor, AaResolvedColor }
+internal enum class DeferredLaneTopologyV4 { Ordinary, GeometryBridge, GeneralGeometryAndColor, AaResolvedColor, AaResolvedCoverage }
 
 /** Unissued source refs are confined to this metadata type until full material binding. */
 internal class SourceDeferredRenderConstructionV4 private constructor(

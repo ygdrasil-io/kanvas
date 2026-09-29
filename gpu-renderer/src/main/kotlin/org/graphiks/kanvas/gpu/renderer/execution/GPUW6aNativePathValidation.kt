@@ -91,6 +91,38 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
             depthViews[depthId] = view.view
             return@forEachIndexed
         }
+        val coverageBinding = (pass as? PlanPass.FilterCoverageSourcePass)?.aaCoverageBinding
+        if (coverageBinding != null) {
+            val authority = w4dAaCoverageAuthorities[coverageBinding] ?: return false
+            val native = byStep[ordinalI32 + 1] as? GPUPreparedNativeScopeOperand.Render ?: return false
+            val resolve = native.pass.resolveTarget ?: return false
+            val color = native.pass.colorTarget
+            val phases = authority.phases
+            val depth = phases.first().depthStencil
+            if (native.w6aPassV1 !== authority.owner ||
+                color.view === resolve.view || color.deviceGeneration != prepared.generationSeal.deviceGeneration ||
+                resolve.deviceGeneration != color.deviceGeneration ||
+                color.ownership != GPUPreparedNativeOperandOwnership.Borrowed || resolve.ownership != color.ownership ||
+                native.pass.loadOperation != GPUPreparedNativeLoadOperation.Clear ||
+                native.pass.storeOperation != GPUPreparedNativeStoreOperation.Store ||
+                native.pass.clearColor != GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) ||
+                native.semanticPayloads.size != phases.size)
+                return false
+            if (depth == null) {
+                if (native.pass.depthStencilTarget != null || ordinalI32 + 1 in payload.pathDepthStencilViewAuthority) return false
+            } else {
+                expectedPathSteps += ordinalI32 + 1
+                val view = native.pass.depthStencilTarget ?: return false
+                if (payload.pathDepthStencilViewAuthority[ordinalI32 + 1] !== view.view ||
+                    view.deviceGeneration != prepared.generationSeal.deviceGeneration ||
+                    view.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                    view.view === color.view || view.view === resolve.view || !native.pass.depthReadOnly ||
+                    native.pass.stencilReadOnly || native.pass.stencilLoadOperation != GPUPreparedNativeLoadOperation.Clear ||
+                    native.pass.stencilStoreOperation != GPUPreparedNativeStoreOperation.Store || native.pass.stencilClearValue != 0u ||
+                    depthViews.put(depth, view.view) != null) return false
+            }
+            return@forEachIndexed
+        }
         val aa = w4dAaAuthorities.keys.singleOrNull { binding ->
             binding.passes().any { it === pass }
         }

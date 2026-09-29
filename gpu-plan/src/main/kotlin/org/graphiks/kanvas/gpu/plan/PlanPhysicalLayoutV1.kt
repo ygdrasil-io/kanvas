@@ -36,6 +36,7 @@ internal class SourcePhysicalConstructionV1(
     val w6cColorUniformBindings: Map<String, W6cColorUniformBindingV1> = emptyMap(),
     val w4eGeometry: List<PlanW4eGeometryBindingV1> = emptyList(),
     val w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
+    val w4dAaCoverageSources: List<PlanW4dAaCoverageSourceBindingV1> = emptyList(),
     /** Final W6 SolidRect host choices, attached before the peak/layout publication boundary. */
     val w6SolidRectHostRecipes: Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1> = emptyMap(),
     /** Final W6 non-W4e CorePrimitive host choices, attached beside the already sealed physical source. */
@@ -215,6 +216,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     inverseDomainDirectRecipes: Map<PlanPassId, W6InverseDomainDirectRecipeV1> = emptyMap(),
     inverseDomainFanRecipes: Map<PlanPassId, W6InverseDomainFanRecipeV1> = emptyMap(),
     w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
+    w4dAaCoverageSources: List<PlanW4dAaCoverageSourceBindingV1> = emptyList(),
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
@@ -223,6 +225,8 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val w4e = immutableList(w4eGeometry)
     private val aaSources = immutableList(w4dAaSources)
     public fun w4dAaSourceBindings(): List<PlanW4dAaSourceBindingV1> = aaSources
+    private val aaCoverageSources = immutableList(w4dAaCoverageSources)
+    public fun w4dAaCoverageSourceBindings(): List<PlanW4dAaCoverageSourceBindingV1> = aaCoverageSources
     private val pictures = java.util.Collections.unmodifiableMap(LinkedHashMap(pictureComposites))
     private val spatialCaches = immutableList(spatialCaches)
     private val solidRectHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(solidRectHostRecipes))
@@ -843,6 +847,10 @@ public class PlanPhysicalLayoutV1 private constructor(
                 }
             }
             val aaPhases = source.w4dAaSources.flatMap { it.passes() }
+            require(graph.passes().filterIsInstance<PlanPass.FilterCoverageSourcePass>().mapNotNull { it.aaCoverageBinding } == source.w4dAaCoverageSources)
+            source.w4dAaCoverageSources.forEach { binding ->
+                require(binding.resources().all { row -> rows.any { it === row } })
+            }
             require(aaPhases.map { it.id }.distinct().size == aaPhases.size &&
                 graph.passes().filterIsInstance<PlanPass.PathRenderPass>() == aaPhases)
             source.w4dAaSources.forEach { binding ->
@@ -859,6 +867,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 inverseDomainFans = expectedInverseDomainFans,
                 w5aOrdinarySolidSources = expectedW5aOrdinarySolidSources,
                 w4dAaSources = source.w4dAaSources,
+                w4dAaCoverageSources = source.w4dAaCoverageSources,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -894,6 +903,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 inverseDomainFans = source.w6InverseDomainFanRecipes,
                 w5aOrdinarySolidSources = source.w5aOrdinarySolidSourceRecipes,
                 w4dAaSources = source.w4dAaSources,
+                w4dAaCoverageSources = source.w4dAaCoverageSources,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
@@ -1128,7 +1138,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 source.w5aOrdinarySolidSourceRecipes,
                 source.nativeSiteRecipeCatalogV1, source.w6PathRenderDirectColorRecipes, source.w6InverseMaskPathRecipes,
                 source.w6InverseDomainZeroCoverRecipes, source.w6InverseDomainDirectRecipes,
-                w4dAaSources = source.w4dAaSources)
+                w4dAaSources = source.w4dAaSources, w4dAaCoverageSources = source.w4dAaCoverageSources)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
             val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->

@@ -36,6 +36,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W4eClipMaskProducerStencilCover,
     W6PathRenderDirectColor,
     W4dAaSource,
+    W4dAaCoverageSource,
     W6InverseMaskGeometryProducer,
     W6InverseMaskGeometryCover,
     W6InverseMaskZeroCover,
@@ -1270,9 +1271,11 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         inverseDomainFans: Map<PlanPassId, W6InverseDomainFanRecipeV1> = emptyMap(),
         w5aOrdinarySolidSources: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = emptyMap(),
         w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
+        w4dAaCoverageSources: List<PlanW4dAaCoverageSourceBindingV1> = emptyList(),
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W4dAaSourceNativeSiteRecipeV1 -> w4dAaSources.any { it === recipe.binding && it.recipe === recipe }
+            is W4dAaCoverageSourceNativeSiteRecipeV1 -> w4dAaCoverageSources.any { it === recipe.binding && it.recipe === recipe }
             is W5aSourceNativeSiteNativeRecipeV1 -> w5aOrdinarySolidSources[recipe.owner] === recipe.host
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
             is W6CorePrimitiveNativeSiteRecipeV1 -> corePrimitives[recipe.host.site] === recipe.host
@@ -1395,9 +1398,14 @@ public fun freezeNativeSiteRecipeCatalogV1(
     inverseDomainFans: Map<PlanPassId, W6InverseDomainFanRecipeV1> = emptyMap(),
     w5aOrdinarySolidSources: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = emptyMap(),
     w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
+    w4dAaCoverageSources: List<PlanW4dAaCoverageSourceBindingV1> = emptyList(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     w4dAaSources.forEach { binding ->
         require(binding.passes().all { pass -> passes.any { it === pass } })
+        add(binding.recipe)
+    }
+    w4dAaCoverageSources.forEach { binding ->
+        require(passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().single { it.id == binding.ownerPassId }.aaCoverageBinding === binding)
         add(binding.recipe)
     }
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -1723,7 +1731,7 @@ public fun freezeW6FullscreenEmptyRecipesV1(
     passes.forEach { pass -> when (pass) {
         is PlanPass.PictureAggregateBeginPass -> add(pass, W6FullscreenEmptyPhaseV1.PictureAggregateBegin, pass.target, AttachmentLoadPlan.ClearTransparent)
         is PlanPass.FilterSourceClear -> add(pass, W6FullscreenEmptyPhaseV1.FilterTransparentBlack, pass.output, AttachmentLoadPlan.ClearTransparent)
-        is PlanPass.FilterCoverageSourcePass -> if (pass.rasterBinding == null && pass.sealedAlphaSource == null)
+        is PlanPass.FilterCoverageSourcePass -> if (pass.rasterBinding == null && pass.sealedAlphaSource == null && pass.aaCoverageBinding == null)
             add(pass, W6FullscreenEmptyPhaseV1.CoverageAbsent, pass.output, AttachmentLoadPlan.ClearTransparent)
         is PlanPass.PictureAggregateSealPass -> add(pass, W6FullscreenEmptyPhaseV1.PictureAggregateSeal, pass.aggregateTarget, AttachmentLoadPlan.Load)
         is PlanPass.PictureComposite -> if (pass.operands?.copyCompositeScissorTargetLocalI32() == null)

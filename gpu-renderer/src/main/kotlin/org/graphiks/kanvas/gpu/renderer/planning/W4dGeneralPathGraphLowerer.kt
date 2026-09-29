@@ -364,7 +364,11 @@ internal class W4dGeneralPathGraphLowerer {
         w4ePreparedClipConsumer: GPUW4ePreparedClipConsumerAuthority? = null,
         finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan = pass.draw.blend,
         w5bMaterial: org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload? = null,
+        aaCoverage: org.graphiks.kanvas.gpu.plan.PlanW4dAaCoverageSourceBindingV1? = null,
     ): BuiltPacket {
+        require(aaCoverage == null || graph.physicalLayoutOrNull()?.w4dAaCoverageSourceBindings()?.any {
+            it === aaCoverage && pass in it.passes()
+        } == true)
         val draw = pass.draw
         val scissor = draw.copyScissorI32()
         val scissorBounds = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
@@ -431,7 +435,7 @@ internal class W4dGeneralPathGraphLowerer {
             }
         }
         // Hard-mask phases write binary coverage, independently of the color material.
-        val color = if (pass.phase.isHistoricalHardMaskProducer()) {
+        val color = if (aaCoverage != null || pass.phase.isHistoricalHardMaskProducer()) {
             ColorF32.of(1f, 1f, 1f, 1f)
         } else if (graph.hasW5aMaterialPathCapabilityV2()) {
             if (pass.phase.isColorProducing()) {
@@ -452,7 +456,7 @@ internal class W4dGeneralPathGraphLowerer {
                 sourceFamily = GPUCorePrimitiveSourceFamily.Path,
                 geometry = geometryInput,
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
-                material = if (!pass.phase.isColorProducing()) null else
+                material = if (aaCoverage != null || !pass.phase.isColorProducing()) null else
                     w5bMaterial ?: W5aMaterialPlanLowerer().material(graph.materialPlanTableOrNull(), draw.materialAuthority, draw.commandIndex,
                         draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(graph::packedMaterialSourceV4)),
                 targetBounds = bounds,
