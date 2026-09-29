@@ -36,7 +36,6 @@ import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokeCap
 import org.graphiks.math.geometry.PathStrokeDashF64
 import org.graphiks.math.geometry.PathStrokeDrawMode
-import org.graphiks.math.geometry.PathFillFlatteningPolicyF64
 import org.graphiks.math.geometry.PathStrokeInvalidSceneReason
 import org.graphiks.math.geometry.PathStrokeJoin
 import org.graphiks.math.geometry.PathStrokePolicyF64
@@ -362,11 +361,6 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         if (scope.fill) {
             when (val result = scope.matrixF64.preparePathFillGeometryF32(
                 path = scope.path,
-                fillPolicyF64 = if (admitsStandaloneRectPathFrames && scope.requestsAntiAlias) {
-                    W7_STANDALONE_ROOT_AA_FILL_POLICY
-                } else {
-                    PathFillFlatteningPolicyF64()
-                },
                 strokePolicyF64 = strokePolicyF64,
                 frameWorkUsageBeforeI64 = frameWorkUsageI64,
             )) {
@@ -1531,10 +1525,6 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             capabilityId == AA_CAPABILITY_ID || capabilityId == W5A_AA_CAPABILITY_ID
         private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         private val REQUIRED = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)
-        /** Caps standalone root AA curve error at 1/16 device pixel before AA4 coverage. */
-        private val W7_STANDALONE_ROOT_AA_FILL_POLICY = PathFillFlatteningPolicyF64(
-            maximumSagittaErrorF64 = 0.0625,
-        )
         private const val MAX_DRAWS = 512
     }
 }
