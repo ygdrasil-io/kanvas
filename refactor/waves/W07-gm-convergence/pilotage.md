@@ -11,7 +11,8 @@ Lot cache de preuve CPU : renderer `b256b3d68`, PR draft
 [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414), empilée sur #2413.
 Lot image/opacité : renderer `bef3af6fa`, PR draft
 [#2415](https://github.com/ygdrasil-io/kanvas/pull/2415), empilée sur #2414.
-Lot courant : preuve Sweep AA, renderer `49d8224d3`, branche
+Lot courant : preuve Sweep AA, renderer `49d8224d3`, PR draft
+[#2416](https://github.com/ygdrasil-io/kanvas/pull/2416), branche
 `codex/w7-sweep-aa-proof`, empilée sur #2415.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
@@ -727,6 +728,12 @@ une correction transversale mesurable ; ces 51 refus ne promettent pas 51 gains.
 Radial/Conical, RRect × wrappers, AA géométrique, opacité × bords fractionnaires,
 les gates W6/W0 et la suite générale restent explicitement ouverts. Publication
 draft uniquement, sans clôture W7 ni autorisation de merge.
+
+La review indépendante Sol de branche `14d2be4f8..6ad868c91` autorise la
+publication draft : aucun point Critical/Important/Minor. Elle confirme le
+snapshot inchangé et conserve toutes les limites ci-dessus, sans autoriser
+merge ou clôture W7. PR [#2416](https://github.com/ygdrasil-io/kanvas/pull/2416)
+empilée sur #2415 ; le suivi de revue/lien ne change ni code ni mesures.
 
 ## Décisions de pilotage
 

@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot preuve Sweep AA — 29 septembre 2026
 
-Renderer `49d8224d3`, branche `codex/w7-sweep-aa-proof`, empilée sur la PR draft
+Renderer `49d8224d3`, PR draft [#2416](https://github.com/ygdrasil-io/kanvas/pull/2416),
+branche `codex/w7-sweep-aa-proof`, empilée sur la PR draft
 [#2415](https://github.com/ygdrasil-io/kanvas/pull/2415). La preuve conserve les
 classes zéro/subnormal/normal perdues par le hull des sélections Sweep, puis
 traite les régions normales signées d'`Atan2` avec l'enveloppe inchangée.
@@ -22,6 +23,8 @@ La suite reste donc rouge et incomplète, sans conclusion de performance.
 La review de tâche Sol approuve le code ; la sensibilité de `PATH_STROKE` est
 confirmée par mutation causale postérieure, mais son RED avant implémentation
 n'est pas attesté. Cette réserve TDD reste explicitement ouverte.
+La review Sol de toute la branche `14d2be4f8..6ad868c91` autorise sa publication
+draft (Critical 0 / Important 0 / Minor 0), pas le merge ni la clôture W7.
 
 Le [snapshot complet](sweep-aa-49d8224d3.json) conserve **166/443 rendus**, 144
 comparaisons et 26 cas à ≥99 % de pixels ±2/canal. **Les 166 empreintes RGBA,
