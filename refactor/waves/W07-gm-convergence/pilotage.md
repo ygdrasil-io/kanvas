@@ -11,9 +11,12 @@ Lot cache de preuve CPU : renderer `b256b3d68`, PR draft
 [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414), empilée sur #2413.
 Lot image/opacité : renderer `bef3af6fa`, PR draft
 [#2415](https://github.com/ygdrasil-io/kanvas/pull/2415), empilée sur #2414.
-Lot courant : preuve Sweep AA, renderer `49d8224d3`, PR draft
+Lot preuve Sweep AA : renderer `49d8224d3`, PR draft
 [#2416](https://github.com/ygdrasil-io/kanvas/pull/2416), branche
 `codex/w7-sweep-aa-proof`, empilée sur #2415.
+Lot courant : adaptateur Rect+CTM, code `d45904e0b`, branche
+`codex/w7-layer-source-routing`, PR draft
+[#2417](https://github.com/ygdrasil-io/kanvas/pull/2417), empilée sur #2416.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -734,6 +737,186 @@ publication draft : aucun point Critical/Important/Minor. Elle confirme le
 snapshot inchangé et conserve toutes les limites ci-dessus, sans autoriser
 merge ou clôture W7. PR [#2416](https://github.com/ygdrasil-io/kanvas/pull/2416)
 empilée sur #2415 ; le suivi de revue/lien ne change ni code ni mesures.
+
+## Diagnostic des sources de layers — 29 septembre 2026
+
+Base `5c89431a1`, après la PR #2416. Le groupe de 51 premiers refus
+`w6a.layer.unsupported_child` comprend 24 GMs COMPOSITE, 21 BLUR, cinq IMAGE
+et un CLIP. Ce regroupement ne désigne pas une cause unique : W6a remplace
+par ce message générique les `NotCandidate` de sa chaîne de sources enfants.
+
+Le triage statique des témoins distingue :
+
+- `PlusMergesAA` : le premier path AA est dessiné hors `saveLayer`, alors que
+  la source `AaResolvedColor` exige un scope W6 explicite. Les enfants `PLUS`
+  rencontreraient ensuite une limite distincte, le contrat AA ne permettant
+  actuellement que `SrcOver`. Une simple admission ne crée pas ces contrats.
+- `blur2rects` : paths AA avec mask blur, hors layer explicite. Il manque la
+  source AA racine et son contrat de couverture filtrée. Le refus explicite
+  des paths AA filtrés dans une layer reste un comportement testé et conservé.
+- `crbug_899512` : rectangle AA réfléchi avec mask blur et color filter `Blend`.
+  Une source Rect existante paraît pouvoir le traiter, mais la cause exacte
+  du refus doit être établie. La restriction Matrix de W4a n'est pas une
+  explication suffisante : W3 est essayé avant W4a et normalise déjà `Blend`.
+
+Une nouvelle exécution sur la base confirme `crbug_899512` refusé (149 ms),
+et les neuf tests `W7AaPathLayerSurfacePixelTest` passent (Gradle 0, sans
+branche de refus de capacité dans les logs). Ces tests ne prouvent pas les
+contrats manquants ci-dessus. Le témoin Surface réduit et la trace temporaire
+de sélection ci-dessous ont ensuite établi la cause avant correction.
+Archives : `/private/tmp/kanvas-w7-layer-source.mCvMdN/baseline-crbug` et
+`baseline-aa-layer`.
+
+### Cause établie et correctif retenu
+
+Le témoin `Surface` reproduisant directement le rectangle, sa CTM, son mask
+blur et son color filter passe déjà sur la base, ainsi que son replay Picture
+et son aller-retour sérialisé. Ce résultat est un contrôle positif, **pas un
+RED**. La trace temporaire du GM montre en revanche `PATH/ANTIALIASED` avant
+et après le retrait du mask filter. W3/W4a refusent donc la géométrie Path et
+W4c refuse l'AA ; aucun défaut de leur normalisation des color filters n'est
+établi. Le producteur fautif est `GmCanvas.drawRect`, qui prétransforme les
+coins et remplace tout rectangle à CTM non identité par un path device-space.
+
+L'[appel Skia de référence](https://github.com/google/skia/blob/3f4c5038da37/gm/crbug_899512.cpp)
+conserve au contraire `concat(matrix)` puis `drawRect`. Sur avis ciblé Astra,
+le correctif retenu préserve ce couple Rect+CTM pour scale/translate, reflets
+inclus, à l'intérieur de l'adaptateur : clip existant posé d'abord, puis
+`save/concat/drawRect/restore` avec `finally`. Rect et Paint restent intacts.
+Il ne change ni une whitelist du renderer ni le contrat des paths AA filtrés.
+
+La preuve retenue passe par **GmCanvas puis Surface**, avec trois
+témoins pixels : le cas blur exact, un gradient local réfléchi avec clip et
+restauration de l'état, et un stroke mis à l'échelle. Le renderer direct déjà
+vert ne peut pas remplacer leur RED avant correction.
+
+Cette décision change la capture effectuée par l'adaptateur partagé : une
+hausse du nombre de GMs rendus est un **gain d'adaptateur**, pas une nouvelle
+capacité GPU. La comparaison porte sur chaque identité, les anciens rendus et
+les scores, sans affirmer que l'IR capturée est restée identique. Les fixtures GM,
+références, seuils et exclusions ne sont pas modifiés.
+
+Portée réservée : rotation/skew/perspective, autres primitives prétransformées,
+`setMatrix/resetMatrix`, clip différé et forwarding de `saveLayer`. La fidélité
+complète du port `crbug_899512` n'est pas certifiée : AA par défaut et
+`respectCTM` du blur sont des écarts distincts à auditer. Le reflet unitaire du
+témoin ne prouve pas la fidélité d'un blur sous échelle non unitaire.
+
+### Mesure complète du code `d45904e0b`
+
+Le [snapshot](rect-adapter-d45904e0b.json) contient les **631 mêmes identités**,
+dont 443 éligibles, 133 fonts, 54 codecs et la même quarantaine. Registre,
+dimensions, empreintes PNG de référence, scopes, seuils et tolérances sont
+identiques à [#2416](sweep-aa-49d8224d3.json). La capture Rect+CTM, elle, change.
+
+| Indicateur | Base #2416 | Adaptateur corrigé |
+| --- | ---: | ---: |
+| Rendus / 443 éligibles | 166 | 192 (+26) |
+| Comparaisons possibles | 144 | 170 (+26) |
+| Cas à ≥99 % de pixels ±2/canal | 26 | 36 (+10) |
+| Cas à ≥95 % de pixels ±2/canal | 36 | 48 (+12) |
+| Médiane des comparaisons courantes | 65,23469 % | 70,23720 % |
+| Médiane appariée des 144 anciennes comparaisons | 65,23469 % | 65,49051 % |
+| Rendus anciens perdus | — | 0 |
+| Empreintes RGBA anciennes identiques | — | 162 / 166 |
+
+Les 26 gains sont `analytic_gradients`, `anisomips`,
+`backdrop_imagefilter_croprect`, `clamped_gradients`, `color4blendcf`,
+`colorcomposefilter_alpha`, `colorcomposefilter_wacky`, `colorfilterimagefilter`,
+`composeshader_alpha`, `composeshader_bitmap`, `composeshader_bitmap_lm`,
+`crbug_899512`, `drawimagerect_filter`, `fillrect_gradient`,
+`gradient_dirty_laundry`, `gradient_matrix`, `gradients_interesting`,
+`hardstop_gradients_many`, `imagefiltersgraph`, `linear_gradient_rt`,
+`linear_gradient_tiny`, `localmatriximageshader`, `luminosity_overflow`,
+`paint_alpha_normals_rt`, `perlinnoise` et `sweep_tiling`.
+`crbug_899512` atteint **91,63905 %** ; un rendu nouveau n'est pas forcément
+fidèle (`paint_alpha_normals_rt` reste à 0,22430 %, par exemple).
+
+Quatre anciens rendus changent effectivement de pixels :
+
+| GM | Score avant | Score après |
+| --- | ---: | ---: |
+| `crbug_938592` | 93,4 % | 99,8 % |
+| `scaled_tilemode_gradient` | 61,02320 % | 99,44489 % |
+| `thinstrokedrects` | 89,14583 % | 91,66667 % |
+| `perlinnoise_localmatrix` | 62,5 % | 62,5 % |
+
+Aucun score ancien ne baisse, mais l'égalité du score Noise **ne prouve pas
+l'égalité des pixels ni l'absence de différences locales**. Le snapshot conserve
+les deux empreintes dans les checkpoints respectifs. Vingt-neuf cas toujours
+en échec changent seulement de premier diagnostic : aucun gain de rendu ne
+leur est attribué. Les refus génériques de segment layer passent de 51 à 43,
+sans prétendre que les huit sorties de ce groupe deviennent toutes des succès.
+
+Exécutions sérielles sur le même code et timeout 30 s : `[0,607)` Gradle 0
+(2 min 2 s), `[607,608)` Gradle 1 / processus 124 (`vertices`, timeout rendu),
+`[608,631)` Gradle 0 (5 s). Les 50 setup failures, 200 render failures,
+huit dimensions incompatibles et quatorze références non comparables restent
+comptés. `ninepatch-stretch` rend en 22,991 s, avec toujours peu de marge ;
+ces durées isolées ne constituent pas un benchmark. Journaux :
+`/private/tmp/kanvas-w7-layer-source.mCvMdN/corpus`.
+
+### Limites de replay révélées par les contrôles
+
+Les trois nouveaux témoins passent réellement au rouge avant le correctif :
+refus `unsupported_child` pour le blur, pixel (8,0) bleu au lieu de rouge pour
+le shader, pixel (2,8) transparent au lieu de rouge pour le stroke. Les oracles
+directs passent ensuite sans modification de leurs valeurs attendues.
+
+Deux essais complémentaires de `Picture.playback` avec clip divergent : un
+pixel extérieur au clip devient coloré. Le code existant ignore `SetClip` et
+rejoue `DrawRect` sans réappliquer son clip capturé. La dette de CTM parent est
+distincte ; elle ne suffit pas à expliquer ces deux observations. Ce lot ne
+modifie pas `Picture`. Les contrôles shader/stroke vérifient donc le second
+`Surface.render()` et les mêmes pixels littéraux ; seul le cas blur sans clip
+revendique aussi le replay Picture. Les archives des deux échecs sont conservées
+(`stage-b-green-adapter`, `stage-b-green-replay-diagnostic`) : aucune couverture
+générale de replay Picture avec clip n'est revendiquée.
+
+Le contrôle existant `GmCanvasTest.rotated clip rect is captured as a device path`
+échoue également. Il appelle directement Surface/Canvas, sans passer par la
+méthode de l'adaptateur modifiée ; l'échec reste rapporté, sans modifier ce test
+d'infrastructure ni étendre la correction aux clips tournés.
+
+### Validation du correctif d'adaptateur
+
+Le commit `d45904e0b` ne touche que `GmCanvas.kt` (huit lignes) et les trois
+tests pixels publics. Le run final `stage-b-final-adapter` donne **3/3 PASS**,
+sans skip, Gradle 0. Les 24 contrôles W6b/W7 AA passent avec Gradle 0. Une
+sélection incluant W5f a émis 68 PASS, mais sans sortie terminale exploitable :
+elle reste incomplète et n'est pas une validation réussie du run entier.
+Après demande de review, le seul shard W5f manquant a été relancé séparément
+(`review-r1-w5f`) : **44/44 assertions PASS**, sans skip, puis le worker natif
+quitte avec `133` et Gradle avec 1 après 3 min 23 s. La cause native reste
+`UNKNOWN` ; ce run a maintenant une issue connue, mais n'est pas vert. Aucun
+worker ne reste actif après sa terminaison. Il ne justifie aucune nouvelle
+relance générale ni effacement de l'exécution incomplète précédente.
+Les contrôles historiques de l'adaptateur donnent 9/10, Gradle 1, avec le
+seul échec de clip tourné détaillé ci-dessus.
+
+L'unique tentative complète `:kanvas:test` atteint 240,104 s puis sort 1
+(`Could not stop all services`). Les événements/XML recensent **729 tests :
+685 PASS, les mêmes 43 échecs que la base #2416 et un interrompu**.
+`W5eImageConvergenceSurfaceTest.unownedSyntheticImageSamplersKeepHistoricalCompatibility`
+passe sur la tentative parente mais est interrompu ici ; un autre cas de la
+base n'est pas atteint. Il n'y a aucun nouvel échec d'assertion dans les 729
+identités communes, mais aucune conclusion verte ou complète n'est possible.
+Les warnings JVM native-access, LWJGL Unsafe et Gradle deprecation restent
+présents ; le rapport conserve aussi les essais de compilation/trace invalides,
+qui ne valent pas RED comportemental. Archives dans
+`/private/tmp/kanvas-w7-layer-source.mCvMdN/`, comparaison avec
+`/private/tmp/kanvas-w7-sweep-aa.82Ytul/full-suite-240`.
+
+La review de tâche Sol approuve conformité et qualité après correction du
+rapport : sélection incomplète explicitée et 43 échecs listés par méthode.
+Le nom interne « replay » de deux résultats désigne le second rendu Surface,
+pas une preuve Picture ; cette remarque mineure reste ouverte, sans modifier
+les assertions. Les warnings restent visibles. La review Sol de toute la branche
+`5c89431a1..728868af4` approuve la publication draft (Critical 0 / Important 0 /
+Minor 1 de nommage). Elle vérifie indépendamment les 631 identités, les 26 gains,
+les quatre anciens rendus modifiés et les mêmes 43 échecs. Les contrats AA racine,
+AA filtré/PLUS, transforms générales et Picture/clip restent hors correction,
+explicitement ouverts ; aucune clôture W7/merge n'est proposée.
 
 ## Décisions de pilotage
 
