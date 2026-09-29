@@ -21,7 +21,8 @@ Lot précédent : source AA racine, renderer `470f62e63`, branche
 `codex/w7-root-aa-source`, PR draft
 [#2418](https://github.com/ygdrasil-io/kanvas/pull/2418), empilée sur #2417.
 Lot courant : couverture AA filtrée, renderer `82893045c`, branche
-`codex/w7-aa-mask-coverage`, publication draft prévue sur #2418.
+`codex/w7-aa-mask-coverage`, draft
+[#2419](https://github.com/ygdrasil-io/kanvas/pull/2419) empilée sur #2418.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -107,6 +108,12 @@ AA filtré en layer/Picture, autres styles/blends/strokes/clips complexes,
 réduction des écarts de pixels et fermeture des gates W6 restent des suites
 possibles, pas des propriétés livrées ici. La draft et sa revue globale ne
 doivent pas être présentées comme une clôture W7 ou une autorisation de merge.
+Revue globale Sol de `a21bb6472..70f2ff164` : **Critical 0 / Important 0 / Minor 3**,
+publication draft recevable. Restent deux commentaires trop restrictifs
+(classe de test « direct », sélection `DirectTriangle`) et les warnings/outillage.
+La revue n'a pas jugé les images spatialement, les autres GPUs/OS, toutes les
+combinaisons EVEN_ODD/transformations, les causes des échecs historiques ni les
+tests globaux non atteints. Aucune preuve correspondante n'est revendiquée.
 
 ## Mesure
 

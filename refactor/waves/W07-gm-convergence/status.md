@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot couverture AA filtrée — 29 septembre 2026
 
-Sur #2418, renderer `82893045c`, branche `codex/w7-aa-mask-coverage`.
+Draft [#2419](https://github.com/ygdrasil-io/kanvas/pull/2419) empilée sur #2418,
+renderer `82893045c`, branche `codex/w7-aa-mask-coverage`.
 [Design](aa-mask-design.md), [plan](aa-mask-plan.md) et
 [snapshot complet](aa-mask-82893045c.json). La source blanche AA4/resolve1
 reste indépendante de la peinture ; stencil producer/cover partagent une
@@ -32,7 +33,10 @@ n'est pas atteint. Aucune nouvelle assertion en échec observée, sans garantie
 sur les tests non atteints. Warnings JVM/Gradle conservés ; un fallback Kotlin
 daemon avait eu lieu en Task1, absent des validations finales.
 
-Revue globale et publication draft empilée restent à clôturer. AA+blur en
+Revue globale Sol de `a21bb6472..70f2ff164` : zéro Critical/Important, draft
+recevable sans merge readiness. Trois Minor suivis : deux commentaires encore
+limités au direct/DirectTriangle et les warnings/outillage historiques.
+AA+blur en
 layer/Picture, styles autres que NORMAL, strokes/blends/clips complexes et
 parité visuelle fine restent hors du contrat de ce lot ; W7 reste ouvert.
 

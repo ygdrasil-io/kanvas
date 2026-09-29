@@ -224,8 +224,8 @@ contrôleur organise Sol spec+quality et les corrections/re-reviews bornées.
 
 - [x] Corpus631 sur commit exact, slices0–607/607–608/608–631, timeout30 ; tous diagnostics conservés.
 - [x] Comparer à `root-aa-470f62e63.json` : gains/pertes individuels et empreintes RGBA, aucun seuil modifié.
-- [ ] Mettre à jour le suivi existant avec résultat réel et limites ; revue globale Sol.
-- [ ] Publier draft empilée sur #2418 et l'attacher ; aucune revendication de parité globale ou merge readiness.
+- [x] Mettre à jour le suivi existant avec résultat réel et limites ; revue globale Sol.
+- [x] Publier draft empilée sur #2418 et l'attacher ; aucune revendication de parité globale ou merge readiness.
 
 ## Self-review du plan
 
