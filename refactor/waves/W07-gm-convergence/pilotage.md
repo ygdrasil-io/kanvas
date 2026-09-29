@@ -14,9 +14,11 @@ Lot image/opacité : renderer `bef3af6fa`, PR draft
 Lot preuve Sweep AA : renderer `49d8224d3`, PR draft
 [#2416](https://github.com/ygdrasil-io/kanvas/pull/2416), branche
 `codex/w7-sweep-aa-proof`, empilée sur #2415.
-Lot courant : adaptateur Rect+CTM, code `d45904e0b`, branche
+Lot adaptateur Rect+CTM : code `d45904e0b`, branche
 `codex/w7-layer-source-routing`, PR draft
 [#2417](https://github.com/ygdrasil-io/kanvas/pull/2417), empilée sur #2416.
+Lot courant : source AA racine, renderer `470f62e63`, branche
+`codex/w7-root-aa-source`, publication draft prévue sur #2417.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -917,6 +919,100 @@ Minor 1 de nommage). Elle vérifie indépendamment les 631 identités, les 26 ga
 les quatre anciens rendus modifiés et les mêmes 43 échecs. Les contrats AA racine,
 AA filtré/PLUS, transforms générales et Picture/clip restent hors correction,
 explicitement ouverts ; aucune clôture W7/merge n'est proposée.
+
+## Lot source AA racine — 29 septembre 2026
+
+Le [design](root-aa-design.md) et le [plan](root-aa-plan.md), relus par Astra,
+réemploient la source MSAA4/resolve1× pour les Paths AA solid-fill SrcOver
+racine d'une frame déjà possédée par W6. L'ownership ne change pas, la racine
+reste 1× et chaque source isolée est composée immédiatement dans l'ordre.
+Le mapping root ne réapplique pas la CTM ; le binding natif reçoit une origine
+zéro explicite, au lieu d'interpréter l'ordinal multisample comme une layer.
+Les chemins layer existants, seals, budgets et contrôles d'autorité restent
+inchangés. Aucun adaptateur, fixture, référence, seuil ou exclusion n'a changé.
+
+### Mesure à corpus constant
+
+Le [snapshot](root-aa-470f62e63.json) porte le commit complet
+`470f62e638618274997aec9dfd5cd4f172688001` et les **631 mêmes identités**,
+dont **443 éligibles**. Les 133 fonts, 54 codecs et `jpg-color-cube` restent
+exclus. Les trois tranches terminent avec des exits Gradle 0/1/0 ; le 1 est
+le timeout conservé de `vertices` à 30 s (processus 124).
+
+| Mesure | #2417 | Ce lot |
+| --- | ---: | ---: |
+| Rendus disponibles | 192 | 193 |
+| Comparaisons possibles | 170 | 171 |
+| Échecs de rendu / setup | 200 / 50 | 199 / 50 |
+| Non comparés / dimensions incompatibles | 14 / 8 | 14 / 8 |
+| Timeouts | 1 | 1 |
+| Cas à ≥99 % / ≥95 % des pixels ±2/canal | 36 / 48 | 36 / 48 |
+
+Le seul gain est **`rasterallocator`, à 27,2533 %**. Les **192 anciens rendus
+sont pixel-identiques** ; aucune perte, aucun autre changement d'issue ou de
+diagnostic. Les identités, scopes, références et seuils sont invariants.
+La médiane des 170 mêmes cas reste **70,2372 %** ; celle des 171 comparaisons
+devient **68,9011 %**, par ajout d'un cas moins fidèle, pas par régression
+des anciens pixels. Le port `RasterAllocatorGm` se décrit lui-même comme
+une approximation simplifiée ; ce rendu gagné ne valide pas sa fidélité au GM
+Skia. Aucun rapprochement ISO n'est revendiqué pour ce nouveau cas.
+Somme des durées par cas : **149,813 s**, sans valeur de benchmark.
+`ninepatch-stretch` termine à 25,092 s, toujours proche de la borne de 30 s.
+
+### Validation et limites
+
+Cinq positifs directs refusent avant patch puis passent : ordre dans les
+deux sens, alpha 128 composé une fois à 188 sur noir, translation/clip hard et
+origine layer, deux sources stencil et budget exact **B=27 772 / B−1**.
+La layer vide de la fixture B est réellement allouée (196 octets inclus).
+Le run final W7 donne **16/16 PASS**, et les contrôles voisins **53/53 PASS**,
+sans skip, Gradle 0. Ce sont deux sélections qui se recoupent, pas 69 tests
+distincts. Les assertions positives exigent Render/Readback.
+
+L'unique tentative globale, arrêtée par la borne de quatre minutes, termine
+Gradle 1 en 4m01 : **681 PASS, 43 échecs, un interrompu** parmi 725 identités.
+Ce sont les mêmes 43 échecs que la base dans l'intersection. Le cas auparavant
+passant `W5eDecodedImageSurfacePixelTest.cubicDrawImageMatchesMitchellNetravaliOracle`
+est interrompu ; quatre cas parents ne sont pas atteints. Le runner XML
+signale aussi `failed to execute tests` / `Could not stop all services`.
+La suite reste rouge/incomplète. Warnings JVM native-access, LWJGL Unsafe et
+Gradle deprecation conservés ; le problème natif 133 W5f antérieur n'est ni
+réexécuté ni clos par ce lot.
+
+Les archives résident dans `/private/tmp/kanvas-w7-root-aa.8WK1ZR/`.
+`green` mélange plusieurs tentatives (trois échecs alpha) ; `final` est
+séparé, sans doublon. Une première mesure contrôleur avait un SHA étiqueté
+incorrectement : arrêtée, conservée mais exclue. Seul `corpus-verified`
+alimente le snapshot et son SHA est celui réellement exécuté.
+
+La review Sol a demandé un oracle bleu indépendant pour le contrôle hard root,
+en plus du vert de la layer et de Render/Readback. Le commit test-only
+`3bfab918c` l'ajoute et précise le nom du refus Picture en layer. Son run
+`review-r1` repasse **16/16**, Gradle 0 ; aucun fichier de production n'a changé
+depuis le commit mesuré. Le détail d'une des trois tentatives GREEN échouées
+n'est plus récupérable après réutilisation du dossier : cette perte de détail
+reste signalée, sans cause inventée.
+La re-review Sol approuve conformité et qualité après ces corrections, sans
+nouveau défaut. La review de l'ensemble du lot reste le dernier gate avant
+publication draft ; cette validation ne vaut pas merge readiness.
+
+### Arbitrages et suite
+
+- Nouvelle admission limitée à `!ownsW6b` : les frames mêlant filtres et root
+  AA restent refusées ; la restriction ne touche pas l'AA des layers existantes.
+- Source plein viewport isolée conservée : simplicité de preuve et ordre
+  préservés, au coût d'une allocation mémoire conservatrice par occurrence.
+- **Picture AA positif différé**, contrairement au premier plan : sa chaîne
+  de compilation et son émetteur SingleSample demandent un raccord séparé.
+  Le test vérifie son refus/sentinel/récupération, pas un playback réussi,
+  même sans clip. Cette part du contrat initial n'est pas accomplie.
+
+AA filtré, `PLUS`, les frames W6b et Picture AA restent des extensions
+distinctes. `PlusMergesAA` et `blur2rects` refusent toujours ; les 42 refus
+génériques de segments restants ne sont pas 42 gains potentiels démontrés.
+Le prochain travail doit traiter la couverture AA filtrée avec un témoin
+public et un consommateur réel, sans contourner le garde W6b ; le raccord
+Picture reste identifié séparément. Ni merge ni clôture W7 à ce stade.
 
 ## Décisions de pilotage
 

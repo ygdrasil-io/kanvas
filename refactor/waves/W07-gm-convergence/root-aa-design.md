@@ -31,7 +31,8 @@ de couverture d'interactions, pas une impossibilité de mélanger les siblings.
 L'ownership W6 ne change pas. Les autres routes et diagnostics restent tels quels.
 
 À la racine, le rebind conserve les coordonnées device déjà préparées
-(`mapping=null`, domaine=null), sans réappliquer la CTM. La source résolue
+(`mapping=null` ; le domaine root fourni au helper n'est alors pas appliqué),
+sans réappliquer la CTM. La source résolue
 et le composite couvrent le viewport entier, origine destination `(0,0)`.
 Chaque occurrence garde ses IDs et allocations, ses loads scellés, son
 resolve consommé une fois et `versions[root]` incrémenté. Aucun
@@ -52,7 +53,8 @@ translation/clip hard et layer AA à origine non nulle ; deux sources stencil
 avec trous/exterieur ; budget exact B/B−1 avec sentinel et récupération.
 Chaque succès exige Render/Readback, sans convertir un refus capability en PASS.
 Le second `Surface.render()` prouve un second rendu des opérations retenues,
-pas le replay Picture avec clip. Le cas alpha sans clip inclut aussi Picture.
+pas le replay Picture. Le cas alpha direct est positif ; le replay Picture AA,
+même sans clip, reste négatif avec sentinel et récupération (voir déviation).
 
 Fixture budget : Surface 7×7, triangle root `(1,1)-(5,1)-(1,5)`, et
 `saveLayer()/restore()` vide pour l'ownership W6. Cette layer est réellement
@@ -84,3 +86,16 @@ dans ce contrat AA. Il omettait les 196 octets de layer vide et le fallback
 d'origine du binding natif. Ces trois points sont corrigés dans ce design.
 L'admission root sans W6b est retenue pour livrer un prérequis vérifiable,
 avant toute extension aux filtres ou à `PLUS`.
+
+## Déviation constatée pendant le RED/GREEN
+
+Les cinq témoins directs passent après le raccord root, mais le playback Picture
+AA refuse : `preparePictureDrawLane` n'inclut pas le compilateur de source AA,
+et `appendPlannedDraw` consomme des phases `SingleSample` sans resolve/composite
+AA dédié. Ajouter seulement un compilateur à la chaîne serait insuffisant.
+Le pilotage borne donc ce lot aux occurrences root directes ; le test Picture
+devient un refus public explicite avec sentinel/récupération, sans prétendre
+à un replay réussi. La composition AA des occurrences Picture est une tâche
+architecturale distincte, ouverte, y compris sans clip. Le positif alpha direct
+et tous les autres témoins sont conservés ; ce report ne constitue pas une
+réparation de Picture et doit rester visible au bilan/PR.

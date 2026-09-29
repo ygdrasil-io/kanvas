@@ -3,6 +3,29 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot source AA racine — 29 septembre 2026
+
+Renderer `470f62e63`, branche `codex/w7-root-aa-source`, draft prévue sur
+[#2417](https://github.com/ygdrasil-io/kanvas/pull/2417). Path AA solid SrcOver
+racine admis dans une frame W6 ordinaire, par source MSAA4 isolée et composite
+immédiat ; aucun changement d'ownership, de budget ou d'autorité native.
+
+Le [snapshot](root-aa-470f62e63.json) conserve 631 identités/443 éligibles :
+**193 rendus (+1), 171 comparaisons ; les 192 anciens rendus sont pixel-identiques**.
+Seul `rasterallocator` devient rendable, à 27,25 % de pixels ±2/canal ; ce n'est
+pas une preuve de fidélité au GM Skia. Toujours 36 cas à ≥99 %, 48 à ≥95 %.
+`vertices` reste timeout à 30 s. Références, seuils et exclusions inchangés.
+
+Validation ciblée : **16/16 W7 et 53/53 contrôles voisins**, Gradle 0 (sélections
+recoupées). Suite globale rouge/incomplète : 681 PASS, mêmes 43 échecs sur 725 cas
+communs, un interrompu et quatre anciens cas non atteints. Le runner échoue
+aussi lors de l'arrêt. Voir le [bilan](pilotage.md#lot-source-aa-racine--29-septembre-2026).
+
+Arbitrages : nouvelle route exclue des frames W6b ; allocation plein viewport
+conservatrice ; **Picture AA positif différé**, même sans clip, avec refus
+transactionnel testé plutôt que playback revendiqué. AA filtré et PLUS restent
+ouverts ; `PlusMergesAA`/`blur2rects` refusent toujours. W7 n'est pas terminé.
+
 ## Lot adaptateur Rect+CTM — 29 septembre 2026
 
 Code `d45904e0b`, branche `codex/w7-layer-source-routing`, empilée sur

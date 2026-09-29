@@ -39,7 +39,7 @@ Les autres inputs restent explicitement non admis, pas implicitement certifiés.
 `rebindW4eV6` et `PlanW4dAaSourceBindingV1`. Produit leurs mêmes types, avec
 une occurrence root correctement scellée ; aucune nouvelle API/native recipe.
 
-- [ ] **Step 1: Écrire les témoins publics avant code de production.**
+- [x] **Step 1: Écrire les témoins publics avant code de production.**
 
 1. `root aa preserves sibling chronology` : Surface7×7, fond rouge opaque,
    triangle bleu `(1,1)-(5,1)-(1,5)`, layer verte `[2,2,3,3]`. Deux ordres :
@@ -47,8 +47,10 @@ une occurrence root correctement scellée ; aucune nouvelle API/native recipe.
    rouge(0,0)/(5,5), alpha255. Second rendu Surface égal byte à byte.
 2. `root aa alpha is composed once` : fond noir, Path rectangle `[1,1,6,6]`
    blanc alpha128, layer vide. Pixel(3,3)=(188,188,188,255), extérieur noir.
-   Picture sans clip enregistré via API publique puis playback sur Surface,
-   mêmes literals et pixels ; pas d'inspection de DisplayOps.
+   Second témoin Picture sans clip enregistré via API publique puis playback
+   sur Surface : figer le refus observé, sentinel intact et récupération.
+   Le positif Picture initialement prévu est différé (déviation ci-dessous) ;
+   aucun succès de replay n'est revendiqué, ni inspection de DisplayOps.
 3. `root aa transform clip and layer origin remain distinct` : Surface9×8,
    clip hard device `[3,2,5,4]` posé avant translate(2,1), Path rectangle local
    `[0,0,4,4]` bleu. Restore ; layerAA `[5,4,9,8]`, triangle vert aux points
@@ -76,14 +78,14 @@ Tous les positifs exigent Render/Readback et pixels indépendants. GPU natif
 connu disponible : aucun catch de capability refusé ne vaut un PASS positif.
 Nettoyage GPU au `@AfterAll`, pattern W7 existant. Pas de nouveau helper product.
 
-- [ ] **Step 2: Exécuter le RED public et l'archiver.**
+- [x] **Step 2: Exécuter le RED public et l'archiver.**
 
 Run: `rtk proxy ./gradlew :kanvas:test --offline --no-build-cache --tests org.graphiks.kanvas.surface.W7RootAaSurfacePixelTest -I /private/tmp/kanvas-w7-image-opacity.YmtXjI/isolated.init.gradle -Pw7.validationDir=/private/tmp/kanvas-w7-root-aa.8WK1ZR/red --console=plain`.
 Les nouveaux positifs doivent refuser `w6a.layer.unsupported_child` avant patch.
 Un défaut de compilation/oracle n'est pas un RED. Corriger le test d'abord.
 Préserver les diagnostics des contrôles négatifs, ne pas les deviner.
 
-- [ ] **Step 3: Étendre seulement les trois sites autorisés.**
+- [x] **Step 3: Étendre seulement les trois sites autorisés.**
 
 Sélection : condition actuelle des layers inchangée ; nouvelle alternative
 scope nul, `!ownsW6b`, couverture AA explicite et contrat source existant.
@@ -98,7 +100,7 @@ n'est obligatoire si quelques variables locales rendent ces deux branches claire
 Tout besoin de changer un seal/native recipe/admission numérique exige un
 diagnostic causal envoyé au contrôleur avant modification, pas un assouplissement.
 
-- [ ] **Step 4: GREEN ciblé et contrôles proches, séquentiels.**
+- [x] **Step 4: GREEN ciblé et contrôles proches, séquentiels.**
 
 Même commande, archive unique `green`. Puis sélection conjointe de
 `W7AaPathLayerSurfacePixelTest`, `W6aLayerSurfacePixelTest`,
@@ -106,14 +108,14 @@ Même commande, archive unique `green`. Puis sélection conjointe de
 `W6aLayerBudgetRecoverySurfacePixelTest`, archive `related`.
 Ne pas relancer W5f large, fonts/codecs ou tests infrastructure.
 
-- [ ] **Step 5: Une tentative globale bornée, puis validation finale.**
+- [x] **Step 5: Une tentative globale bornée, puis validation finale.**
 
 Même init, `:kanvas:test` sans filtre et archive `full-suite-240` ; timeout240s.
 Conserver toutes les identités d'échec/interruption/warnings et l'exit réel.
 Comparer à `/private/tmp/kanvas-w7-layer-source.mCvMdN/stage-b-full-kanvas`.
 Pas de répétition globale. Final nouveau shard + ancien W7AA, archive `final`.
 
-- [ ] **Step 6: Self-review, commit et handoff réels.**
+- [x] **Step 6: Self-review, commit et handoff réels.**
 
 `git diff --check`, commit seulement les deux fichiers production et le nouveau
 test. Aucun push par worker. Rapport scratch avec commandes/exits/XML, tous les
@@ -121,9 +123,9 @@ test. Aucun push par worker. Rapport scratch avec commandes/exits/XML, tous les
 
 ### Clôture contrôleur
 
-- [ ] Relecture de tâche Sol, correction puis re-review ciblée si nécessaire.
-- [ ] Corpus631 sur le commit exact, slices0–607/607–608/608–631, timeout30.
-- [ ] Comparaison individuelle à `rect-adapter-d45904e0b.json`, gains/pertes,
+- [x] Relecture de tâche Sol, correction puis re-review ciblée si nécessaire.
+- [x] Corpus631 sur le commit exact, slices0–607/607–608/608–631, timeout30.
+- [x] Comparaison individuelle à `rect-adapter-d45904e0b.json`, gains/pertes,
   empreintes et diagnostics ; aucun gain anticipé, aucun seuil modifié.
 - [ ] Mise à jour du suivi existant, review globale Sol, PR draft sur #2417.
 
@@ -133,3 +135,15 @@ Trois sites producteurs/consommateurs couverts dans une seule tâche dépendante
 Les cinq risques ont un témoin ; diagnostic Terra corrigé par Astra sur
 HARD_EDGE, layer vide et origine native. Aucun nouveau type/API ni contrat
 filtré/PLUS. L'avis Astra porte aussi sur ces fichiers avant handoff.
+
+## Déviation d'exécution — Picture AA
+
+GREEN direct atteint, mais Picture AA refuse dans une chaîne séparée :
+`preparePictureDrawLane` ne propose pas la source AA et `appendPlannedDraw`
+ne consomme que les phases SingleSample. Le contrôleur a vérifié ces deux
+sites et décidé de conserver les trois sites de production initiaux.
+Step 1.2 conserve le positif alpha direct et devient un témoin négatif
+séparé pour Picture (diagnostic exact, sentinel, récupération). Le replay AA
+Picture sans clip est explicitement ouvert et doit figurer dans le rapport,
+le suivi et la PR ; cette déviation ne vaut pas accomplissement du contrat
+Picture initial. Aucun élargissement implicite aux sources filtrées.
