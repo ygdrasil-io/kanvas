@@ -127,7 +127,7 @@ test. Aucun push par worker. Rapport scratch avec commandes/exits/XML, tous les
 - [x] Corpus631 sur le commit exact, slices0–607/607–608/608–631, timeout30.
 - [x] Comparaison individuelle à `rect-adapter-d45904e0b.json`, gains/pertes,
   empreintes et diagnostics ; aucun gain anticipé, aucun seuil modifié.
-- [ ] Mise à jour du suivi existant, review globale Sol, PR draft sur #2417.
+- [x] Mise à jour du suivi existant, review globale Sol, PR draft #2418 sur #2417.
 
 ## Self-review du plan
 

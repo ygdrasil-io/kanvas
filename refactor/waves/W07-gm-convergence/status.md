@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot source AA racine — 29 septembre 2026
 
-Renderer `470f62e63`, branche `codex/w7-root-aa-source`, draft prévue sur
+Renderer `470f62e63`, branche `codex/w7-root-aa-source`, PR draft
+[#2418](https://github.com/ygdrasil-io/kanvas/pull/2418), empilée sur
 [#2417](https://github.com/ygdrasil-io/kanvas/pull/2417). Path AA solid SrcOver
 racine admis dans une frame W6 ordinaire, par source MSAA4 isolée et composite
 immédiat ; aucun changement d'ownership, de budget ou d'autorité native.
@@ -25,6 +26,9 @@ Arbitrages : nouvelle route exclue des frames W6b ; allocation plein viewport
 conservatrice ; **Picture AA positif différé**, même sans clip, avec refus
 transactionnel testé plutôt que playback revendiqué. AA filtré et PLUS restent
 ouverts ; `PlusMergesAA`/`blur2rects` refusent toujours. W7 n'est pas terminé.
+Reviews Sol tâche, correctif et ensemble approuvées pour la draft, sans
+Critical/Important ; Minor suivi pour un témoin de refus Picture au root
+(le permanent actuel couvre le playback en layer).
 
 ## Lot adaptateur Rect+CTM — 29 septembre 2026
 

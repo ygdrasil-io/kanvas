@@ -18,7 +18,8 @@ Lot adaptateur Rect+CTM : code `d45904e0b`, branche
 `codex/w7-layer-source-routing`, PR draft
 [#2417](https://github.com/ygdrasil-io/kanvas/pull/2417), empilée sur #2416.
 Lot courant : source AA racine, renderer `470f62e63`, branche
-`codex/w7-root-aa-source`, publication draft prévue sur #2417.
+`codex/w7-root-aa-source`, PR draft
+[#2418](https://github.com/ygdrasil-io/kanvas/pull/2418), empilée sur #2417.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -993,8 +994,13 @@ depuis le commit mesuré. Le détail d'une des trois tentatives GREEN échouées
 n'est plus récupérable après réutilisation du dossier : cette perte de détail
 reste signalée, sans cause inventée.
 La re-review Sol approuve conformité et qualité après ces corrections, sans
-nouveau défaut. La review de l'ensemble du lot reste le dernier gate avant
-publication draft ; cette validation ne vaut pas merge readiness.
+nouveau défaut. La review indépendante de l'ensemble `54781716e..e900a0983`
+approuve la publication draft #2418 : Critical 0 / Important 0 / Minor 1.
+Le Minor reste suivi pour le chantier Picture : le refus permanent est testé
+en layer, pas au root, où il n'a été observé que dans une tentative GREEN.
+Le support positif Picture/AA filtré/PLUS/W6b/clips complexes et la fidélité
+du port simplifié restent explicitement ouverts. Cette validation ne vaut
+ni merge readiness ni clôture W7.
 
 ### Arbitrages et suite
 
