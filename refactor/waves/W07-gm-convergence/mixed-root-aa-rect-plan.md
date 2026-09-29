@@ -41,7 +41,7 @@ dans le companion, avec opt-in privé conservé par les copies du compiler.
 Aucun nouveau contrat natif; si un garde supplémentaire bloque, diagnostic au
 contrôleur avant élargissement du lot.
 
-- [ ] **Step 1: Ajouter les témoins publics avant la production.** Chaque
+- [x] **Step 1: Ajouter les témoins publics avant la production.** Chaque
   positif impose Render/Readback et un second `surface.render()` byte-identique.
   Nettoyage GPU `@AfterAll` comme les W7 existants, pas de capability catch en PASS.
   - `mixed root gradient and aa ring preserve pixels and order` : Surface8×8,
@@ -79,12 +79,12 @@ contrôleur avant élargissement du lot.
     le test; ne lire ni peak ni échec pour le choisir. B rend l'oracle, B−1
     refuse le budget W6, sentinel intact puis récupération sur la même Surface.
 
-- [ ] **Step 2: RED isolé, causal et archivé.**
+- [x] **Step 2: RED isolé, causal et archivé.**
   `rtk proxy ./gradlew :kanvas:test --offline --no-build-cache --tests org.graphiks.kanvas.surface.W7MixedRootAaRectSurfacePixelTest -I /private/tmp/kanvas-w7-image-opacity.YmtXjI/isolated.init.gradle -Pw7.validationDir=/private/tmp/kanvas-w7-next.0hEQlf/mixed-red --console=plain`.
   Le mélange positif doit échouer sur le refus AA stroke existant. Pas de
   compile error comme RED. Corriger d'abord tout oracle/test invalide.
 
-- [ ] **Step 3: Implémenter le domaine de la spec, sans route alternative.**
+- [x] **Step 3: Implémenter le domaine de la spec, sans route alternative.**
   Tout draw doit satisfaire le domaine; stroke+LinearGradient obligatoires.
   W6 reste prioritaire pour ses layers/filtres historiques. Pour la nouvelle
   branche, sélectionner tous les segments avant candidat; garder la décision
@@ -93,23 +93,23 @@ contrôleur avant élargissement du lot.
   réellement Stroke dans sa recipe avec son fill mesh, sans changer Fill.
   Réutiliser la construction root, origine0, resolve/composite adjacent existants.
 
-- [ ] **Step 4: GREEN ciblé et contrôles proches sérialisés.** Même commande,
+- [x] **Step 4: GREEN ciblé et contrôles proches sérialisés.** Même commande,
   archive `mixed-green`; puis `W7StrokeRoutingSurfacePixelTest`,
   `W7RootAaSurfacePixelTest`, `W7AaPathLayerSurfacePixelTest`,
   `W7AaMaskBlurSurfacePixelTest`, `W6aLayerBudgetRecoverySurfacePixelTest`,
   archive `mixed-related`. Chaque run doit réellement terminer avant suivant.
   Ne pas lancer la globale : le contrôleur en prend une unique tentative finale.
 
-- [ ] **Step 5: Self-review et commit limité.** `git diff --check`, ne committer
+- [x] **Step 5: Self-review et commit limité.** `git diff --check`, ne committer
   que les quatre fichiers possédés. Rapport détaillé scratch : RED/GREEN,
   commandes/exits/XML, budget pré-calculé, échecs/warnings et limites. Pas de
   push, pas de sous-agents; rendre l'ownership runtime au contrôleur.
 
 ### Clôture contrôleur
 
-- [ ] Revue tâche Sol, corrections/re-review si nécessaire.
-- [ ] Tentative `:kanvas:test` globale unique bornée240s, puis final ciblé.
-- [ ] Mesure corpus631 au SHA exact, timeout30s et comparaison au snapshot
+- [x] Revue tâche Sol, corrections/re-review si nécessaire.
+- [x] Tentative `:kanvas:test` globale unique bornée240s, puis final ciblé.
+- [x] Mesure corpus631 au SHA exact, timeout30s et comparaison au snapshot
   `aa-mask-82893045c.json`, pertes/gains/pixels/diagnostics séparés.
 - [ ] Suivi à jour, revue globale Sol et draft empilée sur #2419; aucun merge.
 
@@ -121,3 +121,46 @@ Avis Astra réduit par pilotage aux siblings Rect/LinearGradient pour limiter
 le premier domaine; images en mémoire reportées explicitement, pas promises.
 Le budget est une dérivation physique préalable confiée au worker, pas un
 oracle appris du planner. Toute divergence doit être rapportée avant patch.
+
+## Exécution et écarts de preuve
+
+Production `947ffdabb`, correction tests-only `ff628a94d`. La revue Sol a
+demandé de séparer le stroke transparent visible du stroke opaque hors écran :
+le premier rend le fond inchangé, le second refuse transactionnellement sur
+`w4d.general.path-resource-limit` pendant la sélection W4d du mélange W6.
+Les sept tests publics passent (exit0), re-review Sol validée, aucun changement
+de production pour obtenir ces deux résultats.
+
+Deux exigences de chronologie de preuve du plan initial n'ont pas été tenues :
+le RED négatif vérifiait refus/sentinel/récupération mais pas les préfixes, et
+le premier budget pré-calculé53952 était erroné. Les préfixes finaux sont donc
+post-patch, sans stabilité historique prouvée. B=29408 a ensuite été dérivé
+statiquement avec une revue indépendante : root256 + readback2048 + W6uniform16
++ AA4color1024 + resolve256 + depth41024 + un seul V/I/U24576 + solid16
++ gradientV1uniform128 + stops64. Le Rect gradient hard sélectionne W3, sans
+second tripletV/I/U. Cette réparation précède le B/B−1 final, pas le premier
+essai. Aucun peak mesuré ni assouplissement de budget n'a fixé cet oracle.
+
+Le premier GREEN proche contient40 END uniques sur5classes, mais seuls les
+derniers10 XML ont été conservés après réutilisation du dossier. Quatre runs
+terminent exit0; le dernier W6 budget finit exit1/executor133 après10 assertions
+PASS. Ce lot n'est pas annoncé entièrement vert.
+
+Validation finale du contrôleur au SHA `ff628a94d` :47/47 tests publics sur
+6classes, XML et events complets, Gradle exit0. Le crash133 du run isolé
+précédent n'est pas effacé par ce succès combiné. La globale unique bornée
+240s donne708 END uniques :665 PASS,42 FAIL déjà présents,1 SKIPPED lors de
+l'arrêt de `generalCoordinateUniformBudgetRefusesPreciselyAndRecovers`.
+Les708 identités existent dans le parent; aucune nouvelle assertion en échec
+observée. Seize autres cas du relevé parent ne sont pas atteints. Le wrapper
+retourne124 après TERM du groupe propre à cette invocation sans daemon partagé;
+l'enfant Gradle retourne143, pas une sortie normale de suite complète. Les
+XML globaux ne sont pas finalisés; les résultats viennent des events persistés
+et du log. Warnings JVM/Gradle conservés.
+
+Corpus631 final : [snapshot](mixed-root-ff628a94d.json),198 rendus/176
+comparaisons, gain unique `alphagradients`33,8822%,197 anciennes empreintes
+inchangées, aucune perte ni changement de référence/seuil/scope. Le rejeu PNG
+retrouve la même empreinte; voir le [bilan](pilotage.md#lot-mélange-racine-rect-stroke-aa--29-septembre-2026)
+pour la divergence du port et les limites de fidélité. `vertices` reste
+timeout30s. Revue globale et publication draft restent à effectuer.

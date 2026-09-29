@@ -20,9 +20,11 @@ Lot adaptateur Rect+CTM : code `d45904e0b`, branche
 Lot précédent : source AA racine, renderer `470f62e63`, branche
 `codex/w7-root-aa-source`, PR draft
 [#2418](https://github.com/ygdrasil-io/kanvas/pull/2418), empilée sur #2417.
-Lot courant : couverture AA filtrée, renderer `82893045c`, branche
+Lot précédent : couverture AA filtrée, renderer `82893045c`, branche
 `codex/w7-aa-mask-coverage`, draft
 [#2419](https://github.com/ygdrasil-io/kanvas/pull/2419) empilée sur #2418.
+Lot courant : Rect stroke AA dans un mélange racine, renderer `ff628a94d`,
+branche `codex/w7-mixed-root-aa-rect`, publication draft prévue sur #2419.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -45,6 +47,85 @@ de rendu et timeouts éligibles restent au dénominateur.
 
 Les gates W6 relatives à la durée de vie et aux ressources restent suivies.
 Leur fermeture et la proximité visuelle sont deux mesures distinctes.
+
+## Lot mélange racine Rect stroke AA — 29 septembre 2026
+
+Le [design](mixed-root-aa-rect-design.md), issu d'un diagnostic Terra et d'un
+avis stratégique Astra, puis le [plan](mixed-root-aa-rect-plan.md) bornent le
+nouveau domaine aux Rect solid STROKE AA / SrcOver / MITER et aux siblings
+Rect FILL solides ou LinearGradient. Pas de layer artificielle : W6 sélectionne
+la frame complète, W4d garde RECT/STROKE et l'outline math, produit une source
+MSAA4/resolve1 puis compose immédiatement dans l'ordre. Les anciennes voies
+standalone/layers/filtres gardent leurs contrats. Les images/Picture, autres
+blends, clips complexes et transforms non axis-aligned restent hors extension.
+
+Le [snapshot](mixed-root-ff628a94d.json), renderer exact
+`ff628a94da2a9c38aa05c004dff354f61ceaafbf`, conserve les631 identités,443
+éligibles, références, scènes, dimensions, seuils, scopes et exclusions.
+
+| Mesure à corpus inchangé | Parent #2419 | Ce lot |
+| --- | ---: | ---: |
+| Rendus disponibles | 197 | 198 |
+| Comparaisons possibles | 175 | 176 |
+| Échecs de rendu | 195 | 194 |
+| Échecs de setup | 50 | 50 |
+| Rendus sans référence exploitable | 14 | 14 |
+| Dimensions incompatibles | 8 | 8 |
+| Timeouts à30s | 1 | 1 |
+| Cas à≥99% des pixels ±2/canal | 36 | 36 |
+| Cas à≥95% des pixels ±2/canal | 49 | 49 |
+
+**Un seul nouveau rendu : `alphagradients`,33,8822% de pixels ±2/canal**,553ms
+dans le corpus. SSIM luminance0,658254, erreur absolue normalisée0,0840202.
+Les197 anciennes empreintes RGBA sont identiques, sans perte, ni autre
+changement d'outcome/diagnostic. Les13 autres premiers refus Rect stroke AA
+restent des refus, pas des gains promis. La médiane appariée des175 anciens
+cas reste71,8965%; celle des176 devient71,7349% par changement de population.
+Les trois sessions [0,607),[607,608),[608,631) terminent Gradle0/1/0 :
+`vertices` reste timeout au rendu, child124. `ninepatch-stretch` rend en26,758s
+avec faible marge sous30s. Somme des durées155,241s, hors démarrage Gradle/JVM,
+observation et non benchmark.
+
+Le rejeu PNG de `alphagradients` conserve exactement l'empreinte du corpus.
+Inspection du rendu et de la référence : colonnes produites identiques contre
+colonnes différenciées dans la référence, contours gris contre noirs et écarts
+de couleur visibles. `AlphaGradientsGm.draw` appelle la même construction
+`drawGrad` pour les deux colonnes, seul leur placement change. Cela identifie
+une divergence du port; cela n'attribue pas causalement chaque écart de pixel
+au port ni au renderer. Le seuil historique0 donne `declaredContractPass=true`
+malgré33,88% : il ne devient pas une preuve de parité. Prochaine priorité de
+fidélité : auditer le port et son contrat d'interpolation/alpha par rapport à
+Skia, puis isoler les écarts renderer avec des témoins publics. Aucun GM,
+adaptateur, PNG de référence, seuil ni score historique n'est changé ici.
+
+### Validation et limites du lot
+
+La revue de tâche Sol a demandé des témoins séparés : transparent visible
+(fond inchangé) et opaque hors écran (refus terminal W4d lors de la sélection
+du mélange W6, sentinel intact, récupération). Correction tests-only
+`ff628a94d`, re-review validée. **Final proche47/47 sur6classes, XML complets,
+Gradle0**, natif Render/Readback et deux rendus identiques. Un run isolé
+antérieur W6 budget avait10 assertions PASS puis executor133/Gradle1; ce fait
+reste distinct du succès combiné final.
+
+Budget physique final B=29408,B−1 refusé sans publication puis récupération.
+Le premier pré-calcul53952 était erroné (deux tripletsV/I/U au lieu d'un,
+uniforme gradientV1 mal compté). La dérivation statique corrigée, revue par
+Sol, précède le succès B/B−1 final mais pas le premier essai. Le RED négatif
+ne relevait pas les préfixes; les préfixes finaux ne prouvent pas leur stabilité
+historique. Ces deux écarts au plan sont assumés, pas effacés rétroactivement.
+
+Une seule globale bornée240s :708 END persistés,665 PASS,42 FAIL déjà présents,
+1 SKIPPED à l'interruption de
+`W5dGradientAddressingSurfacePixelTest.generalCoordinateUniformBudgetRefusesPreciselyAndRecovers`.
+Les708 identités sont communes au parent, sans nouvelle assertion en échec
+observée;16 autres cas du relevé parent ne sont pas atteints. Le wrapper
+retourne124 et l'enfant Gradle143 après TERM de son groupe, sans daemon partagé.
+Les XML globaux n'ont pas été finalisés : preuve issue des events et du log,
+pas708 XML. Warnings JVM `System::load`/`Unsafe` et dépréciations Gradle restent
+signalés; conversions redondantes des nouveaux tests retirées en re-review.
+La globale est donc rouge/incomplète. W7 et les gates W6 restent ouverts,
+aucune merge readiness. Revue globale du lot encore à effectuer.
 
 ## Lot couverture AA filtrée — 29 septembre 2026
 
