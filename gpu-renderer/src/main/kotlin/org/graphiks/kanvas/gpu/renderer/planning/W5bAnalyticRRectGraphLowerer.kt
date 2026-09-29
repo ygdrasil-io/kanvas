@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.renderer.materials.composedStopAllocationLabelV5
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.color.*
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -42,7 +43,9 @@ internal class W5bAnalyticRRectGraphLowerer {
             GPUFrameResourceRole.ReadbackStaging, setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead),
             GPUFrameResourceLifetime.FrameLocal, footprint.readbackBytes, "$identity.staging")
         val allocations = graph.resources().map { resource ->
-            GPUFrameMemoryAllocation("$identity.${resource.id.value}", when (resource.role) {
+            GPUFrameMemoryAllocation(if (resource.role == PlanResourceRole.GradientStopData)
+                graph.composedStopAllocationLabelV5(request.w5aCompositeSessionIdentity ?: identity) ?: "$identity.${resource.id.value}"
+                else "$identity.${resource.id.value}", when (resource.role) {
                 PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
                 PlanResourceRole.ReadbackStaging -> GPUFrameMemoryCategory.ReadbackStaging
                 PlanResourceRole.DestinationSnapshot -> GPUFrameMemoryCategory.DestinationSnapshot

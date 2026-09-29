@@ -199,6 +199,37 @@ internal data class ColorBranchFactV1(val predicate: ColorOperationGraphV1.Predi
 internal object ColorRoundedGraphProofV1 {
     private val normalF64 = java.lang.Float.MIN_NORMAL.toDouble()
     private val largestDivisorF64 = Math.scalb(1.0,126)
+    /** A conservative F32 value-class set; zero includes both signed zeroes. */
+    private class F32ClassFacts private constructor(private val bitsI32: Int) {
+        fun union(other: F32ClassFacts): F32ClassFacts = of(bitsI32 or other.bitsI32)
+        fun intersectOrNull(other: F32ClassFacts): F32ClassFacts? =
+            (bitsI32 and other.bitsI32).takeIf { it != 0 }?.let(::of)
+        fun isNormalOnly(): Boolean = bitsI32 == NORMAL.bitsI32
+
+        companion object {
+            val ZERO = F32ClassFacts(1)
+            val SUBNORMAL = F32ClassFacts(2)
+            val NORMAL = F32ClassFacts(4)
+            val ALL = F32ClassFacts(7)
+
+            fun of(bitsI32: Int): F32ClassFacts {
+                require(bitsI32 in 1..7)
+                return when (bitsI32) {
+                    ZERO.bitsI32 -> ZERO
+                    SUBNORMAL.bitsI32 -> SUBNORMAL
+                    NORMAL.bitsI32 -> NORMAL
+                    ALL.bitsI32 -> ALL
+                    else -> F32ClassFacts(bitsI32)
+                }
+            }
+        }
+    }
+
+    private data class F32ClassConstraint(
+        val scalar: ColorOperationGraphV1.Scalar,
+        val whenTrue: F32ClassFacts,
+        val whenFalse: F32ClassFacts,
+    )
     private sealed interface ContextDependencies {
         data object Full : ContextDependencies
 
@@ -292,6 +323,8 @@ internal object ColorRoundedGraphProofV1 {
             java.util.IdentityHashMap<Map<ColorOperationGraphV1.Scalar, ColorBoundsV1>, List<ColorBoundsV1>>>()
         val cache = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar,
             MutableMap<EvaluationEnvironment, ColorBoundsV1>>()
+        val classCache = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar,
+            MutableMap<EvaluationEnvironment, F32ClassFacts>>()
         val dependencies = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar, ContextDependencies>()
         fun dependencyOf(node: ColorOperationGraphV1.Scalar): ContextDependencies = dependencies[node] ?: run {
             fun predicateDependencies(
@@ -386,6 +419,55 @@ internal object ColorRoundedGraphProofV1 {
             val environment = EvaluationEnvironment(conditions, dependencyOf(node), activeNoise)
             cache[node]?.get(environment)?.let { return it }
             fun value(n: ColorOperationGraphV1.Scalar) = evaluate(n, conditions)
+            fun classes(bounds: ColorBoundsV1): F32ClassFacts {
+                var bitsI32 = 0
+                if (bounds.lowerF64 <= 0.0 && bounds.upperF64 >= 0.0) bitsI32 = bitsI32 or 1
+                if (bounds.lowerF64 < normalF64 && bounds.upperF64 > -normalF64 &&
+                    (bounds.lowerF64 < 0.0 || bounds.upperF64 > 0.0)) bitsI32 = bitsI32 or 2
+                if (bounds.lowerF64 <= -normalF64 || bounds.upperF64 >= normalF64) bitsI32 = bitsI32 or 4
+                return F32ClassFacts.of(bitsI32)
+            }
+            fun exactClassConstraint(predicate: ColorOperationGraphV1.Predicate): F32ClassConstraint? {
+                fun constant(node: ColorOperationGraphV1.Scalar, valueF32: Float): Boolean =
+                    node is ColorOperationGraphV1.Scalar.ConstantF32 && Float.fromBits(node.bitsI32) == valueF32
+                fun direct(value: ColorOperationGraphV1.Predicate): F32ClassConstraint? = when (value) {
+                    is ColorOperationGraphV1.Predicate.LessEqual -> when {
+                        value.a is ColorOperationGraphV1.Scalar.Abs && constant(value.b, 0f) ->
+                            F32ClassConstraint(value.a.value,
+                                F32ClassFacts.ZERO.union(F32ClassFacts.SUBNORMAL),
+                                F32ClassFacts.SUBNORMAL.union(F32ClassFacts.NORMAL))
+                        constant(value.a, java.lang.Float.MIN_NORMAL) &&
+                            value.b is ColorOperationGraphV1.Scalar.Abs ->
+                            F32ClassConstraint(value.b.value,
+                                F32ClassFacts.NORMAL, F32ClassFacts.ZERO.union(F32ClassFacts.SUBNORMAL))
+                        else -> null
+                    }
+                    is ColorOperationGraphV1.Predicate.Not -> direct(value.value)?.let {
+                        F32ClassConstraint(it.scalar, it.whenFalse, it.whenTrue)
+                    }
+                    else -> null
+                }
+                return direct(predicate)
+            }
+            fun classFacts(n: ColorOperationGraphV1.Scalar): F32ClassFacts {
+                conditions[n]?.let(::classes)?.let { return it }
+                val classEnvironment = EvaluationEnvironment(conditions, dependencyOf(n), activeNoise)
+                classCache[n]?.get(classEnvironment)?.let { return it }
+                val result = if (n is ColorOperationGraphV1.Scalar.EagerSelect) {
+                    val constraint = exactClassConstraint(n.predicate)
+                    fun selectedFacts(branch: ColorOperationGraphV1.Scalar, taken: Boolean): F32ClassFacts? {
+                        val facts = classFacts(branch)
+                        return if (constraint != null && branch === constraint.scalar)
+                            facts.intersectOrNull(if (taken) constraint.whenTrue else constraint.whenFalse)
+                        else facts
+                    }
+                    // Bounds above still validate both eagerly evaluated arms. These
+                    // facts merely retain the exact zero-or-normal disjunction.
+                    listOfNotNull(selectedFacts(n.yes, true), selectedFacts(n.no, false)).reduce(F32ClassFacts::union)
+                } else classes(value(n))
+                classCache.getOrPut(n) { mutableMapOf() }[classEnvironment] = result
+                return result
+            }
             fun imageIndex(read: ImageNumericOperationGraphV1.TexelRead,x: Boolean): IntRange {
                 val base = value(if (x) read.baseX else read.baseY)
                 val upload=imageUpload(read)
@@ -890,17 +972,31 @@ internal object ColorRoundedGraphProofV1 {
                 is ColorOperationGraphV1.Scalar.Atan2 -> {
                     val y = value(node.y); val x = value(node.x)
                     fun hasZero(v: ColorBoundsV1) = v.lowerF64 <= 0.0 && v.upperF64 >= 0.0
-                    fun normal(v: ColorBoundsV1) = v.lowerF64 >= normalF64 || v.upperF64 <= -normalF64
                     // WGSL 15.7.4.1 grants 4096 ULP only for normal y and
                     // 2^-126 <= |x| <= 2^126. Sweep's real eager axis guards
                     // substitute one before this call; zero is not an exemption.
-                    require(normal(x) && normal(y) &&
+                    // The interval hull alone can lose that zero-or-normal
+                    // disjunction, so require the local contextual class fact.
+                    require(classFacts(node.x).isNormalOnly() && classFacts(node.y).isNormalOnly() &&
                         maxOf(kotlin.math.abs(x.lowerF64),kotlin.math.abs(x.upperF64)) <= largestDivisorF64)
-                    val corners = listOf(StrictMath.atan2(y.lowerF64,x.lowerF64),StrictMath.atan2(y.lowerF64,x.upperF64),
-                        StrictMath.atan2(y.upperF64,x.lowerF64),StrictMath.atan2(y.upperF64,x.upperF64))
-                    val crossesCut = x.lowerF64 < 0.0 && hasZero(y)
-                    rounded(Math.nextDown(if (crossesCut) -Math.PI else corners.min()),
-                        Math.nextUp(if (crossesCut) Math.PI else corners.max()),4096.0)
+                    fun normalRegions(v: ColorBoundsV1): List<ColorBoundsV1> = buildList {
+                        if (v.lowerF64 <= -normalF64) add(ColorBoundsV1(v.lowerF64,minOf(v.upperF64,-normalF64)))
+                        if (v.upperF64 >= normalF64) add(ColorBoundsV1(maxOf(v.lowerF64,normalF64),v.upperF64))
+                    }
+                    // Class facts certify that every reachable value is normal;
+                    // split the original hull at the absent zero/subnormal gap.
+                    // This is at most two intervals per operand and four rectangles.
+                    val enclosures = normalRegions(y).flatMap { yRegion -> normalRegions(x).map { xRegion ->
+                        val corners = listOf(StrictMath.atan2(yRegion.lowerF64,xRegion.lowerF64),
+                            StrictMath.atan2(yRegion.lowerF64,xRegion.upperF64),
+                            StrictMath.atan2(yRegion.upperF64,xRegion.lowerF64),
+                            StrictMath.atan2(yRegion.upperF64,xRegion.upperF64))
+                        val crossesCut = xRegion.lowerF64 < 0.0 && hasZero(yRegion)
+                        rounded(Math.nextDown(if (crossesCut) -Math.PI else corners.min()),
+                            Math.nextUp(if (crossesCut) Math.PI else corners.max()),4096.0)
+                    } }
+                    require(enclosures.isNotEmpty() && enclosures.size <= 4)
+                    enclosures.reduce(::hull)
                 }
                 is ColorOperationGraphV1.Scalar.Sin, is ColorOperationGraphV1.Scalar.Cos -> {
                     val cosine = node is ColorOperationGraphV1.Scalar.Cos
