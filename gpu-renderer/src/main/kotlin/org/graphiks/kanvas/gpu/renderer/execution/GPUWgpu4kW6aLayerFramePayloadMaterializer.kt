@@ -2153,15 +2153,16 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             require(frame.validatesW4dAaSources(framePlan))
             val w4dAaCoverageMappings = frame.w4dAaCoverageAuthorities.mapValues { (binding, authority) ->
                 require(frame.physical.nativeSiteRecipeCatalogV1().recipe(binding.recipe.owner) === binding.recipe)
-                val built = authority.built
-                require(w4dGeneralEntryMatches(built.packet, authority.fact, built.structuralPipelineKey, built.structuralPipelineKey))
-                val semantic = built.packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
-                require(semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte) == authority.fact.uniformPayloadBytes &&
-                    frame.template(built.packet) == null && built.structuralPipelineKey.sampleCount == 4)
-                (mapW4dGeneralStructuralKeyToWgpu4kPipelineIdentity(built.structuralPipelineKey)
-                    as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped)?.also {
-                    require(it.componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY)
-                } ?: error("w6b.filter.aa_coverage_pipeline_unavailable")
+                authority.built.zip(authority.facts).associate { (built, fact) ->
+                    require(w4dGeneralEntryMatches(built.packet, fact, built.structuralPipelineKey, built.structuralPipelineKey))
+                    val semantic = built.packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
+                    require(semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte) == fact.uniformPayloadBytes &&
+                        frame.template(built.packet) == null && built.structuralPipelineKey.sampleCount == 4)
+                    built.packet.passId to ((mapW4dGeneralStructuralKeyToWgpu4kPipelineIdentity(built.structuralPipelineKey)
+                        as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped)?.also {
+                        require(it.componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY)
+                    } ?: error("w6b.filter.aa_coverage_pipeline_unavailable"))
+                }
             }
             val w4dAaMappings = frame.w4dAaAuthorities.mapValues { (binding, authority) ->
                 require(frame.physical.nativeSiteRecipeCatalogV1().recipe(binding.recipe.owner) === binding.recipe)
@@ -2426,31 +2427,49 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             val renderOperands = mutableListOf<GPUPreparedNativeScopeOperand>()
             val pathViews = mutableMapOf<Int, GPUTextureView>()
             val w4dAaCoverageOperands = frame.w4dAaCoverageAuthorities.map { (binding, authority) ->
-                val phase = authority.phase
-                val data = phase.drawDataResources
+                val phases = authority.phases
                 val geometry = authority.geometry
-                val mapping = w4dAaCoverageMappings.getValue(binding)
-                val layout = owned.own(device.createBindGroupLayout(corePrimitiveBindGroupLayoutDescriptor(mapping.componentIdentity)))
-                val pipeline = geometryPipeline(mapping, layout, owned, null)
-                val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
-                    BindGroupEntry(binding = 0u, resource = BufferBinding(geometryBuffers.getValue(data.uniform), 0uL, 32uL)),
-                ))))
-                queue.writeBuffer(geometryBuffers.getValue(data.vertex), 0uL, ArrayBuffer.of(geometry.copyVertexData()))
-                queue.writeBuffer(geometryBuffers.getValue(data.index), 0uL, ArrayBuffer.of(geometry.copyIndexData()))
-                queue.writeBuffer(geometryBuffers.getValue(data.uniform), 0uL, ArrayBuffer.of(authority.fact.uniformPayloadBytes.toByteArray()))
-                fun buffer(id: PlanResourceId) = GPUPreparedNativeBufferOperand(geometryBuffers.getValue(id), generation,
-                    byteCapacity = frame.physical.resource(id).byteSize)
                 val stepIndex = framePlan.steps.indexOfFirst { it is GPUFrameStep.RenderPassStep && it.w6aPassV1 === authority.owner }
-                stepIndex to w4dGeneralRenderOperand(stepIndex,
-                    authority.built.packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive,
-                    GPUPreparedNativeRenderPassConfig(
-                        colorTarget = GPUPreparedNativeTextureViewOperand(views.getValue(phase.target), generation),
-                        resolveTarget = GPUPreparedNativeTextureViewOperand(views.getValue(authority.owner.output), generation),
-                        loadOperation = GPUPreparedNativeLoadOperation.Clear, storeOperation = GPUPreparedNativeStoreOperation.Store,
-                        clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
-                    GPUPreparedNativeRenderPipelineOperand(pipeline, generation), GPUPreparedNativeBindGroupOperand(group, generation), 0L,
-                    buffer(data.vertex), geometry.vertexUsefulBytes, buffer(data.index), geometry.indexUsefulBytes,
-                    geometry.slices.single(), authority.owner)
+                val depthLoad = when (phases.first().depthStencilLoadStore) {
+                    PlanDepthStencilLoadStore.ClearZeroStore -> GPUPreparedNativeLoadOperation.Clear
+                    null -> null
+                    else -> error("AA coverage opens a native stencil scope only with its producer")
+                }
+                val config = GPUPreparedNativeRenderPassConfig(
+                    colorTarget = GPUPreparedNativeTextureViewOperand(views.getValue(phases.first().target), generation),
+                    resolveTarget = GPUPreparedNativeTextureViewOperand(views.getValue(authority.owner.output), generation),
+                    depthStencilTarget = phases.first().depthStencil?.let { GPUPreparedNativeTextureViewOperand(views.getValue(it), generation) },
+                    loadOperation = GPUPreparedNativeLoadOperation.Clear, storeOperation = GPUPreparedNativeStoreOperation.Store,
+                    clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0), depthReadOnly = true,
+                    stencilReadOnly = depthLoad == null, stencilClearValue = 0u.takeIf { depthLoad == GPUPreparedNativeLoadOperation.Clear },
+                    stencilLoadOperation = depthLoad, stencilStoreOperation = depthLoad?.let { GPUPreparedNativeStoreOperation.Store },
+                )
+                phases.first().depthStencil?.let { pathViews[stepIndex] = views.getValue(it) }
+                val commands = mutableListOf<GPUPreparedNativeRenderCommand>()
+                val semantics = mutableListOf<GPUDrawSemanticPayload>()
+                authority.built.zip(authority.facts).zip(phases).forEach { (builtFact, phase) ->
+                    val (built, fact) = builtFact
+                    val data = phase.drawDataResources
+                    val mapping = w4dAaCoverageMappings.getValue(binding).getValue(built.packet.passId)
+                    val layout = owned.own(device.createBindGroupLayout(corePrimitiveBindGroupLayoutDescriptor(mapping.componentIdentity)))
+                    val pipeline = geometryPipeline(mapping, layout, owned, null)
+                    val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = BufferBinding(geometryBuffers.getValue(data.uniform), 0uL, 32uL)),
+                    ))))
+                    queue.writeBuffer(geometryBuffers.getValue(data.vertex), 0uL, ArrayBuffer.of(geometry.copyVertexData()))
+                    queue.writeBuffer(geometryBuffers.getValue(data.index), 0uL, ArrayBuffer.of(geometry.copyIndexData()))
+                    queue.writeBuffer(geometryBuffers.getValue(data.uniform), 0uL, ArrayBuffer.of(fact.uniformPayloadBytes.toByteArray()))
+                    fun buffer(id: PlanResourceId) = GPUPreparedNativeBufferOperand(geometryBuffers.getValue(id), generation,
+                        byteCapacity = frame.physical.resource(id).byteSize)
+                    val operand = w4dGeneralRenderOperand(stepIndex,
+                        built.packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive, config,
+                        GPUPreparedNativeRenderPipelineOperand(pipeline, generation), GPUPreparedNativeBindGroupOperand(group, generation), 0L,
+                        buffer(data.vertex), geometry.vertexUsefulBytes, buffer(data.index), geometry.indexUsefulBytes,
+                        requireNotNull(geometry.slices.singleOrNull { it.pathPassId == phase.id.value }), authority.owner)
+                    commands += operand.commands
+                    semantics += operand.semanticPayloads
+                }
+                stepIndex to GPUPreparedNativeScopeOperand.Render(stepIndex, config, commands, semantics, w6aPassV1 = authority.owner)
             }.toMap()
             val w4dAaOperands = frame.w4dAaAuthorities.flatMap { (binding, authority) ->
                 authority.packets.zip(authority.facts).mapIndexed { index, (built, fact) ->

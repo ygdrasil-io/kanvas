@@ -4,7 +4,9 @@ import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.planning.W4dGeneralPathGraphLowerer
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.resources.*
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.math.color.ColorF32
@@ -13,24 +15,34 @@ import org.graphiks.math.color.ColorF32
 internal class GPUW4dAaCoveragePreparedAuthority private constructor(
     val owner: PlanPass.FilterCoverageSourcePass,
     val binding: PlanW4dAaCoverageSourceBindingV1,
-    val fact: W4dGeneralNativePathPassFact,
+    facts: List<W4dGeneralNativePathPassFact>,
     val geometry: W4dGeneralNativeFrameResourceSeal,
-    val built: W4dGeneralPathGraphLowerer.BuiltPacket,
+    built: List<W4dGeneralPathGraphLowerer.BuiltPacket>,
 ) {
-    val phase: PlanPass.PathRenderPass get() = binding.passes().single()
+    val facts: List<W4dGeneralNativePathPassFact> = java.util.Collections.unmodifiableList(facts.toList())
+    val built: List<W4dGeneralPathGraphLowerer.BuiltPacket> = java.util.Collections.unmodifiableList(built.toList())
+    val phases: List<PlanPass.PathRenderPass> get() = binding.passes()
 
-    fun resourceUses(refs: Map<PlanResourceId, GPUFrameResourceRef>): List<GPUFrameResourceUse> = listOf(
-        GPUFrameResourceUse(refs.getValue(phase.target), GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true),
-        GPUFrameResourceUse(refs.getValue(owner.output), GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true),
-        GPUFrameResourceUse(refs.getValue(phase.drawDataResources.vertex), GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, GPUFrameResourceLifetime.FrameLocal, false),
-        GPUFrameResourceUse(refs.getValue(phase.drawDataResources.index), GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, GPUFrameResourceLifetime.FrameLocal, false),
-        GPUFrameResourceUse(refs.getValue(phase.drawDataResources.uniform), GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false),
-    )
+    fun resourceUses(refs: Map<PlanResourceId, GPUFrameResourceRef>): List<GPUFrameResourceUse> = buildList {
+        val terminal = phases.last()
+        add(GPUFrameResourceUse(refs.getValue(phases.first().target), GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true))
+        add(GPUFrameResourceUse(refs.getValue(owner.output), GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true))
+        phases.first().depthStencil?.let { add(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true)) }
+        add(GPUFrameResourceUse(refs.getValue(terminal.drawDataResources.vertex), GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, GPUFrameResourceLifetime.FrameLocal, false))
+        add(GPUFrameResourceUse(refs.getValue(terminal.drawDataResources.index), GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, GPUFrameResourceLifetime.FrameLocal, false))
+        add(GPUFrameResourceUse(refs.getValue(terminal.drawDataResources.uniform), GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false))
+    }
 
     fun validates(render: GPUFrameStep.RenderPassStep?, refs: Map<PlanResourceId, GPUFrameResourceRef>): Boolean =
-        render != null && render.w6aPassV1 === owner && render.drawPackets.singleOrNull() === built.packet &&
-            render.target == refs.getValue(phase.target) && render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
-            render.sampleContinuation == null && render.w4eSceneContinuation == null && render.depthStencilLoadStore == null &&
+        render != null && render.w6aPassV1 === owner && render.drawPackets == built.map { it.packet } &&
+            render.target == refs.getValue(phases.first().target) && render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+            render.sampleContinuation == null && render.w4eSceneContinuation == null &&
+            render.depthStencilLoadStore == when (phases.first().depthStencilLoadStore) {
+                PlanDepthStencilLoadStore.ClearZeroStore -> GPUDepthStencilLoadStorePlan.WritableStencil(
+                    GPUStencilLoadOperation.Clear, GPUStorePlan.Store, 0u)
+                null -> null
+                else -> error("AA coverage opens a native stencil scope only with its producer")
+            } &&
             render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store &&
             render.resourceUses == resourceUses(refs)
 
@@ -51,15 +63,14 @@ internal class GPUW4dAaCoveragePreparedAuthority private constructor(
                 W4dGeneralNativeResourceFact(row.id.value, row.role, row.kind, row.format, size?.width, size?.height,
                     row.byteSize, row.usages(), row.lifetime, row.firstPassIndex, row.lastPassIndexExclusive, row.sampleCountI32)
             }
-            val phase = binding.passes().single()
             val facts = W4dGeneralNativeMaterializationSnapshot.capturePathFacts(binding.passes(), rows.associateBy { it.resourceId },
-                bounds, mapOf(phase.id.value to ColorF32.of(1f, 1f, 1f, 1f)))
+                bounds, binding.passes().associate { it.id.value to ColorF32.of(1f, 1f, 1f, 1f) })
             val geometry = requireNotNull(W4dGeneralNativeFrameResourceSeal.from(graph.capabilities, null, 0L,
                 binding.passes(), rows, facts))
-            val built = W4dGeneralPathGraphLowerer().packet(phase, 0, bounds, GPUColorFormat.RGBA8UnormSrgb, graph,
-                aaCoverage = binding)
-            require(facts.single().uniformPayloadBytes.size == 32)
-            return GPUW4dAaCoveragePreparedAuthority(owner, binding, facts.single(), geometry, built)
+            val built = binding.passes().mapIndexed { index, phase -> W4dGeneralPathGraphLowerer().packet(phase, index, bounds,
+                GPUColorFormat.RGBA8UnormSrgb, graph, aaCoverage = binding) }
+            require(facts.all { it.uniformPayloadBytes.size == 32 })
+            return GPUW4dAaCoveragePreparedAuthority(owner, binding, facts, geometry, built)
         }
     }
 }

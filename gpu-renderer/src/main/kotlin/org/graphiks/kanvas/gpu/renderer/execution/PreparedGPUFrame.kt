@@ -180,7 +180,8 @@ class GPUCommandEncoderScopePlan internal constructor(
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass && w6aPass.depthStencil != null ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass &&
-                w6aPass.rasterBinding?.depthStencil != null ||
+                (w6aPass.rasterBinding?.depthStencil != null ||
+                    w6aPass.aaCoverageBinding?.passes()?.firstOrNull()?.depthStencil != null) ||
             w6aNative is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskProducer && w6aNative.depthStencil != null ||
             w6aNative is org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass && w6aNative.depthStencil != null
         val pathSealed = corePrimitivePathStencilNativeRouteSeal is
@@ -1585,7 +1586,10 @@ internal class PreparedGPUFrame(
                 // are the frozen W4 authority carried by the typed source binding.
                 val w6bStencilCoverage = sealedW6a && !sealedW4e &&
                     (step.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)
-                        ?.rasterBinding?.depthStencil != null
+                        ?.let { coverage ->
+                            coverage.rasterBinding?.depthStencil != null ||
+                                coverage.aaCoverageBinding?.passes()?.firstOrNull()?.depthStencil != null
+                        } == true
                 val pathSealed = w6aPath || scope.corePrimitivePathStencilNativeRouteSeal is
                     GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
                     scope.corePrimitivePathStencilNativeRouteSeal is

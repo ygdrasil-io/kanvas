@@ -367,7 +367,7 @@ internal class W4dGeneralPathGraphLowerer {
         aaCoverage: org.graphiks.kanvas.gpu.plan.PlanW4dAaCoverageSourceBindingV1? = null,
     ): BuiltPacket {
         require(aaCoverage == null || graph.physicalLayoutOrNull()?.w4dAaCoverageSourceBindings()?.any {
-            it === aaCoverage && it.passes().single() === pass
+            it === aaCoverage && pass in it.passes()
         } == true)
         val draw = pass.draw
         val scissor = draw.copyScissorI32()

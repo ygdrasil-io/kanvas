@@ -24,8 +24,9 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         val indexedGeometry = geometryBinding != null || indexedAa
         // A FilterCoverage source with a frozen stencil producer replays the producer and
         // cover in this one W6b scope.  It cannot use the single-packet W4e stream shell.
-        val stencilCoverage = (pass as? PlanPass.FilterCoverageSourcePass)
-            ?.rasterBinding?.depthStencil != null
+        val aaCoverageStencil = aaCoverage?.passes()?.firstOrNull()?.depthStencil != null
+        val stencilCoverage = aaCoverageStencil ||
+            (pass as? PlanPass.FilterCoverageSourcePass)?.rasterBinding?.depthStencil != null
         val w4e = physical.w4eGeometryBinding(pass.id)
             ?.takeUnless { stencilCoverage }
             ?.let { requireNotNull(render).drawPackets.single() }
@@ -77,6 +78,8 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         val keys = if (stencilCoverage) buildList {
             add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView,
                 "w6a.$index.coverage.target"))
+            if (aaCoverageStencil) add(key(GPUPreparedNativeOperandRole.RenderResolveTarget,
+                GPUPreparedNativeOperandKind.TextureView, "w6a.$index.coverage.resolve"))
             add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget, GPUPreparedNativeOperandKind.TextureView,
                 "w6a.$index.coverage.depth-stencil"))
             repeat(2) { packet ->
@@ -97,7 +100,7 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             key(GPUPreparedNativeOperandRole.ReadbackDestination, GPUPreparedNativeOperandKind.Buffer, "w6a.$index.readback", GPUPreparedNativeOperandOwnership.OutputOwnedReadback))
         else buildList {
             add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.target"))
-            ((pass as? PlanPass.PathRenderPass)?.resolveTarget ?: aaCoverage?.passes()?.single()?.resolveTarget)?.let {
+            ((pass as? PlanPass.PathRenderPass)?.resolveTarget ?: aaCoverage?.passes()?.last()?.resolveTarget)?.let {
                 add(key(GPUPreparedNativeOperandRole.RenderResolveTarget,
                     GPUPreparedNativeOperandKind.TextureView, "w6a.$index.resolve"))
             }

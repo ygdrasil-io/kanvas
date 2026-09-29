@@ -54,8 +54,16 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
     is PlanPass.FilterCoverageRetainPass,
     -> packets.isEmpty()
     is PlanPass.FilterCoverageSourcePass -> pass.aaCoverageBinding?.let { binding ->
-        packets.singleOrNull()?.let { it.passId == binding.passes().single().id.value &&
-            it.commandIdValue == binding.commandIndexI32 && it.role == GPUDrawPacketRole.Shading } == true
+        val phases = binding.passes()
+        packets.size == phases.size && packets.zip(phases).all { (packet, phase) ->
+            packet.passId == phase.id.value && packet.commandIdValue == binding.commandIndexI32 &&
+                packet.role == when (phase.phase) {
+                    PathRenderPhase.MultisampleStencilProducer -> GPUDrawPacketRole.PathStencilProducer
+                    PathRenderPhase.MultisampleStencilColorCover -> GPUDrawPacketRole.PathStencilCover
+                    PathRenderPhase.MultisampleDirectColor -> GPUDrawPacketRole.Shading
+                    else -> return@all false
+                }
+        }
     } ?: pass.rasterBinding?.let { binding -> when {
         binding.draw is SolidRectDraw -> packets.isEmpty()
         binding.depthStencil == null -> packets.size == 1 && packets.single().role == GPUDrawPacketRole.Shading
@@ -426,9 +434,15 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                 val task = listOf(GPUTaskID("w6a.${pass.id.value}"))
                 val coverage = (pass as? PlanPass.FilterCoverageSourcePass)?.aaCoverageBinding?.let(w4dAaCoverageAuthorities::getValue)
                 if (coverage != null) {
-                    add(GPUFrameStep.RenderPassStep(refs.getValue(coverage.phase.target) as GPUFrameTargetRef,
+                    add(GPUFrameStep.RenderPassStep(refs.getValue(coverage.phases.first().target) as GPUFrameTargetRef,
                         GPULoadStorePlan("clear", GPUStorePlan.Store), GPUSamplePlan.MultisampleFrame(4),
-                        coverage.resourceUses(refs), listOf(coverage.built.packet), task, w6aPassV1 = pass))
+                        coverage.resourceUses(refs), coverage.built.map { it.packet }, task,
+                        depthStencilLoadStore = when (coverage.phases.first().depthStencilLoadStore) {
+                            PlanDepthStencilLoadStore.ClearZeroStore -> GPUDepthStencilLoadStorePlan.WritableStencil(
+                                GPUStencilLoadOperation.Clear, GPUStorePlan.Store, 0u)
+                            null -> null
+                            else -> error("AA coverage opens a native stencil scope only with its producer")
+                        }, w6aPassV1 = pass))
                     return@forEach
                 }
                 val aa = w4dAaAuthorities.entries.singleOrNull { pass in it.key.passes() }?.value

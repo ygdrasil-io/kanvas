@@ -152,9 +152,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             )
             is Recognition.Ready -> if (allowAaColorSource && (recognized.elidedNoOpsI32 != 0 ||
                 recognized.draws.size != 1 || recognized.draws.any {
-                    !it.requestsAntiAlias || it.blend != BlendPlan.SrcOver ||
-                        w6AaCoverageSource && it.strategy != PathFillStrategy.DirectTriangle
-                })) gap("W6 AA colour source admits one solid SrcOver direct-triangle child")
+                    !it.requestsAntiAlias || it.blend != BlendPlan.SrcOver
+                })) gap("W6 AA colour source admits one solid SrcOver child")
             else GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, recognized.draws, recognized.materialPlanTable, recognized.elidedNoOpsI32, recognized.requestedAa,recognized.sources))
             is Recognition.Gap -> gap(recognized.message)
             is Recognition.Invalid -> invalid(recognized.message)
@@ -305,9 +304,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
         return when (val prepared = prepare(scope, frameWorkUsageI64)) {
             is Prepared.Ready -> {
-                val targetScissor = intersect(prepared.geometry.copyConservativeScissorI32(), targetBounds)
-                    ?: return DrawResult.Empty(prepared.frameWorkUsageI64)
-                val scissor = scope.clip?.let { intersect(targetScissor, it) } ?: targetScissor
+                // A W6 coverage source is localized only after W6b has frozen its raw demand.
+                // In particular, an offscreen edge may blur into a terminal clip; pruning it here
+                // would erase that input before the filter has a chance to produce its halo.
+                val targetScissor = if (w6AaCoverageSource) prepared.geometry.copyConservativeScissorI32() else
+                    intersect(prepared.geometry.copyConservativeScissorI32(), targetBounds)
+                        ?: return DrawResult.Empty(prepared.frameWorkUsageI64)
+                val scissor = if (w6AaCoverageSource) targetScissor else
+                    scope.clip?.let { intersect(targetScissor, it) } ?: targetScissor
                 if (scissor.isEmpty) return DrawResult.Empty(prepared.frameWorkUsageI64)
                 if (prepared.geometry.fillRule == FillRule.WINDING &&
                     prepared.geometry.copyStencilEdgeFanF32OrNull() != null &&
@@ -571,9 +575,6 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             capabilities,
         ) ?: return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
         if (!buffersFit(base, capabilities)) return promoted("W4d.2 buffer capability is unavailable")
-        if (w6AaCoverageSource && selected.draws.any { it.strategy != PathFillStrategy.DirectTriangle }) {
-            return promoted("W6 AA coverage source admits only the direct-triangle phase until stencil coverage is issued")
-        }
         val topology = aaResolvedColorTopology(selected, base, provisional, w6AaCoverageSource)
         val symbolic = remapSourcePassesV4(topology.passes) { reference ->
             MaterialPlanRef(selected.draws.map(SealedDraw::material).indexOf(reference).also { require(it >= 0) })

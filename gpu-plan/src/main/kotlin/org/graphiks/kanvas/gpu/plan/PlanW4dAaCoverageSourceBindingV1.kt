@@ -37,19 +37,40 @@ public class PlanW4dAaCoverageSourceBindingV1 internal constructor(
     init {
         require(sourceCapabilityId == W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID)
         require(commandIndexI32 >= 0 && extent.width > 0 && extent.height > 0)
-        require(sourceIds.size == 1 && phases.size == 1)
-        val direct = phases.single()
-        require(direct.phase == PathRenderPhase.MultisampleDirectColor &&
-            direct.draw is GeneralPathDraw && direct.draw.commandIndex == commandIndexI32 &&
-            direct.draw.strategy == PathFillStrategy.DirectTriangle && direct.draw.coverage == CoveragePlan.StencilAA4 &&
-            direct.draw.sample == SamplePlan.Multisample4 && direct.draw.blend == BlendPlan.SrcOver &&
-            direct.depthStencil == null && direct.atomicGroup == null &&
-            direct.load == AttachmentLoadPlan.ClearTransparent && direct.store == AttachmentStorePlan.Store &&
-            direct.depthStencilAccess == null && direct.depthStencilLoadStore == null)
+        require(sourceIds.size == phases.size && sourceIds.distinct().size == sourceIds.size)
+        val terminal = when (phases.size) {
+            1 -> phases.single().also { direct ->
+                require(direct.phase == PathRenderPhase.MultisampleDirectColor &&
+                    direct.draw.strategy == PathFillStrategy.DirectTriangle && direct.depthStencil == null &&
+                    direct.atomicGroup == null && direct.load == AttachmentLoadPlan.ClearTransparent &&
+                    direct.store == AttachmentStorePlan.Store && direct.depthStencilAccess == null &&
+                    direct.depthStencilLoadStore == null)
+            }
+            2 -> phases[1].also { cover ->
+                val producer = phases[0]
+                require(producer.phase == PathRenderPhase.MultisampleStencilProducer &&
+                    cover.phase == PathRenderPhase.MultisampleStencilColorCover &&
+                    producer.draw.strategy == PathFillStrategy.StencilCover && cover.draw.strategy == PathFillStrategy.StencilCover &&
+                    producer.target == cover.target && producer.depthStencil != null && producer.depthStencil == cover.depthStencil &&
+                    producer.atomicGroup != null && producer.atomicGroup == cover.atomicGroup &&
+                    producer.load == AttachmentLoadPlan.ClearTransparent && producer.store == AttachmentStorePlan.Store &&
+                    producer.depthStencilAccess == PlanDepthStencilAccess.Write &&
+                    producer.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore && producer.resolveTarget == null &&
+                    cover.load == AttachmentLoadPlan.Load && cover.store == AttachmentStorePlan.Store &&
+                    cover.depthStencilAccess == PlanDepthStencilAccess.ReadWrite &&
+                    cover.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset)
+            }
+            else -> error("W6 AA coverage occurrence has one direct pass or one stencil pair")
+        }
+        require(phases.all { phase ->
+            phase.draw is GeneralPathDraw && phase.draw.commandIndex == commandIndexI32 &&
+                phase.draw.coverage == CoveragePlan.StencilAA4 && phase.draw.sample == SamplePlan.Multisample4 &&
+                phase.draw.blend == BlendPlan.SrcOver
+        })
         require(remapping.values.toSet() == rows.map { it.id }.toSet() && remapping.values.size == rows.size)
         require(rows.none { it.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging, PlanResourceRole.PathAaResolvedColor) })
-        val target = rows.single { it.id == direct.target }
-        val resolve = rows.single { it.id == direct.resolveTarget }
+        val target = rows.single { it.id == terminal.target }
+        val resolve = rows.single { it.id == terminal.resolveTarget }
         require(target.role == PlanResourceRole.MultisampleColorTarget && target.sampleCountI32 == 4 &&
             resolve.role == PlanResourceRole.CoverageSource && resolve.sampleCountI32 == 1 && target.id != resolve.id &&
             target.copyExtent() == extent && resolve.copyExtent() == extent && target.format == resolve.format &&
@@ -57,12 +78,15 @@ public class PlanW4dAaCoverageSourceBindingV1 internal constructor(
             target.format == PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) &&
             target.usages() == setOf(PlanResourceUsage.RenderAttachment) &&
             resolve.usages() == setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled))
-        require(rows.map { it.id }.toSet() == setOf(target.id, resolve.id, direct.drawDataResources.vertex,
-            direct.drawDataResources.index, direct.drawDataResources.uniform))
+        require(rows.map { it.id }.toSet() == buildSet {
+            add(target.id); add(resolve.id); add(terminal.drawDataResources.vertex)
+            add(terminal.drawDataResources.index); add(terminal.drawDataResources.uniform)
+            phases.first().depthStencil?.let(::add)
+        })
         require(rows.all { it.lifetime == PlanResourceLifetime.FrameLocal })
-        listOf(direct.drawDataResources.vertex to PlanResourceRole.VertexData,
-            direct.drawDataResources.index to PlanResourceRole.IndexData,
-            direct.drawDataResources.uniform to PlanResourceRole.UniformData).forEach { (id, role) ->
+        listOf(terminal.drawDataResources.vertex to PlanResourceRole.VertexData,
+            terminal.drawDataResources.index to PlanResourceRole.IndexData,
+            terminal.drawDataResources.uniform to PlanResourceRole.UniformData).forEach { (id, role) ->
             val row = rows.single { it.id == id }
             require(row.role == role && row.kind == PlanResourceKind.Buffer && row.format == null && row.copyExtent() == null)
         }
@@ -84,17 +108,23 @@ public class W4dAaCoverageSourceNativeSiteRecipeV1 internal constructor(
         text("topology", "TriangleList"); int("samples", 4); text("resolve", "CoverageSource")
         val extent = binding.copyExtentI32(); int("width", extent.width); int("height", extent.height)
         val origin = binding.copyOriginDeviceI32(); int("origin.x", origin.x); int("origin.y", origin.y)
-        val pass = binding.passes().single()
-        text("phase.source", binding.sourcePassIds().single().value); text("phase.owner", pass.id.value)
-        enum("phase.kind", pass.phase); enum("phase.load", pass.load); enum("phase.store", pass.store)
-        text("target", pass.target.value); text("resolve.target", requireNotNull(pass.resolveTarget).value)
-        text("vertex", pass.drawDataResources.vertex.value); text("index", pass.drawDataResources.index.value)
-        text("uniform", pass.drawDataResources.uniform.value); text("uniform.abi", "W4dUniform32"); int("uniform.bytes", 32)
-        blend("blend", pass.draw.blend); rect("scissor", pass.draw.copyScissorI32())
-        val geometry = (pass.draw.copyPathGeometry() as PathDrawGeometry.Fill).valueF32
-        requireNotNull(geometry.copyDirectTriangleF32OrNull()).let { triangle ->
-            triangle.copyVerticesF32().forEachIndexed { i, value -> float("vertex.$i", value) }
-            triangle.copyIndicesI32().forEachIndexed { i, value -> int("index.$i", value) }
+        binding.sourcePassIds().zip(binding.passes()).forEachIndexed { phaseIndex, (source, pass) ->
+            text("phase.$phaseIndex.source", source.value); text("phase.$phaseIndex.owner", pass.id.value)
+            enum("phase.$phaseIndex.kind", pass.phase); enum("phase.$phaseIndex.load", pass.load); enum("phase.$phaseIndex.store", pass.store)
+            text("phase.$phaseIndex.target", pass.target.value); pass.resolveTarget?.let { text("phase.$phaseIndex.resolve.target", it.value) }
+            pass.depthStencil?.let { text("phase.$phaseIndex.depth", it.value) }; pass.atomicGroup?.let { text("phase.$phaseIndex.group", it.value) }
+            text("phase.$phaseIndex.vertex", pass.drawDataResources.vertex.value); text("phase.$phaseIndex.index", pass.drawDataResources.index.value)
+            text("phase.$phaseIndex.uniform", pass.drawDataResources.uniform.value); text("phase.$phaseIndex.uniform.abi", "W4dUniform32"); int("phase.$phaseIndex.uniform.bytes", 32)
+            blend("phase.$phaseIndex.blend", pass.draw.blend); rect("phase.$phaseIndex.scissor", pass.draw.copyScissorI32())
+            val geometry = (pass.draw.copyPathGeometry() as PathDrawGeometry.Fill).valueF32
+            geometry.copyDirectTriangleF32OrNull()?.let { triangle ->
+                triangle.copyVerticesF32().forEachIndexed { i, value -> float("phase.$phaseIndex.vertex.$i", value) }
+                triangle.copyIndicesI32().forEachIndexed { i, value -> int("phase.$phaseIndex.index.$i", value) }
+            } ?: requireNotNull(geometry.copyStencilEdgeFanF32OrNull()).let { fan ->
+                fan.copyVerticesF32().forEachIndexed { i, value -> float("phase.$phaseIndex.fan.vertex.$i", value) }
+                fan.copyIndicesI32().forEachIndexed { i, value -> int("phase.$phaseIndex.fan.index.$i", value) }
+                fan.copyContourStartsI32().forEachIndexed { i, value -> int("phase.$phaseIndex.fan.contour.$i", value) }
+            }
         }
         binding.resourceRemapping().entries.sortedBy { it.key.value }.forEachIndexed { i, entry ->
             text("resource.$i.source", entry.key.value); text("resource.$i.final", entry.value.value)

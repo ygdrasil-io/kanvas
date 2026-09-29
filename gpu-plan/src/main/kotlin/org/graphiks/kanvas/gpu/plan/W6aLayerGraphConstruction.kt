@@ -147,7 +147,8 @@ internal class W6aLayerGraphConstruction(
     private val graphTextureMaterialSourcesByAggregate: Map<PictureStreamAggregateIdI32, MaterialSourceConstructionV4>
     private val w4eBindings = mutableListOf<PlanW4eGeometryBindingV1>()
     private val w4dAaBindings = mutableListOf<PlanW4dAaSourceBindingV1>()
-    private val aaCoveragePhases = linkedMapOf<Int, PlanPass.PathRenderPass>()
+    /** Hidden W4d phases emitted as command groups by one W6 FilterCoverage native pass. */
+    private val aaCoveragePhases = linkedMapOf<Int, List<PlanPass.PathRenderPass>>()
     private val aaCoverageOwners = linkedMapOf<Int, PlanPass.FilterCoverageSourcePass>()
     private val childSnapshots = mutableSetOf<PlanResourceId>()
     val nonUniformBytesI64: Long
@@ -2662,19 +2663,25 @@ internal class W6aLayerGraphConstruction(
                                 occurrence.source, rasterBinding = rasterBinding)
                             if (aaCoverage) {
                                 val lane = bindings.indexOf(binding)
-                                val original = binding.source.passes().single() as PlanPass.PathRenderPass
-                                val rebound = original.rebindW4eV6(passes.size, { laneResourceIds[lane].getValue(it) },
-                                    sources.coverage.mapping, sources.coverage.copyDeviceBoundsI32()) as PlanPass.PathRenderPass
                                 // The raw filter demand owns raster clipping, not the ordinary
                                 // root viewport scissor retained by the selected W4d source.
+                                // Preserve the W4d pair exactly: producer then cover remain two
+                                // command groups in one native coverage pass, with the resolve
+                                // only on the terminal cover.
                                 val rawExtent = sources.coverage.copyExtentI32()
-                                val coverageDraw = (rebound.draw as GeneralPathDraw).rebindGeometryV6(
-                                    rebound.draw.copyPathGeometry(), RectI32(0, 0, rawExtent.width, rawExtent.height))
-                                aaCoveragePhases[lane] = PlanPass.PathRenderPass(rebound.ordinal, rebound.target,
-                                    coverageDraw, rebound.phase, rebound.drawDataResources, null, null,
-                                    AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
-                                    depthStencilAccess = null, depthStencilLoadStore = null,
-                                    resolveTarget = sources.coverage.resourceId)
+                                aaCoveragePhases[lane] = binding.source.passes().mapIndexed { phaseIndex, original ->
+                                    val rebound = (original as PlanPass.PathRenderPass).rebindW4eV6(
+                                        passes.size + phaseIndex, { laneResourceIds[lane].getValue(it) },
+                                        sources.coverage.mapping, sources.coverage.copyDeviceBoundsI32(),
+                                    ) as PlanPass.PathRenderPass
+                                    val coverageDraw = (rebound.draw as GeneralPathDraw).rebindGeometryV6(
+                                        rebound.draw.copyPathGeometry(), RectI32(0, 0, rawExtent.width, rawExtent.height))
+                                    PlanPass.PathRenderPass(rebound.ordinal, rebound.target, coverageDraw, rebound.phase,
+                                        rebound.drawDataResources, rebound.atomicGroup, rebound.depthStencil,
+                                        if (phaseIndex == 0) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
+                                        rebound.store, rebound.depthStencilAccess, rebound.depthStencilLoadStore,
+                                        if (phaseIndex == binding.source.passes().lastIndex) sources.coverage.resourceId else null)
+                                }
                                 aaCoverageOwners[lane] = coveragePass
                             }
                             passes += coveragePass
@@ -3097,12 +3104,12 @@ internal class W6aLayerGraphConstruction(
                 }
             }
         })
-        aaCoveragePhases.forEach { (laneI32, phase) ->
+        aaCoveragePhases.forEach { (laneI32, phases) ->
             val source = directFilterSourceByCommand.getValue(bindings[laneI32].firstCommandIndexI32).coverage
             val remapping = laneResourceIds[laneI32]
             val binding = PlanW4dAaCoverageSourceBindingV1(aaCoverageOwners.getValue(laneI32).id,
-                lanes[laneI32].capabilityId, phase.draw.commandIndex,
-                lanes[laneI32].passes().map { it.id }, listOf(phase), remapping,
+                lanes[laneI32].capabilityId, phases.first().draw.commandIndex,
+                lanes[laneI32].passes().map { it.id }, phases, remapping,
                 resources.filter { it.id in remapping.values }, source.copyExtentI32(),
                 source.mapping.copyLayerOriginDeviceI32())
             val owner = aaCoverageOwners.getValue(laneI32)
