@@ -67,9 +67,8 @@ class W7AaMaskBlurSurfacePixelTest {
         }
         val translated = renderRepeated(translatedSurface)
         assertNative(translated)
-        assertPixel(translated.pixels, 96, 27, 26, 0, 0, 0, 255)
-        assertAlphaIn(translated.pixels, 96, 18, 34, 1..254)
-        assertPixel(translated.pixels, 96, 12, 34, 0, 0, 0, 0)
+        assertTranslatedPixels(base.pixels, translated.pixels)
+        assertTranslationExcludedRegions(base.pixels, translated.pixels)
     }
 
     @Test
@@ -111,24 +110,25 @@ class W7AaMaskBlurSurfacePixelTest {
         val bounds = RectF32.ofLTRB(0f, 0f, 96f, 96f)
         val base = Paint(ColorARGB.Black, maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1.5f), antiAlias = true)
         val fixtures = listOf(
-            { base.copy(imageFilter = ImageFilter.Blur(1f, 1f)) },
-            { base.copy(blendMode = BlendMode.PLUS) },
-            { base.copy(style = PaintStyle.STROKE) },
-            { Paint(ColorARGB.Black, maskFilter = MaskFilter.Blur(BlurStyle.OUTER, 1.5f), antiAlias = true) },
+            "w6a.layer.unsupported_child" to { base.copy(imageFilter = ImageFilter.Blur(1f, 1f)) },
+            "w6a.layer.unsupported_child" to { base.copy(blendMode = BlendMode.PLUS) },
+            "w6a.layer.unsupported_child" to { base.copy(style = PaintStyle.STROKE) },
+            "w6a.layer.unsupported_child" to { Paint(ColorARGB.Black, maskFilter = MaskFilter.Blur(BlurStyle.OUTER, 1.5f), antiAlias = true) },
         )
-        fixtures.forEach { paint ->
+        fixtures.forEach { (expectedCode, paint) ->
             val surface = Surface(96, 96).also { target -> target.canvas { drawPath(triangle(), paint()) } }
-            assertTerminalAndRecovers(surface, bounds)
+            assertTerminalAndRecovers(surface, bounds, expectedCode)
         }
         val stencil = Path().apply {
             moveTo(16f, 16f); lineTo(80f, 16f); lineTo(80f, 80f); lineTo(48f, 48f); lineTo(16f, 80f); close()
         }
-        assertTerminalAndRecovers(Surface(96, 96).also { target -> target.canvas { drawPath(stencil, base) } }, bounds)
+        assertTerminalAndRecovers(Surface(96, 96).also { target -> target.canvas { drawPath(stencil, base) } }, bounds,
+            "w6a.layer.unsupported_child")
         assertTerminalAndRecovers(Surface(96, 96).also { target -> target.canvas {
             saveLayer()
             drawPath(triangle(), base)
             restore()
-        } }, bounds)
+        } }, bounds, "w6a.layer.unsupported_spatial_filter")
     }
 
     private fun triangleSurface(phase: Float, paint: Paint): Surface = Surface(96, 96).also { surface ->
@@ -143,18 +143,39 @@ class W7AaMaskBlurSurfacePixelTest {
     }
 
     private fun diagonalBandAlphas(pixels: UByteArray): List<Int> = buildList {
-        for (y in 20..76) for (x in 20..76) if (x + y in 93..99) add(pixels[(y * 96 + x) * 4 + 3].toInt())
+        for (y in 20..76) for (x in 20..76) if (x + y in 93..99) {
+            assertContentEquals(ubyteArrayOf(0u, 0u, 0u), pixels.copyOfRange((y * 96 + x) * 4, (y * 96 + x) * 4 + 3))
+            add(pixels[(y * 96 + x) * 4 + 3].toInt())
+        }
     }
 
-    private fun assertTerminalAndRecovers(surface: Surface, bounds: RectF32) {
+    private fun assertTerminalAndRecovers(surface: Surface, bounds: RectF32, expectedCode: String) {
         val sentinel = UByteArray(96 * 96 * 4) { 0x5au }
         val before = sentinel.copyOf()
         val failure = assertFailsWith<IllegalStateException> { surface.readPixels(bounds, sentinel) }
-        assertTrue(failure.message?.startsWith("w6a.layer.unsupported_") == true, failure.message)
+        assertTrue(failure.message?.substringBefore(':') == expectedCode, failure.message)
         assertContentEquals(before, sentinel)
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.Black, antiAlias = false)) }
-        assertNative(surface.render())
+        surface.render().also { result ->
+            assertNative(result)
+            assertPixel(result.pixels, 96, 48, 48, 0, 0, 0, 255)
+        }
+    }
+
+    /** The common domain is frozen before rendering: base [0,92]×[0,93] maps by (+3,+2). */
+    private fun assertTranslatedPixels(base: UByteArray, translated: UByteArray) {
+        for (y in 0..93) for (x in 0..92) {
+            assertContentEquals(base.copyOfRange((y * 96 + x) * 4, (y * 96 + x + 1) * 4),
+                translated.copyOfRange(((y + 2) * 96 + x + 3) * 4, ((y + 2) * 96 + x + 4) * 4), "($x,$y)")
+        }
+    }
+
+    private fun assertTranslationExcludedRegions(base: UByteArray, translated: UByteArray) {
+        for (y in 0 until 96) for (x in 93 until 96) assertPixel(base, 96, x, y, 0, 0, 0, 0)
+        for (y in 94 until 96) for (x in 0..92) assertPixel(base, 96, x, y, 0, 0, 0, 0)
+        for (y in 0 until 96) for (x in 0..2) assertPixel(translated, 96, x, y, 0, 0, 0, 0)
+        for (y in 0..1) for (x in 3 until 96) assertPixel(translated, 96, x, y, 0, 0, 0, 0)
     }
 
     private fun assertNative(result: RenderResult) {
