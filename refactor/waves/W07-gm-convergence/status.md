@@ -3,6 +3,27 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot pointillés — 29 septembre 2026
+
+Renderer `5f971f750`, PR draft [#2413](https://github.com/ygdrasil-io/kanvas/pull/2413)
+empilée sur #2412 : l'égalité des
+pointillés immuables est réparée dans `math`, sans desserrer les seals.
+Le [snapshot final](dash-5f971f750.json) conserve **164/443 rendus**, tous
+identiques pixel à pixel à #2412, **142 comparaisons** et **26 cas à ≥99 %**.
+Les 631 identités, scopes, références, seuils et trois timeouts sont inchangés.
+
+L'amélioration de précision AA a été **retirée après avis Astra** : malgré
+le gain sur `circle_sizes`, elle faisait perdre `parsedpaths` et
+`perspective_clip`. Le [plan et le diagnostic](aa-dash-repair-plan.md)
+préservent l'expérience ; **le défaut AA reste ouvert**.
+
+**77 tests publics ciblés et 476 tests math geometry passent** sur le code
+final, Gradle 0. La tentative de suite Kanvas complète est inachevée : 39 échecs observés,
+puis arrêt d'un calcul long dans la preuve CPU d'un test de gradient W5d.
+Les [limites de validation](pilotage.md#validation-du-lot-et-limite-de-la-suite-complète)
+sont explicites. W7 et les gates W6 ne sont pas clos ; aucune merge
+readiness n'est revendiquée.
+
 ## Lot standalone rect/path — 29 septembre 2026
 
 PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
