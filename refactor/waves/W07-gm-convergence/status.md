@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot image/opacité — 29 septembre 2026
 
-Renderer `bef3af6fa`, branche `codex/w7-image-opacity-authority`, empilée sur
+Renderer `bef3af6fa`, PR draft [#2415](https://github.com/ygdrasil-io/kanvas/pull/2415)
+(`codex/w7-image-opacity-authority`), empilée sur
 la PR draft [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414).
 `OpacityV1` reconnaît précisément l'enfant `ImageMaterialProgramV3` comme
 une chaîne V4 ; le graph numérique et la preuve existants redeviennent
@@ -23,7 +24,9 @@ isolée reste inachevée à 240 s : **728 réussites, 50 échecs, un interrompu*
 exactement les 779 mêmes identités et résultats que la base. Les exécutions
 préliminaires ayant brièvement chevauché sont écartées au profit de ces
 rejeux sérialisés. Voir le [bilan](pilotage.md#lot-imageopacité--29-septembre-2026).
-Revue de tâche Sol : aucun défaut bloquant. Prochain lot : preuve Sweep AA ;
+Revues Sol de tâche et de branche : aucun défaut bloquant ; publication draft
+approuvée, couverture opacité × bords AA fractionnaires à compléter.
+Prochain lot : preuve Sweep AA ;
 W7 et les gates W6 restent ouverts, sans merge readiness.
 
 ## Lot preuve CPU — 29 septembre 2026

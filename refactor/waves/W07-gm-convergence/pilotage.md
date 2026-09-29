@@ -541,7 +541,8 @@ aucun diff de source ou de test ne reste. Les contrôles restent stricts.
 ## Lot image/opacité — 29 septembre 2026
 
 Le renderer `bef3af6faabcbbd205fe711e54ba38de1c4e4ac1`, sur
-`codex/w7-image-opacity-authority` empilée sur #2414, corrige la cause localisée
+`codex/w7-image-opacity-authority` ([Draft #2415](https://github.com/ygdrasil-io/kanvas/pull/2415)
+empilée sur #2414), corrige la cause localisée
 ci-dessus. `OpacityV1` propage désormais V4 lorsqu'il enveloppe précisément
 `ImageMaterialProgramV3`, comme il le faisait déjà pour un enfant V4. Le graph
 numérique V4 existant est donc sélectionné ; l'opacité V1 non-image, les bindings,
@@ -554,7 +555,8 @@ d'un snapshot public et un frame mêlant image rect, lattice opaque et lattice
 avec alpha. Les variantes AA/hard-edge, `SRC_OVER`/`SRC_ATOP`, cellules
 default/fixed/transparent et rendu répété vérifient les pixels au moyen de
 l'oracle image existant, inchangé. Aucun test d'infrastructure n'est ajouté.
-La revue Sol ne trouve pas de défaut bloquant ; elle relève une amélioration
+Les revues Sol de tâche et de branche ne trouvent pas de défaut bloquant ;
+la publication en draft est approuvée. Elles relèvent une amélioration
 de couverture non bloquante : ces nouveaux bords sont entiers. Le témoin
 existant `latticeAdjacentCellsKeepFullInteriorCoverage` couvre séparément
 les bords fractionnaires, pas leur combinaison avec cette opacité.
