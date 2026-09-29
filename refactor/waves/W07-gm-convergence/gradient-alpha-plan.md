@@ -15,13 +15,13 @@ schedule F32, les limites et les preuves attendues. Base c80e5b56d.
 
 ## Global Constraints
 
-- Mode par défaut, sources de composition, images et leurs conventions, filtres, snapshots, formats de sortie et domaine linéaire restent inchangés.
+- Sémantique du mode par défaut, sources de composition, images et leurs conventions, filtres, snapshots, formats de sortie et domaine linéaire restent inchangés ; le remplacement natif SRC direct borné par la spec utilise explicitement blend=null.
 - Aucun GM/adaptateur, référence PNG, seuil, score historique, exclusion, plafond de budget, enveloppe numérique ou contrôle d'autorité modifié.
 - Fonts, codecs/décodage externe et `jpg-color-cube` restent hors périmètre.
 - Pas de tests d'infrastructure : Surface publique, pixels natifs, Picture publique, readPixels/sentinel/refus/récupération et deuxième rendu.
 - Géométrie dans math ; nomenclature I/F32/64 pour ses valeurs et types.
 - Nouveau mode admis pour LinearGradient, espace effectif SRGB, tile CLAMP ; les autres combinaisons refusent sans downgrade.
-- Un seul runtime Gradle/GPU à la fois. Terra implémente ; Sol révise. Pas de merge ni clôture W7.
+- Un seul runtime Gradle/GPU à la fois. Terra implémente le socle, Luna complète les intégrations ; Sol révise. Pas de merge ni clôture W7.
 
 ## Review Focus
 
@@ -54,6 +54,10 @@ nécessaires du nouveau champ, sans refonte générale des fichiers existants.
   si la propagation du programme ou le refus legacy l'exige ; pas de formule
   premul WGSL indépendante du graphe.
 - Gardes legacy éventuelles : `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaterialMapper.kt`.
+- Prérequis SRC : `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitivePipelineDescriptor.kt`,
+  `GPUW5aSourceStageNativeV2.kt` dans le même dossier,
+  `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUW5aGeometryHostTemplateV1.kt`
+  et déclaration de `GPUW5aHostColorTargetV1`/consommateurs requis par sa représentation fidèle.
 - Create public test : `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W7GradientAlphaSurfacePixelTest.kt`.
 - Create historical public fixture : `kanvas/src/test/resources/picture/format-15-straight-alpha-gradient-c80e5b56d.base64`.
 - Reuse/extend independent oracle : `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5fColorCpuOracle.kt` ;
@@ -74,16 +78,28 @@ nécessaires du nouveau champ, sans refonte générale des fichiers existants.
 - Refusal prefix for unsupported alpha combinations:
   `unsupported.material.gradient.alpha-mode`.
 
+- [ ] **Step 0: Rendre le remplacement SRC natif cohérent avec l'oracle.**
+  Suivre exactement le prérequis borné de la spec, relu par Astra : direct
+  PremulSrc/coverage None/single-sample, sans AA/masque/clip analytique.
+  Représenter blend=null dans template, identité/cache et descripteur ;
+  aucune relaxation des contrôles d'authenticité, aucun changement AA/dst-read.
+  Contrôles publics : SRC existant et remplacement semi-transparent sur
+  destination préremplie, oracle SRC et RGB/alpha, Render/Readback/deux rendus.
+  Exécuter les contrôles avant activation de la formule alpha ; documenter
+  si le Mac passe déjà avant correction, sans inventer de RED natif.
+
 - [ ] **Step 1: Écrire les témoins publics avant les changements de sémantique.**
   Noms/contrats :
-  `premultipliedTransparentEndpointPreservesWhite` : t=.5, blanc255→noir0,
-  blanc destination, premul255 et straight205 avec enveloppe existante ;
+  `premultipliedTransparentEndpointPreservesSourceColor` : t=.5, blanc255→noir0,
+  SRC sans fond, premul RGB187–188 et straight91–92, alpha127–128 ;
   `premultipliedTwoNonzeroAlphasPreserveWeightedColor` : rouge128→bleu64,
-  idéal (228,207,212,255), disjoint de straight (218,207,218,255).
+  SRC sans fond, premul R108–109/G0–1/B51–52, straight R/B80–81, alpha96.
   `zeroAndMinimalAlphaEndpointsStayFinite` : zéro aux deux côtés et chaque
   côté, alpha1/255, alpha128/64 ; pixels conformes sans NaN/refus inattendu.
   Construire les résultats par équations indépendantes dans l'oracle,
-  `requireBounded` sur chaque attente ; Render/Readback et deux rendus.
+  `requireBounded` sur chaque attente des deux modes et vérifier disjonction
+  d'au moins un canal RGB ; Render/Readback et deux rendus. Utiliser les
+  ensembles de codes de l'oracle, pas les octets idéaux stricts.
   Introduire la déclaration API minimale si nécessaire pour compiler les
   tests : une erreur de compilation seule n'est pas le RED comportemental.
   Avant de modifier l'archiveur, capturer via Picture.toByteArray la fixture

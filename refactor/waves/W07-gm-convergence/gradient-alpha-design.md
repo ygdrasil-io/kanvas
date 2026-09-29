@@ -20,7 +20,7 @@ pas le GM et ne prétend pas résoudre l'écart 191/205 de composition.
 - Utiliser les routes géométriques/wrappers déjà admis par le pipeline V4 ;
   ne pas ouvrir une nouvelle route de rendu pour contourner un refus.
   Tout chemin incapable de conserver la politique refuse, jamais de downgrade.
-- Mode par défaut, sources de composition, images et leurs conventions,
+- Sémantique du mode par défaut, sources de composition, images et leurs conventions,
   filtres, snapshots, formats de sortie et domaine linéaire restent inchangés.
 - Aucun GM/adaptateur, référence PNG, seuil, score historique, exclusion,
   plafond de budget, enveloppe numérique ou contrôle d'autorité modifié.
@@ -102,13 +102,46 @@ avec `unsupported.material.gradient.alpha-mode`. Les refus géométriques,
 budgétaires et numériques conservent leurs codes et leur caractère terminal.
 Ni succès CPU simulé, ni fallback legacy perdant le mode.
 
+## Prérequis natif borné : remplacement SRC direct
+
+La fermeture CPU a montré que les témoins SrcOver sur blanc dépassent la
+borne existante de deux codes adjacents, du fait de la composition et des
+conversions fixed-function. Ne pas élargir l'enveloppe pour ces témoins.
+L'oracle SRC sans couverture omet cette étape, mais le descripteur natif
+actuel émet encore One/Zero. La précision de format cible reste permise par
+[D3D11.3 §17.5](https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm) ;
+ne pas supposer One/Zero équivalent numériquement à blending désactivé.
+
+Après diagnostic ciblé Astra, le lot inclut un remplacement explicite
+`blend=null` uniquement pour le chemin direct PremulSrc, coverage None,
+single-sample, sans AA, masque ni clip analytique. Le domaine de composition
+et l'équation SRC ne changent pas ; seule sa réalisation native devient
+un remplacement sans calcul de blend. Pas de règle générique sur One/Zero,
+ni de modification des routes AA/destination-read.
+
+`GPUW5aHostColorTargetV1` et le template scellé doivent représenter fidèlement
+l'absence de blending (pas un One/Zero fictif), jusqu'au cache et au
+descripteur natif. `hostTargetV1` impose actuellement requireNotNull(blend) :
+traiter ce couplage explicitement, sans retirer les contrôles d'authenticité
+dans `composeW5aHostSourceV1`. Contrôler cette route par un SRC public existant
+et un remplacement semi-transparent sur destination préremplie, RGB/alpha,
+deux rendus. Ce prérequis est justifié par inspection et spécification ;
+aucun RED natif antérieur n'est inventé si les pixels du Mac sont déjà conformes.
+
 ## Preuves publiques attendues
 
-- Blanc opaque → noir transparent, point t=0,5 sur blanc : STRAIGHT voisin
-  de 205, PREMULTIPLIED 255 ; deux rendus et Render/Readback réels.
-- Rouge alpha128 → bleu alpha64, t=0,5 sur blanc : idéal premul
-  (228,207,212), straight (218,207,218). Enveloppe indépendante existante,
-  pas tolérance choisie après observation ; alpha final 255.
+- Témoins causaux SRC source seule, couverture complète, AA désactivé,
+  sans fond ; oracle destination Transparent/finalBlend SRC dans les deux modes.
+  Blanc opaque → noir transparent, t=.5 : fermeture CPU STRAIGHT RGB91–92,
+  PREMULTIPLIED RGB187–188, alpha127–128 dans les deux modes.
+- Rouge alpha128 → bleu alpha64, t=.5 : fermeture CPU straight R/B80–81,
+  premul R108–109, G0–1, B51–52, alpha96. RequireBounded avant le GPU,
+  ensembles RGB disjoints puis pixels admis exactement par ces ensembles,
+  Render/Readback et deux rendus. Pas d'égalité à un octet idéal unique.
+  Les couples alternatifs192/96 et254/127 ont été examinés uniquement sur
+  CPU et ferment aussi ; le premier128/64 suffit, aucun choix après mesure GPU.
+  Les repères analytiques sur blanc205/255 et (228,207,212)/(218,207,218)
+  restent utiles au diagnostic, mais ne sont pas ces témoins numériques bornés.
 - Alphas nuls, nul à gauche/droite, alpha minimal 1, stops opaques, un stop,
   égalités/hard stops, extrémités clamp et dégénérescence gardent le contrat.
   Pour un axe linéaire dégénéré CLAMP, le graphe existant fixe t=1 : la
