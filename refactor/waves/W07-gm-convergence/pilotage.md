@@ -15,7 +15,8 @@ Lot preuve Sweep AA : renderer `49d8224d3`, PR draft
 [#2416](https://github.com/ygdrasil-io/kanvas/pull/2416), branche
 `codex/w7-sweep-aa-proof`, empilée sur #2415.
 Lot courant : adaptateur Rect+CTM, code `d45904e0b`, branche
-`codex/w7-layer-source-routing`, empilée sur #2416 ; publication draft en préparation.
+`codex/w7-layer-source-routing`, PR draft
+[#2417](https://github.com/ygdrasil-io/kanvas/pull/2417), empilée sur #2416.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -910,8 +911,12 @@ La review de tâche Sol approuve conformité et qualité après correction du
 rapport : sélection incomplète explicitée et 43 échecs listés par méthode.
 Le nom interne « replay » de deux résultats désigne le second rendu Surface,
 pas une preuve Picture ; cette remarque mineure reste ouverte, sans modifier
-les assertions. Les warnings restent visibles. La review de branche est la
-dernière étape avant publication draft ; aucune clôture W7/merge n'est proposée.
+les assertions. Les warnings restent visibles. La review Sol de toute la branche
+`5c89431a1..728868af4` approuve la publication draft (Critical 0 / Important 0 /
+Minor 1 de nommage). Elle vérifie indépendamment les 631 identités, les 26 gains,
+les quatre anciens rendus modifiés et les mêmes 43 échecs. Les contrats AA racine,
+AA filtré/PLUS, transforms générales et Picture/clip restent hors correction,
+explicitement ouverts ; aucune clôture W7/merge n'est proposée.
 
 ## Décisions de pilotage
 

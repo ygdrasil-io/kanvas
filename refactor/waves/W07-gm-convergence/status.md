@@ -6,7 +6,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 ## Lot adaptateur Rect+CTM — 29 septembre 2026
 
 Code `d45904e0b`, branche `codex/w7-layer-source-routing`, empilée sur
-[#2416](https://github.com/ygdrasil-io/kanvas/pull/2416), publication draft en préparation.
+[#2416](https://github.com/ygdrasil-io/kanvas/pull/2416), PR draft
+[#2417](https://github.com/ygdrasil-io/kanvas/pull/2417).
 `GmCanvas.drawRect` conserve le rectangle local et la CTM pour scale/translate,
 reflets inclus. Le renderer savait déjà les traiter ; l'adaptateur les
 transformait prématurément en Path. Ce lot ne crée aucune capacité GPU.
@@ -29,6 +30,9 @@ seul le blur vérifie aussi Picture. Le test historique de clip tourné échoue.
 La tentative générale reste rouge/incomplète à 240 s : 685 PASS, les mêmes
 43 échecs que #2416 et un interrompu. Les réserves de validation et la mesure
 appariée figurent dans le [bilan](pilotage.md#diagnostic-des-sources-de-layers--29-septembre-2026).
+Reviews Sol de tâche et de branche approuvées pour cette publication draft ;
+aucun Critical/Important, un Minor de nommage de second rendu Surface reste suivi.
+Le verdict ne permet ni merge ni clôture W7.
 
 Les 43 refus génériques de segment layer restants ne sont pas une cause unique.
 La prochaine priorité est le contrat de source Path AA racine puis sa couverture
