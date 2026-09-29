@@ -3,6 +3,41 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot preuve CPU — 29 septembre 2026
+
+Renderer `b256b3d68`, PR draft [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414)
+empilée sur #2413 :
+le cache de preuve utilise les dépendances conservatrices sans élargir
+les domaines numériques ou budgets. Le [snapshot](proof-b256b3d68.json)
+mesure **165/443 rendus** (+1), **143 comparaisons**, **26 cas à ≥99 %**
+et **un timeout** au lieu de trois. Les 164 anciens rendus sont identiques
+pixel à pixel. `ninepatch-stretch` rend en 26,168 s (78,15 %, marge faible) ;
+`lattice2` atteint un refus d'autorité explicite ; `vertices` reste timeout.
+Le périmètre, les références et les seuils sont inchangés.
+
+**20/20 tests publics ciblés et 476/476 tests math passent.** Le test W5d
+auparavant bloqué termine en 1,756 s mais conserve un refus numérique AA.
+La tentative complète, bornée à 240 s, reste inachevée : **728 réussites,
+50 échecs, un test interrompu** ; aucun ancien test vert observé ne devient
+rouge. Le [bilan et ses limites](pilotage.md#lot-cache-de-preuve-cpu--29-septembre-2026)
+et le [plan](proof-evaluation-plan.md) distinguent performance, admission et
+fidélité. W7 reste ouvert, sans merge readiness.
+
+La [validation complémentaire par dix lots bornés](pilotage.md#validation-complémentaire-par-lots-bornés)
+atteint **411/412 réussites W6/W7 Surface**, **598/598 cas de géométrie W5h**
+et **92/92 cas W5f image filter**. La sélection générale GPU/API/blend observe
+**1 990 réussites et 1 254 échecs** : leur antériorité n'est pas établie
+individuellement. Six classes W5 restent partielles ou non atteintes ; les
+timeouts et sorties natives 133 restent séparés des assertions. Ces lots
+ne constituent ni une suite complète ni un nouveau gain de similarité.
+
+Le premier refus de `lattice2` est localisé : un wrapper image/opacité déclare
+un programme V1 avec une autorité V4. La prochaine correction doit produire
+une chaîne V4 authentique, sans desserrer le witness. Le diagnostic Sweep AA,
+relu avec Astra, propose ensuite de préserver localement les classes F32
+perdues par le hull des sélections. **Ces deux corrections restent à implémenter** ;
+seuls les diagnostics et la validation sont ajoutés à ce checkpoint.
+
 ## Lot pointillés — 29 septembre 2026
 
 Renderer `5f971f750`, PR draft [#2413](https://github.com/ygdrasil-io/kanvas/pull/2413)
