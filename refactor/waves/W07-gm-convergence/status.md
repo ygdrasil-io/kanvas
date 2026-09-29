@@ -3,6 +3,39 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot adaptateur Rect+CTM — 29 septembre 2026
+
+Code `d45904e0b`, branche `codex/w7-layer-source-routing`, empilée sur
+[#2416](https://github.com/ygdrasil-io/kanvas/pull/2416), publication draft en préparation.
+`GmCanvas.drawRect` conserve le rectangle local et la CTM pour scale/translate,
+reflets inclus. Le renderer savait déjà les traiter ; l'adaptateur les
+transformait prématurément en Path. Ce lot ne crée aucune capacité GPU.
+
+Le [snapshot complet](rect-adapter-d45904e0b.json) mesure **192/443 rendus
+(+26), 170 comparaisons et 36 cas à ≥99 % de pixels ±2/canal (+10)**.
+Les 166 anciens rendus restent disponibles : 162 sont pixel-identiques,
+trois scores progressent et `perlinnoise_localmatrix` change de pixels à score
+constant (62,5 %). Aucun ancien score ne baisse. `crbug_899512` rend à 91,64 %.
+Fixtures GM, identités, références, seuils et exclusions restent identiques,
+**pas la capture IR**. `vertices` reste timeout à 30 s ; 29 refus changent
+seulement de diagnostic, sans être comptés comme gains.
+
+Les **3/3 nouveaux tests publics passent**, avec RED causal préalable et
+Gradle 0 ; les 24 contrôles W6b/W7 AA passent aussi. Le replay Picture avec
+clip reste défectueux. Le shard W5f complémentaire a 44/44 assertions PASS,
+mais termine Gradle 1 / native 133 (`UNKNOWN`), pas un succès du run. Deux
+témoins vérifient le second rendu Surface,
+seul le blur vérifie aussi Picture. Le test historique de clip tourné échoue.
+La tentative générale reste rouge/incomplète à 240 s : 685 PASS, les mêmes
+43 échecs que #2416 et un interrompu. Les réserves de validation et la mesure
+appariée figurent dans le [bilan](pilotage.md#diagnostic-des-sources-de-layers--29-septembre-2026).
+
+Les 43 refus génériques de segment layer restants ne sont pas une cause unique.
+La prochaine priorité est le contrat de source Path AA racine puis sa couverture
+filtrée, avec `PlusMergesAA`/`blur2rects` comme diagnostics, sans relâcher les
+gardes actuelles. La fidélité du port, les transformations générales et les
+clips Picture restent des dettes distinctes. W7 demeure ouvert.
+
 ## Lot preuve Sweep AA — 29 septembre 2026
 
 Renderer `49d8224d3`, PR draft [#2416](https://github.com/ygdrasil-io/kanvas/pull/2416),
