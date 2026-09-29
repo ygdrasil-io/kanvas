@@ -3,6 +3,36 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot preuve Sweep AA — 29 septembre 2026
+
+Renderer `49d8224d3`, branche `codex/w7-sweep-aa-proof`, empilée sur la PR draft
+[#2415](https://github.com/ygdrasil-io/kanvas/pull/2415). La preuve conserve les
+classes zéro/subnormal/normal perdues par le hull des sélections Sweep, puis
+traite les régions normales signées d'`Atan2` avec l'enveloppe inchangée.
+Les deux bras eager restent validés. Un défaut de label d'allocation des stops
+RRect, révélé ensuite et diagnostiqué par Astra, est corrigé au producteur ;
+aucun montant mémoire, lifetime, shader ou contrôle d'autorité n'est relâché.
+
+**9/9 tests publics ciblés passent, Gradle 0.** La tentative générale à 240 s
+atteint 730 cas : 686 réussites, 43 échecs, un interrompu. Six anciens échecs
+passent, aucun nouvel échec d'assertion dans cette intersection ; 49 cas de
+la tentative de base ne sont pas atteints et un ancien succès est interrompu.
+La suite reste donc rouge et incomplète, sans conclusion de performance.
+
+La review de tâche Sol approuve le code ; la sensibilité de `PATH_STROKE` est
+confirmée par mutation causale postérieure, mais son RED avant implémentation
+n'est pas attesté. Cette réserve TDD reste explicitement ouverte.
+
+Le [snapshot complet](sweep-aa-49d8224d3.json) conserve **166/443 rendus**, 144
+comparaisons et 26 cas à ≥99 % de pixels ±2/canal. **Les 166 empreintes RGBA,
+les issues et diagnostics sont inchangés** : aucun gain de GM ou de fidélité
+mesuré. `vertices` reste timeout à 30 s. Voir le [bilan](pilotage.md#lot-preuve-sweep-aa--29-septembre-2026).
+
+La combinaison RRect × vingt wrappers n'est pas établie. Les défauts Radial,
+Conical, AA géométrique et opacité × bords fractionnaires restent ouverts.
+Prochaine priorité de diagnostic : le groupe `w6a.layer.unsupported_child`
+(51 premiers refus), sans promettre autant de rendus gagnés. W7 reste ouvert.
+
 ## Lot image/opacité — 29 septembre 2026
 
 Renderer `bef3af6fa`, PR draft [#2415](https://github.com/ygdrasil-io/kanvas/pull/2415)

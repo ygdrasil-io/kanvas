@@ -7,8 +7,12 @@ empilée sur #2411, routage standalone rect/path, renderer `718445e6e`.
 Lot précédent : pointillés réparés, expérience AA retirée après mesure,
 renderer `5f971f750`, PR draft [#2413](https://github.com/ygdrasil-io/kanvas/pull/2413)
 empilée sur #2412.
-Lot courant : cache de preuve CPU, renderer `b256b3d68`, PR draft
+Lot cache de preuve CPU : renderer `b256b3d68`, PR draft
 [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414), empilée sur #2413.
+Lot image/opacité : renderer `bef3af6fa`, PR draft
+[#2415](https://github.com/ygdrasil-io/kanvas/pull/2415), empilée sur #2414.
+Lot courant : preuve Sweep AA, renderer `49d8224d3`, branche
+`codex/w7-sweep-aa-proof`, empilée sur #2415.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -620,6 +624,109 @@ Le lot résout le refus d'autorité de `lattice2`, pas son écart de fidélité.
 La prochaine correction est la preuve Sweep AA décrite plus haut ; Radial,
 Conical, les défauts géométriques AA et les autres gates restent distincts.
 La publication demeure draft, sans clôture W7 ni autorisation de merge.
+
+## Lot preuve Sweep AA — 29 septembre 2026
+
+Renderer `49d8224d3158002d2e52d73bc4d90976d161c19a`. L'analyse locale des
+classes F32 conserve zéro (signé inclus), subnormal non nul et normal en
+complément des intervalles conservateurs. Elle reconnaît les prédicats exacts
+sur `abs(v)` et zéro/`MIN_NORMAL`, avec la même identité scalaire et le contexte
+d'évaluation. Elle ne déduit pas « normal » d'un simple `v != 0`. Les deux bras
+de `EagerSelect` restent validés, la réassociation et les preuves scellées restent
+inchangées, et le cache ne mélange pas les environnements.
+
+Pour deux opérandes certifiés normaux, `Atan2` découpe les bornes originales en
+au plus deux signes chacun, soit quatre rectangles. Chaque région conserve
+l'enveloppe **4096 ULP**, puis les résultats sont réunis. La limite de magnitude
+de x et le domaine normal fini restent ceux de la
+[spécification WGSL épinglée](https://www.w3.org/TR/2026/CRD-WGSL-20260831/#accuracy-of-concrete-expressions).
+Ni shader, ni géométrie, ni budget, ni tolérance ne sont modifiés.
+
+Le témoin public initial RRect AA non uniforme, sur `Surface(17,1)`, échoue
+d'abord sur `composed.numeric-domain-unbounded`. La nouvelle preuve expose
+ensuite une incohérence distincte du label de l'allocation `GradientStopData` :
+le lowerer RRect déclarait un label générique alors que le validateur exigeait
+le label composé déjà utilisé par Rect. Astra a confirmé la cause par lecture
+du stack et du producteur/consommateur. Le correctif reprend ce seul helper et
+son fallback dans le lowerer RRect ; octets, extent, lifetime, identité du slab,
+witness et comparaison exacte sont conservés. `NoiseTableData` reste hors lot.
+
+### Tests publics et limites
+
+La sélection finale initiale comprend **9/9 réussites, Gradle 0** : huit tests
+`W7ProofContextSurfacePixelTest` et le contrôle image/opacité. Le témoin RRect
+initial conserve ses huit pixels bleus puis neuf rouges, Render/Readback et
+replay. Le `PATH_STROKE` non uniforme utilise la route hard-edge déjà admise ;
+sa première variante AA refusée n'a pas servi à élargir les capacités.
+Une fixture distincte vérifie quadrants, axes et coupure angulaire avec vingt
+paires CoordClamp/LocalMatrix et pixels littéraux. **La combinaison RRect ×
+vingt wrappers n'est pas revendiquée** ; le test historique de budget
+`sweepFullCoveragePreservesRequestedTileBudgetIdentity` reste rouge.
+
+Les points-clamps publics zéro, `Float.MIN_VALUE` et `Float.MIN_NORMAL`
+atteignent réellement Render/Readback/replay. Les petites échelles LocalMatrix
+conservent séparément leurs refus précis et la récupération ; ces refus en amont
+ne sont pas présentés comme preuve positive des classes F32. Aucun test
+d'infrastructure ni changement de l'oracle n'est ajouté.
+
+La review de tâche Sol approuve le code (aucun point Critical/Important), mais
+relève une réserve de méthode : aucun RED `PATH_STROKE` antérieur au correctif
+n'est attesté. Un contrôle causal postérieur rétablit temporairement l'ancienne
+restriction `Atan2` : le test échoue alors sur `numeric-domain-unbounded`.
+Le code est ensuite restauré exactement au commit mesuré. La seconde lecture
+Sol valide cette preuve causale, sans la confondre avec une chronologie TDD
+initiale : cette dernière reste non démontrée. La sélection initiale 9/9 et le
+corpus sérialisé ci-dessous restent les preuves d'acceptation principales.
+Les replays supplémentaires après mutation ne renforcent pas ce gate : une
+tentative venait du cache, puis la terminaison d'un rerun n'a pas été attestée
+avant le suivant. Bien que le dernier ait fini Gradle 0 avec neuf succès,
+l'isolation de cette reprise n'est pas certifiée ; aucun gain de durée ou de
+robustesse n'en est déduit. Aucun worker ne subsistait à la restitution finale.
+
+La tentative générale est unique et strictement sérialisée : session `20040`,
+Gradle 1 à 240 s, **730 cas = 686 réussites + 43 échecs + un interrompu**.
+Les 730 identités sont appariées à la base. Six anciens échecs deviennent verts :
+
+- W5c `sweepGradientUsesClockwiseScreenAnglesOnFourLanes` ;
+- W5c `sweepGradientHandlesSpanBoundariesAndDegeneracy` ;
+- W5d `nonClampDropsOnlyTheOuterEndpointDuplicate` ;
+- W5d `sweepFullCoverageForcesClamp` ;
+- W5d `linearTileModesCoverSignedBoundariesOnEveryLane` ;
+- W5d `sweepEndpointsAndFullCoverageMatchOracle`.
+
+Aucun nouvel échec d'assertion n'apparaît dans cette intersection, mais 49 cas
+atteints par la base ne le sont pas ici. L'ancien succès
+`W5eImageConvergenceSurfaceTest.unownedDirectImagesKeepExplicitLinearSampling`
+est interrompu : la suite reste rouge/incomplète et ce relevé ne certifie ni
+sa totalité ni une amélioration de durée. Les 43 échecs sont conservés dans
+les XML/JSONL directs, et le runner ajoute un échec synthétique distinct.
+Archives : `/private/tmp/kanvas-w7-sweep-aa.82Ytul/green-final-focused` et
+`full-suite-240`. Les avertissements JVM/Gradle et de compilation restent visibles.
+
+### Corpus et priorité suivante
+
+Le [snapshot complet](sweep-aa-49d8224d3.json) garde les 631 identités, 443
+éligibles, 133 exclusions font, 54 codec et la quarantaine `jpg-color-cube`.
+Les trois tranches sérialisées `[0,607)`, `[607,608)`, `[608,631)` terminent
+respectivement Gradle 0, 1 (timeout `vertices` persisté par le worker124), 0.
+Elles utilisent le commit exact, une limite de 30 s inchangée et des archives
+dédiées dans `/private/tmp/kanvas-w7-sweep-aa.82Ytul/corpus`.
+
+Comparé à `image-opacity-bef3af6fa.json`, **aucune issue, aucun diagnostic,
+aucune empreinte RGBA, aucune référence, aucun seuil ni scope ne change**.
+Les 166 rendus, 144 comparaisons, 26 cas à ≥99 % et 36 à ≥95 % de pixels ±2
+restent identiques ; la médiane reste 65,23469075520833 %. `vertices` reste
+timeout et `ninepatch-stretch` prend 23,760 s sur ce relevé.
+Ce lot répare donc des comportements publics et six tests historiques, mais
+**ne produit aucun gain de GM ni de fidélité mesuré**.
+
+La prochaine priorité de diagnostic est le groupe `w6a.layer.unsupported_child`
+(51 premiers refus du corpus). Il faut isoler un cas représentatif, distinguer
+les restrictions du planner des capacités réellement disponibles, puis choisir
+une correction transversale mesurable ; ces 51 refus ne promettent pas 51 gains.
+Radial/Conical, RRect × wrappers, AA géométrique, opacité × bords fractionnaires,
+les gates W6/W0 et la suite générale restent explicitement ouverts. Publication
+draft uniquement, sans clôture W7 ni autorisation de merge.
 
 ## Décisions de pilotage
 
