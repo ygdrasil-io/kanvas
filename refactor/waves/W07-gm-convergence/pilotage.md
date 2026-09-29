@@ -7,8 +7,8 @@ empilée sur #2411, routage standalone rect/path, renderer `718445e6e`.
 Lot précédent : pointillés réparés, expérience AA retirée après mesure,
 renderer `5f971f750`, PR draft [#2413](https://github.com/ygdrasil-io/kanvas/pull/2413)
 empilée sur #2412.
-Lot courant : cache de preuve CPU, renderer `b256b3d68`, branche
-`codex/w7-proof-evaluation`, empilée sur #2413.
+Lot courant : cache de preuve CPU, renderer `b256b3d68`, PR draft
+[#2414](https://github.com/ygdrasil-io/kanvas/pull/2414), empilée sur #2413.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,

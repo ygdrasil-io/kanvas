@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot preuve CPU — 29 septembre 2026
 
-Renderer `b256b3d68`, branche `codex/w7-proof-evaluation` empilée sur #2413 :
+Renderer `b256b3d68`, PR draft [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414)
+empilée sur #2413 :
 le cache de preuve utilise les dépendances conservatrices sans élargir
 les domaines numériques ou budgets. Le [snapshot](proof-b256b3d68.json)
 mesure **165/443 rendus** (+1), **143 comparaisons**, **26 cas à ≥99 %**

@@ -91,11 +91,13 @@ Temporary counters may measure hits/misses/entries copied but must not ship.
 - [x] Run the full Kanvas suite with a bounded task timeout, plus math geometry. Classify all failures or any new remaining stall; do not widen this fix automatically to unrelated behavior.
 - [x] Replay the fixed 631-case Skia corpus at the committed renderer SHA, 30 s per case. Keep all outcomes and resume after recorded timeouts. Compare identities, references, outcomes and RGBA hashes with `dash-5f971f750.json`.
 - [x] Record checkpoint, public test totals and open defects in pilotage/status. Obtain an independent whole-branch review and address confirmed findings.
-- [ ] Push and create a draft PR stacked on #2413, attach it to the chat. Do not merge or call the overall renderer complete while full validation is red.
+- [x] Push and create a draft PR stacked on #2413, attach it to the chat. Do not merge or call the overall renderer complete while full validation is red.
 
 ## Execution evidence
 
 Production commit: `b256b3d68c753bec5dd4a19620583a0634a5b48f`.
+Published as draft [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414),
+stacked on #2413 and attached to the chat. No merge.
 The task review and scoped evidence re-review by Sol are approved.
 The final independent whole-branch Sol review finds no confirmed defect
 and approves draft publication, explicitly not merge readiness.
