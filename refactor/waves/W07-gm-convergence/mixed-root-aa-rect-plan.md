@@ -111,7 +111,7 @@ contrôleur avant élargissement du lot.
 - [x] Tentative `:kanvas:test` globale unique bornée240s, puis final ciblé.
 - [x] Mesure corpus631 au SHA exact, timeout30s et comparaison au snapshot
   `aa-mask-82893045c.json`, pertes/gains/pixels/diagnostics séparés.
-- [ ] Suivi à jour, revue globale Sol et draft empilée sur #2419; aucun merge.
+- [x] Suivi à jour, revue globale Sol et draft empilée sur #2419; aucun merge.
 
 ## Self-review du plan
 
@@ -163,4 +163,6 @@ comparaisons, gain unique `alphagradients`33,8822%,197 anciennes empreintes
 inchangées, aucune perte ni changement de référence/seuil/scope. Le rejeu PNG
 retrouve la même empreinte; voir le [bilan](pilotage.md#lot-mélange-racine-rect-stroke-aa--29-septembre-2026)
 pour la divergence du port et les limites de fidélité. `vertices` reste
-timeout30s. Revue globale et publication draft restent à effectuer.
+timeout30s. Revue globale Sol `1cd04aa77..cd6f923fd` : aucun finding C/I/M,
+publication draft recevable, merge readiness NON. Draft
+[#2420](https://github.com/ygdrasil-io/kanvas/pull/2420) empilée sur #2419.

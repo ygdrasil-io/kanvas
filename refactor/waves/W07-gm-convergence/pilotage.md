@@ -24,7 +24,8 @@ Lot précédent : couverture AA filtrée, renderer `82893045c`, branche
 `codex/w7-aa-mask-coverage`, draft
 [#2419](https://github.com/ygdrasil-io/kanvas/pull/2419) empilée sur #2418.
 Lot courant : Rect stroke AA dans un mélange racine, renderer `ff628a94d`,
-branche `codex/w7-mixed-root-aa-rect`, publication draft prévue sur #2419.
+branche `codex/w7-mixed-root-aa-rect`, draft
+[#2420](https://github.com/ygdrasil-io/kanvas/pull/2420) empilée sur #2419.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -125,7 +126,11 @@ Les XML globaux n'ont pas été finalisés : preuve issue des events et du log,
 pas708 XML. Warnings JVM `System::load`/`Unsafe` et dépréciations Gradle restent
 signalés; conversions redondantes des nouveaux tests retirées en re-review.
 La globale est donc rouge/incomplète. W7 et les gates W6 restent ouverts,
-aucune merge readiness. Revue globale du lot encore à effectuer.
+aucune merge readiness. Revue globale Sol `1cd04aa77..cd6f923fd` :
+Critical0/Important0/Minor0, publication draft recevable. Non jugés par cette
+revue : fidélité Skia globale, extension aux images/Picture, périmètres
+exclus et stabilité des tests globaux non atteints. Ces sujets restent ouverts;
+aucune preuve correspondante n'est revendiquée.
 
 ## Lot couverture AA filtrée — 29 septembre 2026
 

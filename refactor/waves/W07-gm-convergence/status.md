@@ -5,8 +5,9 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot mélange racine Rect stroke AA — 29 septembre 2026
 
-Renderer `ff628a94d`, branche `codex/w7-mixed-root-aa-rect`, draft prévue sur
-#2419. [Design](mixed-root-aa-rect-design.md), [plan](mixed-root-aa-rect-plan.md),
+Renderer `ff628a94d`, branche `codex/w7-mixed-root-aa-rect`, draft
+[#2420](https://github.com/ygdrasil-io/kanvas/pull/2420) empilée sur #2419.
+[Design](mixed-root-aa-rect-design.md), [plan](mixed-root-aa-rect-plan.md),
 [snapshot631](mixed-root-ff628a94d.json) et
 [bilan détaillé](pilotage.md#lot-mélange-racine-rect-stroke-aa--29-septembre-2026).
 
@@ -26,7 +27,8 @@ réécriture de l'historique. Globale unique240s rouge/incomplète :665 succès,
 42 échecs déjà présents,1 interrompu sur708 identités communes;16 autres cas
 du parent non atteints. Wrapper124, enfant Gradle143, XML globaux non finalisés.
 Un ancien run voisin isolé avait terminé native133 malgré ses assertions PASS.
-Revue globale encore à effectuer; W7 non clos, aucune autorisation de merge.
+Revue globale Sol `1cd04aa77..cd6f923fd` validée, aucun finding C/I/M;
+W7 non clos, aucune autorisation de merge.
 
 ## Lot couverture AA filtrée — 29 septembre 2026
 
