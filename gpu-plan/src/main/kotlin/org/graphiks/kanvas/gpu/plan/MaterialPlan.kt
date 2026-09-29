@@ -63,7 +63,9 @@ public sealed interface MaterialProgramPlan {
 
     /** Child topology is code shape, while alpha remains a dynamic binding value. */
     public class OpacityV1(public val child: MaterialProgramPlan) : MaterialProgramPlan {
-        override val versionI32: Int = if (child.versionI32 == 4) 4 else 1
+        // Image V3 roots are sealed through the V4 color-source proof path; opacity must
+        // preserve that authority just as it does for an already-promoted V4 child.
+        override val versionI32: Int = if (child.versionI32 == 4 || child is ImageMaterialProgramV3) 4 else 1
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-opacity-v1(${child.structuralId.value})")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 =
             if (versionI32 == 4) NumericOperationGraphV1.colorSourceV4() else NumericOperationGraphV1.opacity()
