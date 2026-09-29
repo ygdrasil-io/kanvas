@@ -404,6 +404,9 @@ Le lot justifie une publication draft, pas une clôture de W7 ni une merge
 readiness. La suite doit encore être complétée par sélections bornées ;
 les refus AA de gradient, les erreurs de budget/autorité, le timeout
 `vertices` et la réparation géométrique AA restent des travaux distincts.
+La relecture finale indépendante Sol confirme les comptes des XML, les
+631 identités et les 164 anciennes empreintes RGBA ; elle ne relève aucun
+défaut confirmé du lot et valide sa publication draft, pas le merge.
 
 ## Décisions de pilotage
 
