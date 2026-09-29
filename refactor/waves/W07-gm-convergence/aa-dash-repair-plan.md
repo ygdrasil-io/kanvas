@@ -66,8 +66,8 @@
 ### Task 3: Measure and publish
 
 - [x] Commit production, run the same complete 631 identities / 443 eligible cases with 30-second timeouts and resume journals; compare against both `strokes-718445e6e.json` and the original baseline. Final `5f971f750`: 164 renders, all RGBA hashes and outcomes identical to #2412; 142 comparisons, 26 ≥99%, no corpus changes. Original 41 gains preserved; no new GM gain from dash.
-- [ ] Verify public W6/W7 regressions, record failures honestly, inspect changed images and receive a whole-branch review.
-- [ ] Update pilotage/status and publish a draft PR stacked on #2412; attach it to the chat. No merge.
+- [x] Verify public W6/W7 regressions, record failures honestly, inspect changed images and receive a whole-branch review. Sol verifies the delivered diff, snapshots and XML: no new confirmed defect, draft publication approved, not merge-ready.
+- [x] Update pilotage/status and publish a draft PR stacked on #2412; attach it to the chat. [PR #2413](https://github.com/ygdrasil-io/kanvas/pull/2413), attached; no merge. AA remains explicitly deferred.
 
 Final validation before review: 77 public tests plus 476 math geometry
 tests pass, zero failures/skips, Gradle exit 0. Full Kanvas attempt remains

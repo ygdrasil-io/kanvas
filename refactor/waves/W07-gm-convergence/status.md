@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot pointillés — 29 septembre 2026
 
-Renderer `5f971f750`, pour une PR draft empilée sur #2412 : l'égalité des
+Renderer `5f971f750`, PR draft [#2413](https://github.com/ygdrasil-io/kanvas/pull/2413)
+empilée sur #2412 : l'égalité des
 pointillés immuables est réparée dans `math`, sans desserrer les seals.
 Le [snapshot final](dash-5f971f750.json) conserve **164/443 rendus**, tous
 identiques pixel à pixel à #2412, **142 comparaisons** et **26 cas à ≥99 %**.

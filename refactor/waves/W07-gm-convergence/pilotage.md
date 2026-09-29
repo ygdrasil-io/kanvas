@@ -5,7 +5,8 @@ empilée sur [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410).
 Lot standalone : PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
 empilée sur #2411, routage standalone rect/path, renderer `718445e6e`.
 Lot courant : pointillés réparés, expérience AA retirée après mesure,
-renderer `5f971f750`, destiné à une PR draft sur #2412.
+renderer `5f971f750`, PR draft [#2413](https://github.com/ygdrasil-io/kanvas/pull/2413)
+empilée sur #2412.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -292,6 +293,10 @@ Les XML de cette tentative sont conservés localement dans
 un échec synthétique du runner Gradle, distinct des 39 tests échoués.
 La pile est conservée dans `/private/tmp/kanvas-w7-w5d-stall-5f971f750.txt`.
 La PR reste draft, sans promesse de merge readiness.
+La relecture finale indépendante Sol ne relève aucun nouveau défaut du diff
+livré et confirme les chiffres des snapshots et XML ; elle valide la
+publication draft, pas le merge. L'origine des 39 échecs globaux, la
+réparation AA et les domaines font/codec/ports restent ouverts ou hors scope.
 
 ## Décisions de pilotage
 
