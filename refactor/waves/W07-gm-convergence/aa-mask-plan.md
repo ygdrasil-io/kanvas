@@ -156,7 +156,7 @@ sur le contrat complet ; ne pas revendiquer une suite globale verte ici.
 MultisampleStencilColorCover : deux groupes de commandes dans UNE passe native
 coverage avec depth-stencil4 distinct, clear0 initial et resolve terminal.
 
-- [ ] **Step 1: Nouveaux témoins RED publics avant extension stencil.**
+- [x] **Step 1: Nouveaux témoins RED publics avant extension stencil.**
 
 1. `normal aa ring preserves hole and both halos` : Surface128², outer CW
    [16,16,112,112], inner CCW[40,40,88,88], noir opaque, sigma2,3.
@@ -188,7 +188,7 @@ coverage avec depth-stencil4 distinct, clear0 initial et resolve terminal.
 Conserver les négatifs hors scope de Task1 ; retirer seulement son négatif
 stencil devenu couvert. Tous les positifs exigent second render et evidence.
 
-- [ ] **Step 2: Étendre seulement le même producer coverage.**
+- [x] **Step 2: Étendre seulement le même producer coverage.**
 
 Créer/valider depth-stencil4, clear transparent/stencil0 à l'ouverture de la
 passe native, commandes producer puis cover test/reset, target AA4 commune,
@@ -200,13 +200,13 @@ ni RenderPassSegment ; jamais deux writers du
 resolve, ni stencil repris d'une autre occurrence. Préserver les inputs
 hors viewport/clip par leurs mappings W6b, sans changer blur ou shading.
 
-- [ ] **Step 3: GREEN et témoins proches séquentiels.**
+- [x] **Step 3: GREEN et témoins proches séquentiels.**
 
 Commandes Task1 étendues au nouveau fichier éventuel ; archives uniques
 `task2-red`, `task2-green`, `task2-related`. Ajouter les tests publics W6aLayer,
 W6aNestedLayer, W6aLayerBudgetRecovery aux contrôles précédents.
 
-- [ ] **Step 4: Une seule tentative globale bornée, puis validation finale.**
+- [x] **Step 4: Une seule tentative globale bornée, puis validation finale.**
 
 `:kanvas:test --offline --no-build-cache` sans filtre, même init timeout240s,
 archive `full-suite-240`. Comparer XML/events à
@@ -215,15 +215,15 @@ identités communes, non atteintes/interrompues, warnings et exit réel.
 Pas de répétition globale, ni relance W5f large. Puis shard AA-mask + proches
 dans `final`, attendre chaque exit avant handoff.
 
-- [ ] **Step 5: Self-review, commit, rapport et runtime rendu au contrôleur.**
+- [x] **Step 5: Self-review, commit, rapport et runtime rendu au contrôleur.**
 
 Rapport et commit selon Task1, avec dérivation B et toutes les limites. Le
 contrôleur organise Sol spec+quality et les corrections/re-reviews bornées.
 
 ### Clôture contrôleur
 
-- [ ] Corpus631 sur commit exact, slices0–607/607–608/608–631, timeout30 ; tous diagnostics conservés.
-- [ ] Comparer à `root-aa-470f62e63.json` : gains/pertes individuels et empreintes RGBA, aucun seuil modifié.
+- [x] Corpus631 sur commit exact, slices0–607/607–608/608–631, timeout30 ; tous diagnostics conservés.
+- [x] Comparer à `root-aa-470f62e63.json` : gains/pertes individuels et empreintes RGBA, aucun seuil modifié.
 - [ ] Mettre à jour le suivi existant avec résultat réel et limites ; revue globale Sol.
 - [ ] Publier draft empilée sur #2418 et l'attacher ; aucune revendication de parité globale ou merge readiness.
 

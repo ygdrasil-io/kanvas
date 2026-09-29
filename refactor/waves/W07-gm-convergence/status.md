@@ -3,18 +3,38 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
-## Lot couverture AA filtrée — en cours
+## Lot couverture AA filtrée — 29 septembre 2026
 
-Sur #2418, [design](aa-mask-design.md) et [plan](aa-mask-plan.md) relus par
-Astra : source de couverture blanche MSAA4/resolve1 distincte de la source
-couleur, blur NORMAL puis peinture appliquée une fois sur le halo complet.
-Deux étapes séquentielles : triangle direct, puis stencil/trous/frontières et
-budget exact. La verticale directe est implémentée et sa revue Sol est validée
-après renforcement des oracles publics : 4/4 ciblés et 35/35 contrôles proches,
-exit 0 (`c73e5758c`). Stencil, frontières, budget exact, corpus et revue globale
-restent à faire. Aucun nouveau rendu GM ni gain de fidélité revendiqué.
-Baseline publique 22/22 ; `blur2rects` refuse encore
-`w6a.layer.unsupported_child` en 113 ms sur la base #2418.
+Sur #2418, renderer `82893045c`, branche `codex/w7-aa-mask-coverage`.
+[Design](aa-mask-design.md), [plan](aa-mask-plan.md) et
+[snapshot complet](aa-mask-82893045c.json). La source blanche AA4/resolve1
+reste indépendante de la peinture ; stencil producer/cover partagent une
+seule passe native, puis NORMAL et le matériau W5 couvrent le halo complet.
+
+Les **631 identités / 443 éligibles** et toutes les références, scopes et
+tolérances sont inchangés : **193 → 197 rendus**, **171 → 175 comparaisons**.
+Les **193 anciennes empreintes RGBA sont identiques**, sans perte de rendu.
+Les gains sont `blur2rects` (96,18 % des pixels ±2/canal, 499 ms),
+`blur2rectsnonninepatch` (94,88 %, 651 ms), `blur_matrix_rect` (91,62 %, 5 845 ms)
+et `blurcircles` (86,24 %, 3 281 ms). Ce sont quatre rendus nouveaux, pas une
+parité globale. `vertices` reste timeout30s ; 195 échecs de rendu, 50 de setup,
+14 rendus non comparables et 8 désaccords de dimensions restent au bilan.
+
+Revues Sol des deux tâches validées après corrections des oracles publics.
+Final proche **75/75, exit 0** ; dernier correctif tests-only **8/8, exit 0**.
+Budgets dérivés avant exécution : direct B=299104, stencil B=723296 ; B−1
+refuse avant publication, sentinel intact et récupération stable sur deux rendus.
+La globale unique est **rouge/incomplète** : 680 succès, 43 échecs déjà présents,
+un test interrompu sur 724 identités communes. Le watchdog wrapper240s retourne
+124 ; l'exit propre de Gradle n'est pas observé. `formatsAlphaAndColorSpaceMatchOracle`
+est interrompu (passait sur parent), `cubicDrawImageMatchesMitchellNetravaliOracle`
+n'est pas atteint. Aucune nouvelle assertion en échec observée, sans garantie
+sur les tests non atteints. Warnings JVM/Gradle conservés ; un fallback Kotlin
+daemon avait eu lieu en Task1, absent des validations finales.
+
+Revue globale et publication draft empilée restent à clôturer. AA+blur en
+layer/Picture, styles autres que NORMAL, strokes/blends/clips complexes et
+parité visuelle fine restent hors du contrat de ce lot ; W7 reste ouvert.
 
 ## Lot source AA racine — 29 septembre 2026
 
