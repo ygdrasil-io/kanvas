@@ -3,6 +3,32 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot ports hardstop fidèles — 30 septembre 2026
+
+Branche `codex/w7-hardstop-ports`, draft
+[#2425](https://github.com/ygdrasil-io/kanvas/pull/2425) empilée sur #2424.
+[Plan](hardstop-ports-plan.md), [snapshot631](hardstop-ports-34e3d4e98.json),
+[bilan et arbitrages](pilotage.md#lot-ports-hardstop-fidèles--30-septembre-2026).
+Grille 500×500 dans une image 512×512, ordre des doubles stops et hauteur
+des bandes réparés ; paints non-AA conformes aux sources Skia épinglées.
+Les deux domaines restent LINEAR, aucun changement moteur ou critère.
+
+**hardstop_gradients : 16,11 % → 100 % des pixels ±2** ;
+**hardstop_gradients_many : 10,66 % → 100 %**. Écarts maximaux RGB 2 et 1,
+alpha exact ; égalité stricte 90,47 % et 96,382 %, pas 100 % exact.
+Le code final `34e3d4e98` conserve 631 identités / 443 éligibles,
+**198 rendus / 176 comparés ; 196 autres images byte-identiques**.
+39 cas ≥99 %, 52 ≥95 %, médiane 73,264678 %. Références, scopes, seuils,
+diagnostics et domaines inchangés ; timeout vertices 30 s conservé.
+
+RED causal 2/2, GREEN séparés 1/1 chacun, final **9/9**, les sept contrôles
+parent conservés. Sol et Astra sans Critical/Important ; un Minor natif
+aligné à la tolérance déjà prévue puis relu. Warnings hérités différés.
+Globale historique rouge/incomplète, non rejouée ; corpus complet terminé.
+Suite : diagnostiquer les sources de layers, notamment AA avec blend PLUS,
+sans supposer que les 38 refus génériques sont une seule cause.
+W7 reste ouvert, publication draft uniquement, aucune parité globale.
+
 ## Lot alphagradients fidèle et diagnostic cohérent — 30 septembre 2026
 
 Branche `codex/w7-alphagradients-port`, draft
