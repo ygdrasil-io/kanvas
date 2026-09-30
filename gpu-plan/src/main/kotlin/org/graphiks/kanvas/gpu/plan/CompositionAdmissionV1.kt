@@ -80,6 +80,9 @@ public object CompositionAdmissionV1 {
     private fun drawRefusal(command: SceneCommand.Draw, index: Int): RenderDiagnostic? {
         val node = command.node
         if (node.origin == DrawOrigin.IMAGE) return imagePatchRefusal(node, index)
+        if (node.origin in setOf(DrawOrigin.IMAGE_NINE, DrawOrigin.IMAGE_LATTICE, DrawOrigin.ATLAS)) {
+            return diagnostic("image", index, "Encoded composition admits only direct ImagePatch image draws.")
+        }
         val paint = node.paint
         if (node.origin != DrawOrigin.RECT || node.geometry !is GeometryNode.Rect ||
             paint?.style != PaintStyleNode.FILL || paint.antiAlias ||

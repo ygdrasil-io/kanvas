@@ -78,26 +78,30 @@ internal class GPUPlanSurfaceRouter(
         val w6bOwned = GPUPlanSurfaceCandidateGate.ownsW6bFilters(planningOperations)
         val w6dOwned = GPUPlanSurfaceCandidateGate.ownsW6dAdvancedFilters(planningOperations)
         val requestedTarget = config.resolvedCompositionTarget()
-        if (w6dOwned && config.gpuColorFormat == GPUColorFormat.RGBA16_FLOAT) {
-            throw GPUPlanSurfaceTerminalException(
-                org.graphiks.kanvas.gpu.plan.W6dPlanDiagnostics.UnsupportedTargetFormat,
-                "W6d advanced filters do not support the public RGBA16_FLOAT target.",
-            )
-        }
-        if (w6bOwned && requestedTarget != GPUColorFormat.RGBA8_UNORM_SRGB) {
-            throw GPUPlanSurfaceTerminalException(
-                org.graphiks.kanvas.gpu.plan.W6bFilterDiagnostics.UnsupportedTargetFormat,
-                "W6b filters require the public RGBA8_UNORM_SRGB target.",
-            )
-        }
-        if (!w6bOwned && layerOwned && requestedTarget != GPUColorFormat.RGBA8_UNORM_SRGB &&
-            !(encodedComposition(config) && requestedTarget == GPUColorFormat.RGBA8_UNORM)) {
-            throw GPUPlanSurfaceTerminalException(
-                "w6a.layer.unsupported_target_format",
-                "W6a layers require the public RGBA8_UNORM_SRGB target.",
-            )
-        }
         val encodedComposition = config.compositionDomain == CompositionDomain.SRGB_ENCODED
+        // For the encoded contract, whole-scene admission owns all non-target
+        // refusals. In particular a filter must report its stable composition
+        // source suffix rather than being intercepted by a historical W6 owner.
+        if (!encodedComposition) {
+            if (w6dOwned && config.gpuColorFormat == GPUColorFormat.RGBA16_FLOAT) {
+                throw GPUPlanSurfaceTerminalException(
+                    org.graphiks.kanvas.gpu.plan.W6dPlanDiagnostics.UnsupportedTargetFormat,
+                    "W6d advanced filters do not support the public RGBA16_FLOAT target.",
+                )
+            }
+            if (w6bOwned && requestedTarget != GPUColorFormat.RGBA8_UNORM_SRGB) {
+                throw GPUPlanSurfaceTerminalException(
+                    org.graphiks.kanvas.gpu.plan.W6bFilterDiagnostics.UnsupportedTargetFormat,
+                    "W6b filters require the public RGBA8_UNORM_SRGB target.",
+                )
+            }
+            if (!w6bOwned && layerOwned && requestedTarget != GPUColorFormat.RGBA8_UNORM_SRGB) {
+                throw GPUPlanSurfaceTerminalException(
+                    "w6a.layer.unsupported_target_format",
+                    "W6a layers require the public RGBA8_UNORM_SRGB target.",
+                )
+            }
+        }
         if (!encodedComposition && !layerOwned && !w6bOwned && !GPUPlanSurfaceCandidateGate.accepts(planningOperations, config)) return legacy()
         val imageOwned = GPUPlanSurfaceCandidateGate.ownsW5eImages(planningOperations)
 

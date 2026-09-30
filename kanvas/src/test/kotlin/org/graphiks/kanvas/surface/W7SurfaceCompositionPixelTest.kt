@@ -7,19 +7,28 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.SamplingOptions
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
+import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Test
 
@@ -250,42 +259,124 @@ class W7SurfaceCompositionPixelTest {
 
     @Test
     fun encodedPlainLayerBudgetIsExactAndOneByteLessRecovers() {
-        // B = root RGBA8 2x2 (16) + layer RGBA8 2x2 (16) + aligned readback
-        // (2 × 256) + one 16-byte source uniform for each colored root/layer draw +
-        // the 16-byte restore-opacity uniform = 592.
-        // These are the final resource descriptors before the first B execution.
-        val budgetB = 16L + 16L + 512L + 16L + 16L + 16L
+        // The initial 2x2 attempt counted 16 + 16 + 512 + 16 + 16 = 576 and
+        // omitted the restore-opacity uniform; native validation correctly said 592.
+        // The preflight report fixes this independent 3x3 witness before its first
+        // execution: `task-1-budget-preflight-3x3.md` derives root/layer RGBA8
+        // descriptors (3*3*4 each), 256-byte-row terminal readback (3*256), two
+        // FrameSourceLayoutV4 SourceUniformData rows (root and child), and the
+        // 16-byte W6a geometry UniformData base at uniformCursorI64 = 16:
+        // B = 36 + 36 + 768 + 16 + 16 + 16 = 888 bytes.
+        val budgetB = 36L + 36L + 768L + 16L + 16L + 16L
         val root = ColorARGB.of(255, 19, 143, 71)
         val child = ColorARGB.of(128, 211, 47, 129)
         fun record(surface: Surface) = surface.canvas {
-            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(root, antiAlias = false))
+            drawRect(RectF32.ofLTRB(0f, 0f, 3f, 3f), Paint(root, antiAlias = false))
             saveLayer()
-            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(child, antiAlias = false))
+            drawRect(RectF32.ofLTRB(0f, 0f, 3f, 3f), Paint(child, antiAlias = false))
             restore()
         }
-        val accepted = Surface(2, 2, config = RenderConfig(
+        val compositeExpected = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+            W7CompositionCpuOracle.storedSample(W7CompositionCpuOracle.store(
+                W7CompositionCpuOracle.solid(child, CompositionDomain.SRGB_ENCODED), CompositionDomain.SRGB_ENCODED,
+            ), CompositionDomain.SRGB_ENCODED),
+            W7CompositionCpuOracle.storedSample(W7CompositionCpuOracle.store(
+                W7CompositionCpuOracle.solid(root, CompositionDomain.SRGB_ENCODED), CompositionDomain.SRGB_ENCODED,
+            ), CompositionDomain.SRGB_ENCODED),
+        ), CompositionDomain.SRGB_ENCODED)
+        val accepted = Surface(3, 3, config = RenderConfig(
             compositionDomain = CompositionDomain.SRGB_ENCODED, frameLocalBudgetBytes = budgetB,
         ))
         record(accepted)
-        assertTrue(accepted.render().nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+        val acceptedFirst = accepted.render()
+        assertEveryPixelResult(acceptedFirst, compositeExpected, PixelFormat.RGBA8, CompositionDomain.SRGB_ENCODED)
+        val acceptedSecond = accepted.render()
+        assertEveryPixelResult(acceptedSecond, compositeExpected, PixelFormat.RGBA8, CompositionDomain.SRGB_ENCODED)
+        assertContentEquals(acceptedFirst.pixels, acceptedSecond.pixels)
 
-        val refused = Surface(2, 2, config = RenderConfig(
+        val refused = Surface(3, 3, config = RenderConfig(
             compositionDomain = CompositionDomain.SRGB_ENCODED, frameLocalBudgetBytes = budgetB - 1L,
         ))
         record(refused)
-        val sentinel = UByteArray(16) { 0x5au }
+        val sentinel = UByteArray(36) { 0x5au }
         val failure = assertFailsWith<IllegalStateException> {
-            refused.readPixels(RectF32.ofLTRB(0f, 0f, 2f, 2f), sentinel)
+            refused.readPixels(RectF32.ofLTRB(0f, 0f, 3f, 3f), sentinel)
         }
         assertTrue(failure.message.orEmpty().startsWith("w6a.layer.frame_budget_exceeded:"), failure.message.orEmpty())
-        assertContentEquals(UByteArray(16) { 0x5au }, sentinel)
+        assertContentEquals(UByteArray(36) { 0x5au }, sentinel)
         refused.discardRecordedOperations()
-        refused.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(root, antiAlias = false)) }
+        refused.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 3f, 3f), Paint(root, antiAlias = false)) }
         val expected = W7CompositionCpuOracle.store(
             W7CompositionCpuOracle.solid(root, CompositionDomain.SRGB_ENCODED), CompositionDomain.SRGB_ENCODED,
         )
         assertEveryPixelResult(refused.render(), expected, PixelFormat.RGBA8, CompositionDomain.SRGB_ENCODED)
         assertEveryPixelResult(refused.render(), expected, PixelFormat.RGBA8, CompositionDomain.SRGB_ENCODED)
+    }
+
+    @Test
+    fun encodedCompositionExclusionMatrixIsTransactionalAfterAValidDraw() {
+        // The table is declared before any Surface is rendered.  Each operation is
+        // appended after a known admitted Rect so this validates whole-frame admission,
+        // not merely that an isolated unsupported command has no renderer.
+        val image = Image.fromPixels(1, 1, byteArrayOf(37, 101, -37, -1), alphaType = AlphaType.PREMUL)
+        val full = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val matrix: List<Triple<String, String, Canvas.() -> Unit>> = listOf(
+            Triple("aa", "geometry") { drawRect(pixel, Paint(ColorARGB.Red, antiAlias = true)) },
+            Triple("stroke", "geometry") { drawRect(pixel, Paint(ColorARGB.Red, style = PaintStyle.STROKE, strokeWidth = 1f, antiAlias = false)) },
+            Triple("path", "geometry") { drawPath(Path().apply { addRect(pixel) }, Paint(ColorARGB.Red, antiAlias = false)) },
+            Triple("src", "blend") { drawColor(ColorARGB.Red, BlendMode.SRC) },
+            Triple("noninteger-transform", "geometry") { translate(.5f, 0f); drawRect(pixel, Paint(ColorARGB.Red, antiAlias = false)) },
+            Triple("translated-drawColor", "geometry") { translate(1f, 0f); drawColor(ColorARGB.Red) },
+            Triple("image-filter", "source") { drawRect(pixel, Paint(ColorARGB.Red, imageFilter = ImageFilter.Offset(1f, 0f), antiAlias = false)) },
+            Triple("color-filter", "source") { drawRect(pixel, Paint(ColorARGB.Red, colorFilter = ColorFilter.Luma, antiAlias = false)) },
+            Triple("nested-layer", "layer") { saveLayer(); saveLayer(); restore(); restore() },
+            Triple("sibling-layer", "layer") { saveLayer(); restore(); saveLayer(); restore() },
+            Triple("scaled-image", "geometry") { drawImage(image, full, SamplingOptions.NEAREST, Paint(antiAlias = false)) },
+            Triple("nonnearest-image", "geometry") { drawImage(image, pixel, SamplingOptions.LINEAR, Paint(antiAlias = false)) },
+            Triple("image-shader", "source") { drawRect(pixel, Paint(shader = Shader.Image(image), antiAlias = false)) },
+            Triple("nine", "image") { drawImageNine(image, pixel, full, Paint(antiAlias = false)) },
+            Triple("lattice", "image") { drawImageLattice(image, Lattice(emptyList(), emptyList()), full, Paint(antiAlias = false), SamplingOptions.NEAREST) },
+            Triple("atlas", "image") { drawAtlas(image, listOf(Matrix3x3F32()), listOf(pixel), paint = Paint(antiAlias = false)) },
+        )
+        matrix.forEach { (name, suffix, appendExcluded) ->
+            assertEncodedExclusion(name, suffix, full, appendExcluded)
+        }
+    }
+
+    @Test
+    fun contradictoryNativeTargetsStayInvalidInBothDomainsAndUseSeparateRecovery() {
+        val sentinel = ubyteArrayOf(0x5au, 0x5au, 0x5au, 0x5au)
+        val contradictions = listOf(
+            CompositionDomain.LINEAR to GPUColorFormat.RGBA8_UNORM,
+            CompositionDomain.LINEAR to GPUColorFormat.BGRA8_UNORM,
+            CompositionDomain.LINEAR to GPUColorFormat.RGBA16_FLOAT,
+            CompositionDomain.SRGB_ENCODED to GPUColorFormat.RGBA8_UNORM_SRGB,
+            CompositionDomain.SRGB_ENCODED to GPUColorFormat.BGRA8_UNORM,
+            CompositionDomain.SRGB_ENCODED to GPUColorFormat.RGBA16_FLOAT,
+        )
+        for ((domain, invalidFormat) in contradictions) {
+            val invalid = Surface(1, 1, config = RenderConfig(
+                compositionDomain = domain,
+                gpuColorFormat = invalidFormat,
+            ))
+            invalid.canvas { drawRect(pixel, Paint(ColorARGB.Red, antiAlias = false)) }
+            val firstFailure = assertFailsWith<IllegalStateException> { invalid.readPixels(pixel, sentinel) }
+            assertEquals("unsupported.surface.composition.target-format", firstFailure.message.orEmpty().substringBefore(':'))
+            assertContentEquals(ubyteArrayOf(0x5au, 0x5au, 0x5au, 0x5au), sentinel)
+            invalid.discardRecordedOperations()
+            invalid.canvas { drawRect(pixel, Paint(ColorARGB.Blue, antiAlias = false)) }
+            val stillInvalid = assertFailsWith<IllegalStateException> { invalid.readPixels(pixel, sentinel) }
+            assertEquals("unsupported.surface.composition.target-format", stillInvalid.message.orEmpty().substringBefore(':'))
+            assertContentEquals(ubyteArrayOf(0x5au, 0x5au, 0x5au, 0x5au), sentinel)
+
+            val expected = W7CompositionCpuOracle.store(
+                W7CompositionCpuOracle.solid(ColorARGB.Blue, domain), domain,
+            )
+            val valid = Surface(1, 1, config = RenderConfig(compositionDomain = domain))
+            valid.canvas { drawRect(pixel, Paint(ColorARGB.Blue, antiAlias = false)) }
+            assertColoredResult(valid.render(), expected, PixelFormat.RGBA8, domain)
+            assertColoredResult(valid.render(), expected, PixelFormat.RGBA8, domain)
+        }
     }
 
     @Test
@@ -477,6 +568,37 @@ class W7SurfaceCompositionPixelTest {
             drawRect(pixel, Paint(foreground, antiAlias = false))
         }
     }.render()
+
+    private fun assertEncodedExclusion(
+        name: String,
+        suffix: String,
+        full: RectF32,
+        appendExcluded: Canvas.() -> Unit,
+    ) {
+        val refused = Surface(2, 2, config = RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
+        refused.canvas {
+            drawRect(full, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
+            appendExcluded()
+        }
+        val sentinel = UByteArray(16) { 0x5au }
+        val failure = assertFailsWith<IllegalStateException> { refused.readPixels(full, sentinel) }
+        assertEquals("unsupported.surface.composition.$suffix", failure.message.orEmpty().substringBefore(':'), name)
+        assertContentEquals(UByteArray(16) { 0x5au }, sentinel, name)
+        refused.discardRecordedOperations()
+        refused.canvas {
+            resetMatrix()
+            drawRect(full, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
+        }
+        val expected = W7CompositionCpuOracle.store(
+            W7CompositionCpuOracle.solid(ColorARGB.of(255, 17, 61, 211), CompositionDomain.SRGB_ENCODED),
+            CompositionDomain.SRGB_ENCODED,
+        )
+        val first = refused.render()
+        assertEveryPixelResult(first, expected, PixelFormat.RGBA8, CompositionDomain.SRGB_ENCODED)
+        val second = refused.render()
+        assertEveryPixelResult(second, expected, PixelFormat.RGBA8, CompositionDomain.SRGB_ENCODED)
+        assertContentEquals(first.pixels, second.pixels, name)
+    }
 
     private fun expected(
         domain: CompositionDomain,
