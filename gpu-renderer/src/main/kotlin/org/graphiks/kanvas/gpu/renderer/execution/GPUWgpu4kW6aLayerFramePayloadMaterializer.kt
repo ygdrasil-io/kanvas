@@ -34,6 +34,17 @@ import org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 
+/** W6a receives the planner-selected target; it never silently recreates an sRGB attachment. */
+private fun PlanLogicalColorFormat.w6aTextureFormat(): GPUTextureFormat = when (this) {
+    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> GPUTextureFormat.RGBA8UnormSrgb
+    PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> GPUTextureFormat.RGBA8Unorm
+}
+
+private fun W6PlainLayerCompositeTargetV1.w6aTextureFormat(): GPUTextureFormat = when (format) {
+    W6PlainLayerCompositeTargetFormatV1.RGBA8UnormSrgb -> GPUTextureFormat.RGBA8UnormSrgb
+    W6PlainLayerCompositeTargetFormatV1.RGBA8Unorm -> GPUTextureFormat.RGBA8Unorm
+}
+
 /** Native handles for one binding in an already-published W5 source manifest. */
 private sealed interface GPUW6bMaskShaderResourceV1 {
     class Buffer(val value: GPUBuffer, val byteSizeI64: Long) : GPUW6bMaskShaderResourceV1
@@ -2209,6 +2220,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val extent = requireNotNull(resource.copyExtent())
                 val format = when (resource.format) {
                     PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL) -> GPUTextureFormat.RGBA8Unorm
                     PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) -> GPUTextureFormat.Depth24PlusStencil8
                     PlanTextureFormat.CoverageMask -> GPUTextureFormat.RGBA8Unorm
                     else -> error("Unadmitted W6 texture format")
@@ -2733,7 +2745,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val verticesSemantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
                                 val pipeline = if (mapped == null) pipeline(requireNotNull(template).sourceWgsl, layout,
                                     w6aColorTarget(if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else solidRectRecipe?.blend
-                                        ?: preparedVerticesRecipe?.blend ?: draw.blend), owned, template,
+                                        ?: preparedVerticesRecipe?.blend ?: draw.blend, graph.colorFormat.w6aTextureFormat()), owned, template,
                                     verticesSemantic?.artifact)
                                     else geometryPipeline(mapped, layout, owned, template,
                                         if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else null,
@@ -2897,7 +2909,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             require(plainRecipe.site == plainSite && plainRecipe.source == pass.source &&
                                 plainRecipe.destination == pass.destination &&
                                 plainRecipe.family == W6PlainLayerCompositeFamilyV1.FullscreenRestore &&
-                                plainRecipe.target == W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample &&
+                                plainRecipe.target.w6aTextureFormat() == graph.colorFormat.w6aTextureFormat() &&
                                 plainRecipe.groupZeroAbi == W6PlainLayerCompositeGroupZeroAbiV1.OneTexture &&
                                 plainRecipe.blend !is BlendPlan.DestinationReadV1 && plainRecipe.alphaF32.isFinite()) {
                                 "W6 plain layer-composite recipe projection changed before native allocation."
@@ -2913,7 +2925,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     return textureLoad(layer_source, vec2<i32>(position.xy) - vec2<i32>(${destination.x}, ${destination.y}) + vec2<i32>(${source.left}, ${source.top}), 0) * ${plainRecipe.alphaF32};
                                 }
                             """
-                            val pipeline = pipeline(shader, layout, w6aColorTarget(plainRecipe.blend), owned)
+                            val pipeline = pipeline(shader, layout, w6aColorTarget(plainRecipe.blend, plainRecipe.target.w6aTextureFormat()), owned)
                             val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
                                 entries = listOf(BindGroupEntry(0u, views.getValue(plainRecipe.source))))))
                             renderOperands += GPUPreparedNativeScopeOperand.Render(stepIndex,

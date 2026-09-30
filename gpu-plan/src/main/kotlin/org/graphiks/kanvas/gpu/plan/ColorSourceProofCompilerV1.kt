@@ -458,8 +458,13 @@ internal object ColorSourceProofCompilerV1 {
                     if (channels.any { !it.isFinite() || it !in 0f..1f }) return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.Schema)
                     channels.forEachIndexed { channelI32, valueF32 -> words[offsetU32+channelI32]=valueF32.toRawBits() }
                     val alpha = ColorOperationGraphV1.Scalar.DynamicF32(offsetU32+3)
-                    List(4) { if(it==3) alpha else ColorOperationGraphV1.Scalar.Multiply(
-                        ColorOperationGraphV1.eotf(ColorOperationGraphV1.Scalar.DynamicF32(offsetU32+it)),alpha) }
+                    when (table.entry(MaterialPlanRef(indexI32)).program) {
+                        MaterialProgramPlan.SolidLinearPremulV1 -> List(4) { if(it==3) alpha else ColorOperationGraphV1.Scalar.Multiply(
+                            ColorOperationGraphV1.eotf(ColorOperationGraphV1.Scalar.DynamicF32(offsetU32+it)),alpha) }
+                        MaterialProgramPlan.SolidEncodedPremulV1 -> List(4) { if(it==3) alpha else ColorOperationGraphV1.Scalar.Multiply(
+                            ColorOperationGraphV1.Scalar.DynamicF32(offsetU32+it),alpha) }
+                        else -> return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.Schema)
+                    }
                 }
                 is MaterialBindingPlan.OpacityF32V1 -> {
                     words[offsetU32] = binding.alphaF32.toRawBits()

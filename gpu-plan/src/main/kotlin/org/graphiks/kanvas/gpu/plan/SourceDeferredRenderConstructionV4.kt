@@ -184,6 +184,7 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
                 else -> emptyList()
             } }
             allDraws.forEach { draw ->
+                if (draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) return@forEach
                 val source = sources.source(draw.materialAuthority.materialPlanRef())
                 val coordinates = when (val authority = draw.materialAuthority) {
                     is PlanDrawMaterialAuthority.MaterialV5 -> SourceCoordinatesV4.None

@@ -123,7 +123,7 @@ public class W6aLayerPlanCompiler public constructor(
                         W6aPlanDiagnostics.DepthLimit,
                         "Layer nesting exceeds depth ${graphLimits.maxDepth}.",
                     )
-                    semanticRefusalFor(command.descriptor, ownsW6b)?.let { (code, message) -> return invalid(code, message) }
+                    semanticRefusalFor(command.descriptor, ownsW6b, target)?.let { (code, message) -> return invalid(code, message) }
                     if (!hasEmptyExplicitCompositeClip(command.descriptor)) {
                         geometryRefusalFor(command.descriptor, target)?.let { (code, message) -> return invalid(code, message) }
                     }
@@ -168,6 +168,11 @@ public class W6aLayerPlanCompiler public constructor(
                         "A layer child transform is non-finite.",
                     )
                 }
+                is SceneCommand.DrawColor -> {
+                    // W3 owns the authenticated color recognition; preserving this command as
+                    // its own ordered segment lets a plain layer retain that same lane.
+                    scopeByDrawIndex[indexI32] = stack.lastOrNull()?.idI32
+                }
                 is SceneCommand.SetTransform -> if (!finite(command.matrix)) return invalid(
                     W6aPlanDiagnostics.NonFiniteTransform,
                     "A layer transform is non-finite.",
@@ -207,42 +212,46 @@ public class W6aLayerPlanCompiler public constructor(
             // Picture is a first-class W6a typed source lane, emitted in the graph with its
             // captured scene/outer draw.  It is deliberately not erased merely because another
             // occurrence in the frame owns W6b.
-            if ((commands[drawIndexI32] as SceneCommand.Draw).node.geometry is GeometryNode.Picture) {
+            val recordedCommand = commands[drawIndexI32]
+            if ((recordedCommand as? SceneCommand.Draw)?.node?.geometry is GeometryNode.Picture) {
                 return@forEach
             }
             val draws = setOf(drawIndexI32)
             val segment = SceneSnapshot.of(scene.extent, scene.colorSpace, commands.mapIndexed { index, command ->
                 if (index in draws) {
-                    stripW6bPayload(command as SceneCommand.Draw, drawIndexI32 in directInputDemandCommands)
+                    (command as? SceneCommand.Draw)?.let {
+                        stripW6bPayload(it, drawIndexI32 in directInputDemandCommands)
+                    } ?: command
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
             }, graphLimits)
             val aaSource = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
             val rootAaRectSource = W4dGeneralPathPlanCompiler.w6RootAaRectStrokeSource(runtimeCatalog)
             val aaCoverageSource = W4dGeneralPathPlanCompiler.w6AaCoverageSource(runtimeCatalog)
-            val originalDraw = (commands[drawIndexI32] as SceneCommand.Draw).node
-            val unfilteredDraw = stripW6bPayload(commands[drawIndexI32] as SceneCommand.Draw,
-                drawIndexI32 in directInputDemandCommands).node
+            val originalDraw = (recordedCommand as? SceneCommand.Draw)?.node
+            val unfilteredDraw = (recordedCommand as? SceneCommand.Draw)?.let {
+                stripW6bPayload(it, drawIndexI32 in directInputDemandCommands).node
+            }
             // Keep the historical ordinary general-path compiler for every other segment.
             // The AA variant proves DirectTriangle during select, before capability planning.
             val rootAaSource = scopeI32 == null && !ownsW6b &&
-                originalDraw.coverage == CoverageRequest.ANTIALIASED &&
-                aaSource.acceptsW6AaColorSourceScope(originalDraw)
+                originalDraw?.coverage == CoverageRequest.ANTIALIASED &&
+                aaSource.acceptsW6AaColorSourceScope(requireNotNull(originalDraw))
             val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&
-                rootAaRectSource.acceptsW6RootAaRectStrokeScope(originalDraw)
+                originalDraw?.let(rootAaRectSource::acceptsW6RootAaRectStrokeScope) == true
             val rootAaCoverage = scopeI32 == null && ownsW6b &&
-                originalDraw.coverage == CoverageRequest.ANTIALIASED &&
+                originalDraw?.coverage == CoverageRequest.ANTIALIASED &&
                 originalDraw.paint?.let { paint ->
                     (paint.maskFilter as? org.graphiks.kanvas.render.ir.MaskFilterNode.Blur)?.style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL &&
                         paint.imageFilter == null && paint.colorFilter == null && paint.shader == null
                 } == true &&
-                aaCoverageSource.acceptsW6AaColorSourceScope(unfilteredDraw)
+                unfilteredDraw?.let(aaCoverageSource::acceptsW6AaColorSourceScope) == true
             val generalPath = when {
                 rootAaCoverage -> aaCoverageSource
                 rootAaRectStroke -> rootAaRectSource
-                (scopeI32 != null && aaSource.acceptsW6AaColorSourceScope(originalDraw)) || rootAaSource -> aaSource
+                (scopeI32 != null && originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true) || rootAaSource -> aaSource
                 else -> W4dGeneralPathPlanCompiler()
             }
-            val child = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
+            val child = CapabilityCompilerChain.ofProjected(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
                 W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
                 W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), generalPath), runtimeCatalog)
             when (val selection = child.select(segment, target)) {
@@ -335,7 +344,8 @@ public class W6aLayerPlanCompiler public constructor(
                 is RenderPlanResult.InvalidScene -> return result
             }
             val frame = W6aLayerGraphConstruction(PlanId("w6a.${selected.sceneCanonicalId.value}"), org.graphiks.math.geometry.SizeI32(selected.target.extent.width, selected.target.extent.height),
-                capabilities, budget, selected.occurrences, bindings, selected.scene, runtimeCatalog)
+                capabilities, budget, selected.occurrences, bindings, selected.scene, runtimeCatalog,
+                logicalColorFormat(selected.target))
             when (val layout = FrameSourceLayoutV4.layeredFrame(frame)) {
                 // Task 2 has now published (and therefore validated) the one graph authority.
                 // Native admission reads only those frozen operation kinds, schedule, terminals
@@ -484,7 +494,7 @@ public class W6aLayerPlanCompiler public constructor(
      * Refusals determined entirely by the descriptor's requested semantics.  These must stay
      * observable even when an explicit empty composite clip later elides geometry and targets.
      */
-    private fun semanticRefusalFor(descriptor: LayerDescriptor, w6bOwned: Boolean): Pair<String, String>? {
+    private fun semanticRefusalFor(descriptor: LayerDescriptor, w6bOwned: Boolean, target: RenderTargetDescriptor): Pair<String, String>? {
         if (descriptor.paint == null && descriptor.material != null) return W6aPlanDiagnostics.UnsupportedRestore to "A restore source without its captured paint is unsupported."
         val paint = descriptor.paint ?: return null
         if (!w6bOwned && (paint.imageFilter != null || paint.maskFilter != null)) return W6aPlanDiagnostics.UnsupportedSpatialFilter to
@@ -493,9 +503,14 @@ public class W6aLayerPlanCompiler public constructor(
         if (colorFilter != null && ColorFilterPlanCompilerV1.compile(colorFilter) is ColorFilterCompileResultV1.Refused)
             return W6aPlanDiagnostics.UnsupportedRestore to "W6a cannot compile this restore color filter."
         if (FinalBlendPlanner.plan(descriptor.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
-                PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1()) == null)
+                logicalColorFormat(target).blendTargetClampV1()) == null)
             return W6aPlanDiagnostics.UnsupportedRestore to "W6a does not admit this restore blender."
         return null
+    }
+
+    private fun logicalColorFormat(target: RenderTargetDescriptor): PlanLogicalColorFormat = when (target.compositionDomain) {
+        org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+        org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
     }
 
     /**

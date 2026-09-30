@@ -57,6 +57,8 @@ internal class OccurrenceSourceInputV1(
     val recordedInnerClip: ClipStackNode,
     val deferredCompositeClip: ClipStackNode,
     val target: PlanResourceId,
+    /** Authenticated parent composition target; occurrence reconstruction must not default to LINEAR. */
+    val renderTarget: RenderTargetDescriptor,
     val commandIndexI32: Int,
     val sourceOnly: Boolean,
 ) {

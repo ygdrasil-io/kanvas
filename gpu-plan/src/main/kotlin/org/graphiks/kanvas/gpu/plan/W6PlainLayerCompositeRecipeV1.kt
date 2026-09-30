@@ -13,7 +13,7 @@ public data class W6LayerCompositeSiteKeyV1(
 }
 
 public enum class W6PlainLayerCompositeFamilyV1 { FullscreenRestore }
-public enum class W6PlainLayerCompositeTargetFormatV1 { RGBA8UnormSrgb }
+public enum class W6PlainLayerCompositeTargetFormatV1 { RGBA8UnormSrgb, RGBA8Unorm }
 public enum class W6PlainLayerCompositeGroupZeroAbiV1 { OneTexture }
 
 /** Target facts deliberately selected by the planner rather than accepted as native defaults. */
@@ -21,11 +21,13 @@ public data class W6PlainLayerCompositeTargetV1(
     public val format: W6PlainLayerCompositeTargetFormatV1,
     public val sampleCountI32: Int,
 ) {
-    init { require(format == W6PlainLayerCompositeTargetFormatV1.RGBA8UnormSrgb && sampleCountI32 == 1) }
+    init { require(sampleCountI32 == 1) }
 
     public companion object {
         public val Rgba8UnormSrgbSingleSample: W6PlainLayerCompositeTargetV1 =
             W6PlainLayerCompositeTargetV1(W6PlainLayerCompositeTargetFormatV1.RGBA8UnormSrgb, 1)
+        public val Rgba8UnormSingleSample: W6PlainLayerCompositeTargetV1 =
+            W6PlainLayerCompositeTargetV1(W6PlainLayerCompositeTargetFormatV1.RGBA8Unorm, 1)
     }
 }
 
@@ -58,7 +60,7 @@ public class W6PlainLayerCompositeRecipeV1 internal constructor(
         require(family == W6PlainLayerCompositeFamilyV1.FullscreenRestore)
         require(source != destination && !sourceBoundsSnapshotI32.isEmpty)
         require(blend !is BlendPlan.DestinationReadV1)
-        require(target == W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample)
+        require(target.sampleCountI32 == 1)
         require(groupZeroAbi == W6PlainLayerCompositeGroupZeroAbiV1.OneTexture)
     }
 
@@ -88,6 +90,7 @@ public class W6PlainLayerCompositeRecipeV1 internal constructor(
  */
 public fun freezeW6PlainLayerCompositeRecipesV1(
     passes: List<PlanPass>,
+    logicalFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
 ): Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1> {
     val recipes = linkedMapOf<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>()
     passes.forEach { pass ->
@@ -105,12 +108,17 @@ public fun freezeW6PlainLayerCompositeRecipesV1(
             destinationOriginParentI32 = composite?.copyDestinationOriginParentI32() ?: requireNotNull(aa).copyDestinationOriginLayerI32(),
             alphaF32 = composite?.restore?.alphaF32 ?: 1f,
             blend = composite?.restore?.blend ?: BlendPlan.LegacySrcOverV1,
-            target = W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample,
+            target = logicalFormat.w6PlainLayerCompositeTarget(),
             groupZeroAbi = W6PlainLayerCompositeGroupZeroAbiV1.OneTexture,
         )
         require(recipes.put(site, recipe) == null)
     }
     return java.util.Collections.unmodifiableMap(LinkedHashMap(recipes))
+}
+
+internal fun PlanLogicalColorFormat.w6PlainLayerCompositeTarget(): W6PlainLayerCompositeTargetV1 = when (this) {
+    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample
+    PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> W6PlainLayerCompositeTargetV1.Rgba8UnormSingleSample
 }
 
 /** IIIa1's sole active filtered restore: one texture plus the pre-issued layer uniform window. */

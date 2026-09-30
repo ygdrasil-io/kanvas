@@ -7,6 +7,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.ColorChannel
 import org.graphiks.kanvas.paint.ImageFilter
@@ -22,6 +23,7 @@ import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.AfterAll
 
 /**
  * Public W6d atomic-visibility witnesses.  B is derived before a [Surface] exists:
@@ -49,7 +51,7 @@ class W6dAdvancedRecoverySurfacePixelTest {
             ))
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6d.layer.unsupported_target_format:")
+        assertTerminalWithoutReadbackMutation(surface, "unsupported.surface.composition.target-format:")
     }
 
     @Test
@@ -321,7 +323,9 @@ class W6dAdvancedRecoverySurfacePixelTest {
         SizeF32.of(1f, 1f), floatArrayOf(1f), 1f, 0f, Vector2F32(0f, 0f), TileMode.CLAMP, true,
     )
 
-    private companion object {
+    companion object {
+        @AfterAll @JvmStatic fun disposeGpuRuntime() = GPUBackendRuntimeFactory.dispose()
+
         const val W6D_BUDGET_BYTES: Long = 4L + 4L + 4L + 4L + 4L + 16L + 16L + 4096L + 256L
         val unit: RectF32 = RectF32.ofLTRB(0f, 0f, 1f, 1f)
         const val familyWidthI32: Int = 3

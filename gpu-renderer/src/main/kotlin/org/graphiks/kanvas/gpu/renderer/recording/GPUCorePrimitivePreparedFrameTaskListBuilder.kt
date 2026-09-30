@@ -2064,7 +2064,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             stagingDescriptor.alignmentBytes,
         ) ?: return refused("w3.lowering.incompatible_plan", "W3 readback layout is not canonical.")
         if (targetDescriptor.logicalBounds != request.targetBounds ||
-            targetDescriptor.format != GPUColorFormat.RGBA8UnormSrgb || targetDescriptor.sampleCount != 1 ||
+            targetDescriptor.format !in setOf(GPUColorFormat.RGBA8UnormSrgb, GPUColorFormat.RGBA8Unorm) || targetDescriptor.sampleCount != 1 ||
             request.targetPreparation.byteSize != targetBytes ||
             stagingBytes != request.stagingPreparation.byteSize ||
             stagingBytes != canonicalStagingBytes ||
@@ -2238,6 +2238,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         request: GPUCorePrimitivePreplannedFrameRequest,
         render: GPUTask.Render,
     ): Boolean {
+        val targetFormat = (request.targetPreparation.descriptor as? GPUFrameTextureDescriptor)?.format ?: return false
         val deviceLimits = w3DeviceLimitFacts(request.memoryBudget.deviceLimitFacts) ?: return false
         if (request.compositeWitness?.matches(request, render.drawPackets) == false) return false
         val scratch = render.drawPackets.firstOrNull()
@@ -2268,7 +2269,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             render.drawPackets.zipWithNext().any { (first, second) ->
                 first.commandIdValue >= second.commandIdValue
             } ||
-            render.drawPackets.any { packet -> !isExactW3Packet(packet, request.targetBounds) } ||
+            render.drawPackets.any { packet -> !isExactW3Packet(packet, request.targetBounds, targetFormat) } ||
             render.batchEligibilityByPacketId.keys != render.drawPackets.map(GPUDrawPacket::packetId).toSet() ||
             render.batchEligibilityByPacketId.values.any { eligibility ->
                 eligibility.kind != GPUPassBatchKind.SolidFill ||
@@ -2306,7 +2307,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             ) != stagingDescriptor.byteSize
         ) return false
 
-        if (!hasExactW3Scratch(request, render, scratch, deviceLimits)) return false
+        if (!hasExactW3Scratch(request, render, scratch, deviceLimits, targetFormat)) return false
 
         val targetBytes = request.targetPreparation.byteSize
         val stagingBytes = request.stagingPreparation.byteSize
@@ -2375,6 +2376,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         render: GPUTask.Render,
         scratch: W3SessionScratchV1,
         deviceLimits: W3DeviceLimitFacts,
+        targetFormat: GPUColorFormat,
     ): Boolean {
         val packets = render.drawPackets
         val expectedVertexBytes = packets.size.toLong() * 32L
@@ -2411,7 +2413,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 clip,
                 blend,
                 sampleCount = 1,
-                colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                colorFormat = targetFormat.corePrimitiveStructuralColorFormat(),
             )
             val authority = packet.corePrimitivePreparedAuthority
             authority?.w3SessionScratch === scratch &&
@@ -2425,7 +2427,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         requireNotNull(candidate.clipExecutionPlan),
                         requireNotNull(candidate.blendPlan),
                         sampleCount = 1,
-                        colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                        colorFormat = targetFormat.corePrimitiveStructuralColorFormat(),
                     )
                 } &&
                 authority.renderPipelineKey == packet.renderPipelineKey
@@ -2505,9 +2507,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
 
     private fun w3SessionIdentity(request: GPUCorePrimitivePreplannedFrameRequest): String =
         request.compositeWitness?.sessionIdentity
-            ?: "w3.session.${request.baseTaskList.capabilitySeal.deviceGeneration.value}.${request.targetBounds.width}x${request.targetBounds.height}.rgba8unorm-srgb"
+            ?: "w3.session.${request.baseTaskList.capabilitySeal.deviceGeneration.value}.${request.targetBounds.width}x${request.targetBounds.height}.${(request.targetPreparation.descriptor as? GPUFrameTextureDescriptor)?.format?.value ?: return "invalid"}"
 
-    private fun isExactW3Packet(packet: GPUDrawPacket, targetBounds: GPUPixelBounds): Boolean {
+    private fun isExactW3Packet(packet: GPUDrawPacket, targetBounds: GPUPixelBounds,
+        targetFormat: GPUColorFormat): Boolean {
         val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
         val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.Rect ?: return false
         val clip = packet.clipExecutionPlan ?: return false
@@ -2529,7 +2532,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 clip,
                 blend,
                 sampleCount = 1,
-                colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                colorFormat = targetFormat.corePrimitiveStructuralColorFormat(),
             ).stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY) ||
             packet.computePipelineKey != null ||
             packet.bindingLayoutHash != CORE_PRIMITIVE_BINDING_LAYOUT_HASH ||
@@ -2537,7 +2540,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             packet.resourceSlot != null ||
             packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
             packet.scissorBoundsHash != corePrimitiveScissorAuthority(semantic.scissorBounds) ||
-            packet.targetStateHash != corePrimitiveTargetStateHash(1, GPUColorFormat.RGBA8UnormSrgb) ||
+            packet.targetStateHash != corePrimitiveTargetStateHash(1, targetFormat) ||
             packet.resourceGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
             packet.frameProvenance != GPUFrameProvenance.None ||
             packet.diagnostics.isNotEmpty() ||

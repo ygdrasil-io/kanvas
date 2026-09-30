@@ -549,41 +549,50 @@ internal object WgslFloatEnvelopeV1Oracle {
 
     private fun evaluate(node: NumericOperationGraphV1.Node, inputs: Inputs): Value = when (node.operation) {
         NumericOperationGraphV1.Operation.INPUT_IMAGE_LINEAR_PREMUL,
+        NumericOperationGraphV1.Operation.INPUT_IMAGE_ENCODED_PREMUL,
         NumericOperationGraphV1.Operation.INPUT_IMAGE_MASK_F32,
         NumericOperationGraphV1.Operation.IMAGE_MASK_MULTIPLY -> error("This V1/V2 oracle does not evaluate W5e image nodes")
         NumericOperationGraphV1.Operation.INPUT_SOLID_SRGBA_STRAIGHT -> Rgba(requireNotNull(inputs.solid))
         NumericOperationGraphV1.Operation.INPUT_GRADIENT_SRGBA_STRAIGHT -> Rgba(requireNotNull(inputs.gradient).invoke())
         NumericOperationGraphV1.Operation.INPUT_MATERIAL_LINEAR_PREMUL -> Rgba(requireNotNull(inputs.material).invoke())
-        NumericOperationGraphV1.Operation.INPUT_DESTINATION_LINEAR_PREMUL -> Rgba(inputs.destination)
+        NumericOperationGraphV1.Operation.INPUT_DESTINATION_LINEAR_PREMUL,
+        NumericOperationGraphV1.Operation.INPUT_DESTINATION_ENCODED_PREMUL -> Rgba(inputs.destination)
         NumericOperationGraphV1.Operation.INPUT_COVERAGE_F32 -> Scalar(inputs.coverage)
         NumericOperationGraphV1.Operation.CONSTANT_TRANSPARENT -> Rgba(Array(4) { Interval.ZERO })
         NumericOperationGraphV1.Operation.SRGB_TO_LINEAR -> evaluate(node.inputs.single(), inputs).rgba().let {
             Rgba(arrayOf(toLinear(it[0]), toLinear(it[1]), toLinear(it[2]), it[3]))
         }
-        NumericOperationGraphV1.Operation.PREMULTIPLY -> evaluate(node.inputs.single(), inputs).rgba().let {
+        NumericOperationGraphV1.Operation.PREMULTIPLY,
+        NumericOperationGraphV1.Operation.PREMULTIPLY_ENCODED -> evaluate(node.inputs.single(), inputs).rgba().let {
             Rgba(arrayOf(it[0] * it[3], it[1] * it[3], it[2] * it[3], it[3]))
         }
         NumericOperationGraphV1.Operation.OPACITY_F32 -> evaluate(node.inputs.single(), inputs).rgba().let { value ->
             val opacity = requireNotNull(inputs.opacity)
             Rgba(Array(4) { value[it] * opacity })
         }
-        NumericOperationGraphV1.Operation.SRC_OVER -> {
+        NumericOperationGraphV1.Operation.SRC_OVER,
+        NumericOperationGraphV1.Operation.SRC_OVER_ENCODED -> {
             val src = evaluate(node.inputs[0], inputs).rgba()
             val dst = evaluate(node.inputs[1], inputs).rgba()
             val inverseAlpha = Interval.ONE - src[3]
             Rgba(Array(4) { sourceOver(src[it], dst[it], inverseAlpha) })
         }
-        NumericOperationGraphV1.Operation.APPLY_COVERAGE_F32 -> {
+        NumericOperationGraphV1.Operation.APPLY_COVERAGE_F32,
+        NumericOperationGraphV1.Operation.APPLY_COVERAGE_ENCODED_F32 -> {
             val dst = evaluate(node.inputs[0], inputs).rgba()
             val coverage = evaluate(node.inputs[2], inputs).scalar()
             val blend = node.inputs[1]
-            require(blend.operation == NumericOperationGraphV1.Operation.SRC_OVER && blend.inputs[1] == node.inputs[0])
+            require(blend.operation in setOf(
+                NumericOperationGraphV1.Operation.SRC_OVER,
+                NumericOperationGraphV1.Operation.SRC_OVER_ENCODED,
+            ) && blend.inputs[1] == node.inputs[0])
             val source = evaluate(blend.inputs[0], inputs).rgba()
             Rgba(Array(4) { blendAndCoverage(source[it], source[3], dst[it], coverage) })
         }
         NumericOperationGraphV1.Operation.LINEAR_TO_SRGB_ATTACHMENT -> evaluate(node.inputs.single(), inputs).rgba().let {
             Rgba(arrayOf(attachmentEncode(it[0]), attachmentEncode(it[1]), attachmentEncode(it[2]), it[3]))
         }
+        NumericOperationGraphV1.Operation.ENCODED_TO_UNORM_ATTACHMENT -> evaluate(node.inputs.single(), inputs)
         NumericOperationGraphV1.Operation.CLAMP_01 -> evaluate(node.inputs.single(), inputs).rgba().let {
             Rgba(Array(4) { index -> it[index].clamp01() })
         }

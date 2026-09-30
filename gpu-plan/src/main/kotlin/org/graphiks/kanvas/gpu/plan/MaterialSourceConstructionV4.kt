@@ -189,7 +189,7 @@ internal class MaterialSourceConstructionV4 private constructor(
             require((child == null) == (childSource == null)) { W5eImagePlanDiagnostics.InvalidContract }
             val program = if (childSource == null) ImageMaterialProgramV3.ColorV3(color.channelOrder,
                 color.alphaType,color.transfer,color.gamut,sampling,tileModes,cells != null,latticeKinds,
-                atlasMode,color.premultiplication)
+                atlasMode,color.premultiplication,color.compositionDomain)
             else ImageMaterialProgramV3.MaskV3(childSource.table.entry(childSource.root).program,color.alphaType,
                 sampling,tileModes,cells != null,latticeKinds,atlasMode)
             val numeric = ImageNumericAuthorityV1.seal(program,upload,coordinates,bounds,paintAlphaF32,
@@ -324,11 +324,12 @@ internal class MaterialSourceConstructionV4 private constructor(
             is MaterialNode.CoordClamp -> containsComposed(root.material)
             else -> false
         }
-        private fun describeImageOrigin(draw: DrawNode): ImageChildMetadata {
+        private fun describeImageOrigin(draw: DrawNode,
+            compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain = org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR): ImageChildMetadata {
             val patch = draw.geometry as? GeometryNode.ImagePatch
             require(draw.origin == DrawOrigin.IMAGE && patch != null && colorFilterEffectsMatchPaint(draw)) { W5eImagePlanDiagnostics.InvalidContract }
             val sample = draw.material as? MaterialNode.ImageSample ?: error(W5eImagePlanDiagnostics.InvalidContract)
-            val description = EffectiveMaterialPlanner.describeImageSample(sample,true) { pixels ->
+            val description = EffectiveMaterialPlanner.describeImageSample(sample,true,compositionDomain) { pixels ->
                 require(draw.resource === pixels && patch.image.id.value == pixels.sourceId) { W5eImagePlanDiagnostics.InvalidContract }
             }
             description.validateUploadMetadata()
@@ -341,12 +342,14 @@ internal class MaterialSourceConstructionV4 private constructor(
         }
 
         fun captureImageOrigin(draw: DrawNode,bounds: RectF32,blend: BlendPlan,
-            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): MaterialSourceConstructionV4 {
-            return captureAuthenticated(authenticatePrepared(draw, runtimeCatalog), bounds, blend)
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+            compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain = org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR): MaterialSourceConstructionV4 {
+            return captureAuthenticated(authenticatePrepared(draw, runtimeCatalog, compositionDomain), bounds, blend)
         }
 
         fun authenticatePrepared(draw: DrawNode,
-            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): PreparedAuthentication {
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+            compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain = org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR): PreparedAuthentication {
             if (draw.origin != DrawOrigin.IMAGE) {
                 validateComposedDraw(draw, draw.material, null)
                 val entries = authenticateComposed(draw.material, runtimeCatalog)
@@ -354,7 +357,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 return PreparedAuthentication(draw, draw.material, null,
                     draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f, runtimeCatalog, entries)
             }
-            val origin = describeImageOrigin(draw)
+            val origin = describeImageOrigin(draw, compositionDomain)
             val sample = origin.original
             val description = origin.description
             val mask = description.color.channelOrder == ImageChannelOrderV1.ALPHA

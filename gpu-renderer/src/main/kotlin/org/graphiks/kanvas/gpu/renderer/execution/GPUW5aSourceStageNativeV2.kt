@@ -217,7 +217,11 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
     val target = template.target
     val blend = listOfNotNull(target.colorBlend, target.alphaBlend)
     val directSrc = target.colorBlend == null && target.alphaBlend == null
-    require(target.format == GPUTextureFormat.RGBA8UnormSrgb &&
+    val sourceFormat = when (source.stage.compositionDomain) {
+        org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> GPUTextureFormat.RGBA8UnormSrgb
+        org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> GPUTextureFormat.RGBA8Unorm
+    }
+    require(target.format == sourceFormat &&
         (if (destination == null) directSrc || blend.size == 2 && blend.all { it.operation == GPUBlendOperation.Add }
         else blend.size == 2 && blend.all {
             it.operation == GPUBlendOperation.Add && it.srcFactor == GPUBlendFactor.One && it.dstFactor == GPUBlendFactor.Zero

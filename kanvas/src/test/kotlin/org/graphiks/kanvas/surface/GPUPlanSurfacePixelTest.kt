@@ -2740,14 +2740,23 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
-    fun `unsupported SRC scene retains its known legacy pixels`() {
-        val surface = Surface(1, 1)
-        surface.canvas {
-            drawColor(ColorARGB.Blue)
-            drawColor(ColorARGB.of(128, 255, 0, 0), BlendMode.SRC)
-        }
+    fun `unsupported SRC scene retains known legacy bytes through AUTO and compatible public formats`() {
+        for (format in PixelFormat.entries) for (config in listOf(
+            RenderConfig(),
+            RenderConfig(gpuColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB),
+        )) {
+            val surface = Surface(1, 1, format, config)
+            surface.canvas {
+                drawColor(ColorARGB.Blue)
+                drawColor(ColorARGB.of(128, 255, 0, 0), BlendMode.SRC)
+            }
 
-        assertPixelsEqual(ubyteArrayOf(188u, 0u, 0u, 128u), surface.render().pixels)
+            assertPixelsEqual(
+                if (format == PixelFormat.RGBA8) ubyteArrayOf(188u, 0u, 0u, 128u)
+                else ubyteArrayOf(0u, 0u, 188u, 128u),
+                surface.render().pixels,
+            )
+        }
     }
 
     private fun renderScene(format: PixelFormat, first: ColorARGB, second: ColorARGB): RenderResult {

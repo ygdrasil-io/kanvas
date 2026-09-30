@@ -66,7 +66,12 @@ internal class FrameSourceLayoutV4 private constructor(
 
     private fun prepareAndPublishLayered(): org.graphiks.kanvas.render.ir.RenderPlanResult<RenderGraph> {
         val frame = requireNotNull(layeredInput)
-        if (sources.isEmpty()) return org.graphiks.kanvas.render.ir.RenderPlanResult.Ready(frame.publish(null, emptyList()))
+        if (sources.isEmpty()) {
+            // A DrawColor lane has sealed LegacyColorV1 operands and intentionally owns no
+            // W5 material table entry. Preserve every lane in recorded order so W6 can publish
+            // those frozen render passes without asking the material packer to invent a source.
+            return org.graphiks.kanvas.render.ir.RenderPlanResult.Ready(frame.publish(null, nativeLanes.map { it.passes() }))
+        }
         return when (val bound = prepareAndFinish { table, roots, inventory ->
             val lanes = nativeLanes.mapIndexed { index, lane ->
                 val w4eColors = lane.geometrySource?.takeIf { it.w4ePayload != null }?.let { geometry ->
@@ -820,8 +825,9 @@ internal class FrameSourceLayoutV4 private constructor(
             // source list: a shared source may have different final blend ABIs.
             val actualSourceDraws=(preparedInput?.sources?.map { Triple(it,it.blend,extent) } ?:
                 (if(ordinaryLayout == null && layeredInput == null) listOf(requireNotNull(lane)) else nativeLanes).flatMap { actualLane ->
-                RenderGraph.visualDraws(actualLane.passes()).map { draw ->
-                    Triple(actualLane.sourceTable().source(draw.materialAuthority.materialPlanRef()),draw.blend,actualLane.targetExtent)
+                RenderGraph.visualDraws(actualLane.passes()).mapNotNull { draw ->
+                    if (draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) null else
+                        Triple(actualLane.sourceTable().source(draw.materialAuthority.materialPlanRef()),draw.blend,actualLane.targetExtent)
                 }
             }) + layeredInput?.maskMaterialSources().orEmpty().map { (_, source) -> Triple(source, source.blend, extent) }
             var noiseWork=0L

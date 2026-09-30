@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.planning
 import java.util.Collections
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderOutput
+import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 
 public enum class GpuFrameChannelOrder { RGBA }
 
@@ -25,6 +26,7 @@ public class GpuFrameOutput private constructor(
     public val height: Int,
     public val rowStrideBytes: Int,
     public val channelOrder: GpuFrameChannelOrder,
+    public val premultiplication: ImagePremultiplicationV1,
     bytes: ByteArray,
     public val metrics: GpuFrameMetrics,
     diagnostics: List<RenderDiagnostic>,
@@ -50,13 +52,14 @@ public class GpuFrameOutput private constructor(
             bytes: ByteArray, metrics: GpuFrameMetrics, diagnostics: List<RenderDiagnostic>,
             structuralSteps: List<String>, nativeEvidenceCounters: Map<String, Long>,
             nativeEvidenceScopeKinds: List<String>,
+            premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL,
         ): GpuFrameOutput {
             require(width > 0 && height > 0)
             val tight = Math.multiplyExact(width, 4)
             require(rowStrideBytes == tight)
             require(bytes.size == Math.multiplyExact(rowStrideBytes, height))
             require(nativeEvidenceCounters.keys.all(String::isNotBlank) && nativeEvidenceCounters.values.all { it >= 0L })
-            return GpuFrameOutput(width, height, rowStrideBytes, channelOrder, bytes, metrics, diagnostics, structuralSteps, nativeEvidenceCounters, nativeEvidenceScopeKinds)
+            return GpuFrameOutput(width, height, rowStrideBytes, channelOrder, premultiplication, bytes, metrics, diagnostics, structuralSteps, nativeEvidenceCounters, nativeEvidenceScopeKinds)
         }
     }
 }

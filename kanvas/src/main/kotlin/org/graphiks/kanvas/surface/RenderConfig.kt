@@ -1,9 +1,10 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.render.ir.RenderPathFanLimits
+import org.graphiks.kanvas.render.ir.CompositionDomain
 
 data class RenderConfig(
-    val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB,
+    val gpuColorFormat: GPUColorFormat = GPUColorFormat.AUTO,
     val maxPathVertices: UInt = 131072u,
     /**
      * Maximum stencil edge-fan triangles admitted by the legacy/`Unknown`
@@ -29,6 +30,8 @@ data class RenderConfig(
     val debugLevel: DebugLevel = DebugLevel.OFF,
     /** Maximum requested per-channel noise octave evaluations in one frame. */
     val maxNoiseOctaveEvaluationsI64: Long = 1L shl 30,
+    /** Arithmetic domain for every admitted draw in this Surface frame. */
+    val compositionDomain: CompositionDomain = CompositionDomain.LINEAR,
 ) {
     init {
         require(frameLocalBudgetBytes > 0L) { "frameLocalBudgetBytes must be positive" }
@@ -99,6 +102,9 @@ data class RenderConfig(
                     ?: DEFAULT.debugLevel,
                 maxNoiseOctaveEvaluationsI64 = p.getProperty("kanvas.render.maxNoiseOctaveEvaluationsI64")
                     ?.toLongOrNull() ?: DEFAULT.maxNoiseOctaveEvaluationsI64,
+                compositionDomain = p.getProperty("kanvas.render.compositionDomain")
+                    ?.let { runCatching { CompositionDomain.valueOf(it) }.getOrNull() }
+                    ?: DEFAULT.compositionDomain,
             )
         }
     }

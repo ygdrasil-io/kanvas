@@ -180,12 +180,13 @@ public class GpuRenderContext internal constructor(
             } else {
                 null
             }
+            val resolvedTarget = key.internalFormat.resolveGpuTargetFormat()
             val session = owner.prepareSceneFrameSession(
                 GPUOffscreenTargetRequest(
                     key.width,
                     key.height,
-                    GPUColorFormat.RGBA8UnormSrgb,
-                    GPUColorInterpretation.LinearPremul,
+                    resolvedTarget.nativeFormat,
+                    resolvedTarget.interpretation,
                 ),
             )
             if (session.deviceGeneration != owner.deviceGeneration || session.deviceGeneration.value != key.deviceGeneration) {
@@ -428,6 +429,12 @@ public class GpuPlanSurfaceExecutor internal constructor(
             ),
             context = context,
             targetConfig = GpuRenderTargetConfig(target.extent, target.colorSpace, frameLocalBudgetBytes,
+                internalFormat = when (target.compositionDomain) {
+                    org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR ->
+                        org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+                    org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED ->
+                        org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
+                },
                 materialFrameLimits = materialFrameLimits),
         )
         return when (val result = backend.plan(scene, target)) {

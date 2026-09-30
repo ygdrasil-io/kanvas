@@ -245,7 +245,7 @@ class W6aLayerSurfacePixelTest {
     }
 
     @Test
-    fun `unsupportedNonRgba8TargetRefusesTerminallyAndRecovers`() {
+    fun `unsupportedNonRgba8TargetRefusesAtSurfaceTargetBoundaryAndSeparateValidSurfaceRecovers`() {
         val surface = Surface(2, 2, config = RenderConfig(gpuColorFormat = GPUColorFormat.BGRA8_UNORM))
         surface.canvas {
             saveLayer(RectF32.ofLTRB(0f, 0f, 2f, 2f))
@@ -253,10 +253,10 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.unsupported_target_format")
-        surface.discardRecordedOperations()
-        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.Black, antiAlias = false)) }
-        assertPixel(surface.render().pixels, 2, 1, 1, 0, 0, 0, 255)
+        assertTerminalWithoutReadbackMutation(surface, "unsupported.surface.composition.target-format")
+        val recovery = Surface(2, 2)
+        recovery.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.Black, antiAlias = false)) }
+        assertPixel(recovery.render().pixels, 2, 1, 1, 0, 0, 0, 255)
     }
 
     @Test

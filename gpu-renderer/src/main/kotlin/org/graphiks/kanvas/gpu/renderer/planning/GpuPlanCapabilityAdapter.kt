@@ -50,9 +50,15 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
     }
     val srgbSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
         ?.renderAttachmentSampleCounts
-    if (GPUTextureFormat.RGBA8UnormSrgb !in supportedTextureFormats || 1 !in srgbSamples.orEmpty()) {
+    val encodedSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+        ?.renderAttachmentSampleCounts
+    val hasLinearTarget = GPUTextureFormat.RGBA8UnormSrgb in supportedTextureFormats &&
+        1 in srgbSamples.orEmpty()
+    val hasEncodedTarget = GPUTextureFormat.RGBA8Unorm in supportedTextureFormats &&
+        1 in encodedSamples.orEmpty()
+    if (!hasLinearTarget && !hasEncodedTarget) {
         return unsupported(
-            message = "Renderer capabilities do not support a single-sample RGBA8UnormSrgb render target.",
+            message = "Renderer capabilities do not support a single-sample RGBA8 render target for either composition domain.",
             code = W3PlanDiagnostics.CapabilityFormat,
         )
     }
@@ -127,10 +133,21 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                         setOf(PlanResourceUsage.Sampled, PlanResourceUsage.CopyDestination)))
                 }
         }
-        if (oneSampleColorUsages.isNotEmpty()) {
+        if (hasLinearTarget && oneSampleColorUsages.isNotEmpty()) {
             add(
                 PlanTextureSampleSupport.of(
                     PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    1,
+                    oneSampleColorUsages,
+                ),
+            )
+        }
+        // Do not borrow the historical sRGB attachment proof for the encoded
+        // target.  The physical RGBA8Unorm table entry is its own authority.
+        if (hasEncodedTarget && oneSampleColorUsages.isNotEmpty()) {
+            add(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL),
                     1,
                     oneSampleColorUsages,
                 ),
@@ -198,7 +215,10 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             maxTextureDimension2D = observedLimits.maxTextureDimension2D.toInt(),
             maxBufferSizeBytes = maxBuffer,
             copyBytesPerRowAlignment = observedLimits.copyBytesPerRowAlignment.toInt(),
-            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            supportedFormats = buildSet {
+                if (hasLinearTarget) add(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+                if (hasEncodedTarget) add(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL)
+            },
             minUniformBufferOffsetAlignment = observedLimits.minUniformBufferOffsetAlignment.toInt(),
             maxDynamicUniformBuffersPerPipelineLayout =
                 observedLimits.maxDynamicUniformBuffersPerPipelineLayout?.toInt() ?: 0,

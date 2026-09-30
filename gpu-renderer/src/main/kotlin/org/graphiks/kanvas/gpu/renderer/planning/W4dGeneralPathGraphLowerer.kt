@@ -558,6 +558,8 @@ internal class W4dGeneralPathGraphLowerer {
         is PlanTextureFormat.Color -> when (format.value) {
             org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ->
                 GPUColorFormat.RGBA8UnormSrgb
+            org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL ->
+                GPUColorFormat.RGBA8Unorm
         }
         PlanTextureFormat.CoverageMask -> GPUColorFormat.RGBA8Unorm
         else -> error("W4d.2 path pass target must be one validated RGBA color resource")

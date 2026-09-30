@@ -31,6 +31,7 @@ import org.graphiks.kanvas.render.ir.RenderExecutionResult
 import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderSubmission
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.SubmissionId
@@ -67,7 +68,10 @@ public data class GpuRenderTargetConfig(
     init {
         require(colorSpace == ColorSpace.SRGB)
         require(frameLocalBudgetBytes > 0L)
-        require(internalFormat == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+        require(internalFormat in setOf(
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+            PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL,
+        ))
     }
 }
 
@@ -321,6 +325,7 @@ public class GpuRenderBackend(
                 height = targetConfig.extent.height,
                 rowStrideBytes = rowStrideBytes,
                 channelOrder = GpuFrameChannelOrder.RGBA,
+                premultiplication = targetConfig.internalFormat.resolveGpuTargetFormat().outputPremultiplication,
                 bytes = bytes,
                 metrics = GpuFrameMetrics(
                     opsDispatched = metricsSnapshot.visualCommandCount,

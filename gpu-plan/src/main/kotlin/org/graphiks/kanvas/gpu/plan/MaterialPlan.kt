@@ -31,6 +31,13 @@ public sealed interface MaterialProgramPlan {
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.solid()
     }
 
+    /** Same public straight-sRGB binding, composed and stored in the encoded target domain. */
+    public data object SolidEncodedPremulV1 : MaterialProgramPlan {
+        override val versionI32: Int = 1
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-solid-encoded-premul-v1")
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.solidEncoded()
+    }
+
     public data object LinearGradientClampSrgbV1 : MaterialProgramPlan {
         override val versionI32: Int = 1
         // MaterialPlan remains V1; the code/binding layout revision is part of
@@ -354,7 +361,8 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     MaterialProgramPlan.TransparentV1 -> require(entry.bindings is MaterialBindingPlan.EmptyV1) {
                         "Transparent programs require empty bindings"
                     }
-                    MaterialProgramPlan.SolidLinearPremulV1 -> require(entry.bindings is MaterialBindingPlan.SolidRgbaF32V1) {
+                    MaterialProgramPlan.SolidLinearPremulV1,
+                    MaterialProgramPlan.SolidEncodedPremulV1 -> require(entry.bindings is MaterialBindingPlan.SolidRgbaF32V1) {
                         "Solid programs require RGBA bindings"
                     }
                     MaterialProgramPlan.LinearGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.LinearGradientV1 && entry.stopSlab != null)

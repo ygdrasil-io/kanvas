@@ -49,7 +49,7 @@ public sealed interface W6SolidRectColorModeV1 {
 }
 
 /** Target fact selected by the W6 planner, not a native default. */
-public enum class W6SolidRectTargetFormatV1 { RGBA8UnormSrgb }
+public enum class W6SolidRectTargetFormatV1 { RGBA8UnormSrgb, RGBA8Unorm }
 
 public data class W6SolidRectTargetV1(
     public val format: W6SolidRectTargetFormatV1,
@@ -60,6 +60,8 @@ public data class W6SolidRectTargetV1(
     public companion object {
         public val Rgba8UnormSrgbSingleSample: W6SolidRectTargetV1 =
             W6SolidRectTargetV1(W6SolidRectTargetFormatV1.RGBA8UnormSrgb, 1)
+        public val Rgba8UnormSingleSample: W6SolidRectTargetV1 =
+            W6SolidRectTargetV1(W6SolidRectTargetFormatV1.RGBA8Unorm, 1)
     }
 }
 
@@ -86,7 +88,7 @@ public data class W6SolidRectHostRecipeV1 internal constructor(
 ) {
     init {
         require(family == W6SolidRectGeometryFamilyV1.FullscreenTriangle)
-        require(target == W6SolidRectTargetV1.Rgba8UnormSrgbSingleSample)
+        require(target.sampleCountI32 == 1)
         require(coordinateSlot == W6SolidRectCoordinateSlotV1.FragmentPosition)
         require((colorMode is W6SolidRectColorModeV1.UniformColor16) ==
             (groupZeroAbi == W6SolidRectGroupZeroAbiV1.UniformColor16))
@@ -94,7 +96,10 @@ public data class W6SolidRectHostRecipeV1 internal constructor(
 }
 
 /** Freezes every SolidRect draw in final planner pass order, without admitting other geometry families. */
-public fun freezeW6SolidRectHostsV1(passes: List<PlanPass>): Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1> {
+public fun freezeW6SolidRectHostsV1(
+    passes: List<PlanPass>,
+    logicalFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+): Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1> {
     val recipes = linkedMapOf<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1>()
     passes.forEach { pass ->
         val render = pass as? PlanPass.RenderPass ?: return@forEach
@@ -116,7 +121,10 @@ public fun freezeW6SolidRectHostsV1(passes: List<PlanPass>): Map<W6GeometrySiteK
                 colorMode = colorMode,
                 blend = solid.blend,
                 materialOriginDeviceI32 = Point2I32(origin.x, origin.y),
-                target = W6SolidRectTargetV1.Rgba8UnormSrgbSingleSample,
+                target = when (logicalFormat) {
+                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> W6SolidRectTargetV1.Rgba8UnormSrgbSingleSample
+                    PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> W6SolidRectTargetV1.Rgba8UnormSingleSample
+                },
                 coordinateSlot = W6SolidRectCoordinateSlotV1.FragmentPosition,
                 groupZeroAbi = if (colorMode is W6SolidRectColorModeV1.UniformColor16)
                     W6SolidRectGroupZeroAbiV1.UniformColor16 else W6SolidRectGroupZeroAbiV1.Empty,
