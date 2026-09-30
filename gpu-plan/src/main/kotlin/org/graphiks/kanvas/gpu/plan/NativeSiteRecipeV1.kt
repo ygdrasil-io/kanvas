@@ -2157,7 +2157,9 @@ internal class NativeSiteEncodingWriterV1(family: NativeSiteRecipeFamilyV1) {
                 enum("$name.mode", value.mode)
                 text("$name.formulaIdentity", value.formulaIdentity)
                 enum("$name.coverage", value.coverage)
-                enum("$name.coverageLaw", value.coverageLaw)
+                if (value.coverageLaw == BlendCoverageLawV1.SourcePreScale) {
+                    enum("$name.coverageLaw", value.coverageLaw)
+                }
                 long("$name.requiredDestinationVersion", value.requiredDestinationVersion.valueI64)
                 value.snapshotResource?.let {
                     text("$name.snapshotResource.present", "true")

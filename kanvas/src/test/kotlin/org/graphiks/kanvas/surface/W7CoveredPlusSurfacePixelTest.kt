@@ -58,6 +58,9 @@ class W7CoveredPlusSurfacePixelTest {
         val edge = WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
             greenIntervals(), destination, encodedCoverage, scalarMask = true,
         )
+        val full = WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            greenIntervals(), destination, 1f, scalarMask = true,
+        )
         val oldLaw = WgslFloatEnvelopeV1Oracle.destinationExclusion(
             source, MaterialPlanRef(1), destination, BlendMode.PLUS, encodedCoverage, scalarMask = true,
         )
@@ -80,6 +83,7 @@ class W7CoveredPlusSurfacePixelTest {
         } }
         val result = renderTwice(surface)
         WgslFloatEnvelopeV1Oracle.assertAdmits(edge, result.pixels.copyOfRange(0, 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(full, result.pixels.copyOfRange(4, 8))
         WgslFloatEnvelopeV1Oracle.assertAdmits(background, result.pixels.copyOfRange(60, 64))
     }
 
@@ -108,13 +112,20 @@ class W7CoveredPlusSurfacePixelTest {
         assertAdmits(background, nonSaturatingResult.pixels, 4, 4)
 
         val zeroSource = WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(blackIntervals(0f), destination, .5f)
+        // The outside sample has the same result as a covered PLUS draw at C=0: no source
+        // contribution reaches the attachment, independently of the zero-source control above.
+        val zeroCoverage = WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            blackIntervals(controlSourceOpacity), destination, 0f,
+        )
         val zero = Surface(5, 5).also { target -> target.canvas {
             drawRect(BOUNDS, Paint(shader = Shader.SolidColor(controlBackground), antiAlias = true))
             drawRect(RectF32.ofLTRB(.5f, 0f, 2f, 2f), Paint(
                 shader = blackSourceShader(0f), blendMode = BlendMode.PLUS, antiAlias = true,
             ))
         } }
-        assertAdmits(zeroSource, renderTwice(zero).pixels, 0, 1)
+        val zeroResult = renderTwice(zero)
+        assertAdmits(zeroSource, zeroResult.pixels, 0, 1)
+        assertAdmits(zeroCoverage, zeroResult.pixels, 4, 4)
     }
 
     @Test fun `covered PLUS low-budget refusal leaves the same Surface recoverable`() {
@@ -146,7 +157,11 @@ class W7CoveredPlusSurfacePixelTest {
         assertTrue(first.isClean, first.diagnostics.summary())
         assertTrue(first.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), first.nativeEvidenceScopeKinds.toString())
         assertTrue(first.stats.opsDispatched > 0, "native render must dispatch the recorded draws")
-        assertContentEquals(first.pixels, surface.render().pixels)
+        val second = surface.render()
+        assertTrue(second.isClean, second.diagnostics.summary())
+        assertTrue(second.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), second.nativeEvidenceScopeKinds.toString())
+        assertTrue(second.stats.opsDispatched > 0, "repeated native render must dispatch the recorded draws")
+        assertContentEquals(first.pixels, second.pixels)
         return first
     }
 
