@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 /**
  * Port of Skia's `gm/hardstop_gradients.cpp`.
  * 8×3 grid of linear gradients across clamp/repeat/mirror tile modes.
- * @see https://github.com/google/skia/blob/main/gm/hardstop_gradients.cpp
+ * @see https://github.com/google/skia/blob/8019e2e0629f3516b9d829737de2553b1d0ecb4a/gm/hardstop_gradients.cpp
  */
 class HardstopGradientShaderGm : SkiaGm {
     override val name = "hardstop_gradients"
@@ -83,7 +83,7 @@ class HardstopGradientShaderGm : SkiaGm {
     }
 
     private fun shadeRect(canvas: GmCanvas, shader: Shader, cellRow: Int, cellCol: Int) {
-        val paint = Paint(shader = shader)
+        val paint = Paint(shader = shader, antiAlias = false)
         val rect = RectF32.ofOriginSize(
             (cellCol * CELL_WIDTH + PAD_WIDTH).toFloat(),
             (cellRow * CELL_HEIGHT + PAD_HEIGHT).toFloat(),
@@ -103,8 +103,8 @@ class HardstopGradientShaderGm : SkiaGm {
     private companion object {
         const val NUM_ROWS: Int = 8
         const val NUM_COLS: Int = 3
-        const val CELL_WIDTH: Int = 512 / NUM_COLS
-        const val CELL_HEIGHT: Int = 512 / NUM_ROWS
+        const val CELL_WIDTH: Int = 166
+        const val CELL_HEIGHT: Int = 62
         const val PAD_WIDTH: Int = 3
         const val PAD_HEIGHT: Int = 3
         const val RECT_WIDTH: Int = CELL_WIDTH - 2 * PAD_WIDTH
