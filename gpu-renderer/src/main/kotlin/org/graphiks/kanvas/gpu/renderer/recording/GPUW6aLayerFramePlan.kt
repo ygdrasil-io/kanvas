@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.color.*
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
@@ -776,7 +777,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                             coverageProducer, requireNotNull(table), targetBounds, graph).structuralPipelineKey
                                         else W4dPathStrokeGraphLowerer().w5bPacket(packetPass, listOf(draw), requireNotNull(table), targetBounds, graph).structuralPipelineKey
                                     else corePrimitiveRenderPipelineStructuralKey(semantic, requireNotNull(packet.clipExecutionPlan),
-                                        requireNotNull(packet.blendPlan), 1, GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat())
+                                        requireNotNull(packet.blendPlan), 1,
+                                        graph.colorFormat.resolveGpuTargetFormat().nativeFormat.corePrimitiveStructuralColorFormat())
                                 val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)
                                 require(mapping is GPUWgpu4kCorePrimitivePipelineMapping.Mapped)
                                 geometryPipelines[packet.packetId] = mapping
@@ -1037,7 +1039,14 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     // frozen in its W6a geometry binding.  In particular, no W6b operand/pass can look
                     // up a target origin or convert device coordinates back to target-local.
                     val origin = binding.copyMaterialDeviceOriginI32()
-                    val template = requireNotNull(sealW4eMaterialGeometryHostV1(packet, commonFinalSource = true))
+                    val template = requireNotNull(sealW4eMaterialGeometryHostV1(
+                        packet,
+                        commonFinalSource = true,
+                        targetFormat = when (graph.colorFormat) {
+                            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> GPUTextureFormat.RGBA8UnormSrgb
+                            PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> GPUTextureFormat.RGBA8Unorm
+                        },
+                    ))
                     templates[packet.packetId] = template.copy(materialDevicePointWgsl =
                         "${requireNotNull(template.materialCoordinateSlot).devicePointWgsl} + vec2<f32>(${origin.x}.0, ${origin.y}.0)")
                 }

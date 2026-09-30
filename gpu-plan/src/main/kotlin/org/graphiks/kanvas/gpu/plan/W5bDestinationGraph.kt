@@ -21,8 +21,9 @@ internal object W5bDestinationGraphSealer {
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
         w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
     ): RenderGraph {
-        return construct(id, capabilityId, extent, capabilities, budget, draws, material, targetBytesI64, stagingBytesI64, rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource).publish()
+        return construct(id, capabilityId, extent, capabilities, budget, draws, material, targetBytesI64, stagingBytesI64, rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource, colorFormat).publish()
     }
 
     fun construct(
@@ -41,9 +42,10 @@ internal object W5bDestinationGraphSealer {
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
         w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
     ): RenderGraphConstruction {
         val sizing = sizeLayout(capabilityId, extent, capabilities, budget, draws, targetBytesI64, stagingBytesI64, rowBytesI64,
-            geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource)
+            geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource, colorFormat)
         val sourceRequirements = draws.filter { it.materialAuthority.colorSourceCoordinatesV4() == null }.map { draw ->
             RawMaterialRequirementsV2.of(requireNotNull(material), draw.materialAuthority.materialPlanRef()).also { source ->
                 require(source.fitsUniformBinding(capabilities)) {
@@ -77,6 +79,7 @@ internal object W5bDestinationGraphSealer {
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
         w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
     ): DestinationSizingV4 {
         require(w4eSource == null ||
             w4eSource.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID && capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID)
@@ -97,7 +100,7 @@ internal object W5bDestinationGraphSealer {
             capabilities.maxUniformBufferBindingSizeBytesI64?.let { it >= 32L } == true) {
             "unsupported.w5b.destination-capability"
         }
-        val format = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+        val format = PlanTextureFormat.Color(colorFormat)
         require(!readsDestination || capabilities.supportsTexture(format, 1, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled))) {
             "unsupported.w5b.destination-texture"
         }
@@ -147,10 +150,11 @@ internal object W5bDestinationGraphSealer {
         drawDataResources: PlanDrawDataResources? = null,
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
-        w4eSource: W4eGeometryFactsV6? = null): DestinationTopologyV4 =
+        w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL): DestinationTopologyV4 =
         sizeLayout(capabilityId, extent, capabilities, budget, draws, targetBytesI64, stagingBytesI64,
             rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32,
-            depthStencilByCommandI32, w4eSource).finish(draws)
+            depthStencilByCommandI32, w4eSource, colorFormat).finish(draws)
 
     private fun alignedRowBytesI64(capabilities: PlanCapabilitySnapshot, widthI32: Int): Long {
         val bytesI64 = Math.multiplyExact(widthI32.toLong(), 4L)

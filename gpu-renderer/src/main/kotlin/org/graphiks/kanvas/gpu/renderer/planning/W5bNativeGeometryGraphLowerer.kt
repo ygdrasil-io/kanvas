@@ -27,7 +27,9 @@ internal class W5bNativeGeometryGraphLowerer {
         val maxBuffer = requireNotNull(limits.maxBufferSize)
         val maxDynamic = requireNotNull(limits.maxDynamicUniformBuffersPerPipelineLayout)
         val bounds = GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height)
-        val identity = "w3.session.${request.deviceGeneration.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
+        val targetFormat = graph.colorFormat.resolveGpuTargetFormat()
+        val identity = "w3.session.${request.deviceGeneration.value}.${bounds.width}x${bounds.height}." +
+            targetFormat.nativeFormat.value
         val target = GPUFrameTargetRef("$identity.target")
         val staging = GPUFrameBufferRef("$identity.staging")
         val table = requireNotNull(graph.materialPlanTableOrNull())
@@ -35,7 +37,7 @@ internal class W5bNativeGeometryGraphLowerer {
         val targetResource = graph.resources().single { it.role == PlanResourceRole.LogicalTarget }
         val stagingResource = graph.resources().single { it.role == PlanResourceRole.ReadbackStaging }
         val targetPreparation = GPUResourcePreparationRequest(target,
-            GPUFrameTextureDescriptor(bounds, GPUColorFormat.RGBA8UnormSrgb, 1), GPUFrameResourceRole.SceneTarget,
+            GPUFrameTextureDescriptor(bounds, targetFormat.nativeFormat, 1), GPUFrameResourceRole.SceneTarget,
             setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource), GPUFrameResourceLifetime.FrameLocal,
             targetResource.byteSize, "$identity.target")
         val stagingPreparation = GPUResourcePreparationRequest(staging,
@@ -84,7 +86,7 @@ internal class W5bNativeGeometryGraphLowerer {
                     val builder = W4dGeneralPathGraphLowerer()
                     val sealedColors = draws.associateBy { it.commandIndex }
                     val built = sourcePasses.mapIndexed { index, pass -> builder.packet(pass, index, bounds,
-                        GPUColorFormat.RGBA8UnormSrgb, source, finalBlend = sealedColors.getValue(pass.draw.commandIndex).blend,
+                        targetFormat.nativeFormat, source, finalBlend = sealedColors.getValue(pass.draw.commandIndex).blend,
                         w5bMaterial = if (pass.phase == PathRenderPhase.SingleSampleStencilProducer) null else
                             W5aMaterialPlanLowerer().material(table, sealedColors.getValue(pass.draw.commandIndex).materialAuthority,
                                 pass.draw.commandIndex,
@@ -108,8 +110,10 @@ internal class W5bNativeGeometryGraphLowerer {
                         if (draw.materialAuthority.colorSourceCoordinatesV4() != null) org.graphiks.math.color.ColorF32.Transparent
                         else requireNotNull(W5aMaterialPlanLowerer().lower(table,
                             draw.materialAuthority.materialPlanRef())), index, bounds, table, null,
-                        draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(graph::packedMaterialSourceV4)) }
-                    val scratch = (builder.sealW3Scratch(request, target, staging, bounds, seal.sealHash, built) as
+                        draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(graph::packedMaterialSourceV4),
+                        nativeFormat = targetFormat.nativeFormat) }
+                    val scratch = (builder.sealW3Scratch(request, target, staging, bounds, seal.sealHash, built,
+                        nativeFormat = targetFormat.nativeFormat) as
                         GpuPlanTaskListLowerer.W3SessionScratchSealResult.Sealed).scratch
                     require(listOf(resource(data.vertex).byteSize, resource(data.index).byteSize, resource(data.uniform).byteSize) ==
                         listOf(scratch.poolCapacities.vertexBytes, scratch.poolCapacities.indexBytes, scratch.poolCapacities.uniformBytes))

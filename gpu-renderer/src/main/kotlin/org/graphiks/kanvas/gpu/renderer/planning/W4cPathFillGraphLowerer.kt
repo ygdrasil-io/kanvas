@@ -700,6 +700,7 @@ internal class W4cPathFillGraphLowerer {
         }
         val blend = if (role != GPUDrawPacketRole.PathStencilProducer)
             W5bBlendPlanLowerer.lower(draw.blend) else canonicalSolidRectSrcOverBlendPlan()
+        val targetFormat = graph.colorFormat.resolveGpuTargetFormat().nativeFormat
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4cSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = draw.commandIndex,
@@ -724,7 +725,7 @@ internal class W4cPathFillGraphLowerer {
                 clipExecution,
                 blend,
                 sampleCount = 1,
-                colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                colorFormat = targetFormat.corePrimitiveStructuralColorFormat(),
             )
             GPUDrawPacketRole.PathStencilProducer -> corePrimitivePathStencilRenderPipelineStructuralKey(
                 semantic,
@@ -732,7 +733,7 @@ internal class W4cPathFillGraphLowerer {
                 clipExecution,
                 blend,
                 sampleCount = 1,
-                colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                colorFormat = targetFormat.corePrimitiveStructuralColorFormat(),
             )
             GPUDrawPacketRole.PathStencilCover -> corePrimitivePathStencilRenderPipelineStructuralKey(
                 semantic,
@@ -740,7 +741,7 @@ internal class W4cPathFillGraphLowerer {
                 clipExecution,
                 blend,
                 sampleCount = 1,
-                colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                colorFormat = targetFormat.corePrimitiveStructuralColorFormat(),
             )
             else -> error("W4c emits only direct and path-stencil roles")
         }
@@ -771,7 +772,7 @@ internal class W4cPathFillGraphLowerer {
                 semanticPayload = semantic,
                 vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
                 scissorBoundsHash = corePrimitiveScissorAuthority(plannedScissor),
-                targetStateHash = corePrimitiveTargetStateHash(1, GPUColorFormat.RGBA8UnormSrgb),
+                targetStateHash = corePrimitiveTargetStateHash(1, targetFormat),
                 originalPaintOrder = paintOrder,
                 resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
                 frameProvenance = GPUFrameProvenance.None,

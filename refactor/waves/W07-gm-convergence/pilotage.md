@@ -29,10 +29,14 @@ branche `codex/w7-mixed-root-aa-rect`, draft
 Lot précédent : politique alpha du LinearGradient, renderer `09d9574b5`,
 branche `codex/w7-gradient-alpha-mode`, draft
 [#2421](https://github.com/ygdrasil-io/kanvas/pull/2421) empilée sur #2420.
-Lot courant : domaine de composition Surface, branche
+Lot précédent : domaine de composition Surface, branche
 `codex/w7-surface-composition`, draft
 [#2422](https://github.com/ygdrasil-io/kanvas/pull/2422) empilée sur #2421 ;
 validation ciblée et revue finale terminées, réserves ci-dessous.
+Lot courant : Rect hairline entier et encodé, renderer `f80d94fb4`, branche
+`codex/w7-encoded-hairline`, draft
+[#2423](https://github.com/ygdrasil-io/kanvas/pull/2423) empilée sur #2422 ;
+mesure terminée et réserves explicites ci-dessous, sans merge.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -55,6 +59,121 @@ de rendu et timeouts éligibles restent au dénominateur.
 
 Les gates W6 relatives à la durée de vie et aux ressources restent suivies.
 Leur fermeture et la proximité visuelle sont deux mesures distinctes.
+
+## Lot Rect hairline entier et encodé — 30 septembre 2026
+
+Le [design](encoded-hairline-design.md) et le [plan](encoded-hairline-plan.md)
+conservent le vrai Rect/STROKE de largeur zéro, non-AA, solide SrcOver,
+BUTT/MITER. `math` calcule les bandes disjointes de la bordure intérieure
+`[left,top,right+1,bottom+1)` : coins une seule fois, arithmétique I64 avant
+clipping, pas de bord inventé au clip. Une seule occurrence W4d conserve
+source et commande d'origine. La géométrie est commune aux deux domaines ;
+les scales axis-aligned LINEAR déjà admis gardent une largeur device d'un
+pixel. Encodé reste limité à identité/translation entière.
+
+Le domaine authentifié traverse source différée, formats de ressources,
+W5b/W6, stencil producer/cover et readback. La sortie d'octets conserve son
+interprétation EncodedPremulSrgb, distincte du domaine de composition de la
+cible. Le layout clear-only hérité de #2422 est corrigé au producteur.
+Source authority, seals, snapshot physique et caps ne sont pas relâchés ;
+pas de fan-out en quatre commandes, ni de nouvelle source composée fictive.
+Les deux entrées publiques W4d réutilisent l'admission encodée fermée ; les
+factories internes W4e/W6 conservent leurs contrats de scènes localisées.
+Les routes AA restent LINEAR. Aucun support implicite Path, stroke fini,
+shader de stroke, filtre, blend ou transform hors tranche.
+
+### Validation et corrections de review
+
+Task1 `ca058e49a` : RED causal au pixel(1,1), puis math478/478 et native48/48,
+dont les43 contrôles initiaux, sorties0. Sol a demandé le cas height-one,
+ajouté dans `aa29de2ca`, test math ciblé2/2 et contre-relecture approuvée.
+Task2 `52f09880e` : RED d'admission encodée puis68/68 dans onze classes.
+Sa correction de review `ebfd29bb1` ferme AA encodé et propage le format au
+clear-only différé ;56/56, quatre classes, toutes les43 identités initiales.
+
+Astra a ensuite relevé deux Important : le successeur W5b **non vide** avec
+NoOp élidé reconstruit encore LINEAR, et les mélanges hairline/sibling dans
+le même plain layer ne sont pas testés. Un Minor omet une colonne de quatre
+rangées du témoin scale. La vague unique `f80d94fb4` transmet le format de
+source aux deux successeurs W5b, ferme les entrées publiques à la tranche
+existante, étend les mélanges et vérifie toutes les dimensions de la grille.
+La contre-relecture Sol confirme les deux Important corrigés, sans nouvelle
+casse Critical/Important. Reliquat Minor : le contrôle de largeur est placé
+dans la boucle des caractères ; une future ligne vide le sauterait. Les grilles
+actuelles sont toutes complètes, y compris le pixel x=7 du cas scale. Ce
+durcissement du helper est différé après l'unique vague finale, sans prétendre
+que M1 est intégralement clos ni que la branche est prête à merger.
+
+**Validation finale69/69**, onze classes, zéro fail/skip/doublon/runner,
+processus/wrapper0. Les43 contrôles initiaux et les50 du lot parent sont tous
+présents avec résultat inchangé. Témoins : domaines/layouts RGBA/BGRA,
+mélanges des cinq sources dans les deux ordres, racine et même layer borné,
+restore255/128 une seule fois, répétition, translation/clip actif, Picture
+mémoire/archive avec mutation réelle du Rect, snapshots SOURCE_SPACE full/
+subset, refus/sentinel/discard/récupération. Paint/ColorARGB étant immuables,
+aucune réaffectation de variable n'est présentée comme mutation de capture.
+Budget4×4 dérivé avant GPU :
+`B=64+64+1024+16+32+16384+4096+4096+64=25840`, succès à B,
+refus transactionnel à B−1 et récupération répétée, aucun cap relevé.
+Le contrat d'intégration CompositionEnvelope reste inchangé et moins précis
+que le contrat primitif ; pas de parité à un code déduite de ces témoins.
+
+Les essais incorrects restent archivés. En particulier, le premier témoin
+final de mélanges échoue à cause de sa fixture (ordre d'oracle, coordonnée de
+gradient et image étirée hors1:1) : ce n'est pas un RED causal du moteur.
+L'hypothèse intermédiaire de mauvaise localisation layer est retirée.
+Le défaut W5b est établi statiquement sur le compiler public, pas par un
+échec Surface dont la route W6 le contourne. Aucun test d'infrastructure
+n'est ajouté. Les audits d'identités LINEAR et de snapshot physique sont
+statiques et ne sont pas présentés comme des comparaisons runtime de seals.
+
+Globale unique240s, antérieure à la correction finale : **678 PASS,
+40 échecs hérités,1 interrompu**,719 identités communes avec le parent,
+25 anciennes non atteintes ; wrapper124/enfant143. Aucun nouvel échec observé
+dans cette intersection. `nearestAndLinearUsePixelCenters` est interrompu
+(auparavant PASS). La suite reste **rouge/incomplète**, sans attribution de
+performance ni garantie sur les tests non atteints ; elle n'est pas relancée
+pour obtenir un statut vert. Warnings native-access Java/LWJGL Unsafe/Gradle
+hérités conservés.
+
+Le [snapshot631 final](encoded-hairline-f80d94fb4.json) mesure exactement
+`f80d94fb4b5378f10bd2dc4e58d2819897d0adc6`. Les trois tranches sérialisées
+`[0,607)`, `[607,608)`, `[608,631)` terminent Gradle/wrapper0/1/0 ; le1
+correspond au timeout interne30s de `vertices`, journalisé avant sortie124
+du processus de mesure. Aucun wrapper n'a atteint sa limite extérieure.
+**198/443 rendus,176 comparaisons,198 anciennes empreintes RGBA identiques**,
+aucune perte ni nouveau rendu. Les631 identités,443 éligibles, scopes,
+références, dimensions, seuils, résultats et diagnostics restent inchangés.
+Toujours36 cas à≥99%,49 à≥95%, médiane71,734909%,194 échecs de rendu,
+50 de setup,14 rendus non comparés,8 désaccords de dimensions et1 timeout.
+Aucun changement de pixels à attribuer ou inspecter dans cette comparaison.
+`alphagradients` reste à33,882161% des pixels ±2/canal : son port n'active
+pas encore le contrat corrigé. **Aucun gain GM**, aucune parité nouvelle
+revendiquée pour cette capacité moteur ; le changement de scène sera mesuré
+dans un lot distinct.
+
+Archives : `/private/tmp/kanvas-w7-encoded-hairline.AwWRwQ/`, notamment
+`baseline`, `green-math`, `green-final-43-commit`, `fix-round1-math`,
+`task2-final-04`, `task2-review-green-02`, `global-240`,
+`global-comparison.json`, `final-fix-final-05`, les archives `corpus-*` et
+les journaux/PNG sous `parity/`.
+Fonts, codecs/décodage externe, `jpg-color-cube`, ports GM, références,
+seuils, exclusions et scores historiques sont inchangés. Port fidèle
+d'`alphagradients` séparé, puis mesure distincte ; W7 reste ouvert.
+
+### Arbitrages de ce lot, dans l'ordre
+
+1. Exécuter le plan sous la carte blanche W7, sans nouvelle boucle
+   d'approbation : risque de reprise réversible du code/design sur draft.
+2. Une occurrence W4d plutôt que quatre commandes W3 : coût d'erreur,
+   davantage de raccords planner/native à reprendre, sans contourner les seals.
+3. Même géométrie entière LINEAR et encodée : risque de modification de pixels
+   LINEAR historiques, à mesurer et attribuer plutôt que masquer.
+4. Muter réellement RectF32 et vérifier les valeurs Paint/ColorARGB immuables :
+   un futur payload de paint mutable demanderait un témoin supplémentaire.
+5. Différer le contrôle des lignes vides du helper après l'unique vague finale :
+   les grilles actuelles sont complètes ; risque, une future ligne vide pourrait
+   omettre ses pixels sans faire échouer ce contrôle.
 
 ## Lot domaine de composition Surface — 30 septembre 2026
 

@@ -128,6 +128,7 @@ internal class W4dGeneralPathGraphLowerer {
         val graph = preflight(request.graph) ?: return invalid("The graph is not the exact W4d.2 topology.")
         val bounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
         val session = "w4d-general.session.${request.deviceGeneration.value}.${bounds.width}x${bounds.height}"
+        val targetFormat = request.graph.colorFormat.resolveGpuTargetFormat()
         val target = GPUFrameTargetRef("$session.logical-target")
         val staging = GPUFrameBufferRef("$session.staging")
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
@@ -205,7 +206,7 @@ internal class W4dGeneralPathGraphLowerer {
             listOf(
                 GPUResourcePreparationRequest(
                     target,
-                    GPUFrameTextureDescriptor(bounds, GPUColorFormat.RGBA8UnormSrgb, 1),
+                    GPUFrameTextureDescriptor(bounds, targetFormat.nativeFormat, 1),
                     GPUFrameResourceRole.SceneTarget,
                     setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
                     GPUFrameResourceLifetime.FrameLocal,

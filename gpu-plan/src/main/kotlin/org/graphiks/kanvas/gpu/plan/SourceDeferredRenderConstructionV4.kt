@@ -143,8 +143,10 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
 
     companion object {
         fun clearOnly(id: PlanId,capabilityId: String,extent: SizeI32,caps: PlanCapabilitySnapshot,
-            budget: PlanBudget, preparedIdentity: PreparedSceneIdentityV1? = null): RenderPlanResult<SourceDeferredRenderConstructionV4> {
-            val topology = W5bGeometryLanePlanV3.describeClearOnly(capabilityId,extent,caps,budget)
+            budget: PlanBudget, preparedIdentity: PreparedSceneIdentityV1? = null,
+            colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+        ): RenderPlanResult<SourceDeferredRenderConstructionV4> {
+            val topology = W5bGeometryLanePlanV3.describeClearOnly(capabilityId,extent,caps,budget,colorFormat)
             RawMaterialRequirementsV2.requireFrameBudget(emptyList(),topology.peakI64,budget,
                 "resource-limit.w5b.destination-budget")
             val sources = when (val value = MaterialSourceConstructionTableV4.of(emptyList())) {

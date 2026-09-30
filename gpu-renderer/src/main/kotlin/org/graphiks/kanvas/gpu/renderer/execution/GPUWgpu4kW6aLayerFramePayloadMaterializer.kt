@@ -2558,11 +2558,31 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     .filter { recipe -> binding.nativePasses().any { it.id == recipe.producerOwnerPassId } }
                     .flatMap { recipe -> listOf(recipe.producerOwnerPassId.value to recipe, recipe.coverOwnerPassId.value to recipe) }
                     .toMap()
+                // W4e's native pipeline must use the format of this binding's exact final
+                // target row.  It is not interchangeable with the root target: a plain layer
+                // may render to a different local target, and a stencil producer still needs
+                // the same pipeline target even when it writes no colour.
+                val targetFormatsByResourceId = binding.nativePasses()
+                    .filterIsInstance<PlanPass.PathRenderPass>()
+                    .associate { pass ->
+                        val row = graph.resources().singleOrNull { it.id == pass.target }
+                            ?: error("W6 W4e native path target is absent from the authenticated graph resources.")
+                        val format = when (row.format) {
+                            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+                            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL),
+                            PlanTextureFormat.CoverageMask -> GPUTextureFormat.RGBA8Unorm
+                            else -> error("W6 W4e native path target has no admitted texture format.")
+                        }
+                        row.id.value to format
+                    }
                 val childOwned = owned.own(GPUW4eNativeOwnedHandles())
                 encodeW4eNativePasses(device, generation, entries, payload, buffer(payload.vertexResourceId),
                     buffer(payload.indexResourceId), buffer(payload.uniformResourceId), childOwned,
                     { id -> GPUPreparedNativeTextureViewOperand(views.getValue(graph.resources().single { it.id.value == id }.id), generation) },
                     { id -> graph.resources().single { it.id.value == id }.format == PlanTextureFormat.CoverageMask },
+                    { id -> requireNotNull(targetFormatsByResourceId[id]) {
+                        "W6 W4e native path target format is not bound to this local resource."
+                    } },
                     GPUPreparedNativeTextureViewOperand(views.getValue(binding.target), generation), null,
                     org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, extent.width, extent.height),
                     commonSource = true, authority::consumerFor, { code, message -> IllegalArgumentException("$code: $message") },

@@ -94,6 +94,9 @@ public object CompositionAdmissionV1 {
             return diagnostic("image", index, "Encoded composition admits only direct ImagePatch image draws.")
         }
         val paint = node.paint
+        if (node.origin == DrawOrigin.RECT && node.geometry is GeometryNode.Rect &&
+            paint?.style == PaintStyleNode.STROKE
+        ) return rectHairlineRefusal(node, index)
         if (node.origin != DrawOrigin.RECT || node.geometry !is GeometryNode.Rect ||
             paint?.style != PaintStyleNode.FILL || paint.antiAlias ||
             node.coverage != CoverageRequest.HARD_EDGE || !node.transform.isIdentityOrIntegerTranslation() ||
@@ -112,6 +115,38 @@ public object CompositionAdmissionV1 {
         if (gradient.interpolation != ColorInterpolation.SRGB ||
             gradient.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP
         ) return diagnostic("source", index, "Encoded composition LinearGradient requires sRGB interpolation and CLAMP tile mode.")
+        return null
+    }
+
+    /** The hard Rect hairline keeps its original STROKE provenance through admission. */
+    internal fun isAdmittedEncodedRectHairline(command: SceneCommand.Draw): Boolean {
+        val node = command.node
+        return node.origin == DrawOrigin.RECT && node.geometry is GeometryNode.Rect &&
+            node.paint?.style == PaintStyleNode.STROKE && rectHairlineRefusal(node, -1) == null
+    }
+
+    private fun rectHairlineRefusal(
+        node: org.graphiks.kanvas.render.ir.DrawNode,
+        index: Int,
+    ): RenderDiagnostic? {
+        val paint = requireNotNull(node.paint)
+        val bounds = (node.geometry as GeometryNode.Rect).copyBounds()
+        if (paint.antiAlias || node.coverage != CoverageRequest.HARD_EDGE || paint.strokeWidth != 0f ||
+            paint.strokeCap != org.graphiks.kanvas.render.ir.StrokeCapNode.BUTT ||
+            paint.strokeJoin != org.graphiks.kanvas.render.ir.StrokeJoinNode.MITER ||
+            !paint.strokeMiter.isFinite() || paint.strokeMiter < 2f ||
+            !node.transform.isIdentityOrIntegerTranslation() || !node.clip.isHardIntegerRectOrEmpty() ||
+            bounds.isEmpty || !bounds.isIntegerRect()
+        ) return diagnostic("geometry", index,
+            "Encoded composition admits only non-AA integer Rect STROKE hairlines with BUTT/MITER.")
+        if (!node.blend.isSrcOver() || paint.blendMode != BlendMode.SRC_OVER || node.operationBlendMode != null) {
+            return diagnostic("blend", index, "Encoded composition admits only SrcOver blending.")
+        }
+        if (paint.shader != null || paint.blender != null || paint.colorFilter != null ||
+            paint.maskFilter != null || paint.pathEffect != null || paint.imageFilter != null ||
+            node.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty || node.resource != null
+        ) return diagnostic("source", index,
+            "Encoded composition Rect hairline requires a direct solid paint source.")
         return null
     }
 

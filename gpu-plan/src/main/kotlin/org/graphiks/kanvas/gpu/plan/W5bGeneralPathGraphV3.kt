@@ -19,7 +19,8 @@ internal fun issueW5bGeneralPathGraph(source: RenderGraphConstruction, blendsByC
     val graph = W5bDestinationGraphSealer.construct(generalFinalBlendPlanId(source.id, colors),
         W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, source.targetExtent, source.capabilities, source.budget,
         colors, source.materialPlanTableOrNull(), layout.targetBytesI64, layout.stagingBytesI64, layout.rowBytesI64,
-        layout.geometryResources, layout.data, depthStencilByCommandI32 = layout.depthByCommand)
+        layout.geometryResources, layout.data, depthStencilByCommandI32 = layout.depthByCommand,
+        colorFormat = source.colorFormat)
     return RenderGraph.issueW5bGeometry(graph, listOf(GeometryLaneConstruction(source,
         colors.map { it.commandIndex }, layout.data, layout.depth)))
 }
@@ -33,7 +34,7 @@ internal fun describeW5bGeneralPathSourcesV4(source: SourceDeferredRenderConstru
     val envelope = W5bDestinationGraphSealer.describeSources(W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
         source.targetExtent, source.capabilities, source.budget, layout.colors, layout.targetBytesI64,
         layout.stagingBytesI64, layout.rowBytesI64, layout.geometryResources, layout.data,
-        depthStencilByCommandI32 = layout.depthByCommand)
+        depthStencilByCommandI32 = layout.depthByCommand, colorFormat = source.colorFormat)
     return SourceDeferredRenderConstructionV4.of(generalFinalBlendPlanId(source.id, layout.colors),
         W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, source.targetExtent, envelope.format,
         source.capabilities, source.budget, layout.colors.size, envelope.resources, envelope.passes,
