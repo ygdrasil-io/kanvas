@@ -722,15 +722,17 @@ private fun assertRepeatedPixelTable(surface: Surface, expected: List<String>, b
 
 private fun assertPixelTable(expected: List<String>, blue: ColorARGB, red: ColorARGB, actual: RenderResult) {
     assertEquals(actual.height, expected.size, "expected row count")
-    expected.forEachIndexed { y, row -> row.forEachIndexed { x, marker ->
+    expected.forEachIndexed { y, row ->
         assertEquals(actual.width, row.length, "expected width row=$y")
-        val color = if (marker == 'R') red else blue
-        val offset = (y * 8 + x) * 4
-        assertContentEquals(
-            ubyteArrayOf(color.red.toUByte(), color.green.toUByte(), color.blue.toUByte(), color.alpha.toUByte()),
-            actual.pixels.copyOfRange(offset, offset + 4),
-            "pixel ($x,$y)",
-        )
-    } }
+        row.forEachIndexed { x, marker ->
+            val color = if (marker == 'R') red else blue
+            val offset = (y * 8 + x) * 4
+            assertContentEquals(
+                ubyteArrayOf(color.red.toUByte(), color.green.toUByte(), color.blue.toUByte(), color.alpha.toUByte()),
+                actual.pixels.copyOfRange(offset, offset + 4),
+                "pixel ($x,$y)",
+            )
+        }
+    }
     assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
 }

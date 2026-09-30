@@ -21,7 +21,7 @@ object SkiaGmRenderer {
         height: Int = gm.height,
         config: RenderConfig = RenderConfig.DEFAULT,
     ): SkiaRenderResult {
-        val surface = Surface(width = width, height = height, config = config)
+        val surface = Surface(width = width, height = height, config = gm.compositionConfig(config))
         val tracer = if (config.debugLevel >= DebugLevel.TRACE) PipelineTracer() else null
         surface.renderOpListener = tracer
         val canvas = surface.canvas()
@@ -55,7 +55,7 @@ object SkiaGmRenderer {
         height: Int = gm.height,
         config: RenderConfig = RenderConfig.DEFAULT,
     ): SkiaRenderTerminalAttempt? {
-        val surface = Surface(width = width, height = height, config = config)
+        val surface = Surface(width = width, height = height, config = gm.compositionConfig(config))
         val canvas = surface.canvas()
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
@@ -79,7 +79,7 @@ object SkiaGmRenderer {
     /** Captures exactly one existing public Surface.render() attempt for inventory evidence only. */
     fun inventoryEvidence(gm: SkiaGm, config: RenderConfig = RenderConfig.DEFAULT): InventoryRenderEvidence =
         captureInventoryEvidence(gm) {
-            SurfaceInventoryCapture(Surface(width = gm.width, height = gm.height, config = config))
+            SurfaceInventoryCapture(Surface(width = gm.width, height = gm.height, config = gm.compositionConfig(config)))
         }
 }
 
