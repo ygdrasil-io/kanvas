@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.*
+import org.graphiks.kanvas.gpu.plan.BlendCoverageLawV1
 import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
@@ -263,10 +264,14 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
         destination.sourceCoverageEncoding == org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
     val tail = if (destination == null) "" else {
         val scalar = destination.sealedW5b?.compositionAbiI32 == 4
+        val sourcePreScale = destination.sealedW5b?.coverageLaw == BlendCoverageLawV1.SourcePreScale
         require(destination.sourceCoverageEncoding == if (scalar || analyticCoverage)
             org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
             else org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.None) {
             "W5b W3 destination tail requires sealed full/scissor coverage"
+        }
+        require(!sourcePreScale || destination.mode.gpuLabel == "plus" && (scalar || analyticCoverage)) {
+            "W5b SourcePreScale requires scalar covered PLUS before native allocation"
         }
         require(!geometry.contains("@group(2)"))
         if (analyticCoverage) {
@@ -311,8 +316,8 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
                 let dst = textureSampleLevel(kanvas_w5b_destination, kanvas_w5b_sampler,
                     (pixel - vec2<f32>(${requireNotNull(destinationBounds).left}.0, ${destinationBounds.top}.0)) /
                         vec2<f32>(textureDimensions(kanvas_w5b_destination)), 0.0);
-                let blended = kanvas_w5b_blend(src, dst);
-                ${if (scalar) "let mask_sample: vec4<f32> = textureLoad(kanvas_w5b_coverage, vec2<i32>(pixel), 0); let coverage = clamp(mask_sample.r, 0.0, 1.0); return dst + coverage * (blended - dst);" else if (analyticCoverage) "return dst + coverage * (blended - dst);" else "return blended;"}
+                ${if (scalar) "let mask_sample: vec4<f32> = textureLoad(kanvas_w5b_coverage, vec2<i32>(pixel), 0); let coverage = clamp(mask_sample.r, 0.0, 1.0);" else ""}
+                ${if (sourcePreScale) "return kanvas_w5b_blend(coverage * src, dst);" else "let blended = kanvas_w5b_blend(src, dst); " + if (scalar) "return dst + coverage * (blended - dst);" else if (analyticCoverage) "return dst + coverage * (blended - dst);" else "return blended;"}
             }
         """.trimIndent().replace(Regex("\\bvec([234])([fiu])\\b")) { "vec${it.groupValues[1]}<${it.groupValues[2]}32>" }
     }
@@ -507,6 +512,7 @@ internal fun materializeW5aSourcePartitionV2(
             val programIdentity: String,
             val geometryPipeline: GPURenderPipeline,
             val compositionAbiI32: Int,
+            val coverageLaw: BlendCoverageLawV1?,
             val destinationKey: org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey?,
             val destinationBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds?,
             val materializesW6bMaskSource: Boolean,
@@ -596,6 +602,7 @@ internal fun materializeW5aSourcePartitionV2(
                 val base = requireNotNull(currentPipeline)
                 val programIdentity = validated.nativeRecipe?.canonicalLogicalEncodingV1() ?: validated.structuralId
                 val key = SourcePipelineKey(generation.value, programIdentity, base.pipeline, destination?.sealedW5b?.compositionAbiI32 ?: 2,
+                    destination?.sealedW5b?.coverageLaw,
                     destinationCopy?.sourceKey, destinationCopy?.logicalBounds, materializesW6bMaskSource)
                 val (pipeline, materialLayout) = pipelines.getOrPut(key) {
                     val template = verifiedOrdinaryTemplates[base.pipeline] ?: templates.sourceTemplate(base.pipeline)

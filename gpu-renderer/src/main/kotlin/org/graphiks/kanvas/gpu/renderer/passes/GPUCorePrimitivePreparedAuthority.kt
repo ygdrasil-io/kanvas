@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.plan.BlendCoverageLawV1
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
@@ -228,6 +229,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             val formulaId: String,
             val sourceCoverage: GPUSourceCoverageEncoding,
             val w5bCompositionAbiI32: Int? = null,
+            val coverageLaw: BlendCoverageLawV1? = null,
         ) : Blend
 
         data class NoOp(val mode: GPUBlendMode) : Blend
@@ -1042,6 +1044,7 @@ internal fun GPUBlendPlan.corePrimitiveStructuralBlend():
             formulaId,
             sourceCoverageEncoding,
             sealedW5b?.compositionAbiI32,
+            sealedW5b?.coverageLaw,
         )
     is GPUBlendPlan.LayerCompositeBlend -> child.corePrimitiveStructuralBlend()
     is GPUBlendPlan.NoOp -> GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp(mode)

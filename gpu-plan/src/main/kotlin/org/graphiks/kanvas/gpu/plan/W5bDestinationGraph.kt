@@ -221,6 +221,9 @@ internal object W5bDestinationGraphSealer {
             draws.forEach { draw ->
                 val blend = draw.blend
                 if (blend is BlendPlan.DestinationReadV1) {
+                    require(blend.coverageLaw == selectedCoverageLawV1(blend.mode, blend.coverage)) {
+                        "invalid.w5b.coverage-law"
+                    }
                     require(if (draw is W5bW4ePathDraw && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader)
                         blend.compositionAbiI32 == 3
                         else if ((draw as? W5bPointDraw)?.clipOnly != null)
@@ -345,6 +348,9 @@ internal fun validateW5bDestinationVersions(passes: List<PlanPass>) {
                 require(pass.destinationVersionAfter?.valueI64 == if (initialClear) 0L else Math.addExact(versionI64, 1L)) { "invalid.w5b.destination-version" }
                 pass.draws().forEach { draw ->
                     val blend = draw.blend as? BlendPlan.DestinationReadV1 ?: return@forEach
+                    require(blend.coverageLaw == selectedCoverageLawV1(blend.mode, blend.coverage)) {
+                        "invalid.w5b.coverage-law"
+                    }
                     val copy = passes.getOrNull(indexI32 - 1) as? PlanPass.TextureCopy
                     require(pass.draws().size == 1 && copy != null && copy.source == pass.target &&
                         copy.destination == blend.snapshotResource && copy.destinationVersion == blend.requiredDestinationVersion &&
@@ -364,6 +370,9 @@ internal fun validateW5bDestinationVersions(passes: List<PlanPass>) {
                 require(passes.getOrNull(indexI32 - 1) is PlanPass.StencilGeometryProducerV3)
                 require(pass.destinationVersionAfter?.valueI64 == Math.addExact(versionI64, 1L))
                 (pass.draw.blend as? BlendPlan.DestinationReadV1)?.let { blend ->
+                    require(blend.coverageLaw == selectedCoverageLawV1(blend.mode, blend.coverage)) {
+                        "invalid.w5b.coverage-law"
+                    }
                     val copy = passes.getOrNull(indexI32 - 2) as? PlanPass.TextureCopy
                     require(copy != null && copy.source == pass.target && copy.destination == blend.snapshotResource &&
                         copy.destinationVersion == blend.requiredDestinationVersion &&

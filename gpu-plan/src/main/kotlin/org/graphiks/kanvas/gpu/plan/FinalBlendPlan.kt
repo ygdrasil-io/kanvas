@@ -15,6 +15,15 @@ public enum class BlendFactorV1 {
 
 public enum class BlendOperationV1 { Add }
 public enum class BlendCoverageEncodingV1 { FullOrScissor, ScalarCoverageInShader }
+/** Selected coverage composition law; a backend consumes it and never reclassifies the mode. */
+public enum class BlendCoverageLawV1 { DestinationInterpolation, SourcePreScale }
+
+/** The plan authority for covered destination-read composition. */
+public fun selectedCoverageLawV1(
+    mode: BlendMode,
+    coverage: BlendCoverageEncodingV1,
+): BlendCoverageLawV1 = if (mode == BlendMode.PLUS && coverage == BlendCoverageEncodingV1.ScalarCoverageInShader)
+    BlendCoverageLawV1.SourcePreScale else BlendCoverageLawV1.DestinationInterpolation
 
 /** Authenticated target clamp fact; an unavailable fact is never inferred as a clamp. */
 public enum class BlendTargetClampV1 { Unavailable, UnitInterval }
@@ -59,11 +68,13 @@ public sealed interface BlendPlan {
         public val mode: BlendMode,
         public val formulaIdentity: String,
         public val coverage: BlendCoverageEncodingV1,
+        public val coverageLaw: BlendCoverageLawV1 = BlendCoverageLawV1.DestinationInterpolation,
         public val requiredDestinationVersion: DestinationVersionI64,
         public val snapshotResource: PlanResourceId? = null,
         public val compositionAbiI32: Int = 3,
     ) : BlendPlan {
-        override val canonicalLabel: String = "destination-read-$formulaIdentity"
+        override val canonicalLabel: String = "destination-read-$formulaIdentity" +
+            if (coverageLaw == BlendCoverageLawV1.SourcePreScale) "-source-pre-scale-v1" else ""
         override val compositionFacts: FinalBlendCompositionFactsV1
             get() = requireNotNull(BlendFormulaProgramV1.finalCompositionFacts(
                 mode.name.lowercase(), readsPriorDevice = true, writesParentDevice = true))
@@ -131,15 +142,18 @@ public object FinalBlendPlanner {
         } else {
             BlendCoverageEncodingV1.ScalarCoverageInShader
         }
+        val coverageLaw = selectedCoverageLawV1(mode, effectiveCoverage)
         if (effectiveCoverage == BlendCoverageEncodingV1.FullOrScissor ||
             sample == SamplePlan.SingleSample &&
-                coverageApplication == BlendCoverageApplicationV1.SourceMultiplication) {
+                coverageApplication == BlendCoverageApplicationV1.SourceMultiplication &&
+                coverageLaw != BlendCoverageLawV1.SourcePreScale) {
             fixed(mode, effectiveCoverage, targetClamp)?.let { return it }
         }
         return BlendPlan.DestinationReadV1(
             mode = mode,
             formulaIdentity = if (mode == BlendMode.PLUS) "plus_exact@v1" else "${mode.name.lowercase()}@v1",
             coverage = effectiveCoverage,
+            coverageLaw = coverageLaw,
             requiredDestinationVersion = DestinationVersionI64(0L),
         )
     }

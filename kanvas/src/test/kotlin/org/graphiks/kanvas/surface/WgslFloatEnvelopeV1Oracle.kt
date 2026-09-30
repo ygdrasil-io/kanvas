@@ -176,6 +176,54 @@ internal object WgslFloatEnvelopeV1Oracle {
         destination, mode, coverageF32, scalarMask,
     )
 
+    /**
+     * Independent V2 witness for covered PLUS: saturate(C * S + D), before target storage.
+     * It deliberately does not delegate to the historical post-lerp destination closure.
+     */
+    fun coveredPlusPrescaleV2(
+        src: Array<Interval>,
+        destination: AttachmentState,
+        coverageF32: Float,
+        scalarMask: Boolean = false,
+    ): DrawResult {
+        if (!coverageF32.isFinite()) return DrawResult.Unbounded("Non-finite coverage")
+        val values = try {
+            val coverage = if (scalarMask) w4eRectMaskCoverage(coverageF32) else Interval.input(coverageF32)
+            Array(4) { channel ->
+                val scaled = hull(coverage * src[channel], fma(coverage, src[channel], Interval.ZERO))
+                val floating = (scaled + destination.linearPremul[channel]).clamp01()
+                val fixed = directedBinary(fixedPrecisionEnvelope(scaled, conversion = true),
+                    destination.linearPremul[channel], ::downAdd, ::upAdd).clamp01()
+                hull(floating, fixed)
+            }
+        } catch (failure: IllegalArgumentException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        } catch (failure: ArithmeticException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        }
+        val codes = values.mapIndexed { channel, value ->
+            if (channel < 3) codesForSrgbAttachment(attachmentEncode(value)) else codesFor(value)
+        }
+        if (codes.any { it.isEmpty() || it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 }) {
+            return DrawResult.Unbounded("Attachment code sets exceed two adjacent codes: $codes", codes)
+        }
+        return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
+    }
+
+    /** Material decoding remains separate from the V2 PLUS coverage law above. */
+    fun coveredPlusPrescaleV2(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        destination: AttachmentState,
+        coverageF32: Float,
+        scalarMask: Boolean = false,
+    ): DrawResult = coveredPlusPrescaleV2(
+        evaluateMaterialSource(table, root, destination.linearPremul, Interval.ONE),
+        destination,
+        coverageF32,
+        scalarMask,
+    )
+
     /** Public-value oracle seam: no production program or binding participates in evaluation. */
     fun colorThenBlend(src: Array<Interval>, destination: AttachmentState, mode: BlendMode,
         coverageF32: Float = 1f, scalarMask: Boolean = false): DrawResult {

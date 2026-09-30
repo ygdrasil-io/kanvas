@@ -63,29 +63,35 @@ import org.junit.jupiter.api.TestFactory
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUAllApiBlendSurfaceTest {
     @Test
-    fun drawPointHistoricalW5bMatrix() = drawPointHistoricalW5bContexts(
+    fun drawPointHistoricalW5bMatrix() = drawPointW5bContexts(
+        historicalPointModes,
         listOf(BlendContext.UNCLIPPED, BlendContext.SCISSOR, BlendContext.ALPHA_MASK),
     )
 
     @Test
-    fun drawPointHistoricalW5bFullScissorMatrix() = drawPointHistoricalW5bContexts(
+    fun drawPointHistoricalW5bFullScissorMatrix() = drawPointW5bContexts(
+        historicalPointModes,
         listOf(BlendContext.UNCLIPPED, BlendContext.SCISSOR),
     )
 
-    private fun drawPointHistoricalW5bContexts(contexts: List<BlendContext>) {
+    /** Versioned native matrix for selected sat(C*S + D), including the former full/scissor cells. */
+    @Test
+    fun drawPointCoveredPlusPrescaleV2Matrix() = drawPointW5bContexts(
+        listOf(BlendMode.PLUS),
+        listOf(BlendContext.UNCLIPPED, BlendContext.SCISSOR, BlendContext.ALPHA_MASK),
+    )
+
+    private fun drawPointW5bContexts(modes: List<BlendMode>, contexts: List<BlendContext>) {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
-        val modes = listOf(
-            BlendMode.PLUS, BlendMode.MULTIPLY, BlendMode.OVERLAY, BlendMode.DARKEN,
-            BlendMode.LIGHTEN, BlendMode.COLOR_DODGE, BlendMode.COLOR_BURN,
-            BlendMode.HARD_LIGHT, BlendMode.SOFT_LIGHT, BlendMode.DIFFERENCE,
-            BlendMode.EXCLUSION, BlendMode.HUE, BlendMode.SATURATION,
-            BlendMode.COLOR, BlendMode.LUMINOSITY,
-        )
-        assertAll("DrawPoint historical W5b matrix", modes.flatMap { mode -> contexts.map { context ->
+        assertAll("DrawPoint W5b matrix", modes.flatMap { mode -> contexts.map { context ->
             Executable {
                 try {
-                    val (source, edge, destination, centerDestination, centerSetup) = W5bBlendCpuOracle.historicalPointFixture(mode)
+                    val (source, edge, destination, centerDestination, centerSetup) = if (mode == BlendMode.PLUS) {
+                        W5bBlendCpuOracle.coveredPlusPrescaleV2PointFixture()
+                    } else {
+                        W5bBlendCpuOracle.historicalPointFixture(mode)
+                    }
                     val ordinarySource = if (centerSetup == null) source else edge
                     val edgeSource = if (context == BlendContext.ALPHA_MASK) edge else ordinarySource
                     val api = BlendCase("DrawPoint", Point2F32(16f, 16f), Point2F32(10f, 16f), Point2F32(12f, 16f)) {
@@ -119,6 +125,14 @@ class GPUAllApiBlendSurfaceTest {
             }
         } })
     }
+
+    private val historicalPointModes = listOf(
+            BlendMode.MULTIPLY, BlendMode.OVERLAY, BlendMode.DARKEN,
+            BlendMode.LIGHTEN, BlendMode.COLOR_DODGE, BlendMode.COLOR_BURN,
+            BlendMode.HARD_LIGHT, BlendMode.SOFT_LIGHT, BlendMode.DIFFERENCE,
+            BlendMode.EXCLUSION, BlendMode.HUE, BlendMode.SATURATION,
+            BlendMode.COLOR, BlendMode.LUMINOSITY,
+        )
 
     /**
      * Proves that [ALPHA_MASK_EDGE] is a real half-covered pixel for the fixture rather than an

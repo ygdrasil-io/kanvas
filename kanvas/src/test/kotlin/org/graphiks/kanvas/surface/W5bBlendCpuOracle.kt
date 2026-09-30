@@ -44,10 +44,13 @@ internal object W5bBlendCpuOracle {
 
     /** Fixed fixtures: source/destination selection never consults a rendered pixel. */
     fun historicalPointFixture(mode: BlendMode): PointFixture = historicalFixtures.getOrPut(mode) {
+        require(mode != BlendMode.PLUS) {
+            "Covered PLUS has a versioned SourcePreScale V2 fixture; do not route it through the historical V1 matrix"
+        }
         val (edge, destination) = historicalEdgeFixture(mode)
         val center = when (mode) {
             BlendMode.HUE -> Draw(ColorARGB.of(255, 239, 225, 240), .375f, mode)
-            BlendMode.PLUS, BlendMode.SOFT_LIGHT -> Draw(ColorARGB.of(255, 240, 192, 224), .928f, mode)
+            BlendMode.SOFT_LIGHT -> Draw(ColorARGB.of(255, 240, 192, 224), .928f, mode)
             BlendMode.COLOR_BURN, BlendMode.COLOR -> Draw(ColorARGB.of(255, 240, 192, 232), .928f, mode)
             else -> edge
         }
@@ -72,8 +75,26 @@ internal object W5bBlendCpuOracle {
         fixture
     }
 
+    /**
+     * Explicitly versioned replacement for the former historical covered-PLUS Point fixture.
+     *
+     * Its black RGB channels are exact under the V2 envelope. Fractional alpha makes
+     * SourcePreScale distinguishable from destination interpolation and keeps the existing
+     * edge-versus-full proof meaningful. This pair is bounded by the V2 oracle before the GPU
+     * is rendered; the former historical white fixture is not, because its V2 EOTF envelope
+     * spans too many output codes. The separate public W7 witness retains the green saturation
+     * counterexample.
+     */
+    fun coveredPlusPrescaleV2PointFixture(): PointFixture {
+        val source = Draw(ColorARGB.Black, .75f, BlendMode.PLUS)
+        val destination = Draw(ColorARGB.of(64, 0, 0, 0), 1f, BlendMode.SRC_OVER)
+        val fixture = PointFixture(source, source, destination, destination)
+        proveFullPoint(source, destination)
+        proveMaskedEdge(source, destination)
+        return fixture
+    }
+
     private fun historicalEdgeFixture(mode: BlendMode): Pair<Draw, Draw> = when (mode) {
-        BlendMode.PLUS -> Draw(ColorARGB.of(255, 224, 240, 192), .5f, mode) to Draw(ColorARGB.Black, .0625f, BlendMode.SRC_OVER)
         BlendMode.MULTIPLY -> Draw(ColorARGB.of(255, 240, 192, 129), .928f, mode) to Draw(ColorARGB.of(255, 0, 0, 93), .25f, BlendMode.SRC_OVER)
         BlendMode.OVERLAY -> Draw(ColorARGB.of(255, 240, 192, 127), .928f, mode) to Draw(ColorARGB.of(255, 0, 0, 93), .25f, BlendMode.SRC_OVER)
         BlendMode.DARKEN -> Draw(ColorARGB.of(255, 240, 192, 66), .928f, mode) to Draw(ColorARGB.of(255, 0, 0, 93), .25f, BlendMode.SRC_OVER)
@@ -118,9 +139,13 @@ internal object W5bBlendCpuOracle {
         val background = bounded(point(source, destination, 0f))
         val half = bounded(point(source, destination, .5f, true))
         val material = table(source.color, source.opacityF32)
-        val full = WgslFloatEnvelopeV1Oracle.destinationExclusion(material, MaterialPlanRef(1), background.state, source.mode, 1f, true)
+        val full = if (source.mode == BlendMode.PLUS) WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            material, MaterialPlanRef(1), background.state, 1f, scalarMask = true,
+        ) else WgslFloatEnvelopeV1Oracle.drawDestination(
+            material, MaterialPlanRef(1), background.state, source.mode, 1f, scalarMask = true,
+        )
         val over = WgslFloatEnvelopeV1Oracle.sourceOverExclusion(material, MaterialPlanRef(1), background.state, .5f)
-        require(disjoint(half.channels, full.channels)) { "${source.mode} mask edge must differ from full coverage" }
+        require(disjoint(half.channels, bounded(full).channels)) { "${source.mode} mask edge must differ from full coverage" }
         require(disjoint(half.channels, background.channels)) { "${source.mode} mask edge must differ from DST" }
         require(disjoint(half.channels, over.channels)) { "${source.mode} mask edge must differ from SRC_OVER" }
         for (sibling in confusableModes(source.mode)) {
@@ -171,8 +196,11 @@ internal object W5bBlendCpuOracle {
         if (coverageF32 == 0f || background is WgslFloatEnvelopeV1Oracle.DrawResult.Unbounded) return background
         val attachment = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
         val material = table(source.color, source.opacityF32)
-        return if (source.mode == BlendMode.PLUS && coverageF32 == 1f && !scalarMask) WgslFloatEnvelopeV1Oracle.drawPlus(material, MaterialPlanRef(1), attachment)
-        else WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), attachment, source.mode, coverageF32, scalarMask)
+        return if (source.mode == BlendMode.PLUS) WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            material, MaterialPlanRef(1), attachment, coverageF32, scalarMask,
+        ) else WgslFloatEnvelopeV1Oracle.drawDestination(
+            material, MaterialPlanRef(1), attachment, source.mode, coverageF32, scalarMask,
+        )
     }
 
     fun assertOrder(draws: List<Draw>, actual: UByteArray, reversedActual: UByteArray) {
