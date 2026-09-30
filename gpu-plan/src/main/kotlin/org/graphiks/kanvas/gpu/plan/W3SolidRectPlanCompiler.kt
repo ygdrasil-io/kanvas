@@ -500,8 +500,8 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
             capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
             capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name,
             budget.maxFrameLocalBytes.toString(),
-        ) + if (target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED)
-            listOf(target.compositionDomain.name) else emptyList<String>() + planCapabilityIdentityFacts(capabilities)
+        ) + (if (target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED)
+            listOf(target.compositionDomain.name) else emptyList()) + planCapabilityIdentityFacts(capabilities)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { field ->
             val bytes = field.encodeToByteArray()

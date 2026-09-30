@@ -118,7 +118,13 @@ internal object W7CompositionCpuOracle {
 
     fun swizzle(value: CompositionEnvelope, format: PixelFormat): CompositionEnvelope {
         if (format == PixelFormat.RGBA8) return value
-        val order = listOf(2, 1, 0, 3)
+        return permute(value, listOf(2, 1, 0, 3))
+    }
+
+    /** Independent wrong-channel alternative; draw order and endpoint alphas stay fixed. */
+    fun swapRedBlue(value: CompositionEnvelope): CompositionEnvelope = permute(value, listOf(2, 1, 0, 3))
+
+    private fun permute(value: CompositionEnvelope, order: List<Int>): CompositionEnvelope {
         return CompositionEnvelope.stored(order.map(value.channels::get)).withStoreTrace(
             value.storeTrace.map { store -> order.map(store::get) },
         )

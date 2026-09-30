@@ -141,8 +141,9 @@ class W7SurfaceCompositionPixelTest {
 
     @Test
     fun plainLayerPreservesDomainAndAppliesRestoreOpacityOnce() {
-        // Removing either the child-target store, the target domain, or the single restore
-        // opacity multiplication changes this public native pixel.
+        // Domain and one-time restore opacity are discriminated before GPU.  The
+        // intermediate-store alternative is retained below as an honest overlap,
+        // not misrepresented as a witness that can detect its omission.
         val background = ColorARGB.White
         val firstChild = ColorARGB.of(128, 255, 0, 0)
         val secondChild = ColorARGB.of(64, 0, 0, 255)
@@ -159,7 +160,7 @@ class W7SurfaceCompositionPixelTest {
                 assertDisjoint("domain=$domain doubled-restore", tracedExpected,
                     layerStages(domain, restoreAlpha, firstChild, secondChild, doubleRestore = true).trace)
                 assertDisjoint("domain=$domain R/B-inverted", tracedExpected,
-                    layerStages(domain, restoreAlpha, secondChild, firstChild).trace)
+                    W7CompositionCpuOracle.swapRedBlue(tracedExpected))
                 assertOverlaps("domain=$domain intermediate-store-omitted", tracedExpected,
                     layerStages(domain, restoreAlpha, firstChild, secondChild, omitIntermediateStore = true).trace)
             }
@@ -247,15 +248,15 @@ class W7SurfaceCompositionPixelTest {
                 drawRect(RectF32.ofLTRB(-1f, 0f, 1f, 2f), Paint(ColorARGB.of(255, 37, 101, 219), antiAlias = false))
                 restore()
             }
-            val result = clipped.render()
-            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
-            assertEquals(0, result.stats.opsRefused)
             val clippedColor = W7CompositionCpuOracle.store(
                 W7CompositionCpuOracle.solid(ColorARGB.of(255, 37, 101, 219), CompositionDomain.SRGB_ENCODED),
                 CompositionDomain.SRGB_ENCODED,
             )
             val clippedExpected = listOf(transparent, clippedColor, transparent,
                 transparent, clippedColor, transparent)
+            val result = clipped.render()
+            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+            assertEquals(0, result.stats.opsRefused)
             assertPixelSequence(result, clippedExpected, format, CompositionDomain.SRGB_ENCODED)
             assertPixelSequence(clipped.render(), clippedExpected, format, CompositionDomain.SRGB_ENCODED)
 
@@ -458,18 +459,19 @@ class W7SurfaceCompositionPixelTest {
         val subsetColors = listOf(muted, muted, red, muted)
         for (format in PixelFormat.entries) {
             val source = Surface(3, 2, format, RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
+            val sourceExpected = snapshotExpected(colors, CompositionDomain.SRGB_ENCODED, format)
             source.canvas { colors.forEachIndexed { index, color ->
                 val x = (index % 3).toFloat()
                 val y = (index / 3).toFloat()
                 drawRect(RectF32.ofLTRB(x, y, x + 1f, y + 1f), Paint(color, antiAlias = false))
             } }
             val sourceResult = source.render()
-            assertSnapshotPixels(sourceResult, colors, format, CompositionDomain.SRGB_ENCODED)
+            assertSnapshotPixels(sourceResult, sourceExpected)
             val sourceBytes = sourceResult.pixels
             val subsetBytes = listOf(1, 2, 4, 5).flatMap { index ->
                 sourceBytes.copyOfRange(index * 4, index * 4 + 4).asList()
             }.toUByteArray()
-            for ((snapshot, expectedColors, expectedBytes) in listOf(
+            for ((snapshot, _, expectedBytes) in listOf(
                 Triple(source.makeImageSnapshot(), colors, sourceBytes),
                 Triple(requireNotNull(source.makeImageSnapshot(subset)), subsetColors, subsetBytes),
             )) {
@@ -484,13 +486,14 @@ class W7SurfaceCompositionPixelTest {
                 val memory = recorder.finishRecordingAsPicture()
                 val wire = assertNotNull(Picture.fromByteArray(memory.toByteArray()))
                 for (picture in listOf(memory, wire)) {
+                    val replayExpected = snapshotReplayExpected(copied, CompositionDomain.SRGB_ENCODED, format)
                     val replay = Surface(snapshot.width, snapshot.height, format,
                         RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
                     replay.canvas { picture.playback(this) }
                     val first = replay.render()
-                    assertSnapshotPixels(first, expectedColors, format, CompositionDomain.SRGB_ENCODED)
+                    assertSnapshotPixels(first, replayExpected)
                     val second = replay.render()
-                    assertSnapshotPixels(second, expectedColors, format, CompositionDomain.SRGB_ENCODED)
+                    assertSnapshotPixels(second, replayExpected)
                     assertContentEquals(first.pixels, second.pixels)
                 }
             }
@@ -518,9 +521,13 @@ class W7SurfaceCompositionPixelTest {
         )
         for (sourceFormat in PixelFormat.entries) for (color in samples) {
             val source = Surface(1, 1, sourceFormat, RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
+            val sourceExpected = snapshotExpected(listOf(color), CompositionDomain.SRGB_ENCODED, sourceFormat)
             source.canvas { drawRect(pixel, Paint(color, antiAlias = false)) }
+            val sourceResult = source.render()
+            assertSnapshotPixels(sourceResult, sourceExpected)
             val snapshot = source.makeImageSnapshot()
             assertEquals(ImagePremultiplicationV1.SOURCE_SPACE, snapshot.premultiplication)
+            assertContentEquals(sourceResult.pixels, requireNotNull(snapshot.pixels).toUByteArray())
             val expected = expectedReplay(snapshot, CompositionDomain.LINEAR, PixelFormat.RGBA8, ColorARGB.Blue)
             val replay = Surface(1, 1, PixelFormat.RGBA8)
             replay.canvas {
@@ -583,8 +590,12 @@ class W7SurfaceCompositionPixelTest {
     @Test
     fun oneEncodedImageResourceAlternatesAcrossCompositionDomains() {
         val source = Surface(1, 1, PixelFormat.BGRA8, RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
+        val sourceExpected = snapshotExpected(listOf(ColorARGB.of(128, 255, 0, 0)), CompositionDomain.SRGB_ENCODED, PixelFormat.BGRA8)
         source.canvas { drawRect(pixel, Paint(ColorARGB.of(128, 255, 0, 0), antiAlias = false)) }
+        val sourceResult = source.render()
+        assertSnapshotPixels(sourceResult, sourceExpected)
         val image = source.makeImageSnapshot()
+        assertContentEquals(sourceResult.pixels, requireNotNull(image.pixels).toUByteArray())
         for (domain in listOf(CompositionDomain.LINEAR, CompositionDomain.SRGB_ENCODED,
             CompositionDomain.LINEAR, CompositionDomain.SRGB_ENCODED)) {
             val expected = expectedReplay(image, domain, PixelFormat.RGBA8, ColorARGB.Blue)
@@ -766,24 +777,27 @@ class W7SurfaceCompositionPixelTest {
             "domain=$domain format=$format scopes=${result.nativeEvidenceScopeKinds}")
     }
 
-    private fun assertSnapshotPixels(
-        result: RenderResult,
+    private fun snapshotExpected(
         colors: List<ColorARGB>,
-        format: PixelFormat,
         domain: CompositionDomain,
-    ) {
-        val expected = colors.map { color ->
+        format: PixelFormat,
+    ): List<W7CompositionCpuOracle.CompositionEnvelope> = colors.map { color ->
             W7CompositionCpuOracle.swizzle(
                 W7CompositionCpuOracle.store(W7CompositionCpuOracle.solid(color, domain), domain),
                 format,
             )
         }
+
+    private fun assertSnapshotPixels(
+        result: RenderResult,
+        expected: List<W7CompositionCpuOracle.CompositionEnvelope>,
+    ) {
         assertEquals(expected.size * 4, result.pixels.size)
         expected.forEachIndexed { index, pixel ->
             W7CompositionCpuOracle.assertAdmits(pixel, result.pixels.copyOfRange(index * 4, index * 4 + 4))
         }
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
-            "domain=$domain format=$format scopes=${result.nativeEvidenceScopeKinds}")
+            "snapshot scopes=${result.nativeEvidenceScopeKinds}")
         assertEquals(ImagePremultiplicationV1.SOURCE_SPACE, result.premultiplication)
     }
 
@@ -791,14 +805,36 @@ class W7SurfaceCompositionPixelTest {
         image: Image,
         domain: CompositionDomain,
         targetFormat: PixelFormat,
-        background: ColorARGB,
+        background: ColorARGB? = null,
+    ): W7CompositionCpuOracle.CompositionEnvelope = expectedReplay(
+        requireNotNull(image.pixels), image.colorType, image.alphaType, domain, targetFormat, background,
+    )
+
+    private fun snapshotReplayExpected(
+        image: Image,
+        domain: CompositionDomain,
+        targetFormat: PixelFormat,
+    ): List<W7CompositionCpuOracle.CompositionEnvelope> = requireNotNull(image.pixels).asList().chunked(4).map { bytes ->
+        expectedReplay(bytes.toByteArray(), image.colorType, image.alphaType, domain, targetFormat)
+    }
+
+    private fun expectedReplay(
+        bytes: ByteArray,
+        colorType: ColorType,
+        alphaType: AlphaType,
+        domain: CompositionDomain,
+        targetFormat: PixelFormat,
+        background: ColorARGB? = null,
     ): W7CompositionCpuOracle.CompositionEnvelope {
         val source = W7CompositionCpuOracle.sourceSpacePremul(
-            requireNotNull(image.pixels), image.colorType, image.alphaType, domain,
+            bytes, colorType, alphaType, domain,
         )
-        val destination = W7CompositionCpuOracle.solid(background, domain)
+        val root = background?.let { W7CompositionCpuOracle.store(W7CompositionCpuOracle.solid(it, domain), domain) }
+        val destination = root?.let { W7CompositionCpuOracle.storedSample(it, domain) }
+            ?: W7CompositionCpuOracle.solid(ColorARGB.Transparent, domain)
+        val result = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(source, destination), domain)
         return W7CompositionCpuOracle.swizzle(
-            W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(source, destination), domain),
+            if (root == null) result else W7CompositionCpuOracle.trace(root, result),
             targetFormat,
         )
     }
