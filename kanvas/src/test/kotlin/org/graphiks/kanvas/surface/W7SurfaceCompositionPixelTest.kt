@@ -44,7 +44,7 @@ class W7SurfaceCompositionPixelTest {
         // A route that ignores compositionDomain, changes AUTO's target, or swaps public byte
         // layout must fail this public result. The oracle is closed before either render begins.
         val expected = CompositionDomain.entries.associateWith { domain ->
-            val white = W7CompositionCpuOracle.store(W7CompositionCpuOracle.solid(ColorARGB.White, domain), domain)
+            val white = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(ColorARGB.White, domain), domain)
             val result = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
                 W7CompositionCpuOracle.solid(ColorARGB.of(128, 0, 0, 0), domain),
                 W7CompositionCpuOracle.storedSample(white, domain),
@@ -189,10 +189,8 @@ class W7SurfaceCompositionPixelTest {
         val foreground = ColorARGB.of(128, 211, 47, 129)
         val image = Image.fromPixels(1, 1, byteArrayOf(37, 101, -37, -1), alphaType = AlphaType.PREMUL)
         for (domain in CompositionDomain.entries) for (format in PixelFormat.entries) {
-            val root = W7CompositionCpuOracle.store(W7CompositionCpuOracle.solid(background, domain), domain)
-            val child = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
-                W7CompositionCpuOracle.solid(foreground, domain), Array(4) { WgslFloatEnvelopeV1Oracle.Interval.ZERO },
-            ), domain)
+            val root = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(background, domain), domain)
+            val child = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(foreground, domain), domain)
             val drawColorResult = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
                 W7CompositionCpuOracle.storedSample(child, domain), W7CompositionCpuOracle.storedSample(root, domain),
             ), domain)
@@ -207,7 +205,7 @@ class W7SurfaceCompositionPixelTest {
             assertColoredResult(drawColorLayer.render(), drawColorExpected, format, domain)
             assertColoredResult(drawColorLayer.render(), drawColorExpected, format, domain)
 
-            val imageChild = W7CompositionCpuOracle.store(
+            val imageChild = W7CompositionCpuOracle.drawOnClear(
                 W7CompositionCpuOracle.sourceSpacePremul(
                     requireNotNull(image.pixels), image.colorType, image.alphaType, domain,
                 ),
@@ -231,10 +229,7 @@ class W7SurfaceCompositionPixelTest {
     @Test
     fun encodedLayerBoundsTranslationHardClipAndEmptyLayerAreTransactional() {
         for (format in PixelFormat.entries) {
-            val transparent = W7CompositionCpuOracle.store(
-                W7CompositionCpuOracle.solid(ColorARGB.Transparent, CompositionDomain.SRGB_ENCODED),
-                CompositionDomain.SRGB_ENCODED,
-            )
+            val transparent = W7CompositionCpuOracle.clear()
             val empty = Surface(2, 2, format, RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
             empty.canvas { saveLayer(); restore() }
             assertEveryPixelResult(empty.render(), transparent, format, CompositionDomain.SRGB_ENCODED)
@@ -248,12 +243,18 @@ class W7SurfaceCompositionPixelTest {
                 drawRect(RectF32.ofLTRB(-1f, 0f, 1f, 2f), Paint(ColorARGB.of(255, 37, 101, 219), antiAlias = false))
                 restore()
             }
-            val clippedColor = W7CompositionCpuOracle.store(
+            val clippedChild = W7CompositionCpuOracle.drawOnClear(
                 W7CompositionCpuOracle.solid(ColorARGB.of(255, 37, 101, 219), CompositionDomain.SRGB_ENCODED),
                 CompositionDomain.SRGB_ENCODED,
             )
-            val clippedExpected = listOf(transparent, clippedColor, transparent,
-                transparent, clippedColor, transparent)
+            val clippedColor = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+                W7CompositionCpuOracle.storedSample(clippedChild, CompositionDomain.SRGB_ENCODED),
+                W7CompositionCpuOracle.storedSample(transparent, CompositionDomain.SRGB_ENCODED),
+            ), CompositionDomain.SRGB_ENCODED)
+            val clippedTrace = W7CompositionCpuOracle.trace(clippedChild, clippedColor)
+            assertEquals(2, clippedTrace.storeTrace.size, "Clip child and root restore stores are traced before GPU")
+            val clippedExpected = listOf(transparent, clippedTrace, transparent,
+                transparent, clippedTrace, transparent)
             val result = clipped.render()
             assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
             assertEquals(0, result.stats.opsRefused)
@@ -270,12 +271,18 @@ class W7SurfaceCompositionPixelTest {
                 drawColor(boundedColor)
                 restore()
             }
-            val coloredPixel = W7CompositionCpuOracle.store(
+            val boundedChild = W7CompositionCpuOracle.drawOnClear(
                 W7CompositionCpuOracle.solid(boundedColor, CompositionDomain.SRGB_ENCODED),
                 CompositionDomain.SRGB_ENCODED,
             )
-            val expected = listOf(transparent, coloredPixel, coloredPixel,
-                transparent, coloredPixel, coloredPixel)
+            val coloredPixel = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+                W7CompositionCpuOracle.storedSample(boundedChild, CompositionDomain.SRGB_ENCODED),
+                W7CompositionCpuOracle.storedSample(transparent, CompositionDomain.SRGB_ENCODED),
+            ), CompositionDomain.SRGB_ENCODED)
+            val boundedTrace = W7CompositionCpuOracle.trace(boundedChild, coloredPixel)
+            assertEquals(2, boundedTrace.storeTrace.size, "Bounded child and root restore stores are traced before GPU")
+            val expected = listOf(transparent, boundedTrace, boundedTrace,
+                transparent, boundedTrace, boundedTrace)
             assertPixelSequence(bounded.render(), expected, format, CompositionDomain.SRGB_ENCODED)
             assertPixelSequence(bounded.render(), expected, format, CompositionDomain.SRGB_ENCODED)
         }
@@ -299,14 +306,18 @@ class W7SurfaceCompositionPixelTest {
             drawRect(RectF32.ofLTRB(0f, 0f, 3f, 3f), Paint(child, antiAlias = false))
             restore()
         }
-        val compositeExpected = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
-            W7CompositionCpuOracle.storedSample(W7CompositionCpuOracle.store(
-                W7CompositionCpuOracle.solid(child, CompositionDomain.SRGB_ENCODED), CompositionDomain.SRGB_ENCODED,
-            ), CompositionDomain.SRGB_ENCODED),
-            W7CompositionCpuOracle.storedSample(W7CompositionCpuOracle.store(
-                W7CompositionCpuOracle.solid(root, CompositionDomain.SRGB_ENCODED), CompositionDomain.SRGB_ENCODED,
-            ), CompositionDomain.SRGB_ENCODED),
+        val budgetRoot = W7CompositionCpuOracle.drawOnClear(
+            W7CompositionCpuOracle.solid(root, CompositionDomain.SRGB_ENCODED), CompositionDomain.SRGB_ENCODED,
+        )
+        val budgetChild = W7CompositionCpuOracle.drawOnClear(
+            W7CompositionCpuOracle.solid(child, CompositionDomain.SRGB_ENCODED), CompositionDomain.SRGB_ENCODED,
+        )
+        val budgetRestore = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+            W7CompositionCpuOracle.storedSample(budgetChild, CompositionDomain.SRGB_ENCODED),
+            W7CompositionCpuOracle.storedSample(budgetRoot, CompositionDomain.SRGB_ENCODED),
         ), CompositionDomain.SRGB_ENCODED)
+        val compositeExpected = W7CompositionCpuOracle.trace(budgetRoot, budgetChild, budgetRestore)
+        assertEquals(3, compositeExpected.storeTrace.size, "Budget root, child and restore stores are traced before GPU")
         val accepted = Surface(3, 3, config = RenderConfig(
             compositionDomain = CompositionDomain.SRGB_ENCODED, frameLocalBudgetBytes = budgetB,
         ))
@@ -329,7 +340,7 @@ class W7SurfaceCompositionPixelTest {
         assertContentEquals(UByteArray(36) { 0x5au }, sentinel)
         refused.discardRecordedOperations()
         refused.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 3f, 3f), Paint(root, antiAlias = false)) }
-        val expected = W7CompositionCpuOracle.store(
+        val expected = W7CompositionCpuOracle.drawOnClear(
             W7CompositionCpuOracle.solid(root, CompositionDomain.SRGB_ENCODED), CompositionDomain.SRGB_ENCODED,
         )
         assertEveryPixelResult(refused.render(), expected, PixelFormat.RGBA8, CompositionDomain.SRGB_ENCODED)
@@ -409,7 +420,7 @@ class W7SurfaceCompositionPixelTest {
             assertEquals("unsupported.surface.composition.target-format", stillInvalid.message.orEmpty().substringBefore(':'))
             assertContentEquals(ubyteArrayOf(0x5au, 0x5au, 0x5au, 0x5au), sentinel)
 
-            val expected = W7CompositionCpuOracle.store(
+            val expected = W7CompositionCpuOracle.drawOnClear(
                 W7CompositionCpuOracle.solid(ColorARGB.Blue, domain), domain,
             )
             val valid = Surface(1, 1, config = RenderConfig(compositionDomain = domain))
@@ -424,7 +435,7 @@ class W7SurfaceCompositionPixelTest {
         // These are ordinary SOURCE_SPACE/PREMUL/SRGB bytes, deliberately not a
         // normalized transparent snapshot: ZERO_ALPHA_GUARD must erase their RGB.
         val background = ColorARGB.of(255, 19, 143, 71)
-        val expected = W7CompositionCpuOracle.store(
+        val expected = W7CompositionCpuOracle.drawOnClear(
             W7CompositionCpuOracle.solid(background, CompositionDomain.SRGB_ENCODED),
             CompositionDomain.SRGB_ENCODED,
         )
@@ -563,7 +574,7 @@ class W7SurfaceCompositionPixelTest {
         assertContentEquals(ubyteArrayOf(0x5au, 0x5au, 0x5au, 0x5au), sentinel)
         refused.discardRecordedOperations()
         refused.canvas { drawRect(pixel, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
-        val expected = W7CompositionCpuOracle.store(
+        val expected = W7CompositionCpuOracle.drawOnClear(
             W7CompositionCpuOracle.solid(ColorARGB.of(255, 17, 61, 211), CompositionDomain.SRGB_ENCODED),
             CompositionDomain.SRGB_ENCODED,
         )
@@ -634,7 +645,7 @@ class W7SurfaceCompositionPixelTest {
         doubleRestore: Boolean = false,
         omitIntermediateStore: Boolean = false,
     ): LayerStages {
-        val root = W7CompositionCpuOracle.store(W7CompositionCpuOracle.solid(ColorARGB.White, domain), domain)
+        val root = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(ColorARGB.White, domain), domain)
         val firstSource = W7CompositionCpuOracle.srcOver(
             W7CompositionCpuOracle.solid(firstChild, domain),
             W7CompositionCpuOracle.solid(ColorARGB.Transparent, domain),
@@ -701,7 +712,7 @@ class W7SurfaceCompositionPixelTest {
             resetMatrix()
             drawRect(full, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
         }
-        val expected = W7CompositionCpuOracle.store(
+        val expected = W7CompositionCpuOracle.drawOnClear(
             W7CompositionCpuOracle.solid(ColorARGB.of(255, 17, 61, 211), CompositionDomain.SRGB_ENCODED),
             CompositionDomain.SRGB_ENCODED,
         )
@@ -717,7 +728,7 @@ class W7SurfaceCompositionPixelTest {
         background: ColorARGB,
         foreground: ColorARGB,
     ): W7CompositionCpuOracle.CompositionEnvelope {
-        val storedBackground = W7CompositionCpuOracle.store(W7CompositionCpuOracle.solid(background, domain), domain)
+        val storedBackground = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(background, domain), domain)
         val result = W7CompositionCpuOracle.store(
             W7CompositionCpuOracle.srcOver(
                 W7CompositionCpuOracle.solid(foreground, domain),
@@ -783,7 +794,7 @@ class W7SurfaceCompositionPixelTest {
         format: PixelFormat,
     ): List<W7CompositionCpuOracle.CompositionEnvelope> = colors.map { color ->
             W7CompositionCpuOracle.swizzle(
-                W7CompositionCpuOracle.store(W7CompositionCpuOracle.solid(color, domain), domain),
+                W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(color, domain), domain),
                 format,
             )
         }
@@ -829,7 +840,7 @@ class W7SurfaceCompositionPixelTest {
         val source = W7CompositionCpuOracle.sourceSpacePremul(
             bytes, colorType, alphaType, domain,
         )
-        val root = background?.let { W7CompositionCpuOracle.store(W7CompositionCpuOracle.solid(it, domain), domain) }
+        val root = background?.let { W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(it, domain), domain) }
         val destination = root?.let { W7CompositionCpuOracle.storedSample(it, domain) }
             ?: W7CompositionCpuOracle.solid(ColorARGB.Transparent, domain)
         val result = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(source, destination), domain)

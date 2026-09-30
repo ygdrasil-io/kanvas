@@ -80,6 +80,15 @@ internal object W7CompositionCpuOracle {
         return CompositionEnvelope.stored(codes)
     }
 
+    /** Models a real first draw onto a cleared target, including source-times-one precision. */
+    fun drawOnClear(
+        source: Array<WgslFloatEnvelopeV1Oracle.Interval>,
+        domain: CompositionDomain,
+    ): CompositionEnvelope = store(srcOver(source, Array(4) { zero }), domain)
+
+    /** A target clear is not a draw and therefore has no fixed-function source conversion. */
+    fun clear(): CompositionEnvelope = CompositionEnvelope.stored(List(4) { setOf(0) })
+
     fun storedSample(
         value: CompositionEnvelope,
         domain: CompositionDomain,
