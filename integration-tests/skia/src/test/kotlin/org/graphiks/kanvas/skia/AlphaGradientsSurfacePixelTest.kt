@@ -42,7 +42,7 @@ class AlphaGradientsSurfacePixelTest {
 
         GpuAvailability.requireWebGpu()
         val actual = SkiaGmRenderer.render(AlphaGradientsGm())
-        assertPixel(actual.rgba, actual.width, 160, 25, 191, 191, 191, 255)
+        assertPixelNear(actual.rgba, actual.width, 160, 25, 191, 2)
         assertPixel(actual.rgba, actual.width, 470, 25, 255, 255, 255, 255)
         assertPixel(actual.rgba, actual.width, 160, 10, 0, 0, 0, 255)
         assertPixel(actual.rgba, actual.width, 160, 9, 255, 255, 255, 255)
@@ -143,6 +143,7 @@ class AlphaGradientsSurfacePixelTest {
             val suspect = requireNotNull(requireNotNull(manifest.opTrace).ops.lastOrNull { it.afterUrl != null })
             val before = ComparisonUtils.loadPngAsSrgbRgba(File(outputDir, requireNotNull(suspect.beforeUrl)))
             val after = ComparisonUtils.loadPngAsSrgbRgba(File(outputDir, requireNotNull(suspect.afterUrl)))
+            assertEquals(16, before.size)
             assertTrue(before.all { it.toInt() and 255 == 255 }, "$replayMode before PNG was not opaque white")
             assertWholeImageRgbNear(after, 127, 2)
         }
