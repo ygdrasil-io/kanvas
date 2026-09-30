@@ -240,4 +240,5 @@ rtk proxy ruby /private/tmp/kanvas-w7-alpha-mode.vpi7cG/bounded-run.rb /private/
   correction du finding legacy dans `09d9574b5`, puis re-review ciblée Sol :
   conformité/qualité PASS, zéro finding résiduel. Sélection finale46/46,
   13 classes XML, Gradle0 ; preuves et réserves dans `pilotage.md`/`status.md`.
-- [ ] Publication de la PR draft stackée sur #2420 ; W7 reste ouvert.
+- [x] Publication de la PR draft [#2421](https://github.com/ygdrasil-io/kanvas/pull/2421)
+  stackée sur #2420 ; W7 reste ouvert, aucune fusion.

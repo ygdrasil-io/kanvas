@@ -27,7 +27,8 @@ Lot précédent : Rect stroke AA dans un mélange racine, renderer `ff628a94d`,
 branche `codex/w7-mixed-root-aa-rect`, draft
 [#2420](https://github.com/ygdrasil-io/kanvas/pull/2420) empilée sur #2419.
 Lot courant : politique alpha du LinearGradient, renderer `09d9574b5`,
-branche `codex/w7-gradient-alpha-mode`, future draft empilée sur #2420.
+branche `codex/w7-gradient-alpha-mode`, draft
+[#2421](https://github.com/ygdrasil-io/kanvas/pull/2421) empilée sur #2420.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,

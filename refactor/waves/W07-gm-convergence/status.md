@@ -5,8 +5,9 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot politique alpha LinearGradient — 30 septembre 2026
 
-Renderer `09d9574b5`, branche `codex/w7-gradient-alpha-mode`, draft à publier
-sur #2420, revue finale corrigée et validée. [Design](gradient-alpha-design.md),
+Renderer `09d9574b5`, branche `codex/w7-gradient-alpha-mode`, draft
+[#2421](https://github.com/ygdrasil-io/kanvas/pull/2421) empilée sur #2420,
+revue finale corrigée et validée. [Design](gradient-alpha-design.md),
 [plan et commandes](gradient-alpha-plan.md),
 [snapshot631](gradient-alpha-09d9574b5.json) et
 [bilan](pilotage.md#lot-politique-alpha-du-gradient--30-septembre-2026).
