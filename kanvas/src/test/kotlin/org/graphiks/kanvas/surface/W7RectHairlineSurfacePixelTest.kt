@@ -453,6 +453,51 @@ class W7RectHairlineSurfacePixelTest {
     }
 
     @Test
+    fun `fullyClippedEncodedHairlinePreservesMixedRootAndLayerDestinations`() {
+        val domain = CompositionDomain.SRGB_ENCODED
+        val hairline = RectF32.ofLTRB(3f, 3f, 6f, 6f)
+        val excludedClip = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val source = ColorARGB.of(128, 31, 191, 73)
+        val background = ColorARGB.of(255, 17, 61, 211)
+        val hairlinePaint = Paint(ColorARGB.of(128, 255, 0, 0), antiAlias = false,
+            style = PaintStyle.STROKE, strokeWidth = 0f)
+        val sourceOnClear = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(source, domain), domain)
+        val backgroundOnClear = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(background, domain), domain)
+        for (format in PixelFormat.entries) {
+            val mixedRoot = Surface(8, 8, format, RenderConfig(compositionDomain = domain))
+            mixedRoot.canvas {
+                drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(source, antiAlias = false))
+                save()
+                clipRect(excludedClip, antiAlias = false)
+                drawRect(hairline, hairlinePaint)
+                restore()
+            }
+            val rootFirst = mixedRoot.render()
+            val clear = W7CompositionCpuOracle.swizzle(W7CompositionCpuOracle.clear(), format)
+            val expectedSource = W7CompositionCpuOracle.swizzle(sourceOnClear, format)
+            for (y in 0 until 8) for (x in 0 until 8) W7CompositionCpuOracle.assertAdmits(
+                if (x == 0 && y == 0) expectedSource else clear, rootFirst.pixelAt(x, y),
+            )
+            assertContentEquals(rootFirst.pixels, mixedRoot.render().pixels, "mixed-root format=$format")
+
+            val layer = Surface(8, 8, format, RenderConfig(compositionDomain = domain))
+            layer.canvas {
+                drawRect(RectF32.ofLTRB(0f, 0f, 8f, 8f), Paint(background, antiAlias = false))
+                saveLayer()
+                clipRect(excludedClip, antiAlias = false)
+                drawRect(hairline, hairlinePaint)
+                restore()
+            }
+            val layerFirst = layer.render()
+            val expectedBackground = W7CompositionCpuOracle.swizzle(backgroundOnClear, format)
+            for (y in 0 until 8) for (x in 0 until 8) W7CompositionCpuOracle.assertAdmits(
+                expectedBackground, layerFirst.pixelAt(x, y),
+            )
+            assertContentEquals(layerFirst.pixels, layer.render().pixels, "layer format=$format")
+        }
+    }
+
+    @Test
     fun `encodedHairlineBudgetBoundaryIsTransactional`() {
         // Static preflight is archived in task-2-report.md before this GPU witness:
         // B = 64 + 64 + 1024 + 16 + 32 + 16384 + 4096 + 4096 + 64 = 25840.

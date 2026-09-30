@@ -149,6 +149,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             is Preflight.Invalid -> return invalid(preflight.message)
             is Preflight.Limit -> return limit(preflight.message)
         }
+        if ((forceAaFrame || scene.any { it is SceneCommand.Draw && it.node.coverage == CoverageRequest.ANTIALIASED }) &&
+            target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED
+        ) return gap("W4d.2 AA supports only LINEAR composition")
         return when (val recognized = recognize(scene, target)) {
             is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(
                 if (forceAaFrame || scene.any { it is SceneCommand.Draw && it.node.coverage == CoverageRequest.ANTIALIASED }) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
@@ -595,7 +598,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             else if (anyAa) sourceAa(selected, capabilities, budget, geometry)
             else if (selected.draws.isEmpty()) SourceDeferredRenderConstructionV4.clearOnly(
                 PlanId(identity(selected,capabilities,budget,W5B_HARD_CAPABILITY_ID)),W5B_HARD_CAPABILITY_ID,
-                SizeI32(selected.target.extent.width,selected.target.extent.height),capabilities,budget, preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, W5B_HARD_CAPABILITY_ID, scene)) })
+                SizeI32(selected.target.extent.width,selected.target.extent.height),capabilities,budget,
+                preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, W5B_HARD_CAPABILITY_ID, scene)) },
+                colorFormat = logicalColorFormat(selected.target),
+            )
             else withHardMemory(selected,capabilities,budget,geometry) { memory ->
                 val topology = hardSourceTopology(selected,memory,hardStencil)
                 val refs = selected.draws.map { it.material }
@@ -660,7 +666,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         return when (val source = SourceDeferredRenderConstructionV4.of(
             PlanId(identity(selected, capabilities, budget, w6AaSourceCapabilityId())),
             w6AaSourceCapabilityId(),
-            SizeI32(selected.target.extent.width, selected.target.extent.height), logicalColorFormat(selected.target), capabilities, budget,
+            SizeI32(selected.target.extent.width, selected.target.extent.height), AA_FORMAT, capabilities, budget,
             selected.draws.size, topology.resources, symbolic, topology.dependencies, selected.sources,
             if (w6AaCoverageSource) DeferredLaneTopologyV4.AaResolvedCoverage else DeferredLaneTopologyV4.AaResolvedColor,
             null, emptyList(), emptyMap(), emptyMap(),
@@ -716,7 +722,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         fun buffer(role: PlanResourceRole, bytes: Long, usages: Set<PlanResourceUsage>) =
             PlanResource.of(role, 0, PlanResourceKind.Buffer, null, null, bytes, usages,
                 PlanResourceLifetime.FrameLocal, 0, passes.size)
-        val colorFormat = logicalColorFormat(selected.target)
+        val colorFormat = AA_FORMAT
         val resources = buildList {
             add(texture(PlanResourceRole.MultisampleColorTarget, PlanTextureFormat.Color(colorFormat), aa.multisampleColorBytes,
                 setOf(PlanResourceUsage.RenderAttachment), 4))
@@ -743,9 +749,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
         val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
-        val colorFormat = logicalColorFormat(selected.target)
-        if (!coreCapabilities(capabilities, extent, colorFormat)) return promoted("Required W4d.2 device capability is unavailable")
         val anyAa = forceAaFrame || selected.requestedAa
+        val colorFormat = if (anyAa) AA_FORMAT else logicalColorFormat(selected.target)
+        if (!coreCapabilities(capabilities, extent, colorFormat)) return promoted("Required W4d.2 device capability is unavailable")
         val anyHard = selected.draws.any { !it.requestsAntiAlias }
         val aaStencil = selected.draws.any { it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
         val hardStencil = selected.draws.any { !it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
@@ -1192,7 +1198,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         fun buffer(role: PlanResourceRole, bytes: Long, usages: Set<PlanResourceUsage>, first: Int, last: Int) =
             PlanResource.of(role, 0, PlanResourceKind.Buffer, null, null, bytes, usages,
                 PlanResourceLifetime.FrameLocal, first, last)
-        val colorFormat = logicalColorFormat(selected.target)
+        val colorFormat = AA_FORMAT
         resources += texture(PlanResourceRole.MultisampleColorTarget, 0, PlanTextureFormat.Color(colorFormat),
             memory.multisampleColorBytes, setOf(PlanResourceUsage.RenderAttachment), 0, readbackIndex, 4)
         resources += texture(PlanResourceRole.LogicalTarget, 0, PlanTextureFormat.Color(colorFormat), memory.base.targetBytes,
@@ -1680,6 +1686,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         public fun isAaCapabilityId(capabilityId: String): Boolean =
             capabilityId == AA_CAPABILITY_ID || capabilityId == W5A_AA_CAPABILITY_ID
         private val REQUIRED = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)
+        private val AA_FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         private const val MAX_DRAWS = 512
     }
 }
