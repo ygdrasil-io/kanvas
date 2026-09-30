@@ -58,8 +58,10 @@ l'oracle de Task2. Task1 est validée à `bcc3e9deb` après trois corrections
 et re-reviews ciblées Sol : tous les constats sont clos, conformité et qualité
 approuvées. Validation finale `FIX3_EXACT45_GREEN` : 45/45, neuf classes,
 processus et wrapper0, identités antérieures conservées. La réserve du store
-omis reste explicite. Task2 peut commencer ; aucune globale/corpus du lot ni
-nouvelle PR de composition ou revendication de gain GM à ce stade.
+omis reste explicite. Task2 est validée à `f21162055` : Sol approuve conformité
+et qualité, zéro Critical/Important ; un libellé de refus obsolète reste Minor.
+Validation finale48/48, neuf classes XML, processus/wrapper0, les45 identités
+précédentes conservées. Globale/corpus et revue finale du lot restent distincts.
 
 ### Points de contrôle initiaux
 
@@ -127,10 +129,10 @@ nouvelle PR de composition ou revendication de gain GM à ce stade.
 - Produces sRGB/CLAMP LinearGradient in SRGB_ENCODED, both existing GradientAlphaModes, directly `C_srgb * alpha`; no EOTF round trip and no new interpolation semantics.
 - Oracle adds `gradient(left: ColorARGB, right: ColorARGB, tF32: Float, alphaMode: GradientAlphaMode, domain: CompositionDomain): Array<Interval>` using independent published interpolation equations and existing directed primitives. Source-only formula is then fed to Task1's SrcOver/store helpers.
 
-- [ ] **Step 1: RED.** `gradientAlphaModeIsIndependentFromCompositionDomain` uses t=.5, stops white255→black0 alpha0, then red A128→blue A64; all two alpha modes × two domains. Compute complete CompositionEnvelope outputs before GPU, with white destination; assert disjoint relevant alternatives per the amended spec. A valid but unsupported encoded gradient must RED before enabling it. If an alternative overlaps, report CPU evidence before substituting a finite a-priori discriminator; never widen primitive bounds or fit an expectation to native pixels.
-- [ ] **Step 2: Source graph and identities.** Carry the target domain into the existing prepared definition and graph compiler; select encoded straight/premul output before domain transfer. Keep physical stop/slab preparation independent of execution domain; include domain in execution/proof/native identities. Domain guard before one-stop collapse and after wrapper unwrapping; reject unadmitted interpolation/tile/source wrappers instead of falling to legacy.
-- [ ] **Step 3: Integration witnesses.** `gradientDomainSurvivesLayerPictureAndRepeatedTargets` reuses the same gradient in direct root, one plain layer, memory and wire Picture; validates both alpha modes, paint opacity, mutated original stop list after recording, second render and alternating Surface domains. `encodedGradientHardStopsDegenerateAndZeroAlpha` covers equal-position stops, last-stop selection for degenerate CLAMP, both-zero and alpha1 endpoints. Negative LINEAR interpolation/REPEAT/MIRROR/sweep/radial/composed shader cases retain transactionality. No new AA/stroke support.
-- [ ] **Step 4: Final targeted GREEN and commit.** Run the entire Task1 selection plus updated W7SurfaceCompositionPixelTest; verify no omitted prior identity, every XML/exit, budget/refusal recovery. Commit changes; scoped task review, correction/re-review if needed.
+- [x] **Step 1: RED.** `gradientAlphaModeIsIndependentFromCompositionDomain` uses t=.5, stops white255→black0 alpha0, then red A128→blue A64; all two alpha modes × two domains. Compute complete CompositionEnvelope outputs before GPU, with white destination; assert disjoint relevant alternatives per the amended spec. A valid but unsupported encoded gradient must RED before enabling it. If an alternative overlaps, report CPU evidence before substituting a finite a-priori discriminator; never widen primitive bounds or fit an expectation to native pixels.
+- [x] **Step 2: Source graph and identities.** Carry the target domain into the existing prepared definition and graph compiler; select encoded straight/premul output before domain transfer. Keep physical stop/slab preparation independent of execution domain; include domain in execution/proof/native identities. Domain guard before one-stop collapse and after wrapper unwrapping; reject unadmitted interpolation/tile/source wrappers instead of falling to legacy.
+- [x] **Step 3: Integration witnesses.** `gradientDomainSurvivesLayerPictureAndRepeatedTargets` reuses the same gradient in direct root, one plain layer, memory and wire Picture; validates both alpha modes, paint opacity, mutated original stop list after recording, second render and alternating Surface domains. `encodedGradientHardStopsDegenerateAndZeroAlpha` covers equal-position stops, last-stop selection for degenerate CLAMP, both-zero and alpha1 endpoints. Negative LINEAR interpolation/REPEAT/MIRROR/sweep/radial/composed shader cases retain transactionality. No new AA/stroke support.
+- [x] **Step 4: Final targeted GREEN and commit.** Run the entire Task1 selection plus updated W7SurfaceCompositionPixelTest; verify no omitted prior identity, every XML/exit, budget/refusal recovery. Commit changes; scoped task review, correction/re-review if needed.
 
 ## Commands and controller delivery
 
@@ -144,8 +146,8 @@ Replace RUN_NAME with the evidence stage, add explicit --tests selections as
 listed in each step, preserve exact command in report. No parallel Gradle/GPU.
 
 - [x] Baseline19/19, three XML classes, exit0 on b1ba6d0f3, before source changes.
-- [ ] Both tasks spec/quality reviewed; public assertions green, no infrastructure test added.
-- [ ] One global :kanvas:test bounded240s, compare named identities to preceding global, distinguish inherited/new failures and interruptions. Do not call a native crash GREEN.
-- [ ] Same corpus631/443, timeout30s retained, compare all198 old RGBA/results/diagnostics/reference hashes; no GM gain assumed for unused opt-in.
+- [x] Both tasks spec/quality reviewed; public assertions green, no infrastructure test added.
+- [x] One global :kanvas:test bounded240s, compare named identities to preceding global, distinguish inherited/new failures and interruptions. Do not call a native crash GREEN. Result:703PASS/40inheritedFAIL/1interrupted,744identities,exit124/143; no new failure on724common identities, one intentional legacy-test rename. Red/incomplete, no final XML.
+- [x] Same corpus631/443, timeout30s retained, compare all198 old RGBA/results/diagnostics/reference hashes; no GM gain assumed for unused opt-in. Snapshot surface-composition-f21162055.json:all198oldRGBA identical,all metadata/invariants/outcomes/diagnostics unchanged,no added/lost render.
 - [ ] One final whole-branch Astra review, one correction wave and one scoped re-review if necessary.
 - [ ] Update pilotage/status with actual measured outcome/reserves; stacked draft on #2421, never merge or close W7. Hairline geometry and later GM port remain explicitly separate.

@@ -3,6 +3,42 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot domaine de composition Surface — 30 septembre 2026
+
+Branche `codex/w7-surface-composition`, base draft
+[#2421](https://github.com/ygdrasil-io/kanvas/pull/2421).
+[Design](surface-composition-design.md), [plan](surface-composition-plan.md)
+et [bilan](pilotage.md#lot-domaine-de-composition-surface--30-septembre-2026).
+
+`SRGB_ENCODED` explicite fonctionne du draw au snapshot : solides,
+LinearGradient sRGB/CLAMP dans les deux modes alpha, un plain layer,
+images SOURCE_SPACE nearest1:1 et Picture. `LINEAR` reste le défaut.
+AUTO résout le format natif ; RGBA/BGRA public ne change que l'ordre des
+octets. Les configurations natives contradictoires refusent explicitement,
+changement de compatibilité intentionnel. Pas de support ajouté AA/hairline,
+filtres ou topologies riches de layers.
+
+**48/48 tests ciblés, neuf classes XML, processus/wrapper0**, les45 identités
+précédentes conservées. Les deux tâches sont approuvées par Sol ; un libellé
+de diagnostic reste Minor. La validation utilise l'amendement approuvé
+`CompositionEnvelope`, ensembles complets avant GPU mais **acceptation moins
+précise** ; ni les bornes/preuves produit ni les seuils GM ne sont élargis.
+L'omission d'un store n'est pas toujours détectable. Budget3×3/B888 contre887
+vérifié ; les erreurs des premières dérivations restent documentées.
+
+Globale unique240s : **703 PASS,40 échecs hérités,1 interrompu**,744 identités,
+wrapper124/enfant143, XML non finalisés. Aucun nouvel échec sur724 identités
+communes ;13 corrections Picture du lot parent confirmées. Ancien témoin
+legacy SRC renommé et élargi, pas supprimé. Suite rouge/incomplète ; dettes
+native133 isolées et warnings conservés.
+
+[Corpus631](surface-composition-f21162055.json) : **198/443 rendus,176
+comparaisons,198 anciennes images strictement identiques**. Aucun changement
+d'identité/référence/scope/seuil/résultat/diagnostic ; `vertices` timeout30s
+conservé. Aucun gain GM : les ports n'activent pas encore l'opt-in encodé.
+Revue finale et publication draft restent en cours. W7 reste ouvert ; hairline puis port fidèle
+d'`alphagradients` constituent la suite distincte.
+
 ## Lot politique alpha LinearGradient — 30 septembre 2026
 
 Renderer `09d9574b5`, branche `codex/w7-gradient-alpha-mode`, draft
