@@ -170,7 +170,8 @@ Tests nouveaux ciblés puis voisins, une globale bornée à 240 s, corpus
 pas encore le nouveau mode : aucun gain de son score n'est attendu ici.
 Tout échec global antérieur reste nommé et distinct des nouveaux échecs.
 
-Une tâche atomique, revue Sol de tâche puis revue de branche. Publication
+Une tâche atomique, revues Sol de tâche/correctifs puis une revue architecturale
+globale Astra. Publication
 draft seulement après examen des résultats ; W7 reste actif. Si la capacité
 exige une modification de composition/images ou un assouplissement des
 preuves, remonter le couplage démontré et réviser le design, pas élargir le lot.

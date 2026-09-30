@@ -21,7 +21,7 @@ schedule F32, les limites et les preuves attendues. Base c80e5b56d.
 - Pas de tests d'infrastructure : Surface publique, pixels natifs, Picture publique, readPixels/sentinel/refus/récupération et deuxième rendu.
 - Géométrie dans math ; nomenclature I/F32/64 pour ses valeurs et types.
 - Nouveau mode admis pour LinearGradient, espace effectif SRGB, tile CLAMP ; les autres combinaisons refusent sans downgrade.
-- Un seul runtime Gradle/GPU à la fois. Terra implémente le socle, Luna complète les intégrations ; Sol révise. Pas de merge ni clôture W7.
+- Un seul runtime Gradle/GPU à la fois. Terra implémente le socle, Luna complète les intégrations ; Sol révise les tâches/correctifs, Astra effectue une seule revue architecturale globale. Pas de merge ni clôture W7.
 
 ## Review Focus
 
@@ -190,15 +190,17 @@ writer16/schema10. Un éventuel gain de ces tests n'est pas un gain GM.
 
 ## Vérification et livraison du lot par le contrôleur
 
-### Commande finale reproductible (sélection39)
+### Commande finale reproductible (sélection46)
 
-Commande réellement exécutée après le correctif Picture. Pour un nouveau
+Commande réellement exécutée après le correctif legacy. Pour un nouveau
 rejeu, utiliser une archive neuve ; le wrapper refuse d'écraser les journaux.
 
 ```sh
-rtk proxy ruby /private/tmp/kanvas-w7-alpha-mode.vpi7cG/bounded-run.rb /private/tmp/kanvas-w7-alpha-mode.vpi7cG/fix2-final-controls-regressions 240 ./gradlew :kanvas:test --offline --no-daemon --no-build-cache \
+rtk proxy ruby /private/tmp/kanvas-w7-alpha-mode.vpi7cG/bounded-run.rb /private/tmp/kanvas-w7-alpha-mode.vpi7cG/finalfix-targeted46-w6e 240 ./gradlew :kanvas:test --offline --no-daemon --no-build-cache \
+  --tests org.graphiks.kanvas.picture.W6eEffectsConvergencePictureTest.coreShardMemoryAndWireReplayAreStable \
   --tests org.graphiks.kanvas.surface.W7GradientAlphaSurfacePixelTest \
   --tests org.graphiks.kanvas.surface.W7MixedRootAaRectSurfacePixelTest \
+  --tests org.graphiks.kanvas.surface.W7StrokeRoutingSurfacePixelTest \
   --tests 'org.graphiks.kanvas.surface.W5bBlendSurfacePixelTest.geometry fractional Rect retains fixed DST and destination blends' \
   --tests 'org.graphiks.kanvas.surface.W5fGradientInterpolationSurfacePixelTest.workingSpaceOnSolidPreservesOrderedColorWithoutConversion' \
   --tests 'org.graphiks.kanvas.surface.W5fGradientInterpolationSurfacePixelTest.mixedHistoricalAndWorkingSrgb*' \
@@ -214,10 +216,9 @@ rtk proxy ruby /private/tmp/kanvas-w7-alpha-mode.vpi7cG/bounded-run.rb /private/
   --tests org.graphiks.kanvas.picture.W6bFilterPictureTest.picture15PreservesSharedFilterIdentityWithoutValueAliasing \
   --tests org.graphiks.kanvas.picture.W6dLightingPictureTest.picture15PreservesLightingZThroughMemoryAndWireReplay \
   --tests org.graphiks.kanvas.picture.W6dPictureRuntimeEffectPictureTest.historicalPicture14Schema8NonLightingReplaysWhileOldTwoDimensionalLightingFailsClosed \
-  --tests org.graphiks.kanvas.picture.W6eEffectsConvergencePictureTest.coreShardMemoryAndWireReplayAreStable \
   --tests 'org.graphiks.kanvas.surface.SurfaceTest.picture replay retains singular and overflow rect clips for a typed terminal refusal' \
   -I /private/tmp/kanvas-w7-image-opacity.YmtXjI/isolated.init.gradle \
-  -Pw7.validationDir=/private/tmp/kanvas-w7-alpha-mode.vpi7cG/fix2-final-controls-regressions --console=plain
+  -Pw7.validationDir=/private/tmp/kanvas-w7-alpha-mode.vpi7cG/finalfix-targeted46-w6e --console=plain
 ```
 
 ### État de livraison
@@ -233,7 +234,10 @@ rtk proxy ruby /private/tmp/kanvas-w7-alpha-mode.vpi7cG/bounded-run.rb /private/
 - [x] Corpus631/443, mêmes références/seuils/scopes, comparaison des198 anciennes
   empreintes RGBA et issues contre `mixed-root-ff628a94d.json`. Pas de gain
   revendiqué pour un GM qui n'active pas le nouveau mode. Snapshot
-  `gradient-alpha-fadbd80e3.json` :198/198 anciennes RGBA identiques, aucun
+  `gradient-alpha-09d9574b5.json` après le correctif legacy :198/198 anciennes RGBA identiques, aucun
   changement d'issue/diagnostic/score ; rendus198 et comparaisons176 inchangés.
-- [ ] Revue finale Sol de toute la branche, preuves et réserves dans
-  `pilotage.md`/`status.md`, PR draft stackée sur #2420 ; W7 reste actif.
+- [x] Revue finale de toute la branche (Astra, une seule revue architecturale),
+  correction du finding legacy dans `09d9574b5`, puis re-review ciblée Sol :
+  conformité/qualité PASS, zéro finding résiduel. Sélection finale46/46,
+  13 classes XML, Gradle0 ; preuves et réserves dans `pilotage.md`/`status.md`.
+- [ ] Publication de la PR draft stackée sur #2420 ; W7 reste ouvert.

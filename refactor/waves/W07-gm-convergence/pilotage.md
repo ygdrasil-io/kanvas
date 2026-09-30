@@ -26,7 +26,7 @@ Lot précédent : couverture AA filtrée, renderer `82893045c`, branche
 Lot précédent : Rect stroke AA dans un mélange racine, renderer `ff628a94d`,
 branche `codex/w7-mixed-root-aa-rect`, draft
 [#2420](https://github.com/ygdrasil-io/kanvas/pull/2420) empilée sur #2419.
-Lot courant : politique alpha du LinearGradient, renderer `fadbd80e3`,
+Lot courant : politique alpha du LinearGradient, renderer `09d9574b5`,
 branche `codex/w7-gradient-alpha-mode`, future draft empilée sur #2420.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
@@ -177,13 +177,14 @@ les deux constats sont clos sans nouveau Critical/Important/Minor.
 
 ### Corpus constant après correction
 
-Le [snapshot631](gradient-alpha-fadbd80e3.json) étiquette exactement
-`fadbd80e3508fb7024ef9ec2a9bbde6bf2b87108`. Les631 identités,443 éligibles,
+Le [snapshot631](gradient-alpha-09d9574b5.json) étiquette exactement
+`09d9574b5c10be782109efecc73efd53d4174759`, après le correctif legacy décrit
+ci-dessous. Les631 identités,443 éligibles,
 empreintes de références PNG, scopes, seuils, dimensions et paramètres
 restent identiques à [la base](mixed-root-ff628a94d.json). Les trois tranches
 `[0,607)`, `[607,608)`, `[608,631)` sont sérialisées, exits Gradle0/1/0 ;
 le1 est le processus de mesure124 après timeout30s de `vertices`, conservé
-au dénominateur. La première tranche termine en2m09, sans valeur de benchmark.
+au dénominateur. La première tranche termine en1m57, sans valeur de benchmark.
 
 | Indicateur | Parent #2420 | Alpha explicite |
 | --- | ---: | ---: |
@@ -198,11 +199,43 @@ au dénominateur. La première tranche termine en2m09, sans valeur de benchmark.
 nouveau, aucun changement d'issue ni de diagnostic.** Aucun GM n'active
 encore le nouveau mode ; cette livraison apporte un contrat public testé,
 pas un gain de parité mesuré. Les journaux sont dans
-`/private/tmp/kanvas-w7-alpha-mode.vpi7cG/corpus`. L'agrégateur contrôle
+`/private/tmp/kanvas-w7-alpha-mode.vpi7cG/corpus-final`. Le checkpoint préalable
+`fadbd80e3` donnait déjà les mêmes198 empreintes dans `corpus` ; son snapshot
+intermédiaire redondant est retiré du checkout, récupérable dans le commit
+documentaire `08a3fd8dd`. L'agrégateur contrôle
 complétude/unicité et métadonnées ; la comparaison appariée vérifie aussi
 les références, scopes, scores et empreintes, pas seulement les compteurs.
 
-Revue finale de branche encore à compléter avant publication.
+La revue finale architecturale est confiée une fois à Astra, les reviews de
+tâche restant Sol. Sur `c80e5b56d..08a3fd8dd`, elle confirme les preuves
+39/39 et corpus invariant, mais trouve un Important : les voies legacy du
+mapper et des normalisations V1/V2 ignorent encore `alphaMode`. Un Rect stroke
+non-AA à CTM identité peut atteindre le descriptor historique et rendre
+STRAIGHT à la place de PREMULTIPLIED. Aucune reproduction native n'est attribuée
+à cette review statique. Le contrôleur déclenche une seule correction finale.
+
+Le RED public `legacyStrokeRouteRefusesPremultipliedBeforePublicationAndRecovers`
+reproduit ensuite le défaut : `readPixels` retourne true au lieu du refus,
+un échec XML/Gradle1. Le commit `09d9574b5` ferme les frontières legacy du
+mapper, des normalisations V1/V2 (wrappers inclus) et de l'admission stroke,
+avec `unsupported.material.gradient.alpha-mode`, avant réduction un-stop.
+Aucune route legacy n'est promue en V4, STRAIGHT garde son contrat.
+
+La sélection finale `finalfix-targeted46-w6e` passe **46/46,13 classes XML,
+Gradle0 en18s**, zéro échec/skip/doublon. Les39 identités antérieures sont toutes
+présentes, avec le nouveau refus/sentinel/récupération et six contrôles
+`W7StrokeRoutingSurfacePixelTest`. Le contrôleur vérifie aussi les identités,
+pas seulement le compte : la première sélection45 avait omis W6e. Son run
+isolé de complément passe une assertion puis termine native133/Gradle1 ;
+il reste **non vert**, même après le succès du run combiné46. Le shutdown
+isolé de W6e n'est pas corrigé par ce lot.
+
+Le corpus final sur `09d9574b5` est invariant comme détaillé ci-dessus.
+La re-review finale Sol de `08a3fd8dd..09d9574b5` clôt le finding :
+conformité et qualité PASS, zéro Critical/Important/Minor résiduel. Le cycle
+reste une seule correction finale suivie d'une seule re-review ciblée.
+SRC partiel AA, dettes globales/native133, composition,
+port GM et backends GPU non exécutés restent des limites explicites.
 La suite prévue est le contrat de composition de Surface, puis le port GM
 dans un lot distinct. W7 reste ouvert ; aucune autorisation de merge.
 
