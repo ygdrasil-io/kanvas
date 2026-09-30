@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot Rect hairline entier et encodé — 30 septembre 2026
 
-Branche `codex/w7-encoded-hairline`, basée sur la draft #2422.
+Branche `codex/w7-encoded-hairline`, draft
+[#2423](https://github.com/ygdrasil-io/kanvas/pull/2423) empilée sur #2422.
 [Design](encoded-hairline-design.md), [plan](encoded-hairline-plan.md).
 La première tâche est validée au commit `aa29de2ca` : couverture hard-edge
 du Rect entier de largeur zéro, commune et détenue par `math`, une seule

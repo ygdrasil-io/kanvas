@@ -34,7 +34,9 @@ Lot précédent : domaine de composition Surface, branche
 [#2422](https://github.com/ygdrasil-io/kanvas/pull/2422) empilée sur #2421 ;
 validation ciblée et revue finale terminées, réserves ci-dessous.
 Lot courant : Rect hairline entier et encodé, renderer `f80d94fb4`, branche
-`codex/w7-encoded-hairline`, empilée sur #2422 ; mesure et publication en cours.
+`codex/w7-encoded-hairline`, draft
+[#2423](https://github.com/ygdrasil-io/kanvas/pull/2423) empilée sur #2422 ;
+mesure terminée et réserves explicites ci-dessous, sans merge.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
