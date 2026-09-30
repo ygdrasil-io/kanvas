@@ -207,6 +207,10 @@ enum class GPUPreparedMaterialUnsupportedReason(
         "unsupported.material.mapping.gradient_interpolation",
         "Prepared gradient mapping only implements sRGB interpolation",
     ),
+    GRADIENT_ALPHA_MODE(
+        "unsupported.material.gradient.alpha-mode",
+        "Legacy material mapping cannot preserve the gradient alpha mode",
+    ),
     GRADIENT_STOP_COUNT(
         "unsupported.material.mapping.gradient_stop_count",
         "Prepared gradient mapping requires at least one stop",

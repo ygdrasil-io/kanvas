@@ -249,6 +249,34 @@ class W7GradientAlphaSurfacePixelTest {
                 alphaMode = GradientAlphaMode.PREMULTIPLIED), ColorSpaceInterpolation.OKLAB)),
     )
 
+    @Test fun legacyStrokeRouteRefusesPremultipliedBeforePublicationAndRecovers() {
+        // A non-AA identity-CTM Rect stroke is lowered through the legacy descriptor route.
+        // That route has no alpha-mode field, so PREMULTIPLIED must refuse rather than become
+        // STRAIGHT. At (3,1), the full top band would otherwise sample t=.5.
+        val surface = Surface(8, 8)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(2f, 2f, 6f, 6f), Paint(
+                shader = Shader.LinearGradient(Point2F32(3f, 0f), Point2F32(4f, 0f),
+                    listOf(GradientStop(0f, ColorARGB.White), GradientStop(1f, ColorARGB.Transparent)),
+                    alphaMode = GradientAlphaMode.PREMULTIPLIED),
+                antiAlias = false,
+                style = PaintStyle.STROKE,
+                strokeWidth = 2f,
+            ))
+        }
+        val sentinel = UByteArray(8 * 8 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val refusal = assertFailsWith<IllegalStateException> {
+            surface.readPixels(RectF32.ofLTRB(0f, 0f, 8f, 8f), sentinel)
+        }
+        assertTrue(refusal.message.orEmpty().startsWith("unsupported.material.gradient.alpha-mode:"), refusal.message)
+        assertContentEquals(before, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 8f, 8f), Paint(ColorARGB.Blue, antiAlias = false)) }
+        repeat(2) { assertContentEquals(ubyteArrayOf(0u, 0u, 255u, 255u), renderTwice(surface).pixels.copyOfRange(0, 4)) }
+    }
+
     private fun assertRefusesAndRecovers(source: Shader) {
         val surface = Surface(1, 1)
         surface.canvas { drawRect(onePixel, Paint(shader = source, antiAlias = false, blendMode = BlendMode.SRC)) }
