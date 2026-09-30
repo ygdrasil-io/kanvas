@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot ports hardstop fidèles — 30 septembre 2026
 
-Branche `codex/w7-hardstop-ports`, empilée sur la draft #2424.
+Branche `codex/w7-hardstop-ports`, draft
+[#2425](https://github.com/ygdrasil-io/kanvas/pull/2425) empilée sur #2424.
 [Plan](hardstop-ports-plan.md), [snapshot631](hardstop-ports-34e3d4e98.json),
 [bilan et arbitrages](pilotage.md#lot-ports-hardstop-fidèles--30-septembre-2026).
 Grille 500×500 dans une image 512×512, ordre des doubles stops et hauteur

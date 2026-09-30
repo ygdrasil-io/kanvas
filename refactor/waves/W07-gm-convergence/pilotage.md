@@ -42,7 +42,8 @@ code `6259c38d8`, branche `codex/w7-alphagradients-port`, draft
 [#2424](https://github.com/ygdrasil-io/kanvas/pull/2424) empilée sur #2423 ;
 mesure et reviews terminées ci-dessous, sans merge.
 Lot courant : ports fidèles des deux hardstop, code `34e3d4e98`, branche
-`codex/w7-hardstop-ports`, empilée sur #2424 ; mesure et reviews terminées
+`codex/w7-hardstop-ports`, draft [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425)
+empilée sur #2424 ; mesure et reviews terminées
 ci-dessous, publication draft uniquement.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
