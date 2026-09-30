@@ -3,6 +3,39 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot Rect hairline entier et encodé — 30 septembre 2026
+
+Branche `codex/w7-encoded-hairline`, basée sur la draft #2422.
+[Design](encoded-hairline-design.md), [plan](encoded-hairline-plan.md).
+La première tâche est validée au commit `aa29de2ca` : couverture hard-edge
+du Rect entier de largeur zéro, commune et détenue par `math`, une seule
+occurrence de source conservée. **48/48 tests natifs**, dont les43 contrôles
+précédents, et **478/478 tests math**, processus/wrapper0. Sol a demandé le
+cas supplémentaire de hauteur minimale : corrigé, test ciblé2/2, relecture
+sans nouveau Critical/Important. Warnings Java/Gradle hérités conservés.
+
+La propagation SRGB_ENCODED est implémentée et revue en Task2 : mélanges
+racine, plain layer, Picture, snapshots, refus et budget B25840/B−1.
+Sélection68/68 avant sa correction de review, puis56/56 au commit
+`ebfd29bb1`, avec les43 contrôles initiaux présents. L'unique globale240s
+reste rouge/incomplète :678 succès,40 échecs hérités,1 interrompu ;719
+identités communes, aucun nouvel échec observé,25 anciens tests non atteints.
+
+La correction finale `f80d94fb4` transmet le format du successeur W5b non vide,
+ferme les entrées publiques encodées au contrat existant et couvre les
+mélanges dans un même plain layer. **69/69 tests**, onze classes, sorties0,
+tous les43 contrôles initiaux et50 du lot parent présents et inchangés.
+La contre-relecture Sol confirme les deux Important d'Astra corrigés, sans
+nouvelle casse Critical/Important. Minor différé : le helper omettrait son
+contrôle de largeur pour une future ligne vide ; les grilles actuelles sont
+complètes, y compris la colonne manquante du cas scale. Warnings conservés.
+
+[Corpus631 final](encoded-hairline-f80d94fb4.json) : **198/443 rendus,
+176 comparaisons,198 anciennes images strictement identiques**. Références,
+seuils, scopes, résultats et diagnostics inchangés ; `vertices` timeout30s.
+Aucun gain GM mesuré : le port fidèle d'`alphagradients` reste séparé et
+n'active pas encore ces capacités. Publication draft uniquement, W7 ouvert.
+
 ## Lot domaine de composition Surface — 30 septembre 2026
 
 Branche `codex/w7-surface-composition`, draft
