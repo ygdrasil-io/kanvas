@@ -92,3 +92,25 @@ no changes and no unseen failures. Archives contain XML, `events.jsonl`,
 - `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4dGeneralPathPlanCompiler.kt`
 - `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W7RectHairlineSurfacePixelTest.kt`
 - `.superpowers/sdd/encoded-hairline-plan/task-1-report.md`
+
+## Round 1 review fix
+
+The Task 1 review found that the thin-geometry test covered only a width-one
+Rect. `thinRingAndI32EdgesDoNotOverlapOrOverflow` now also covers the exact
+height-one Rect `(2,2,5,3)`: the only bands are `(2,2,6,3)` and `(2,3,6,4)`.
+It enumerates the eight literal lattice points and asserts that each occurs
+exactly once, catching a top/bottom overlap or omission. This is test-only;
+the product helper was unchanged.
+
+Focused verification command:
+
+```sh
+rtk proxy ruby /private/tmp/kanvas-w7-encoded-hairline.AwWRwQ/bounded-run.rb /private/tmp/kanvas-w7-encoded-hairline.AwWRwQ/fix-round1-math 240 ./gradlew :math:geometry:jvmTest --offline --no-daemon --no-build-cache --tests '*RectHairlineCoverageI32Test*' --console=plain
+```
+
+The run completed in 16 s with `child_exit=0`, `wrapper_exit=0`, and
+`timed_out=false`; both named tests passed. Its XML and exit record are archived
+under `/private/tmp/kanvas-w7-encoded-hairline.AwWRwQ/fix-round1-math`.
+The inherited Java restricted-native-access, deprecated Gradle feature and
+configuration-cache notices remain present; no native GPU run was needed for
+this test-only amendment.

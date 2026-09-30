@@ -43,6 +43,20 @@ class RectHairlineCoverageI32Test {
             ),
             rectHairlineCoverageBandsI32(RectI32(2, 2, 3, 5), RectI32(-8, -8, 8, 8)),
         )
+        val heightOne = rectHairlineCoverageBandsI32(
+            deviceRectI32 = RectI32(2, 2, 5, 3),
+            clipI32 = RectI32(-8, -8, 8, 8),
+        )
+        assertEquals(listOf(RectI32(2, 2, 6, 3), RectI32(2, 3, 6, 4)), heightOne)
+        val heightOneCovered = heightOne.flatMap { band ->
+            (band.top until band.bottom).flatMap { y -> (band.left until band.right).map { x -> x to y } }
+        }
+        assertEquals(8, heightOneCovered.size)
+        assertEquals(heightOneCovered.size, heightOneCovered.toSet().size)
+        assertEquals(
+            setOf(2 to 2, 3 to 2, 4 to 2, 5 to 2, 2 to 3, 3 to 3, 4 to 3, 5 to 3),
+            heightOneCovered.toSet(),
+        )
         assertEquals(
             listOf(RectI32(-2, 0, 3, 1), RectI32(-2, 2, 3, 3)),
             rectHairlineCoverageBandsI32(
