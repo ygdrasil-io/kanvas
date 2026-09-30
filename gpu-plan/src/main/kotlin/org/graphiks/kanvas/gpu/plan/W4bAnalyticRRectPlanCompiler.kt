@@ -415,12 +415,12 @@ public class W4bAnalyticRRectPlanCompiler internal constructor(private val runti
             "w4b-plan-w5a-v2", scene.value, target.extent.width.toString(), target.extent.height.toString(), target.colorSpace.name,
             target.colorSpace.transferFunction.name, target.colorSpace.gamut.name, capabilities.deviceGeneration.toString(),
             capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(), capabilities.copyBytesPerRowAlignment.toString(),
-            capabilities.supportedFormats().map { it.name }.sorted().joinToString(","), capabilities.minUniformBufferOffsetAlignment.toString(),
+            capabilities.identitySupportedFormats(target).map { it.name }.sorted().joinToString(","), capabilities.minUniformBufferOffsetAlignment.toString(),
             capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(), capabilities.supportedOperations().map { it.name }.sorted().joinToString(","),
             capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
             capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name,
             budget.maxFrameLocalBytes.toString(),
-        ) + planCapabilityIdentityFacts(capabilities)
+        ) + planCapabilityIdentityFacts(capabilities, target)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { value ->
             val bytes = value.encodeToByteArray()

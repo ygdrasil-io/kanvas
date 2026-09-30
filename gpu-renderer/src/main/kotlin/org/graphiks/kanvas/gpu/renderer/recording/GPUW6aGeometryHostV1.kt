@@ -33,7 +33,7 @@ internal const val W6A_RECT_SHADER: String = W6A_VERTEX_SHADER + """
 /** Mechanically lowers the planner-owned recipe; it deliberately does not inspect the draw packet's authority. */
 internal fun w6aGeometryTemplate(packet: GPUDrawPacket, recipe: W6SolidRectHostRecipeV1): GPUW5aGeometryHostTemplateV1 {
     require(recipe.family == W6SolidRectGeometryFamilyV1.FullscreenTriangle)
-    require(recipe.target == W6SolidRectTargetV1.Rgba8UnormSrgbSingleSample)
+    require(recipe.target.sampleCountI32 == 1)
     require(recipe.coordinateSlot == W6SolidRectCoordinateSlotV1.FragmentPosition)
     val frozen = (recipe.colorMode as? W6SolidRectColorModeV1.FrozenColor)?.color?.copyColorF32()
     val source = frozen?.let(::w6aFrozenColorShader) ?: W6A_RECT_SHADER
@@ -52,8 +52,13 @@ internal fun w6aGeometryTemplate(packet: GPUDrawPacket, recipe: W6SolidRectHostR
     val colorKey = frozen?.let { ".${it.red.toBits()}.${it.green.toBits()}.${it.blue.toBits()}.${it.alpha.toBits()}" }.orEmpty()
     return GPUW5aGeometryHostTemplateV1(packet.packetId.value,
         "w6a.rect.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}.${origin.x}.${origin.y}$colorKey", source, "vs_main", "fs_main",
-        w6aColorTarget(recipe.blend).hostTargetV1(), layout, null, MaterialCoordinateSlotV1.FragmentPosition,
+        w6aColorTarget(recipe.blend, recipe.target.w6aTextureFormat()).hostTargetV1(), layout, null, MaterialCoordinateSlotV1.FragmentPosition,
         materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)")
+}
+
+private fun W6SolidRectTargetV1.w6aTextureFormat(): GPUTextureFormat = when (format) {
+    W6SolidRectTargetFormatV1.RGBA8UnormSrgb -> GPUTextureFormat.RGBA8UnormSrgb
+    W6SolidRectTargetFormatV1.RGBA8Unorm -> GPUTextureFormat.RGBA8Unorm
 }
 
 /**
@@ -276,7 +281,10 @@ private fun w6aFrozenColorShader(color: org.graphiks.math.color.ColorF32): Strin
     """
 }
 
-internal fun w6aColorTarget(blend: BlendPlan): ColorTargetState {
+internal fun w6aColorTarget(
+    blend: BlendPlan,
+    format: GPUTextureFormat = GPUTextureFormat.RGBA8UnormSrgb,
+): ColorTargetState {
     fun factor(value: BlendFactorV1): GPUBlendFactor = when (value) {
         BlendFactorV1.Zero -> GPUBlendFactor.Zero
         BlendFactorV1.One -> GPUBlendFactor.One
@@ -287,13 +295,13 @@ internal fun w6aColorTarget(blend: BlendPlan): ColorTargetState {
         BlendFactorV1.SrcColor -> GPUBlendFactor.Src
         BlendFactorV1.OneMinusSrcColor -> GPUBlendFactor.OneMinusSrc
     }
-    if (blend is BlendPlan.DestinationReadV1) return ColorTargetState(GPUTextureFormat.RGBA8UnormSrgb,
+    if (blend is BlendPlan.DestinationReadV1) return ColorTargetState(format,
         BlendState(BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.Zero),
             BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.Zero)))
     val fixed = blend as? BlendPlan.FixedFunctionV1
     val noOp = blend == BlendPlan.NoOpV1
     require(fixed != null || blend == BlendPlan.LegacySrcOverV1 || noOp)
-    return ColorTargetState(GPUTextureFormat.RGBA8UnormSrgb, BlendState(
+    return ColorTargetState(format, BlendState(
         BlendComponent(GPUBlendOperation.Add,
             if (noOp) GPUBlendFactor.Zero else fixed?.colorSource?.let(::factor) ?: GPUBlendFactor.One,
             if (noOp) GPUBlendFactor.One else fixed?.colorDestination?.let(::factor) ?: GPUBlendFactor.OneMinusSrcAlpha),

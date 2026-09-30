@@ -1454,7 +1454,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val fields = listOf(
             "w4d-general-plan-v2-material-v1", capability, sceneIdentity.value, selected.target.canonicalId.value,
             capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(),
-            capabilities.copyBytesPerRowAlignment.toString(), capabilities.supportedFormats().map { it.name }.sorted().joinToString(","),
+            capabilities.copyBytesPerRowAlignment.toString(), capabilities.identitySupportedFormats(selected.target).map { it.name }.sorted().joinToString(","),
             capabilities.minUniformBufferOffsetAlignment.toString(), capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(),
             capabilities.supportedOperations().map { it.name }.sorted().joinToString(","),
             capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
@@ -1466,7 +1466,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             strokePolicyF64.limitsI32.maxEmittedVertexCountPerFrameI32.toString(), strokePolicyF64.limitsI32.maxEmittedIndexCountPerPathI32.toString(),
             strokePolicyF64.limitsI32.maxEmittedIndexCountPerFrameI32.toString(), strokePolicyF64.limitsI64.maxSnapshotByteCountPerPathI64.toString(),
             strokePolicyF64.limitsI64.maxSnapshotByteCountPerFrameI64.toString(),
-        ) + planCapabilityIdentityFacts(capabilities)
+        ) + planCapabilityIdentityFacts(capabilities, selected.target)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { field ->
             val bytes = field.encodeToByteArray()

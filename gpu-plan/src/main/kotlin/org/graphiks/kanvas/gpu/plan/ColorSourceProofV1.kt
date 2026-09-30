@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.render.ir.ImmutableUBytes
+import org.graphiks.kanvas.render.ir.CompositionDomain
 
 /** Authenticated expressions, bindings and selected-branch facts; no caller-supplied component box. */
 public class ColorSourceProofV1 private constructor(
@@ -22,6 +23,8 @@ public class ColorSourceProofV1 private constructor(
     internal val preparedDefinition: PreparedSourceDefinitionV4? = null,
     internal val imageChildSource: ColorSourceProofV1? = null,
     internal val composedDefinition: PreparedComposedSourceV5? = null,
+    /** Composition owner of the sealed source graph; it cannot be exchanged across targets. */
+    public val compositionDomain: CompositionDomain = CompositionDomain.LINEAR,
 ) {
     public val imageExecution: ImageSampleExecutionPlanV1? = parentSource?.imageExecution ?:
         bindingOwners.filterIsInstance<ImageSampleV3>().singleOrNull()?.execution
@@ -106,6 +109,9 @@ public class ColorSourceProofV1 private constructor(
     internal companion object {
         fun issueComposed(definition: PreparedComposedSourceV5): ColorSourceProofV1? {
             val graph = definition.operationGraph
+            val imageDomains = definition.imageReferences.map { it.binding.metadata.description.color.compositionDomain }.distinct()
+            require(imageDomains.size <= 1) { W5gPlanDiagnostics.Schema }
+            val compositionDomain = imageDomains.singleOrNull() ?: CompositionDomain.LINEAR
             val facts = ColorRoundedGraphProofV1.prove(graph,definition.numericWordsF32Bits,definition.tableRecords,
                 definition.deviceBoundsF32,definition.integerWordsU32,definition.slab,definition) ?: return null
             val identity = "composed-source-proof-v5:${definition.capturedIdentity}:${definition.layout.composedBindingLayoutHash}:" +
@@ -115,7 +121,8 @@ public class ColorSourceProofV1 private constructor(
                 (definition.captured.composed?.primitiveGeometry?.let { ":primitive:${it.canonicalId.value}" } ?: "")
             return ColorSourceProofV1(identity,definition.capturedIdentity,SourceCoordinatesV4.None,graph,emptyList(),
                 definition.numericWordsF32Bits,definition.tableRecords,immutableList(facts),definition.deviceBoundsF32,
-                integerWordValuesU32=definition.integerWordsU32,gradientStopSlab=definition.slab,composedDefinition=definition)
+                integerWordValuesU32=definition.integerWordsU32,gradientStopSlab=definition.slab,composedDefinition=definition,
+                compositionDomain=compositionDomain)
         }
         fun filteredIdentity(source: String, execution: ColorFilterExecutionPlanV1): String =
             "color-filter-source-v4:$source:${execution.canonicalIdentity}"
@@ -143,11 +150,13 @@ public class ColorSourceProofV1 private constructor(
             val proof = composeOutputs?.last()?.conditionedFacts ?: ColorRoundedGraphProofV1.prove(graph, words, tables,
                 source.deviceBoundsF32,source.integerWordValuesU32,source.gradientStopSlab) ?: return null
             val certifiedGraph = composeOutputs?.last()?.graph ?: graph
-            val identity = "color-composed-proof-v1:${source.canonicalIdentity}:${execution.canonicalIdentity}:${graph.canonicalIdentity}:${proof.map { Triple(it.taken,it.left,it.right) }}"
+            val identity = "color-composed-proof-v1:${source.canonicalIdentity}:${execution.canonicalIdentity}:${graph.canonicalIdentity}:${proof.map { Triple(it.taken,it.left,it.right) }}" +
+                if (source.compositionDomain == CompositionDomain.SRGB_ENCODED) ":${source.compositionDomain.name}" else ""
             return ColorSourceProofV1(identity, filteredIdentity(source.sourceIdentity,execution), source.coordinates,
                 certifiedGraph, source.bindingOwners, java.util.Collections.unmodifiableMap(words), java.util.Collections.unmodifiableMap(tables), immutableList(proof),
                 source.deviceBoundsF32, source, execution,immutableList(composeOutputs ?: lerpOutputs ?: emptyList()),
-                source.integerWordValuesU32,source.gradientStopSlab,source.preparedDefinition,source.imageChildSource)
+                source.integerWordValuesU32,source.gradientStopSlab,source.preparedDefinition,source.imageChildSource,
+                compositionDomain=source.compositionDomain)
         }
         fun issuePrepared(definition: PreparedSourceDefinitionV4): ColorSourceProofV1? {
             val graph = ColorSourceProofCompilerV1.graphForPrepared(definition)
@@ -157,7 +166,8 @@ public class ColorSourceProofV1 private constructor(
                 facts.map { Triple(it.taken,it.left,it.right) }
             return ColorSourceProofV1(identity,definition.definitionIdentity,SourceCoordinatesV4.V2(definition.coordinates),
                 graph,emptyList(),definition.numericWordsF32Bits,emptyMap(),immutableList(facts),definition.deviceBoundsF32.copy(),
-                integerWordValuesU32=definition.integerWordsU32,gradientStopSlab=definition.slab,preparedDefinition=definition)
+                integerWordValuesU32=definition.integerWordsU32,gradientStopSlab=definition.slab,preparedDefinition=definition,
+                compositionDomain=definition.compositionDomain)
         }
         fun issue(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: SourceCoordinatesV4,
             boundsF32: RectF32, graph: ColorOperationGraphV1, owners: List<MaterialBindingPlan>,
@@ -165,13 +175,21 @@ public class ColorSourceProofV1 private constructor(
             stops: GradientStopSlabPlanV1? = null, imageChild: ColorSourceProofV1? = null): ColorSourceProofV1? {
             val proof = ColorRoundedGraphProofV1.prove(graph, words, tables,boundsF32,integers,stops) ?: return null
             val source = table.sourceIdentity(root)
+            val compositionDomain = when (val program = table.entry(MaterialPlanRef(root.indexI32 - owners.lastIndex)).program) {
+                MaterialProgramPlan.SolidEncodedPremulV1 -> CompositionDomain.SRGB_ENCODED
+                is ImageMaterialProgramV3.ColorV3 -> program.compositionDomain
+                is GradientInterpolationProgramV4 -> program.compositionDomain
+                else -> CompositionDomain.LINEAR
+            }
             val identity = "color-source-proof-v1:$source:${coordinates.identityV4()}:" +
+                (if (compositionDomain == CompositionDomain.SRGB_ENCODED) "${compositionDomain.name}:" else "") +
                 listOf(boundsF32.left, boundsF32.top, boundsF32.right, boundsF32.bottom).joinToString { it.toRawBits().toString() } +
                 ":${graph.canonicalIdentity}:${words.entries.joinToString { "${it.key}=${it.value}" }}:${tables.entries.joinToString { "${it.key}=${it.value.canonicalId.value}" }}:${proof.map { Triple(it.taken,it.left,it.right) }}" +
                 if (integers.isEmpty() && stops == null) "" else ":u32=$integers:stops=${stops?.canonicalIdentity}"
             return ColorSourceProofV1(identity, source, coordinates, graph, immutableList(owners),
                 java.util.Collections.unmodifiableMap(LinkedHashMap(words)),java.util.Collections.unmodifiableMap(LinkedHashMap(tables)), immutableList(proof), boundsF32.copy(),
-                integerWordValuesU32=java.util.Collections.unmodifiableMap(LinkedHashMap(integers)),gradientStopSlab=stops,imageChildSource=imageChild)
+                integerWordValuesU32=java.util.Collections.unmodifiableMap(LinkedHashMap(integers)),gradientStopSlab=stops,imageChildSource=imageChild,
+                compositionDomain=compositionDomain)
         }
     }
 }

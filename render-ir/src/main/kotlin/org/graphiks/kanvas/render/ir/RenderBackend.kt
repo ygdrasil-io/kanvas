@@ -17,11 +17,13 @@ public data class RenderTargetDescriptor(
     public val extent: SceneExtent,
     public val colorSpace: ColorSpace,
     public val label: String? = null,
+    public val compositionDomain: CompositionDomain = CompositionDomain.LINEAR,
 ) : CanonicalValue {
     init { require(label == null || label.isNotBlank()) { "RenderTargetDescriptor.label must not be blank" } }
     override val canonicalId: CanonicalId = canonicalId(
         "render-target-v1", extent.canonicalId.value, colorSpace.name,
         colorSpace.transferFunction.name, colorSpace.gamut.name, label.orEmpty(),
+        *if (compositionDomain == CompositionDomain.SRGB_ENCODED) arrayOf(compositionDomain.name) else emptyArray(),
     )
 }
 

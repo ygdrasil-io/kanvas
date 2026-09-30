@@ -117,6 +117,7 @@ internal class W6aLayerGraphConstruction(
     sourceBindings: List<W6aLayerSourceBinding>,
     private val filterScene: org.graphiks.kanvas.render.ir.SceneSnapshot? = null,
     private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot = RuntimeEffectSemanticCatalogSnapshot.Unbound,
+    private val logicalColorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
 ) {
     private val occurrences = immutableList(occurrences)
     /**
@@ -128,6 +129,18 @@ internal class W6aLayerGraphConstruction(
     private val root = planResourceId(PlanResourceRole.LogicalTarget, 0)
     private val staging = planResourceId(PlanResourceRole.ReadbackStaging, 0)
     private val rootDomainDeviceI32 = RectI32(0, 0, extent.width, extent.height)
+
+    private fun occurrenceRenderTarget(
+        domain: RectI32,
+        colorSpace: org.graphiks.kanvas.color.ColorSpace,
+    ): org.graphiks.kanvas.render.ir.RenderTargetDescriptor =
+        org.graphiks.kanvas.render.ir.RenderTargetDescriptor(
+            org.graphiks.kanvas.render.ir.SceneExtent(domain.width(), domain.height()), colorSpace,
+            compositionDomain = when (logicalColorFormat) {
+                PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR
+                PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED
+            },
+        )
     private val readbackRowBytesI64 = Math.multiplyExact(extent.width.toLong(), 4L).let {
         Math.addExact(it, (caps.copyBytesPerRowAlignment - it % caps.copyBytesPerRowAlignment) % caps.copyBytesPerRowAlignment)
     }
@@ -234,8 +247,9 @@ internal class W6aLayerGraphConstruction(
             val input = OccurrenceSourceInputV1(entry.plannedCommandId, entry.locator, entry.source,
                 requireNotNull(LayerMappingF64.ofOrNull(evaluation, Point2I32(domain.left, domain.top))),
                 enclosing, domain, domain, entry.source.recordedInnerClipWithoutCull(), ClipStackNode.Empty, target,
+                occurrenceRenderTarget(domain, entry.source.scene.colorSpace),
                 entry.plannedCommandId.valueI32, sourceOnly)
-            val compiler = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog),
+            val compiler = CapabilityCompilerChain.ofProjected(listOf(W5bVerticesPlanCompiler(runtimeCatalog),
                 W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
                 W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(), W4cPathFillPlanCompiler(),
                 W4dPathStrokePlanCompiler()), runtimeCatalog)
@@ -448,7 +462,7 @@ internal class W6aLayerGraphConstruction(
                         W6aPlanDiagnostics.UnsupportedRestore, "Picture-stream layer restore color filter is outside W6a authority."))
             }
             val blend = requireNotNull(FinalBlendPlanner.plan(descriptor.blend, CoveragePlan.FullOrScissor,
-                SamplePlan.SingleSample, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1()))
+                SamplePlan.SingleSample, logicalColorFormat.blendTargetClampV1()))
             if (blend.compositionFacts.readsPriorDevice) throw W6bFilterGraphConstruction.ConstructionFailure(
                 W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedRestore,
                     "Picture-stream layer destination-read restore has no frozen snapshot lane."))
@@ -467,7 +481,7 @@ internal class W6aLayerGraphConstruction(
         }
         fun pictureBlend(draw: DrawNode): BlendPlan = requireNotNull(FinalBlendPlanner.plan(
             draw.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
-            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+            logicalColorFormat.blendTargetClampV1(),
         )) { "${W6aPlanDiagnostics.UnsupportedChild}: Picture blend" }
         fun pictureWrittenOutput(draw: DrawNode, produced: RectI32?, desired: RectI32): RectI32? = when {
             !pictureBlend(draw).compositionFacts.writesParentDevice -> null
@@ -1254,7 +1268,7 @@ internal class W6aLayerGraphConstruction(
             }
             val normalized = EffectiveMaterialPlanner.normalizeSourcesV4(
                 materialDraw,
-                PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+                logicalColorFormat.blendTargetClampV1(),
                 domain,
                 coverage = CoveragePlan.FullOrScissor,
                 sample = SamplePlan.SingleSample,
@@ -1600,7 +1614,7 @@ internal class W6aLayerGraphConstruction(
                 val input = OccurrenceSourceInputV1(entry.plannedCommandId, entry.locator, entry.source,
                     preparedInput.mapping, preparedInput.enclosingMappingF64, preparedInput.copyDomainDeviceI32(),
                     preparedInput.copyDemandDeviceI32(), preparedInput.recordedInnerClip, preparedInput.deferredCompositeClip,
-                    target, entry.plannedCommandId.valueI32, preparedInput.sourceOnly)
+                    target, preparedInput.renderTarget, entry.plannedCommandId.valueI32, preparedInput.sourceOnly)
                 val lane = preparedLane.bindOccurrenceCommandV1(entry.plannedCommandId.valueI32)
                 val enclosing = input.enclosingMappingF64
                 val selected = RenderGraph.visualDraws(lane.passes()).singleOrNull() ?: return null
@@ -1795,7 +1809,7 @@ internal class W6aLayerGraphConstruction(
                     BlendNode.Mode(selectedMode),
                     CoveragePlan.FullOrScissor,
                     SamplePlan.SingleSample,
-                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+                    logicalColorFormat.blendTargetClampV1(),
                 )) { "${W6aPlanDiagnostics.UnsupportedChild}: Picture DrawColor blend" }
                 if (blend is BlendPlan.DestinationReadV1) {
                     throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
@@ -1905,7 +1919,7 @@ internal class W6aLayerGraphConstruction(
                 )
                 return when (val normalized = EffectiveMaterialPlanner.normalizeSourcesV4(
                     materialDraw,
-                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+                    logicalColorFormat.blendTargetClampV1(),
                     domain,
                     coverage = CoveragePlan.FullOrScissor,
                     sample = SamplePlan.SingleSample,
@@ -3026,7 +3040,7 @@ internal class W6aLayerGraphConstruction(
         }
         resources = immutableList(buildList {
             add(PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
-                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), extent,
+                PlanTextureFormat.Color(logicalColorFormat), extent,
                 checkedTextureBytesI64(4, extent.width, extent.height, 1),
                 buildSet {
                     add(PlanResourceUsage.RenderAttachment)
@@ -3043,7 +3057,7 @@ internal class W6aLayerGraphConstruction(
                 }
                 val targetExtent = geometry.targetExtentI32()
                 add(PlanResource.of(PlanResourceRole.LayerTarget, geometry.occurrence.idI32, PlanResourceKind.Texture2D,
-                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), targetExtent,
+                    PlanTextureFormat.Color(logicalColorFormat), targetExtent,
                     checkedTextureBytesI64(4, targetExtent.width, targetExtent.height, 1), usages,
                     PlanResourceLifetime.FrameLocal, 0, passes.size))
             }
@@ -3051,7 +3065,7 @@ internal class W6aLayerGraphConstruction(
                 val parentTarget = scope.parentId?.let { targetFor(it.valueI32) } ?: root
                 val parentExtent = targetExtents.getValue(parentTarget)
                 add(PlanResource.of(PlanResourceRole.DestinationSnapshot, scope.id.valueI32, PlanResourceKind.Texture2D,
-                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), parentExtent,
+                    PlanTextureFormat.Color(logicalColorFormat), parentExtent,
                     checkedTextureBytesI64(4, parentExtent.width, parentExtent.height, 1),
                     setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, passes.size))
             }
@@ -3188,10 +3202,10 @@ internal class W6aLayerGraphConstruction(
         val localized = linkedMapOf<Pair<Int, PlanResourceId>, PlanDraw>()
         val finalBlends = RenderGraph.visualDraws(rawPasses).associate { it.commandIndex to it.blend }
         fun boundDraw(unbound: PlanDraw, target: PlanResourceId): PlanDraw {
-            // Clear/DrawColor stream entries are already complete legacy-color RenderPass
-            // operands.  They intentionally have no W4/W5 lane to rebind: retaining them as-is
-            // is the frozen plan contract, while every material draw follows the source table.
-            if (unbound.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) return unbound
+            // Picture-stream colors have no source lane; ordinary DrawColor does.  The latter
+            // remains frozen as a color operand but still needs W6's target-local localization.
+            if (unbound.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 &&
+                unbound.commandIndex !in byCommand) return unbound
             val command = unbound.commandIndex
             return localized.getOrPut(command to target) {
             val bound = byCommand.getValue(command)
@@ -3199,7 +3213,8 @@ internal class W6aLayerGraphConstruction(
             // particular, a transparent mask auto-layer shades with SRC_OVER while its
             // captured DST_OUT (or other parent blend) is applied exactly once later by
             // FilterComposite.
-            val draw = if (unbound is SolidRectDraw && bindings.any {
+            val draw = if (unbound.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) bound
+            else if (unbound is SolidRectDraw && bindings.any {
                 it.firstCommandIndexI32 == command && it.source.topology == DeferredLaneTopologyV4.AaResolvedCoverage
             }) SolidRectDraw.coverageMaterialCarrier(bound, unbound.copyVisibleBounds())
             else bound.withFinalBlendV1(finalBlends.getValue(command))
@@ -3423,7 +3438,7 @@ internal class W6aLayerGraphConstruction(
                 binding.resourceRemapping(), binding.resources(), binding.copyExtentI32(), binding.copyOriginDeviceI32())
         }
         val finalW4dAaCoverageBindings = passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().mapNotNull { it.aaCoverageBinding }
-        val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes)
+        val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes, logicalColorFormat)
         // RenderGraph.construct publishes this same frame-local row later, after all final
         // recipes have been assembled.  The W5a recipe needs its typed logical descriptor now;
         // this creates no resource or lease and cannot duplicate the later physical allocation.
@@ -3447,7 +3462,7 @@ internal class W6aLayerGraphConstruction(
         val preparedVerticesHostRecipes = if (passes.asSequence().filterIsInstance<PlanPass.RenderPass>()
                 .any { render -> render.draws().any { it is W5bVerticesDraw } })
             freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table)) else emptyMap()
-        val plainLayerCompositeRecipes = freezeW6PlainLayerCompositeRecipesV1(passes)
+        val plainLayerCompositeRecipes = freezeW6PlainLayerCompositeRecipesV1(passes, logicalColorFormat)
         val filteredLayerCompositeRecipes = freezeW6FilteredLayerCompositeRecipesV1(passes, resources + source.resources)
         val layerCompositeDestinationRecipes = freezeW6LayerCompositeDestinationRecipesV1(passes, resources + source.resources)
         val layerCompositeFilteredDestinationRecipes = freezeW6LayerCompositeFilteredDestinationRecipesV1(passes, resources + source.resources)
@@ -3588,7 +3603,7 @@ internal class W6aLayerGraphConstruction(
         val allResources = resources + finalSource.resources
         val peak = W6aLayerPlanBudget.peak(allResources, passes, caps, budget)
         val construction = RenderGraph.construct(id, W6aLayerPlanCompiler.CAPABILITY_ID, extent,
-            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, caps, budget, RenderGraph.visualDraws(passes).size, allResources, passes,
+            logicalColorFormat, caps, budget, RenderGraph.visualDraws(passes).size, allResources, passes,
             passes.zipWithNext { first, second -> PlanPassDependency(first.id, second.id) }, peak, table)
         val sourceNonUniform = Math.subtractExact(construction.peakFrameLocalBytes,
             finalSource.resources.filter { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) })
@@ -3917,7 +3932,7 @@ internal class W6aLayerGraphConstruction(
         }
         val blend = requireNotNull(FinalBlendPlanner.plan(occurrence.descriptor.blend,
             CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
-            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1())) {
+            logicalColorFormat.blendTargetClampV1())) {
             "${W6aPlanDiagnostics.UnsupportedRestore}: restore blend"
         }
         return W6aRestoreFacts(

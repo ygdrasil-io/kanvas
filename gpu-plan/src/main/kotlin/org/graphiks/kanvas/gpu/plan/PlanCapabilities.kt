@@ -4,6 +4,7 @@ public enum class PlanLogicalColorFormat(
     public val clampsNormalizedColorWrites: Boolean,
 ) {
     RGBA8_UNORM_SRGB_LINEAR_PREMUL(true),
+    RGBA8_UNORM_ENCODED_SRGB_PREMUL(true),
 }
 public enum class PlanDepthStencilFormat { Depth24PlusStencil8 }
 public enum class PlanOperationCapability {

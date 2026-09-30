@@ -81,14 +81,15 @@ class SurfaceTest {
 
     @Test
     fun `W3 capability failure is terminal without returning the legacy pixel sentinel`() {
-        val legacySentinel = Surface(
+        val invalidTarget = Surface(
             width = 1,
             height = 1,
             config = RenderConfig(gpuColorFormat = GPUColorFormat.BGRA8_UNORM),
         ).also { surface ->
             surface.canvas { drawColor(ColorARGB.Red) }
-        }.render()
-        assertArrayEquals(byteArrayOf(0, 0, -1, -1), legacySentinel.pixels.toByteArray())
+        }
+        val targetFailure = assertThrows(IllegalStateException::class.java) { invalidTarget.render() }
+        assertTrue(targetFailure.message.orEmpty().startsWith("unsupported.surface.composition.target-format:"))
 
         val surface = Surface(width = 16_777_217, height = 1)
         surface.canvas { drawColor(ColorARGB.Red) }

@@ -14,6 +14,7 @@ public sealed interface NumericOperationGraphV1 {
         SrgbaStraightF32,
         LinearStraightRgbaF32,
         LinearPremulRgbaF32,
+        EncodedPremulRgbaF32,
         CoverageF32,
         AttachmentSrgbaPremulF32,
         AttachmentRgba8,
@@ -28,18 +29,26 @@ public sealed interface NumericOperationGraphV1 {
         INPUT_GRADIENT_SRGBA_STRAIGHT(ValueType.SrgbaStraightF32),
         INPUT_MATERIAL_LINEAR_PREMUL(ValueType.LinearPremulRgbaF32),
         INPUT_IMAGE_LINEAR_PREMUL(ValueType.LinearPremulRgbaF32),
+        INPUT_IMAGE_ENCODED_PREMUL(ValueType.EncodedPremulRgbaF32),
         INPUT_IMAGE_MASK_F32(ValueType.CoverageF32),
         IMAGE_MASK_MULTIPLY(ValueType.LinearPremulRgbaF32, ValueType.LinearPremulRgbaF32, ValueType.CoverageF32),
         INPUT_DESTINATION_LINEAR_PREMUL(ValueType.LinearPremulRgbaF32),
+        INPUT_DESTINATION_ENCODED_PREMUL(ValueType.EncodedPremulRgbaF32),
         INPUT_COVERAGE_F32(ValueType.CoverageF32),
         CONSTANT_TRANSPARENT(ValueType.LinearPremulRgbaF32),
         SRGB_TO_LINEAR(ValueType.LinearStraightRgbaF32, ValueType.SrgbaStraightF32),
         PREMULTIPLY(ValueType.LinearPremulRgbaF32, ValueType.LinearStraightRgbaF32),
+        PREMULTIPLY_ENCODED(ValueType.EncodedPremulRgbaF32, ValueType.SrgbaStraightF32),
         OPACITY_F32(ValueType.LinearPremulRgbaF32, ValueType.LinearPremulRgbaF32),
         SRC_OVER(
             ValueType.LinearPremulRgbaF32,
             ValueType.LinearPremulRgbaF32,
             ValueType.LinearPremulRgbaF32,
+        ),
+        SRC_OVER_ENCODED(
+            ValueType.EncodedPremulRgbaF32,
+            ValueType.EncodedPremulRgbaF32,
+            ValueType.EncodedPremulRgbaF32,
         ),
         APPLY_COVERAGE_F32(
             ValueType.LinearPremulRgbaF32,
@@ -47,9 +56,19 @@ public sealed interface NumericOperationGraphV1 {
             ValueType.LinearPremulRgbaF32,
             ValueType.CoverageF32,
         ),
+        APPLY_COVERAGE_ENCODED_F32(
+            ValueType.EncodedPremulRgbaF32,
+            ValueType.EncodedPremulRgbaF32,
+            ValueType.EncodedPremulRgbaF32,
+            ValueType.CoverageF32,
+        ),
         LINEAR_TO_SRGB_ATTACHMENT(
             ValueType.AttachmentSrgbaPremulF32,
             ValueType.LinearPremulRgbaF32,
+        ),
+        ENCODED_TO_UNORM_ATTACHMENT(
+            ValueType.AttachmentSrgbaPremulF32,
+            ValueType.EncodedPremulRgbaF32,
         ),
         CLAMP_01(
             ValueType.AttachmentSrgbaPremulF32,
@@ -112,10 +131,17 @@ public sealed interface NumericOperationGraphV1 {
             ),
         )
 
+        /** Full source-to-attachment graph for an sRGB-encoded Solid target. */
+        public fun solidEncoded(): NumericOperationGraphV1 = encodedOutput(
+            Node(Operation.PREMULTIPLY_ENCODED, listOf(Node(Operation.INPUT_SOLID_SRGBA_STRAIGHT))),
+        )
+
         public fun gradient(): NumericOperationGraphV1 = output(Node(Operation.PREMULTIPLY,
             listOf(Node(Operation.SRGB_TO_LINEAR, listOf(Node(Operation.INPUT_GRADIENT_SRGBA_STRAIGHT))))))
 
-        public fun imageColor(): NumericOperationGraphV1 = output(Node(Operation.INPUT_IMAGE_LINEAR_PREMUL))
+        public fun imageColor(compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain = org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR): NumericOperationGraphV1 =
+            if (compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR) output(Node(Operation.INPUT_IMAGE_LINEAR_PREMUL))
+            else encodedOutput(Node(Operation.INPUT_IMAGE_ENCODED_PREMUL))
         public fun colorSourceV4(): NumericOperationGraphV1 = output(Node(Operation.INPUT_MATERIAL_LINEAR_PREMUL))
         public fun imageMask(): NumericOperationGraphV1 = output(Node(Operation.IMAGE_MASK_MULTIPLY,
             listOf(Node(Operation.INPUT_MATERIAL_LINEAR_PREMUL), Node(Operation.INPUT_IMAGE_MASK_F32))))
@@ -132,6 +158,16 @@ public sealed interface NumericOperationGraphV1 {
             val covered = Node(Operation.APPLY_COVERAGE_F32, listOf(destination, blended, coverage))
             val encoded = Node(Operation.LINEAR_TO_SRGB_ATTACHMENT, listOf(covered))
             val clamped = Node(Operation.CLAMP_01, listOf(encoded))
+            return Program(Node(Operation.QUANTIZE_UNORM8, listOf(clamped)))
+        }
+
+        private fun encodedOutput(source: Node): NumericOperationGraphV1 {
+            val destination = Node(Operation.INPUT_DESTINATION_ENCODED_PREMUL)
+            val coverage = Node(Operation.INPUT_COVERAGE_F32)
+            val blended = Node(Operation.SRC_OVER_ENCODED, listOf(source, destination))
+            val covered = Node(Operation.APPLY_COVERAGE_ENCODED_F32, listOf(destination, blended, coverage))
+            val attachment = Node(Operation.ENCODED_TO_UNORM_ATTACHMENT, listOf(covered))
+            val clamped = Node(Operation.CLAMP_01, listOf(attachment))
             return Program(Node(Operation.QUANTIZE_UNORM8, listOf(clamped)))
         }
     }

@@ -36,6 +36,7 @@ public object EffectiveMaterialPlanner {
     }
 
     internal fun describeImageSample(sample: MaterialNode.ImageSample,direct: Boolean,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain = org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR,
         verifyPixels: (org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels)->Unit = {}): ImageSampleDescription {
             val sampling = when (val requestedSampling = sample.sampling) {
                 org.graphiks.kanvas.render.ir.ImageSampling.Nearest -> ImageSamplingPlanV1.Nearest
@@ -67,7 +68,7 @@ public object EffectiveMaterialPlanner {
                     org.graphiks.kanvas.color.ColorSpace.DISPLAY_P3 -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.SRGB, ImageGamutPlanV1.DISPLAY_P3)
                     org.graphiks.kanvas.color.ColorSpace.LINEAR_SRGB -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.LINEAR, ImageGamutPlanV1.SRGB)
                     else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.ColorSpace)
-                }
+                }.copy(compositionDomain = compositionDomain)
             }
             val color = sourceColor.copy(premultiplication = pixels.premultiplication)
 
@@ -75,8 +76,9 @@ public object EffectiveMaterialPlanner {
     }
     /** Original IMAGE/Rect/Path source authority, independent of its W4 construction projection. */
     internal fun planW5eImageSource(draw: DrawNode, deviceBoundsI32: org.graphiks.math.geometry.RectI32,
-        maxCellsI64: Long, constructionEntry: ImageConstructionEntryV1?,runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): Result {
-        return when (val described = describeW5eImageSource(draw,deviceBoundsI32,maxCellsI64,constructionEntry,false,runtimeCatalog)) {
+        maxCellsI64: Long, constructionEntry: ImageConstructionEntryV1?,runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain = org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR): Result {
+        return when (val described = describeW5eImageSource(draw,deviceBoundsI32,maxCellsI64,constructionEntry,false,runtimeCatalog,compositionDomain)) {
             is SourceConstructionResultV4.Refused -> Result.Refused(described.diagnosticCode)
             is SourceConstructionResultV4.Built -> try {
                 val image = described.value
@@ -90,6 +92,7 @@ public object EffectiveMaterialPlanner {
     internal fun describeW5eImageSource(draw: DrawNode,deviceBoundsI32: org.graphiks.math.geometry.RectI32,
         maxCellsI64: Long,constructionEntry: ImageConstructionEntryV1?,deferred: Boolean,
         runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain = org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR,
     ): SourceConstructionResultV4<MaterialSourceConstructionV4.ImageMetadata> = try {
             val direct = draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE, org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_NINE,
                 org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_LATTICE, org.graphiks.kanvas.render.ir.DrawOrigin.ATLAS)
@@ -142,7 +145,7 @@ public object EffectiveMaterialPlanner {
             require(atlas == null || sample.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest) { W5eImagePlanDiagnostics.UnsupportedSlice }
             require(nine == null || nine.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest &&
                 sample.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest) { W5eImagePlanDiagnostics.UnsupportedSlice }
-            val description = describeImageSample(sample,direct) { pixels ->
+            val description = describeImageSample(sample,direct,compositionDomain) { pixels ->
             require(!direct || draw.resource?.canonicalId == pixels.canonicalId && (patch?.image ?: nine?.image ?: lattice?.image ?: atlas?.image)?.id?.value == pixels.sourceId) {
                 W5eImagePlanDiagnostics.InvalidContract
             }
@@ -270,7 +273,9 @@ public object EffectiveMaterialPlanner {
         sample: SamplePlan = SamplePlan.SingleSample,
         legacyGradientBoundsI32: org.graphiks.math.geometry.RectI32? = bounds,
         imageMaskChild: Boolean = false,
-        runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): SourceNormalizationV4 {
+        runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain = org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR,
+    ): SourceNormalizationV4 {
         val coordinateNodes = mutableListOf<CoordinateNodeV2>()
         var leaf = if (imageMaskChild) imageMaskMaterial(draw) else draw.material
         var filtered = !imageMaskChild && draw.paint?.colorFilter != null
@@ -320,10 +325,14 @@ public object EffectiveMaterialPlanner {
             (domain != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
                 premultipliedLinear.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP))
             return SourceNormalizationV4.Refused("unsupported.material.gradient.alpha-mode")
-        if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild &&
-            premultipliedLinear?.alphaMode != org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED) {
+        // The V4 transport is needed only for the newly admitted encoded linear-gradient
+        // leaf.  Direct solid sources retain Task 1's authenticated encoded plan.
+        if (!(compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
+                leaf is MaterialNode.LinearGradient) &&
+            (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild &&
+            premultipliedLinear?.alphaMode != org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED)) {
             return when (val original = normalize(draw,targetClamp,true,coverage,sample,elideNoOp=!imageMaskChild,
-                gradientDeviceBoundsI32=legacyGradientBoundsI32,imageMaskChild=imageMaskChild)) {
+                gradientDeviceBoundsI32=legacyGradientBoundsI32,imageMaskChild=imageMaskChild,compositionDomain=compositionDomain)) {
                 Normalization.NoOp -> SourceNormalizationV4.NoOp
                 is Normalization.Refused -> SourceNormalizationV4.Refused(original.diagnosticCode)
                 is Normalization.Source -> SourceNormalizationV4.Source(MaterialSourceConstructionV4.retain(draw,
@@ -354,7 +363,9 @@ public object EffectiveMaterialPlanner {
             is MaterialCoordinatePlanV2.Build.Ready -> SourceCoordinatesV4.V2(built.coordinates)
             is MaterialCoordinatePlanV2.Build.Refused -> return SourceNormalizationV4.Refused(built.code)
         }
-        return when (val captured = MaterialSourceConstructionV4.capture(draw,coordinates,actualBounds,blend,imageMaskChild,runtimeCatalog)) {
+        return when (val captured = MaterialSourceConstructionV4.capture(
+            draw,coordinates,actualBounds,blend,imageMaskChild,runtimeCatalog,compositionDomain=compositionDomain,
+        )) {
             is SourceConstructionResultV4.Built -> if (!collapses) SourceNormalizationV4.Source(captured.value)
                 else when (val solid = collapseOriginalStopV4(captured.value)) {
                     is Result.Ready -> SourceNormalizationV4.Source(MaterialSourceConstructionV4.retain(draw,solid,actualBounds))
@@ -368,7 +379,9 @@ public object EffectiveMaterialPlanner {
         val metadata = requireNotNull(source.gradient)
         val color = requireNotNull(metadata.stops.solidColor)
         require(metadata.family != GradientFamilyV2.CONICAL && source.coordinates == SourceCoordinatesV4.None)
-        var table = MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
+        val solidProgram = if (metadata.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED)
+            MaterialProgramPlan.SolidEncodedPremulV1 else MaterialProgramPlan.SolidLinearPremulV1
+        var table = MaterialPlanTable.of(listOf(MaterialPlanEntry(solidProgram,
             MaterialBindingPlan.SolidRgbaF32V1.of(ColorF32.of(color.redNormalized,color.greenNormalized,
                 color.blueNormalized,color.alphaNormalized)))))
         for (wrapper in metadata.wrappers) {
@@ -496,7 +509,8 @@ public object EffectiveMaterialPlanner {
         }
         val base = when (leaf) {
             MaterialNode.Transparent -> MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1)
-            is MaterialNode.Solid -> MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
+            is MaterialNode.Solid -> MaterialPlanEntry(
+                MaterialProgramPlan.SolidLinearPremulV1,
                 MaterialBindingPlan.SolidRgbaF32V1.of(ColorF32.of(leaf.color.redNormalized,
                     leaf.color.greenNormalized,leaf.color.blueNormalized,leaf.color.alphaNormalized)))
             else -> return Normalization.Refused(W5fPlanDiagnostics.Unpromoted)
@@ -544,6 +558,7 @@ public object EffectiveMaterialPlanner {
     internal fun normalize(draw: DrawNode, targetClamp: BlendTargetClampV1, allowDestinationCandidate: Boolean = false,
         coverage: CoveragePlan = CoveragePlan.FullOrScissor, sample: SamplePlan = SamplePlan.SingleSample,
         elideNoOp: Boolean = true,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain = org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR,
         gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null, imageMaskChild: Boolean = false): Normalization {
         val sourceMaterial = if (imageMaskChild) imageMaskMaterial(draw) else draw.material
         if (sourceMaterial.containsLegacyPremultipliedLinearGradient()) {
@@ -604,7 +619,8 @@ public object EffectiveMaterialPlanner {
                 MaterialPlanRef(0), blend,
             )
             is MaterialNode.Solid -> MaterialPlanEntry(
-                MaterialProgramPlan.SolidLinearPremulV1,
+                if (compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED)
+                    MaterialProgramPlan.SolidEncodedPremulV1 else MaterialProgramPlan.SolidLinearPremulV1,
                 MaterialBindingPlan.SolidRgbaF32V1.of(ColorF32.of(
                     material.color.redNormalized,
                     material.color.greenNormalized,

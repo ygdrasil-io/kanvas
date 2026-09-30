@@ -73,7 +73,7 @@ public class ImageNumericAuthorityV1 private constructor(
             } &&
             execution.upload.widthI32 > 0 && execution.upload.heightI32 > 0 &&
             execution.colorAlpha == when (program) {
-                is ImageMaterialProgramV3.ColorV3 -> ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut, program.premultiplication).takeIf {
+                is ImageMaterialProgramV3.ColorV3 -> ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut, program.premultiplication, program.compositionDomain).takeIf {
                     program.sampling == execution.sampling && program.tileModes == execution.tileModes }
                 is ImageMaterialProgramV3.MaskV3 -> ImageColorAlphaPlanV1(ImageChannelOrderV1.ALPHA, program.alphaType,
                     ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE).takeIf {
@@ -89,7 +89,7 @@ public class ImageNumericAuthorityV1 private constructor(
                     .any { !it.isFinite() } || !deviceBoundsF32.isSorted()) return null
             if (!paintAlphaF32.isFinite() || paintAlphaF32 !in 0f..1f) return null
             val color = when (program) {
-                is ImageMaterialProgramV3.ColorV3 -> ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut, program.premultiplication)
+                is ImageMaterialProgramV3.ColorV3 -> ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut, program.premultiplication, program.compositionDomain)
                 is ImageMaterialProgramV3.MaskV3 -> ImageColorAlphaPlanV1(ImageChannelOrderV1.ALPHA, program.alphaType,
                     ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
             }

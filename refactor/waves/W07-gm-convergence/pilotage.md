@@ -26,9 +26,13 @@ Lot précédent : couverture AA filtrée, renderer `82893045c`, branche
 Lot précédent : Rect stroke AA dans un mélange racine, renderer `ff628a94d`,
 branche `codex/w7-mixed-root-aa-rect`, draft
 [#2420](https://github.com/ygdrasil-io/kanvas/pull/2420) empilée sur #2419.
-Lot courant : politique alpha du LinearGradient, renderer `09d9574b5`,
+Lot précédent : politique alpha du LinearGradient, renderer `09d9574b5`,
 branche `codex/w7-gradient-alpha-mode`, draft
 [#2421](https://github.com/ygdrasil-io/kanvas/pull/2421) empilée sur #2420.
+Lot courant : domaine de composition Surface, branche
+`codex/w7-surface-composition`, draft
+[#2422](https://github.com/ygdrasil-io/kanvas/pull/2422) empilée sur #2421 ;
+validation ciblée et revue finale terminées, réserves ci-dessous.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -51,6 +55,180 @@ de rendu et timeouts éligibles restent au dénominateur.
 
 Les gates W6 relatives à la durée de vie et aux ressources restent suivies.
 Leur fermeture et la proximité visuelle sont deux mesures distinctes.
+
+## Lot domaine de composition Surface — 30 septembre 2026
+
+Le [design](surface-composition-design.md) et le
+[plan](surface-composition-plan.md) ajoutent le domaine explicite
+`SRGB_ENCODED` à `RenderConfig`, avec `LINEAR` conservé par défaut.
+La tranche admise utilise le pipeline partagé : Rect FILL non-AA et SrcOver,
+solides, LinearGradient sRGB/CLAMP dans les deux modes alpha, zéro ou un
+plain layer, images SOURCE_SPACE/PREMUL/SRGB nearest1:1 et snapshots.
+Le domaine suit cible, construction différée, sources/proofs authentifiés,
+programmes, occurrences de layer, texture native et métadonnées de sortie.
+Il ne devient pas une propriété intrinsèque de Picture/SceneSnapshot.
+
+`GPUColorFormat.AUTO` résout la cible RGBA8UnormSrgb pour LINEAR et
+RGBA8Unorm pour SRGB_ENCODED. `PixelFormat` décrit uniquement l'ordre RGBA/BGRA
+des octets publics. Les formats natifs contradictoires, BGRA8 natif et F16
+refusent explicitement : c'est une correction intentionnelle du contrat
+public, qui peut demander une migration de configuration.
+Les snapshots encodés sont SOURCE_SPACE, les historiques restent
+TRANSFER_ENCODED_LINEAR_PREMUL. Encodé→LINEAR est admis ; l'inverse refuse
+dans cette tranche. Ni version Picture ni format externe ne change.
+
+### Validation ciblée et réserve numérique
+
+Task1 est approuvée après trois corrections/re-reviews Sol, commit `bcc3e9deb` :
+**45/45 tests publics**, neuf classes XML, processus et wrapper0. La review
+initiale a notamment fait corriger les ensembles numériques amputés par un
+midpoint, les identités LINEAR, l'admission des layers, la précédence des
+diagnostics et les attentes calculées après GPU. Les corrections suivantes
+conservent tous les champs des identités encodées, un vrai discriminateur R/B,
+et chaque blend/store natif, y compris le premier SrcOver sur transparent.
+
+Task2 `f21162055` ajoute les gradients encodés. RED comportemental : refus
+`unsupported.surface.composition.source` avant support. L'intégration révèle
+ensuite la perte du domaine lors du re-seal après opacité, corrigée dans le
+proof. Un second échec venait du test de récupération dessinant1×1 dans une
+cible2×2, pas du moteur. La sélection finale `task2-final-selected-02` donne
+**48/48**, neuf classes XML, zéro fail/skip/doublon, processus et wrapper0 ;
+les45 identités précédentes sont toutes conservées. Couvre root/layer,
+Picture mémoire/archive, mutation des stops après capture, opacité,
+alternance des domaines, répétition, hard stops, un-stop, axe dégénéré,
+alpha0/1 et refus/sentinel/discard/récupération. Sol approuve conformité et
+qualité Task2 ; seul un libellé de refus devenu incomplet reste Minor.
+
+**Amendement de précision approuvé par l'utilisateur :** les nouveaux tests
+de composition utilisent un type distinct `CompositionEnvelope`, ensembles
+complets par canal et traces des stores calculés avant le GPU. Astra a montré
+que les bornes primitives existantes peuvent produire verts94/96 après les
+stores du témoin obligatoire : l'ancien critère de deux codes adjacents
+ne peut pas couvrir cet ensemble. Ni bornes primitives, ni preuves produit,
+ni gates historiques, ni seuils GM ne sont élargis. L'acceptation de ces
+tests d'intégration est néanmoins **moins précise**, pas une preuve de parité
+Skia à un code. Les témoins séparent mauvais domaine, opacité omise/doublée
+et inversion R/B. L'omission d'un store peut rester indétectable quand ses
+ensembles se recouvrent ; répétition et traces ne lèvent pas cette réserve.
+
+Budget final dérivé statiquement avant essai sur3×3 :
+`B=36+36+768+16+16+16=888`, contre887 pour le refus transactionnel.
+Les trois16 représentent geometry UniformData, source root et source child.
+Les premières dérivations576→592 puis3×2/608 étaient incorrectes ou mal
+attribuées ; elles restent des erreurs de protocole documentées, non des
+preuves a priori. Aucun plafond produit n'a augmenté.
+
+Les deux témoins W5e isolés avaient des assertions PASS puis native133
+(GLFW/AppKit fermé depuis le shutdown thread). La sélection combinée dispose
+explicitement du runtime et finit0 ; elle ne prouve pas la correction du
+lifecycle global. Warnings JVM native-access/Unsafe et Gradle conservés.
+
+### Validation globale, corpus et publication
+
+La globale unique `global-240` sur `f21162055` atteint744 identités :
+**703 PASS,40 FAIL,1 interrompu**, sans doublon, wrapper124/enfant143 après
+TERM à240s, XML non finalisés. Les724 identités communes avec la globale
+précédente ne montrent aucun nouvel échec ; les40 échecs sont hérités.
+Les13 échecs Picture corrigés dans le lot parent passent maintenant, ainsi
+que `cubicDrawImageMatchesMitchellNetravaliOracle`, interrompu auparavant.
+L'ancien nom `unsupported SRC scene retains its known legacy pixels` a été
+remplacé par le témoin élargi AUTO/formats compatibles, qui passe : ce n'est
+pas un test perdu. Les20 identités non appariées comptent19 succès et le cas
+`imageNineInvalidCentersRefuseAndRecoverOnSameRuntime` interrompu à l'arrêt.
+Les tests au-delà ne sont pas couverts par cette globale ; les validations
+ciblées W7 restent séparées. La suite demeure **rouge/incomplète**.
+
+Le [snapshot631 final](surface-composition-1d629b0be.json) mesure exactement
+`1d629b0be8e51ee2fc9de3623ede705e3a4523fa`, après la correction finale ci-dessous.
+Les trois tranches sérialisées
+`[0,607)`, `[607,608)`, `[608,631)` terminent Gradle0/1/0 ; le1 représente
+le processus de mesure124 après timeout30s de `vertices`, conservé au
+dénominateur. Les631 identités,443 éligibles, références PNG, scopes, seuils,
+dimensions, résultats et diagnostics sont identiques au lot parent.
+**198/443 rendus,176 comparaisons,198 anciennes empreintes RGBA identiques,
+zéro rendu perdu ou ajouté.** Toujours36 cas à≥99%,49 à≥95%, médiane71,734909%,
+194 échecs de rendu,50 de setup,14 non comparés et8 désaccords de dimensions.
+Le corpus par défaut n'active pas SRGB_ENCODED : aucun gain GM pour ce lot.
+Le checkpoint préalable `f21162055` donnait déjà les mêmes198 empreintes ;
+son snapshot intermédiaire redondant est retiré du checkout, récupérable
+dans le commit documentaire `4238e9778`. Les deux jeux de journaux sont conservés.
+
+La revue finale Astra de `b1ba6d0f3..4238e9778` trouve quatre Important :
+mixtures root `drawColor` + solide/gradient/image sans owner, Surface encodée
+vide sans owner, PlanId W6 identique entre domaines, et nouvelles capabilities
+modifiant indirectement les identités LINEAR historiques. Deux Minor portent
+sur le libellé de refus source et la précédence géométrique d'ImagePatch.
+Ce sont des constats statiques ; aucun mauvais pixel/cache GPU n'est inventé.
+Le commit `1d629b0be` corrige ces six constats en une vague : ownership W6
+root-only des mixtures encodées, clear/readback vide authentifié, discriminant
+W6 encodé, projection des seules identités capability par cible, diagnostics.
+Les LegacyColor restent figées, sans référence de matériau W5 artificielle ;
+les vérifications physiques gardent le snapshot capability complet.
+La sélection finale `final-fix-selected-10` passe **50/50**, neuf classes XML,
+processus/wrapper0 ; les48 anciennes identités restent présentes, plus deux
+témoins de mixtures et Surface vide. La globale reste celle avant correction
+finale, elle n'est pas relancée ni requalifiée comme verte. Le corpus final
+est vérifié ci-dessus. La re-review ciblée Sol de `4238e9778..1d629b0be`
+confirme les six constats corrigés, sans nouvelle casse Critical/Important.
+
+Une réserve Minor reste ouverte : le chemin clear-only encodé authentifie
+correctement la cible native RGBA8Unorm mais renseigne encore
+RGBA8UnormSrgb dans `GPUPreparedNativeReadbackLayout.format`
+(`GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:7093`). Le consumer
+`GPUFrameReadbackCompletion.kt:710–718` accepte les deux formats et la copie
+native ne dépend pas de ce champ ; les pixels transparents et le tag
+SOURCE_SPACE sont vérifiés. C'est une métadonnée physique inexacte, pas un
+défaut de pixels établi. Point différé après l'unique vague finale, à corriger
+avant qu'un nouveau consumer utilise ce champ pour interpréter les octets.
+Risque conservé : une future interprétation stricte pourrait être erronée.
+
+Réserve d'exécution : quatre essais intermédiaires ont utilisé par erreur le
+checkout `cbf6` (aucun test W7 disponible). Les deux fichiers produit modifiés
+accidentellement par l'agent y ont été restaurés par patch inverse ; le
+contrôleur a vérifié le retour aux seuls deux fichiers utilisateurs déjà
+modifiés. Ces essais exit1 ne sont ni des GREEN ni une preuve de panne GPU.
+Seule la sélection finale50 sur le bon worktree est retenue.
+PR draft [#2422](https://github.com/ygdrasil-io/kanvas/pull/2422) empilée sur
+#2421 avec cette réserve ; aucune readiness pour merge.
+Archives, commandes et comparaison nominative :
+`/private/tmp/kanvas-w7-composition.25GaUn/`.
+Fonts, codecs, `jpg-color-cube`, GM/adaptateurs, références, seuils,
+exclusions et scores historiques restent inchangés.
+
+Le hairline encodé d'`alphagradients`, puis son port fidèle, restent des lots
+distincts. AA, filtres, conversions générales et topologies de layers plus
+riches ne sont pas rendus possibles par ce contrat. W7 reste ouvert.
+
+### Arbitrages de ce lot, dans l'ordre
+
+1. Design et plan pilotés sans nouvelle boucle d'approbation, avec Astra :
+   coût d'erreur, reprise réversible du code/design sur draft.
+2. Tranche verticale en deux tâches, pas migration W3–W6 complète : coût,
+   extensions ultérieures et gain GM retardé.
+3. AUTO et séparation format natif/layout public : coût, migration des callers
+   aux configurations auparavant contradictoires.
+4. SOURCE_SPACE pour les snapshots encodés, refus du replay inverse : coût,
+   extension de conversion et preuve à réaliser ultérieurement.
+5. Task1 subdivisée en milestones, sans réduire son acceptance : coût,
+   handoffs et validations supplémentaires.
+6. Résolution fermée du tuple cible/format/interprétation/sortie, retrait du
+   bypass temporaire W3 avant GREEN : coût, reprise locale des jonctions.
+7. Nouveau contexte Terra après le premier checkpoint : coût, risque de
+   perte de contexte contrôlé par brief et baseline fraîche.
+8. Native133 isolé conservé comme dette, validation combinée : coût,
+   un défaut de lifecycle dépendant de l'ordre pourrait rester masqué.
+9. Nouveau contexte Terra pour snapshots après des retours sans exécution :
+   coût, handoff et omissions possibles, contrôlés par acceptance complète.
+10. Publication frozen-color W6 bornée pour DrawColor, sans élargir W5 : coût,
+    risque local couleur/ordre/clip couvert par les témoins natifs.
+11. Erreurs de budget conservées et nouvelle dérivation statique3×3 figée
+    avant essai : coût, validation supplémentaire sans effacer l'erreur initiale.
+12. CompositionEnvelope distinct approuvé : coût, certaines petites régressions
+    d'arrondi ou de store peuvent échapper à cette acceptance moins précise ;
+    discriminants avant GPU et mesure GM indépendante restent obligatoires.
+13. Métadonnée readback clear-only inexacte différée après l'unique vague
+    finale : aucun effet actuel sur les pixels établi ; coût si cet arbitrage
+    est erroné, mauvaise interprétation par un futur consumer du format.
 
 ## Lot politique alpha du gradient — 30 septembre 2026
 

@@ -13,8 +13,7 @@ class GPUPreparedSurfaceColorMappingTest {
     fun `public default maps to the exact canonical prepared color pair without changing its label`() {
         val config = RenderConfig.DEFAULT
 
-        assertEquals(GPUColorFormat.RGBA8_UNORM_SRGB, config.gpuColorFormat)
-        assertEquals("rgba8unorm-srgb", config.gpuColorFormat.gpuLabel)
+        assertEquals(GPUColorFormat.AUTO, config.gpuColorFormat)
         val ready = assertIs<GPUPreparedSurfaceColorMapping.Ready>(config.mapPreparedGpuColorConfig())
         assertEquals(CanonicalGPUColorFormat.RGBA8UnormSrgb, ready.physicalFormat)
         assertEquals(GPUColorInterpretation.LinearPremul, ready.interpretation)

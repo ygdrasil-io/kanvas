@@ -11,6 +11,7 @@ import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.kanvas.render.ir.SceneExtent
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.surface.gpu.renderViaGpu
 import org.graphiks.math.geometry.RectF32
 
@@ -134,7 +135,7 @@ class Surface(
         }
         return Image(sw, sh, colorType, "surface-snapshot-subset", pixels, colorSpace = result.colorSpace,
             alphaType = AlphaType.PREMUL,
-            premultiplication = org.graphiks.kanvas.render.ir.ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL)
+            premultiplication = result.premultiplication)
     }
 
     /**
@@ -165,6 +166,9 @@ class Surface(
     }
 
     private fun recordingImageSnapshot(subset: RectF32? = null): Image? {
+        check(config.compositionDomain != CompositionDomain.SRGB_ENCODED) {
+            "unsupported.surface.composition.recording-snapshot: encoded Surface snapshots require rendered pixels"
+        }
         val (snapshotWidth, snapshotHeight, sourceSuffix) = if (subset == null) {
             Triple(width, height, "full")
         } else {

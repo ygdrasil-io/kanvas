@@ -231,6 +231,7 @@ private fun validatesW6InverseMaskScanSpanCommandStream(
         PlanTextureFormat.CoverageMask -> GPUTextureFormat.RGBA8Unorm
         is PlanTextureFormat.Color -> when (format.value) {
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> GPUTextureFormat.RGBA8UnormSrgb
+            PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> GPUTextureFormat.RGBA8Unorm
         }
         else -> return false
     }

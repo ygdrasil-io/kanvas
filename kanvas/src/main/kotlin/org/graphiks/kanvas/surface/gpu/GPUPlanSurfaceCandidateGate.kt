@@ -7,6 +7,7 @@ import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.render.ir.CompositionDomain
 
 /** Cheap composition admission only: it intentionally has no Scene or backend dependency. */
 internal object GPUPlanSurfaceCandidateGate {
@@ -230,7 +231,9 @@ internal object GPUPlanSurfaceCandidateGate {
         return null
     }
     fun accepts(operations: List<DisplayOp>, config: RenderConfig): Boolean =
-        config.gpuColorFormat == GPUColorFormat.RGBA8_UNORM_SRGB &&
+        (config.gpuColorFormat == GPUColorFormat.RGBA8_UNORM_SRGB ||
+            config.gpuColorFormat == GPUColorFormat.AUTO ||
+            config.compositionDomain == CompositionDomain.SRGB_ENCODED) &&
             (ownsW5eImages(operations) || operations.all { operation ->
                 if (operation is DisplayOp.DrawRRect && !operation.paint.isStroke() ||
                     operation is DisplayOp.DrawPath && operation.paint.style == org.graphiks.kanvas.paint.PaintStyle.STROKE &&

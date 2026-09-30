@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.plan.MaterialCoordinateOperationV2
 import org.graphiks.kanvas.gpu.plan.GradientStopSlabPlanV1
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.GradientNumericDomainProofV1
+import org.graphiks.kanvas.render.ir.CompositionDomain
 
 /** Typed placement of the sole admitted child fragment; standalone V1/V2 ABI stays exact. */
 internal enum class W5aSourceEmissionLayoutV1(val uniformExpression: String, val sourceFunction: String,
@@ -36,6 +37,7 @@ internal class W5aMaterialSourceStage private constructor(
     val imageV3: org.graphiks.kanvas.gpu.plan.ImageSampleExecutionPlanV1? = null,
     val composedProof: org.graphiks.kanvas.gpu.plan.ColorSourceProofV1? = null,
     val consumesDevicePositionF32: Boolean = gradientStopSlab != null || imageV3 != null,
+    val compositionDomain: CompositionDomain = composedProof?.compositionDomain ?: CompositionDomain.LINEAR,
 ) {
     data class Binding(val bindingI32: Int, val resourceKind: String,
         val composedResource: org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.Resource? = null)
@@ -136,7 +138,8 @@ internal class W5aMaterialSourceStage private constructor(
                     $code
                 }
             """.trimIndent(),requirements.bindingCountI32,false,slab,"w5f_device_point",image,
-                proof.takeIf { it.composedBindingLayout != null },proof.copyOperationGraph().consumesDevicePositionF32)
+                proof.takeIf { it.composedBindingLayout != null },proof.copyOperationGraph().consumesDevicePositionF32,
+                compositionDomain=proof.compositionDomain)
         }
         fun imageV3(table: MaterialPlanTable, root: MaterialPlanRef): W5aMaterialSourceStage {
             val execution = (table.entry(root).bindings as org.graphiks.kanvas.gpu.plan.ImageSampleV3).execution
@@ -214,7 +217,8 @@ internal class W5aMaterialSourceStage private constructor(
                             "w5c_gradient(localPosition)" else return null
                         Operation.INPUT_MATERIAL_LINEAR_PREMUL -> if (binding is MaterialBindingPlan.OpacityF32V1) child ?: return null else return null
                         Operation.SRGB_TO_LINEAR -> "w5a_srgb_to_linear(${inputs.single()})"
-                        Operation.PREMULTIPLY -> "vec4<f32>(${inputs.single()}.rgb * ${inputs.single()}.a, ${inputs.single()}.a)"
+                        Operation.PREMULTIPLY,
+                        Operation.PREMULTIPLY_ENCODED -> "vec4<f32>(${inputs.single()}.rgb * ${inputs.single()}.a, ${inputs.single()}.a)"
                         Operation.OPACITY_F32 -> if (binding is MaterialBindingPlan.OpacityF32V1) "${inputs.single()} * $input.x" else return null
                         else -> return null
                     }
@@ -248,7 +252,11 @@ internal class W5aMaterialSourceStage private constructor(
                 }
             """.trimIndent()
             return W5aMaterialSourceStage(requirements,
-                declarations, chain.size, opaque, table.gradientStopSlab.takeIf { gradientBinding != null })
+                declarations, chain.size, opaque, table.gradientStopSlab.takeIf { gradientBinding != null },
+                compositionDomain = when (table.entry(ref).program) {
+                    org.graphiks.kanvas.gpu.plan.MaterialProgramPlan.SolidEncodedPremulV1 -> CompositionDomain.SRGB_ENCODED
+                    else -> CompositionDomain.LINEAR
+                })
         }
 
 
@@ -399,13 +407,26 @@ internal class W5aMaterialSourceStage private constructor(
             if (graph.contractId != "WgslFloatEnvelopeV1") return null
             fun NumericOperationGraphV1.Node.input(operation: Operation): NumericOperationGraphV1.Node? =
                 takeIf { this.operation == operation }?.inputs?.singleOrNull()
-            val covered = graph.root.input(Operation.QUANTIZE_UNORM8)
-                ?.input(Operation.CLAMP_01)?.input(Operation.LINEAR_TO_SRGB_ATTACHMENT) ?: return null
-            if (covered.operation != Operation.APPLY_COVERAGE_F32) return null
+            val attachment = graph.root.input(Operation.QUANTIZE_UNORM8)
+                ?.input(Operation.CLAMP_01) ?: return null
+            val (covered, destinationOperation, blendOperation) = when (attachment.operation) {
+                Operation.LINEAR_TO_SRGB_ATTACHMENT -> Triple(
+                    attachment.inputs.singleOrNull() ?: return null,
+                    Operation.INPUT_DESTINATION_LINEAR_PREMUL,
+                    Operation.SRC_OVER,
+                )
+                Operation.ENCODED_TO_UNORM_ATTACHMENT -> Triple(
+                    attachment.inputs.singleOrNull() ?: return null,
+                    Operation.INPUT_DESTINATION_ENCODED_PREMUL,
+                    Operation.SRC_OVER_ENCODED,
+                )
+                else -> return null
+            }
+            if (covered.operation !in setOf(Operation.APPLY_COVERAGE_F32, Operation.APPLY_COVERAGE_ENCODED_F32)) return null
             val (destination, blend, coverage) = covered.inputs
-            if (destination != NumericOperationGraphV1.Node(Operation.INPUT_DESTINATION_LINEAR_PREMUL) ||
+            if (destination != NumericOperationGraphV1.Node(destinationOperation) ||
                 coverage != NumericOperationGraphV1.Node(Operation.INPUT_COVERAGE_F32) ||
-                blend.operation != Operation.SRC_OVER || blend.inputs[1] != destination) return null
+                blend.operation != blendOperation || blend.inputs[1] != destination) return null
             return blend.inputs[0]
         }
 

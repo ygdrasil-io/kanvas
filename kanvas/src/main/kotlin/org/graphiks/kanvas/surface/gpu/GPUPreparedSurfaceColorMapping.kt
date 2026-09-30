@@ -16,6 +16,12 @@ internal sealed interface GPUPreparedSurfaceColorMapping {
 
 internal fun RenderConfig.mapPreparedGpuColorConfig(): GPUPreparedSurfaceColorMapping =
     when (gpuColorFormat) {
+        // The public AUTO token is scaffolding until target/domain resolution owns
+        // this decision. Preserve the historical LINEAR target for the RED witness.
+        GPUColorFormat.AUTO -> GPUPreparedSurfaceColorMapping.Ready(
+            physicalFormat = CanonicalGPUColorFormat.RGBA8UnormSrgb,
+            interpretation = GPUColorInterpretation.LinearPremul,
+        )
         GPUColorFormat.RGBA8_UNORM_SRGB -> GPUPreparedSurfaceColorMapping.Ready(
             physicalFormat = CanonicalGPUColorFormat.RGBA8UnormSrgb,
             interpretation = GPUColorInterpretation.LinearPremul,

@@ -110,7 +110,7 @@ fun RenderResult.toImage(sourceId: String = "render-result"): Image =
         pixels = pixels.toByteArray(),
         colorSpace = colorSpace,
         alphaType = AlphaType.PREMUL,
-        premultiplication = org.graphiks.kanvas.render.ir.ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL,
+        premultiplication = premultiplication,
     )
 
 private fun RenderResult.pixelLayout(): ImageEncoder.PixelLayout = when (format) {

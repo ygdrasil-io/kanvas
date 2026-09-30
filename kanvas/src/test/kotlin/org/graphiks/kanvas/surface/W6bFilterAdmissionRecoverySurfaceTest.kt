@@ -19,7 +19,7 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Test
 
-/** Public W6b ownership, terminal-admission, and same-surface recovery contract. */
+/** Public W6b ownership, terminal-admission, and valid-surface recovery contract. */
 class W6bFilterAdmissionRecoverySurfaceTest {
     @Test
     fun `w6c offset is admitted and same surface recovers`() {
@@ -52,14 +52,10 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
-    fun `w6b non-rgba target refuses terminally and same surface recovers`() {
+    fun `w6b non-rgba target refuses at Surface boundary and valid surface recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val recoveryColor = ColorARGB.of(255, 17, 61, 211)
-        val expectedRecovery = Surface(
-            2,
-            2,
-            config = RenderConfig(gpuColorFormat = GPUColorFormat.BGRA8_UNORM),
-        ).also { reference ->
+        val expectedRecovery = Surface(2, 2).also { reference ->
             reference.canvas { drawRect(bounds, Paint(recoveryColor, antiAlias = false)) }
         }.render().pixels
         val surface = Surface(
@@ -71,11 +67,11 @@ class W6bFilterAdmissionRecoverySurfaceTest {
             drawRect(bounds, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.unsupported_target_format:")
+        assertTerminalWithoutReadbackMutation(surface, "unsupported.surface.composition.target-format:")
 
-        surface.discardRecordedOperations()
-        surface.canvas { drawRect(bounds, Paint(recoveryColor, antiAlias = false)) }
-        assertContentEquals(expectedRecovery, surface.render().pixels)
+        val recovery = Surface(2, 2)
+        recovery.canvas { drawRect(bounds, Paint(recoveryColor, antiAlias = false)) }
+        assertContentEquals(expectedRecovery, recovery.render().pixels)
     }
 
     @Test

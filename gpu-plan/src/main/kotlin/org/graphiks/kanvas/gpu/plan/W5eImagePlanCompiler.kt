@@ -190,7 +190,7 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
                 selected.scene.mapIndexed { index, command -> originals[index]?.let { SceneCommand.Draw(projectGeometry(it)) } ?: command },
                 selected.scene.graphLimits)
             val projection = ImageOriginGeometryProjectionV6(projected, entries)
-            val chain = CapabilityCompilerChain.of(listOf(W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(),
+            val chain = CapabilityCompilerChain.ofProjected(listOf(W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(),
                 W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(),
                 W4dGeneralPathPlanCompiler().withImageOriginProjection(projection)), runtimeCatalog)
             val selection = chain.select(projected, selected.target)
@@ -214,7 +214,7 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
                     MaterialSourceConstructionV4.authenticateElidedImageOrigin(original, runtimeCatalog)
                     null
                 } else command to captureImageSource(original, draw, entries.getValue(command), capabilities,
-                    minOf(budget.maxFrameLocalBytes / 128L, Int.MAX_VALUE.toLong()))
+                    minOf(budget.maxFrameLocalBytes / 128L, Int.MAX_VALUE.toLong()), selected.target.compositionDomain)
             }.toMap()
             val overlaid = lanes.map { lane -> when (val result = lane.overlayImageSources { captured[it.commandIndex] }) {
                 is SourceConstructionResultV4.Built -> result.value.withOccurrenceSceneV1(projected)
@@ -228,19 +228,21 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
         }
     }
 
-    private fun captureDirectImageSource(original: DrawNode, geometry: PlanDraw): MaterialSourceConstructionV4 {
+    private fun captureDirectImageSource(original: DrawNode, geometry: PlanDraw,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain): MaterialSourceConstructionV4 {
         val bounds = geometry.w5eDeviceBoundsI32()
         return MaterialSourceConstructionV4.captureImageOrigin(original,
             RectF32.ofLTRB(bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.bottom.toFloat()),
-            geometry.blend, runtimeCatalog)
+            geometry.blend, runtimeCatalog, compositionDomain)
     }
 
     private fun captureImageSource(original: DrawNode, geometry: PlanDraw, entry: ImageConstructionEntryV1,
-        capabilities: PlanCapabilitySnapshot, maxLatticeCellsI64: Long): MaterialSourceConstructionV4 {
-        if (original.origin == DrawOrigin.IMAGE) return captureDirectImageSource(original, geometry)
+        capabilities: PlanCapabilitySnapshot, maxLatticeCellsI64: Long,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain): MaterialSourceConstructionV4 {
+        if (original.origin == DrawOrigin.IMAGE) return captureDirectImageSource(original, geometry, compositionDomain)
         val bounds = geometry.w5eDeviceBoundsI32()
         val metadata = when (val captured = EffectiveMaterialPlanner.describeW5eImageSource(original, bounds,
-            maxLatticeCellsI64, entry, true, runtimeCatalog)) {
+            maxLatticeCellsI64, entry, true, runtimeCatalog, compositionDomain)) {
             is SourceConstructionResultV4.Built -> captured.value
             is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
         }
@@ -388,7 +390,7 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
             }
             val emptyCompiler = W3SolidRectPlanCompiler(runtimeCatalog)
             val imageGeometry = ImageOriginGeometryProjectionV6(projected,constructionEntries)
-            val compiler: GpuPlanCompiler = if (metadataOnly) emptyCompiler else CapabilityCompilerChain.of(listOf(
+            val compiler: GpuPlanCompiler = if (metadataOnly) emptyCompiler else CapabilityCompilerChain.ofProjected(listOf(
                 W5aCompositePlanCompiler(constructionEntries,runtimeCatalog,imageGeometry), W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(),
                 W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), W4dGeneralPathPlanCompiler().withImageOriginProjection(imageGeometry)),runtimeCatalog)
             val selection = if (metadataOnly) {
@@ -402,7 +404,7 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
                 // the geometry capability cannot construct the corresponding footprint.
                 for ((constructionIndexI32, node) in sourceNodes) when (val source = EffectiveMaterialPlanner.planW5eImageSource(node,
                     RectI32(0, 0, selected.target.extent.width, selected.target.extent.height), maxLatticeCellsI64,
-                    constructionEntries.getValue(constructionIndexI32),runtimeCatalog)) {
+                    constructionEntries.getValue(constructionIndexI32),runtimeCatalog, selected.target.compositionDomain)) {
                     is EffectiveMaterialPlanner.Result.Refused -> throw IllegalArgumentException(source.diagnosticCode)
                     else -> Unit
                 }
@@ -448,7 +450,7 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
                         continue
                     }
                     capturedSources[command] = captureImageSource(original, geometryDraw,
-                        constructionEntries.getValue(command), capabilities, maxLatticeCellsI64)
+                        constructionEntries.getValue(command), capabilities, maxLatticeCellsI64, selected.target.compositionDomain)
                 }
                 if (survivingCommands.isEmpty()) return RenderPlanResult.Ready(lanes.first().publishClearOnly())
                 val survivingSources = sourceNodes.filterKeys { it in survivingCommands }
@@ -493,7 +495,7 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
                 val draw = requireNotNull(geometry[commandI32]) { W5eImagePlanDiagnostics.UnsupportedSlice }
                 val bounds = draw.w5eDeviceBoundsI32()
                 val source = when (val result = EffectiveMaterialPlanner.planW5eImageSource(node, bounds, maxLatticeCellsI64,
-                    constructionEntries.getValue(commandI32),runtimeCatalog)) {
+                    constructionEntries.getValue(commandI32),runtimeCatalog, selected.target.compositionDomain)) {
                     is EffectiveMaterialPlanner.Result.Ready -> result
                     is EffectiveMaterialPlanner.Result.Refused -> throw IllegalArgumentException(result.diagnosticCode)
                 }

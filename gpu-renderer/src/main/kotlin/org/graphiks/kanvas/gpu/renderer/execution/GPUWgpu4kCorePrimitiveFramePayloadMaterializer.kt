@@ -573,6 +573,7 @@ internal fun encodeW4eNativePasses(
         val store = when (recipe.store) { AttachmentStorePlan.Store -> GPUPreparedNativeStoreOperation.Store }
         val format = when (recipe.target.format) {
             PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+            PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL) -> GPUTextureFormat.RGBA8Unorm
             PlanTextureFormat.CoverageMask -> GPUTextureFormat.RGBA8Unorm
             else -> throw refusal("invalid.native-core-primitive.w4e-inverse-recipe", "W6 inverse recipe has no admitted color format.")
         }
@@ -729,6 +730,7 @@ internal fun encodeW4eNativePasses(
         }
         val format = when (recipe.target.format) {
             PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+            PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL) -> GPUTextureFormat.RGBA8Unorm
             else -> throw refusal("invalid.native-core-primitive.w4e-inverse-domain-zero", "W6 Zero requires its final RGBA8 scene target.")
         }
         val blend = org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(recipe.blend)
@@ -778,6 +780,7 @@ internal fun encodeW4eNativePasses(
         }
         val format = when (recipe.target.format) {
             PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+            PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL) -> GPUTextureFormat.RGBA8Unorm
             else -> throw refusal("invalid.native-core-primitive.w4e-inverse-domain-direct", "W6 Direct requires final scene color target.")
         }
         require(recipe.shader(org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectBundleV1.DomainStencil) == org.graphiks.kanvas.gpu.plan.W6InverseDomainDirectShaderV1.PathGeometry &&
@@ -849,6 +852,7 @@ internal fun encodeW4eNativePasses(
         }
         val format = when (recipe.target.format) {
             PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+            PlanTextureFormat.Color(org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL) -> GPUTextureFormat.RGBA8Unorm
             else -> throw refusal("invalid.native-core-primitive.w4e-inverse-domain-fan", "W6 fan requires final scene color target.")
         }
         val domain = recipe.copyDomainI32()
@@ -7053,7 +7057,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             preparedSceneTarget.targetGeneration != generationSeal.targetGeneration ||
             preparedSceneTarget.width != witness.graph.targetExtent.width ||
             preparedSceneTarget.height != witness.graph.targetExtent.height ||
-            framePlan.corePrimitiveSceneTargetDescriptor(witness.target)?.format != GPUColorFormat.RGBA8UnormSrgb ||
+            framePlan.corePrimitiveSceneTargetDescriptor(witness.target)?.format != when (witness.graph.colorFormat) {
+                org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> GPUColorFormat.RGBA8UnormSrgb
+                org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> GPUColorFormat.RGBA8Unorm
+            } ||
             resources.ordinaryResources.singleOrNull()?.let { it.logicalResource == witness.target &&
                 it.role == GPUFrameResourceRole.SceneTarget && it.deviceGeneration == generationSeal.deviceGeneration } != true ||
             staging.stagingResource != witness.staging || staging.request != readbackStep.request ||
@@ -7145,6 +7152,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         )
         val targetFormat = framePlan.corePrimitiveSceneTargetDescriptor(renderStep.target)?.format
             ?: return refused("invalid.native-core-primitive.w3-target", "W3 target descriptor is missing.")
+        val sealedTargetFormat = when (scratch.packetStructuralPipelineKeys.map { it.colorFormat }.distinct().singleOrNull()) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm -> GPUColorFormat.RGBA8Unorm
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb -> GPUColorFormat.RGBA8UnormSrgb
+            else -> return refused("invalid.native-core-primitive.w3-target", "W3 scratch carries an unsupported target format.")
+        }
         val renderScopes = encoderPlan.scopes.filter {
             it.operationKind == GPUEncoderOperationKind.Render
         }
@@ -7156,7 +7168,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         if ((if (w5b == null) encoderPlan.scopes.size != 2 else !w5b.validates(framePlan)) ||
             renderScope.sourceStepIndex != framePlan.steps.indexOf(renderStep) ||
             readbackScope.sourceStepIndex != framePlan.steps.indexOf(readbackStep) ||
-            targetFormat != GPUColorFormat.RGBA8UnormSrgb ||
+            targetFormat != sealedTargetFormat ||
             preparedSceneTarget.width != scratch.targetBounds.width ||
             preparedSceneTarget.height != scratch.targetBounds.height ||
             preparedSceneTarget.deviceGeneration != generationSeal.deviceGeneration ||

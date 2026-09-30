@@ -12,8 +12,15 @@ import org.graphiks.kanvas.render.ir.SceneSnapshot
 public class CapabilityCompilerChain private constructor(
     private val compilers: List<GpuPlanCompiler>,
     private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+    /** Only the public captured scene is subject to whole-scene composition admission. */
+    private val enforceCompositionAdmission: Boolean,
 ) : GpuPlanCompiler {
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
+        if (enforceCompositionAdmission) {
+            CompositionAdmissionV1.validate(scene, target).firstOrNull()?.let { diagnostic ->
+                return GpuPlanSelection.InvalidScene(listOf(diagnostic))
+            }
+        }
         // Layer ownership precedes all geometry/source admission, including composed-source gaps.
         if (scene.any { it is org.graphiks.kanvas.render.ir.SceneCommand.BeginLayer || it is org.graphiks.kanvas.render.ir.SceneCommand.EndLayer } ||
             W6bFilterGraphConstruction.owns(scene)) {
@@ -107,7 +114,9 @@ public class CapabilityCompilerChain private constructor(
                 else org.graphiks.kanvas.render.ir.SceneCommand.Annotation.of(
                     org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6.occurrence", index.toString())
             }, input.captured.scene.graphLimits)
-        return when (val selection = select(scene, RenderTargetDescriptor(extent, scene.colorSpace))) {
+        val childTarget = RenderTargetDescriptor(extent, scene.colorSpace,
+            compositionDomain = input.renderTarget.compositionDomain)
+        return when (val selection = select(scene, childTarget)) {
             is GpuPlanSelection.Candidate -> when (val constructed = constructSourceLanes(selection.candidate, capabilities, budget)) {
                 is RenderPlanResult.Ready -> RenderPlanResult.Ready(constructed.plan.map { it.withOccurrenceSceneV1(scene) })
                 else -> constructed
@@ -164,7 +173,15 @@ public class CapabilityCompilerChain private constructor(
         public fun of(compilers: List<GpuPlanCompiler>): CapabilityCompilerChain =
             of(compilers, RuntimeEffectSemanticCatalogSnapshot.Unbound)
 
-        public fun of(compilers: List<GpuPlanCompiler>, runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): CapabilityCompilerChain {
+        public fun of(compilers: List<GpuPlanCompiler>, runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): CapabilityCompilerChain =
+            create(compilers, runtimeCatalog, true)
+
+        /** Internal only: the caller has already admitted its original public scene. */
+        internal fun ofProjected(compilers: List<GpuPlanCompiler>, runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): CapabilityCompilerChain =
+            create(compilers, runtimeCatalog, false)
+
+        private fun create(compilers: List<GpuPlanCompiler>, runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+            enforceCompositionAdmission: Boolean): CapabilityCompilerChain {
             require(compilers.isNotEmpty()) { "CapabilityCompilerChain requires at least one compiler" }
             val ordered = compilers.toMutableList()
             val lastNarrowPathIndex = ordered.indexOfLast { compiler ->
@@ -177,7 +194,8 @@ public class CapabilityCompilerChain private constructor(
             if (w4dGeneralIndex >= 0 && ordered.none { it is W4eClipPlanCompiler }) {
                 ordered.add(w4dGeneralIndex + 1, W4eClipPlanCompiler())
             }
-            return CapabilityCompilerChain(ordered.map { it.bindRuntimeCatalog(runtimeCatalog) }, runtimeCatalog)
+            return CapabilityCompilerChain(ordered.map { it.bindRuntimeCatalog(runtimeCatalog) }, runtimeCatalog,
+                enforceCompositionAdmission)
         }
     }
 }

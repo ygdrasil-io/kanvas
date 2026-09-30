@@ -417,12 +417,18 @@ public class RenderGraph private constructor(
                 }
             }
             val stopSlab = materialPlanTable?.gradientStopSlab
+            // W6 root composition can retain a frozen DrawColor packet. Keep that
+            // legacy authority outside material-table joins; all material packets keep
+            // their existing validation and accounting below.
+            val materialVisualDraws = visualDraws(passes).filter {
+                it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1
+            }
             val maskShaderBindings = passes.filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
                 ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding as?
                     FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned)
             }
             if (stopSlab != null) {
-                visualDraws(passes).forEach { draw ->
+                materialVisualDraws.forEach { draw ->
                     val authority = draw.materialAuthority
                     var indexI32 = authority.materialPlanRef().indexI32
                     while (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
@@ -470,12 +476,12 @@ public class RenderGraph private constructor(
                     }
                 }
             }
-            if (stopSlab != null && (visualDraws(passes).map { it.materialAuthority.materialPlanRef() } +
+            if (stopSlab != null && (materialVisualDraws.map { it.materialAuthority.materialPlanRef() } +
                     maskShaderBindings.map { it.material }).any {
                     materialPlanTable.sourceUsesGradientStopSlab(it)
                 } && resources.none { it.role == PlanResourceRole.GradientStopData }) {
                 stopSlab.requireStorageCapabilities(capabilities)
-                val sourceRequirements = visualDraws(passes).map { it.materialAuthority } +
+                val sourceRequirements = materialVisualDraws.map { it.materialAuthority } +
                     maskShaderBindings.map { it.materialAuthority }
                 val nonV4Requirements = sourceRequirements.filter { it.colorSourceCoordinatesV4() == null }.map { authority ->
                     val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.materialPlanRef())
@@ -495,7 +501,7 @@ public class RenderGraph private constructor(
             }
             // The logical inventory and native upload refer to the same issued frame slab.
             // A role name alone is never authority to add an unreferenced storage buffer.
-            val sourceAuthorities = visualDraws(passes).map { it.materialAuthority } + maskShaderBindings.map { it.materialAuthority }
+            val sourceAuthorities = materialVisualDraws.map { it.materialAuthority } + maskShaderBindings.map { it.materialAuthority }
             val noiseSlabs = materialPlanTable?.let { table -> sourceAuthorities.mapNotNull { authority ->
                 val coordinates = authority.colorSourceCoordinatesV4() ?: return@mapNotNull null
                 val root = authority.materialPlanRef()

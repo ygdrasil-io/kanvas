@@ -8,6 +8,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 import org.graphiks.kanvas.surface.gpu.GPUPlanSurfaceTerminalException
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
@@ -2740,14 +2741,28 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
-    fun `unsupported SRC scene retains its known legacy pixels`() {
-        val surface = Surface(1, 1)
-        surface.canvas {
-            drawColor(ColorARGB.Blue)
-            drawColor(ColorARGB.of(128, 255, 0, 0), BlendMode.SRC)
-        }
+    fun `unsupported SRC scene retains known legacy bytes through AUTO and compatible public formats`() {
+        for (format in PixelFormat.entries) for (config in listOf(
+            RenderConfig(),
+            RenderConfig(gpuColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB),
+        )) {
+            val surface = Surface(1, 1, format, config)
+            surface.canvas {
+                drawColor(ColorARGB.Blue)
+                drawColor(ColorARGB.of(128, 255, 0, 0), BlendMode.SRC)
+            }
 
-        assertPixelsEqual(ubyteArrayOf(188u, 0u, 0u, 128u), surface.render().pixels)
+            val expected =
+                if (format == PixelFormat.RGBA8) ubyteArrayOf(188u, 0u, 0u, 128u)
+                else ubyteArrayOf(0u, 0u, 188u, 128u)
+            val first = surface.render()
+            assertPixelsEqual(expected, first.pixels)
+            assertEquals(ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL, first.premultiplication)
+            val second = surface.render()
+            assertPixelsEqual(expected, second.pixels)
+            assertEquals(first.premultiplication, second.premultiplication)
+            assertContentEquals(first.pixels, second.pixels)
+        }
     }
 
     private fun renderScene(format: PixelFormat, first: ColorARGB, second: ColorARGB): RenderResult {

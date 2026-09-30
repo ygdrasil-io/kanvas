@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.ImageAlphaType
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -41,11 +42,17 @@ public class ImageTileModePlanV1(public val x: ImageTileAxisModePlanV1, public v
 
 public data class ImageColorAlphaPlanV1(public val channelOrder: ImageChannelOrderV1,
     public val alphaType: ImageAlphaType, public val transfer: ImageTransferPlanV1, public val gamut: ImageGamutPlanV1,
-    public val premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE) {
+    public val premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE,
+    /** The sealed target controls whether SOURCE_SPACE bytes are decoded or used directly. */
+    public val compositionDomain: CompositionDomain = CompositionDomain.LINEAR) {
+    /** Keep every historical LINEAR identity byte-for-byte stable. */
+    internal val canonicalIdentity: String = "ImageColorAlphaPlanV1(channelOrder=$channelOrder, alphaType=$alphaType, " +
+        "transfer=$transfer, gamut=$gamut, premultiplication=$premultiplication" +
+        (if (compositionDomain == CompositionDomain.LINEAR) ")" else ", compositionDomain=$compositionDomain)")
     /** Colour decode branches on unit alpha before executing any division. */
     public val unpremultiplyOperation: ImageNumericOperationGraphV1.TexelOperation?
         get() = if (channelOrder != ImageChannelOrderV1.ALPHA && alphaType == ImageAlphaType.PREMUL &&
-            premultiplication == ImagePremultiplicationV1.SOURCE_SPACE)
+            premultiplication == ImagePremultiplicationV1.SOURCE_SPACE && compositionDomain == CompositionDomain.LINEAR)
             ImageNumericOperationGraphV1.TexelOperation.UNIT_ALPHA_GUARDED_UNPREMULTIPLY_SOURCE else null
 }
 
@@ -103,12 +110,14 @@ public sealed interface ImageMaterialProgramV3 : MaterialProgramPlan {
         public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1,
         override val selectsCells: Boolean = false, override val latticeCellKinds: String? = null,
         override val atlasBlendMode: org.graphiks.kanvas.render.ir.BlendMode? = null,
-        public val premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE) : ImageMaterialProgramV3 {
+        public val premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE,
+        public val compositionDomain: CompositionDomain = CompositionDomain.LINEAR) : ImageMaterialProgramV3 {
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut:${sampling.topologyId}:${tileModes.topologyId}${atlasBlendMode?.let { ":atlas-source-blend-v1:$it" }.orEmpty()}" +
             (if (premultiplication == ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL) ":attachment-linear-premul-v1"
                 else if (alphaType == ImageAlphaType.PREMUL) ":unit-alpha-guard-v1" else "") +
+            (if (compositionDomain == CompositionDomain.LINEAR) "" else ":${compositionDomain.name}") +
             if (latticeCellKinds != null) ":lattice-cell-selector-v1:$latticeCellKinds" else if (selectsCells) ":nine-local-cell-selector-v2" else "")
-        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageColor()
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageColor(compositionDomain)
     }
     public class MaskV3(public val child: MaterialProgramPlan, public val alphaType: ImageAlphaType,
         public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1,
@@ -145,7 +154,7 @@ public class ImageSampleExecutionPlanV1 internal constructor(
     public val cellSelection: ImageCellSelectionPlanV1? get() = numericAuthority.cellSelection
     public fun copySourceCellsF32(): List<RectF32> = cellSelection?.samples?.map { it.cell.copySourceF32() } ?: listOf(coordinates.copySourceF32())
     public fun copyDestinationCellsF32(): List<RectF32> = cellSelection?.cells?.map { it.copyDestinationF32() } ?: listOf(coordinates.copyDestinationF32())
-    public val canonicalIdentity: String = "image-execution-v1:${upload.contentIdentity}:${coordinates.canonicalIdentity}:$colorAlpha:" +
+    public val canonicalIdentity: String = "image-execution-v1:${upload.contentIdentity}:${coordinates.canonicalIdentity}:${colorAlpha.canonicalIdentity}:" +
         "${sampling.bindingIdentity}:${tileModes.topologyId}:${paintAlphaF32.toRawBits()}:" +
         childSourceIdentity.orEmpty() +
         ":${numericAuthority.canonicalIdentity}:budget=$totalPessimisticBudgetBytesI64" + atlasBlend?.let { ":${it.canonicalIdentity}" }.orEmpty()

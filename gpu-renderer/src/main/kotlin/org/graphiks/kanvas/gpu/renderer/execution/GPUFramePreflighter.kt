@@ -5299,6 +5299,10 @@ internal class GPUFramePreflighter(
         val staging = preparations.singleOrNull { it.role == GPUFrameResourceRole.ReadbackStaging }
         val targetDescriptor = target?.descriptor as? GPUFrameTextureDescriptor
         val stagingDescriptor = staging?.descriptor as? GPUFrameBufferDescriptor
+        val targetStructuralFormat = targetDescriptor?.format
+            ?.takeIf { it == GPUColorFormat.RGBA8Unorm || it == GPUColorFormat.RGBA8UnormSrgb }
+            ?.corePrimitiveStructuralColorFormat()
+            ?: return false
         val targetBytes = try {
             Math.multiplyExact(
                 Math.multiplyExact(firstSemantic.targetBounds.width.toLong(), firstSemantic.targetBounds.height.toLong()),
@@ -5377,7 +5381,7 @@ internal class GPUFramePreflighter(
                             requireNotNull(candidate.clipExecutionPlan),
                             requireNotNull(candidate.blendPlan),
                             sampleCount = 1,
-                            colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                            colorFormat = targetStructuralFormat,
                         )
                     } &&
                     packet.analysisRecordId == semantic.analysisRecordId &&
@@ -5394,7 +5398,7 @@ internal class GPUFramePreflighter(
                         requireNotNull(packet.clipExecutionPlan),
                         requireNotNull(packet.blendPlan),
                         sampleCount = 1,
-                        colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                        colorFormat = targetStructuralFormat,
                     ) &&
                     packet.renderPipelineKey == authority.structuralPipelineKey.stableRenderPipelineKey(
                         CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
@@ -5418,7 +5422,7 @@ internal class GPUFramePreflighter(
             target?.usages == setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource) &&
             target.lifetime == GPUFrameResourceLifetime.FrameLocal && target.byteSize == targetBytes &&
             targetDescriptor?.logicalBounds == firstSemantic.targetBounds &&
-            targetDescriptor.format == GPUColorFormat.RGBA8UnormSrgb && targetDescriptor.sampleCount == 1 &&
+            targetDescriptor.format.corePrimitiveStructuralColorFormat() == targetStructuralFormat && targetDescriptor.sampleCount == 1 &&
             staging?.resource == scratch.staging &&
             staging.usages == setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead) &&
             staging.lifetime == GPUFrameResourceLifetime.FrameLocal && staging.byteSize == stagingBytes &&

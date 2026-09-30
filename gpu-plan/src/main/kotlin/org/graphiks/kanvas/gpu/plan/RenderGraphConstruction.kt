@@ -97,6 +97,9 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
     remap: (MaterialPlanRef) -> MaterialPlanRef): List<PlanPass> {
         val copied = java.util.IdentityHashMap<PlanDraw, PlanDraw>()
         fun draw(source: PlanDraw): PlanDraw = copied.getOrPut(source) {
+            // DrawColor has an authenticated frozen operand rather than a W5 table
+            // reference. W6 publishes it unchanged beside independently bound lanes.
+            if (source.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) return@getOrPut source
             if (source is W5bW4ePathDraw) return@getOrPut W5bW4ePathDraw(
                 requireNotNull(w4eColorPasses?.get(source.commandIndex)),source.blend)
             if (source is ClippedGeneralPathDraw) return@getOrPut ClippedGeneralPathDraw.of(

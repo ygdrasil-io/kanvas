@@ -396,6 +396,10 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
                 resource.copyExtent()?.let { GPUFrameTextureDescriptor(GPUPixelBounds(0, 0, it.width, it.height),
                     when (resource.format) {
+                        is PlanTextureFormat.Color -> when ((resource.format as PlanTextureFormat.Color).value) {
+                            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> GPUColorFormat.RGBA8UnormSrgb
+                            PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> GPUColorFormat.RGBA8Unorm
+                        }
                         is PlanTextureFormat.DepthStencil -> GPUColorFormat("depth24plus-stencil8")
                         PlanTextureFormat.CoverageMask -> GPUColorFormat("rgba8unorm")
                         else -> GPUColorFormat.RGBA8UnormSrgb

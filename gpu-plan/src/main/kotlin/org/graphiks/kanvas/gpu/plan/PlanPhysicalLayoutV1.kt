@@ -522,7 +522,7 @@ public class PlanPhysicalLayoutV1 private constructor(
             require(source.uniforms.values.toSet() == rows.filter { it.role == PlanResourceRole.SourceUniformData }.map { it.id }.toSet())
             require(source.caches.filter { it.request !is PlanCacheResourceRequest.Sampler }.map { it.resourceId }.toSet() ==
                 rows.filter { it.lifetime == PlanResourceLifetime.DeviceSessionCache }.map { it.id }.toSet())
-            val expectedSolidRectHosts = freezeW6SolidRectHostsV1(graph.passes())
+            val expectedSolidRectHosts = freezeW6SolidRectHostsV1(graph.passes(), graph.colorFormat)
             require(source.w6SolidRectHostRecipes.keys == expectedSolidRectHosts.keys)
             source.w6SolidRectHostRecipes.forEach { (site, recipe) ->
                 require(recipe.site == site && recipe == expectedSolidRectHosts.getValue(site)) {
@@ -556,7 +556,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                     "W6 prepared-vertices host recipe changed after final pass binding."
                 }
             }
-            val expectedPlainLayerComposites = freezeW6PlainLayerCompositeRecipesV1(graph.passes())
+            val expectedPlainLayerComposites = freezeW6PlainLayerCompositeRecipesV1(graph.passes(), graph.colorFormat)
             require(source.w6PlainLayerCompositeRecipes.keys == expectedPlainLayerComposites.keys)
             source.w6PlainLayerCompositeRecipes.forEach { (site, recipe) ->
                 require(recipe.site == site && recipe == expectedPlainLayerComposites.getValue(site)) {

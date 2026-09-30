@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalUnsignedTypes::class)
+
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -19,6 +21,8 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.RenderStats
 import org.graphiks.kanvas.surface.GPUColorFormat
+import org.graphiks.kanvas.render.ir.CompositionDomain
+import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 
 internal fun interface SceneCapturePort {
     fun capture(
@@ -64,6 +68,7 @@ internal class GPUPlanSurfaceRouter(
         if (width <= 0 || height <= 0) {
             throw GPUPlanSurfaceTerminalException("w3.surface.invalid_dimensions", "Surface dimensions must be positive.")
         }
+        config.requireCompositionTarget()
         // The compatibility lowerers below this continuation still own excluded
         // formats/effects in unpromoted mixtures. They never receive an owned plan.
         val planningOperations = operations.map { operation ->
@@ -72,32 +77,39 @@ internal class GPUPlanSurfaceRouter(
         val layerOwned = GPUPlanSurfaceCandidateGate.ownsW6aLayers(planningOperations)
         val w6bOwned = GPUPlanSurfaceCandidateGate.ownsW6bFilters(planningOperations)
         val w6dOwned = GPUPlanSurfaceCandidateGate.ownsW6dAdvancedFilters(planningOperations)
-        if (w6dOwned && config.gpuColorFormat == GPUColorFormat.RGBA16_FLOAT) {
-            throw GPUPlanSurfaceTerminalException(
-                org.graphiks.kanvas.gpu.plan.W6dPlanDiagnostics.UnsupportedTargetFormat,
-                "W6d advanced filters do not support the public RGBA16_FLOAT target.",
-            )
+        val requestedTarget = config.resolvedCompositionTarget()
+        val encodedComposition = config.compositionDomain == CompositionDomain.SRGB_ENCODED
+        // For the encoded contract, whole-scene admission owns all non-target
+        // refusals. In particular a filter must report its stable composition
+        // source suffix rather than being intercepted by a historical W6 owner.
+        if (!encodedComposition) {
+            if (w6dOwned && config.gpuColorFormat == GPUColorFormat.RGBA16_FLOAT) {
+                throw GPUPlanSurfaceTerminalException(
+                    org.graphiks.kanvas.gpu.plan.W6dPlanDiagnostics.UnsupportedTargetFormat,
+                    "W6d advanced filters do not support the public RGBA16_FLOAT target.",
+                )
+            }
+            if (w6bOwned && requestedTarget != GPUColorFormat.RGBA8_UNORM_SRGB) {
+                throw GPUPlanSurfaceTerminalException(
+                    org.graphiks.kanvas.gpu.plan.W6bFilterDiagnostics.UnsupportedTargetFormat,
+                    "W6b filters require the public RGBA8_UNORM_SRGB target.",
+                )
+            }
+            if (!w6bOwned && layerOwned && requestedTarget != GPUColorFormat.RGBA8_UNORM_SRGB) {
+                throw GPUPlanSurfaceTerminalException(
+                    "w6a.layer.unsupported_target_format",
+                    "W6a layers require the public RGBA8_UNORM_SRGB target.",
+                )
+            }
         }
-        if (w6bOwned && config.gpuColorFormat != GPUColorFormat.RGBA8_UNORM_SRGB) {
-            throw GPUPlanSurfaceTerminalException(
-                org.graphiks.kanvas.gpu.plan.W6bFilterDiagnostics.UnsupportedTargetFormat,
-                "W6b filters require the public RGBA8_UNORM_SRGB target.",
-            )
-        }
-        if (!w6bOwned && layerOwned && config.gpuColorFormat != GPUColorFormat.RGBA8_UNORM_SRGB) {
-            throw GPUPlanSurfaceTerminalException(
-                "w6a.layer.unsupported_target_format",
-                "W6a layers require the public RGBA8_UNORM_SRGB target.",
-            )
-        }
-        if (!layerOwned && !w6bOwned && !GPUPlanSurfaceCandidateGate.accepts(planningOperations, config)) return legacy()
+        if (!encodedComposition && !layerOwned && !w6bOwned && !GPUPlanSurfaceCandidateGate.accepts(planningOperations, config)) return legacy()
         val imageOwned = GPUPlanSurfaceCandidateGate.ownsW5eImages(planningOperations)
 
         val extent = SceneExtent(width, height)
         val scene = when (val captured = capturePort.capture(planningOperations, extent, ColorSpace.SRGB, captureLimits)) {
             is SceneCaptureResult.Captured -> captured.scene
             is SceneCaptureResult.Invalid -> {
-                if (!layerOwned && !w6bOwned && !imageOwned && captured.diagnostics.isNotEmpty() &&
+                if (!encodedComposition && !layerOwned && !w6bOwned && !imageOwned && captured.diagnostics.isNotEmpty() &&
                     captured.diagnostics.all { it.code.value in CAPTURE_LIMIT_CODES }
                 ) return legacy()
                 throw terminal(captured.diagnostics)
@@ -106,13 +118,13 @@ internal class GPUPlanSurfaceRouter(
         return when (
             val planned = planPort.plan(
                 scene,
-                RenderTargetDescriptor(extent, ColorSpace.SRGB),
+                RenderTargetDescriptor(extent, ColorSpace.SRGB, compositionDomain = config.compositionDomain),
                 config.frameLocalBudgetBytes,
                 org.graphiks.kanvas.gpu.plan.MaterialFrameLimits(config.maxNoiseOctaveEvaluationsI64),
             )
         ) {
             // No compiler owns a GapNotMigrated frame. This is the final legacy boundary.
-            is GpuPlanSurfacePlanResult.GapNotMigrated -> if (layerOwned || w6bOwned || imageOwned) throw terminal(planned.diagnostics) else legacy()
+            is GpuPlanSurfacePlanResult.GapNotMigrated -> if (encodedComposition || layerOwned || w6bOwned || imageOwned) throw terminal(planned.diagnostics) else legacy()
             is GpuPlanSurfacePlanResult.Terminal -> throw terminal(planned.diagnostics)
             is GpuPlanSurfacePlanResult.Ready -> submitOwned(planned.token, format)
         }
@@ -160,6 +172,7 @@ internal class GPUPlanSurfaceRouter(
             structuralSteps = output.structuralSteps(),
             nativeEvidenceCounters = output.nativeEvidenceCounters(),
             nativeEvidenceScopeKinds = output.nativeEvidenceScopeKinds(),
+            premultiplication = output.premultiplication,
         )
     }
 
@@ -169,9 +182,33 @@ internal class GPUPlanSurfaceRouter(
         return GPUPlanSurfaceTerminalException(diagnostic.code.value, diagnostic.message)
     }
 
+    private fun encodedComposition(config: RenderConfig): Boolean =
+        config.compositionDomain == CompositionDomain.SRGB_ENCODED
+
     private companion object {
         val CAPTURE_LIMIT_CODES = setOf("scene-node-limit", "scene-resource-limit", "graph-node-limit")
     }
+}
+
+/** Single public Surface target/domain resolution shared before both plan and legacy entry. */
+internal fun RenderConfig.resolvedCompositionTarget(): GPUColorFormat = when (compositionDomain) {
+    CompositionDomain.LINEAR -> GPUColorFormat.RGBA8_UNORM_SRGB
+    CompositionDomain.SRGB_ENCODED -> GPUColorFormat.RGBA8_UNORM
+}
+
+internal fun RenderConfig.requireCompositionTarget() {
+    val expected = resolvedCompositionTarget()
+    if (gpuColorFormat != GPUColorFormat.AUTO && gpuColorFormat != expected) {
+        throw GPUPlanSurfaceTerminalException(
+            "unsupported.surface.composition.target-format",
+            "$compositionDomain requires ${expected.name}; ${gpuColorFormat.name} is not an admitted composition target.",
+        )
+    }
+}
+
+internal fun RenderConfig.resolvedCompositionPremultiplication(): ImagePremultiplicationV1 = when (compositionDomain) {
+    CompositionDomain.LINEAR -> ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL
+    CompositionDomain.SRGB_ENCODED -> ImagePremultiplicationV1.SOURCE_SPACE
 }
 
 private class ProductionGPUPlanSurfacePort : GPUPlanSurfacePort {
