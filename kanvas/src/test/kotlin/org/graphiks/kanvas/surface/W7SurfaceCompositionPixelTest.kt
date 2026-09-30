@@ -260,12 +260,11 @@ class W7SurfaceCompositionPixelTest {
     @Test
     fun encodedPlainLayerBudgetIsExactAndOneByteLessRecovers() {
         // The initial 2x2 attempt counted 16 + 16 + 512 + 16 + 16 = 576 and
-        // omitted the restore-opacity uniform; native validation correctly said 592.
-        // The preflight report fixes this independent 3x3 witness before its first
-        // execution: `task-1-budget-preflight-3x3.md` derives root/layer RGBA8
-        // descriptors (3*3*4 each), 256-byte-row terminal readback (3*256), two
-        // FrameSourceLayoutV4 SourceUniformData rows (root and child), and the
-        // 16-byte W6a geometry UniformData base at uniformCursorI64 = 16:
+        // omitted W6a's 16-byte geometry UniformData base, not a restore-opacity
+        // uniform; native validation correctly said 592. The independent 3x3
+        // preflight is anchored in W6aLayerGraphConstruction's LogicalTarget,
+        // LayerTarget, ReadbackStaging and UniformData descriptors, plus
+        // FrameSourceLayoutV4's two SourceUniformData rows (root and child):
         // B = 36 + 36 + 768 + 16 + 16 + 16 = 888 bytes.
         val budgetB = 36L + 36L + 768L + 16L + 16L + 16L
         val root = ColorARGB.of(255, 19, 143, 71)
