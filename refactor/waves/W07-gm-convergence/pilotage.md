@@ -30,8 +30,8 @@ Lot précédent : politique alpha du LinearGradient, renderer `09d9574b5`,
 branche `codex/w7-gradient-alpha-mode`, draft
 [#2421](https://github.com/ygdrasil-io/kanvas/pull/2421) empilée sur #2420.
 Lot courant : domaine de composition Surface, branche
-`codex/w7-surface-composition`, base #2421 ; publication draft après
-validation et revue finale.
+`codex/w7-surface-composition`, base #2421 ; validation ciblée et revue finale
+terminées, publication draft avec les réserves ci-dessous.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -137,8 +137,9 @@ pas un test perdu. Les20 identités non appariées comptent19 succès et le cas
 Les tests au-delà ne sont pas couverts par cette globale ; les validations
 ciblées W7 restent séparées. La suite demeure **rouge/incomplète**.
 
-Le [snapshot631](surface-composition-f21162055.json) mesure exactement
-`f211620555530bc6d35fbfc9cfcce7db2cdb8e5d`. Les trois tranches sérialisées
+Le [snapshot631 final](surface-composition-1d629b0be.json) mesure exactement
+`1d629b0be8e51ee2fc9de3623ede705e3a4523fa`, après la correction finale ci-dessous.
+Les trois tranches sérialisées
 `[0,607)`, `[607,608)`, `[608,631)` terminent Gradle0/1/0 ; le1 représente
 le processus de mesure124 après timeout30s de `vertices`, conservé au
 dénominateur. Les631 identités,443 éligibles, références PNG, scopes, seuils,
@@ -147,8 +148,46 @@ dimensions, résultats et diagnostics sont identiques au lot parent.
 zéro rendu perdu ou ajouté.** Toujours36 cas à≥99%,49 à≥95%, médiane71,734909%,
 194 échecs de rendu,50 de setup,14 non comparés et8 désaccords de dimensions.
 Le corpus par défaut n'active pas SRGB_ENCODED : aucun gain GM pour ce lot.
+Le checkpoint préalable `f21162055` donnait déjà les mêmes198 empreintes ;
+son snapshot intermédiaire redondant est retiré du checkout, récupérable
+dans le commit documentaire `4238e9778`. Les deux jeux de journaux sont conservés.
 
-En attente : revue finale Astra et PR draft empilée sur #2421.
+La revue finale Astra de `b1ba6d0f3..4238e9778` trouve quatre Important :
+mixtures root `drawColor` + solide/gradient/image sans owner, Surface encodée
+vide sans owner, PlanId W6 identique entre domaines, et nouvelles capabilities
+modifiant indirectement les identités LINEAR historiques. Deux Minor portent
+sur le libellé de refus source et la précédence géométrique d'ImagePatch.
+Ce sont des constats statiques ; aucun mauvais pixel/cache GPU n'est inventé.
+Le commit `1d629b0be` corrige ces six constats en une vague : ownership W6
+root-only des mixtures encodées, clear/readback vide authentifié, discriminant
+W6 encodé, projection des seules identités capability par cible, diagnostics.
+Les LegacyColor restent figées, sans référence de matériau W5 artificielle ;
+les vérifications physiques gardent le snapshot capability complet.
+La sélection finale `final-fix-selected-10` passe **50/50**, neuf classes XML,
+processus/wrapper0 ; les48 anciennes identités restent présentes, plus deux
+témoins de mixtures et Surface vide. La globale reste celle avant correction
+finale, elle n'est pas relancée ni requalifiée comme verte. Le corpus final
+est vérifié ci-dessus. La re-review ciblée Sol de `4238e9778..1d629b0be`
+confirme les six constats corrigés, sans nouvelle casse Critical/Important.
+
+Une réserve Minor reste ouverte : le chemin clear-only encodé authentifie
+correctement la cible native RGBA8Unorm mais renseigne encore
+RGBA8UnormSrgb dans `GPUPreparedNativeReadbackLayout.format`
+(`GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt:7093`). Le consumer
+`GPUFrameReadbackCompletion.kt:710–718` accepte les deux formats et la copie
+native ne dépend pas de ce champ ; les pixels transparents et le tag
+SOURCE_SPACE sont vérifiés. C'est une métadonnée physique inexacte, pas un
+défaut de pixels établi. Point différé après l'unique vague finale, à corriger
+avant qu'un nouveau consumer utilise ce champ pour interpréter les octets.
+Risque conservé : une future interprétation stricte pourrait être erronée.
+
+Réserve d'exécution : quatre essais intermédiaires ont utilisé par erreur le
+checkout `cbf6` (aucun test W7 disponible). Les deux fichiers produit modifiés
+accidentellement par l'agent y ont été restaurés par patch inverse ; le
+contrôleur a vérifié le retour aux seuls deux fichiers utilisateurs déjà
+modifiés. Ces essais exit1 ne sont ni des GREEN ni une preuve de panne GPU.
+Seule la sélection finale50 sur le bon worktree est retenue.
+PR draft empilée sur #2421 avec cette réserve ; aucune readiness pour merge.
 Archives, commandes et comparaison nominative :
 `/private/tmp/kanvas-w7-composition.25GaUn/`.
 Fonts, codecs, `jpg-color-cube`, GM/adaptateurs, références, seuils,
@@ -185,6 +224,9 @@ riches ne sont pas rendus possibles par ce contrat. W7 reste ouvert.
 12. CompositionEnvelope distinct approuvé : coût, certaines petites régressions
     d'arrondi ou de store peuvent échapper à cette acceptance moins précise ;
     discriminants avant GPU et mesure GM indépendante restent obligatoires.
+13. Métadonnée readback clear-only inexacte différée après l'unique vague
+    finale : aucun effet actuel sur les pixels établi ; coût si cet arbitrage
+    est erroné, mauvaise interprétation par un futur consumer du format.
 
 ## Lot politique alpha du gradient — 30 septembre 2026
 

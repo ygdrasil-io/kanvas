@@ -18,9 +18,10 @@ octets. Les configurations natives contradictoires refusent explicitement,
 changement de compatibilité intentionnel. Pas de support ajouté AA/hairline,
 filtres ou topologies riches de layers.
 
-**48/48 tests ciblés, neuf classes XML, processus/wrapper0**, les45 identités
-précédentes conservées. Les deux tâches sont approuvées par Sol ; un libellé
-de diagnostic reste Minor. La validation utilise l'amendement approuvé
+**50/50 tests ciblés, neuf classes XML, processus/wrapper0**, les48 identités
+précédentes conservées. Les deux tâches sont approuvées par Sol ; la re-review
+finale confirme les six corrections, sans nouvelle casse Critical/Important.
+La validation utilise l'amendement approuvé
 `CompositionEnvelope`, ensembles complets avant GPU mais **acceptation moins
 précise** ; ni les bornes/preuves produit ni les seuils GM ne sont élargis.
 L'omission d'un store n'est pas toujours détectable. Budget3×3/B888 contre887
@@ -29,14 +30,26 @@ vérifié ; les erreurs des premières dérivations restent documentées.
 Globale unique240s : **703 PASS,40 échecs hérités,1 interrompu**,744 identités,
 wrapper124/enfant143, XML non finalisés. Aucun nouvel échec sur724 identités
 communes ;13 corrections Picture du lot parent confirmées. Ancien témoin
-legacy SRC renommé et élargi, pas supprimé. Suite rouge/incomplète ; dettes
+legacy SRC renommé et élargi, pas supprimé. Globale antérieure à la correction
+finale, non relancée ; suite rouge/incomplète. Dettes
 native133 isolées et warnings conservés.
 
-[Corpus631](surface-composition-f21162055.json) : **198/443 rendus,176
+[Corpus631 final](surface-composition-1d629b0be.json) : **198/443 rendus,176
 comparaisons,198 anciennes images strictement identiques**. Aucun changement
 d'identité/référence/scope/seuil/résultat/diagnostic ; `vertices` timeout30s
 conservé. Aucun gain GM : les ports n'activent pas encore l'opt-in encodé.
-Revue finale et publication draft restent en cours. W7 reste ouvert ; hairline puis port fidèle
+Astra avait relevé quatre raccords à corriger : mixtures root avec DrawColor,
+Surface encodée vide, identité W6 entre domaines et identités LINEAR issues
+des capabilities natives, ainsi que deux diagnostics à actualiser. La vague
+groupée `1d629b0be` les corrige, puis le corpus final reste invariant.
+La re-review Sol est terminée : un Minor résiduel est différé. Le readback
+clear-only encodé déclare encore RGBA8UnormSrgb dans sa métadonnée de layout,
+malgré une cible native RGBA8Unorm correctement authentifiée. Sans défaut de
+pixels/tag établi, mais à corriger avant une nouvelle utilisation interprétative
+de ce champ. Publication draft uniquement. Les essais intermédiaires dans le mauvais
+checkout sont exclus ; les modifications accidentelles y ont été annulées
+sans toucher aux deux fichiers utilisateurs préexistants.
+W7 reste ouvert ; hairline puis port fidèle
 d'`alphagradients` constituent la suite distincte.
 
 ## Lot politique alpha LinearGradient — 30 septembre 2026

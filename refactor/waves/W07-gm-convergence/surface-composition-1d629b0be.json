@@ -4,8 +4,8 @@
     {
       "kind": "run",
       "schema": "skia-parity-v1",
-      "rendererCommit": "f211620555530bc6d35fbfc9cfcce7db2cdb8e5d",
-      "startedAt": "2026-09-30T15:24:06.669517Z",
+      "rendererCommit": "1d629b0be8e51ee2fc9de3623ede705e3a4523fa",
+      "startedAt": "2026-09-30T16:06:05.135970Z",
       "os": "Mac OS X",
       "arch": "aarch64",
       "java": "25.0.1",
@@ -18,8 +18,8 @@
     {
       "kind": "run",
       "schema": "skia-parity-v1",
-      "rendererCommit": "f211620555530bc6d35fbfc9cfcce7db2cdb8e5d",
-      "startedAt": "2026-09-30T15:26:54.921396Z",
+      "rendererCommit": "1d629b0be8e51ee2fc9de3623ede705e3a4523fa",
+      "startedAt": "2026-09-30T16:08:48.399120Z",
       "os": "Mac OS X",
       "arch": "aarch64",
       "java": "25.0.1",
@@ -32,8 +32,8 @@
     {
       "kind": "run",
       "schema": "skia-parity-v1",
-      "rendererCommit": "f211620555530bc6d35fbfc9cfcce7db2cdb8e5d",
-      "startedAt": "2026-09-30T15:27:56.716405Z",
+      "rendererCommit": "1d629b0be8e51ee2fc9de3623ede705e3a4523fa",
+      "startedAt": "2026-09-30T16:09:36.893912Z",
       "os": "Mac OS X",
       "arch": "aarch64",
       "java": "25.0.1",
@@ -142,7 +142,7 @@
       "w6a.layer.unsupported_spatial_filter: W6a does not admit image or mask filters in a layer frame.": 1,
       "w6d.runtime_effect.not_registered: Runtime image filter compiled-174032d6@0 is not registered.": 1
     },
-    "sumCaseElapsedMs": 142493
+    "sumCaseElapsedMs": 141757
   },
   "cases": [
     {
@@ -167,7 +167,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 1311,
+      "renderMs": 1437,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -187,7 +187,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 1715
+      "elapsedMs": 1842
     },
     {
       "kind": "gm",
@@ -211,10 +211,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 2,
-      "renderMs": 56,
+      "renderMs": 63,
       "diagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "outcome": "render_failed",
-      "elapsedMs": 62
+      "elapsedMs": 69
     },
     {
       "kind": "gm",
@@ -319,10 +319,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 2,
-      "renderMs": 64,
+      "renderMs": 71,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. w6c.spatial_cache.preflight: Spatial cache reservation failed before native publication.",
       "outcome": "render_failed",
-      "elapsedMs": 64
+      "elapsedMs": 72
     },
     {
       "kind": "gm",
@@ -346,7 +346,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 140,
+      "renderMs": 147,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -366,7 +366,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 201
+      "elapsedMs": 212
     },
     {
       "kind": "gm",
@@ -390,7 +390,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 33,
+      "renderMs": 29,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 4,
@@ -410,7 +410,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 131
+      "elapsedMs": 141
     },
     {
       "kind": "gm",
@@ -461,7 +461,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 241,
-      "renderMs": 79,
+      "renderMs": 77,
       "diagnostic": "w4d.general.path-resource-limit: Math stroke limit: VertexLimit",
       "outcome": "render_failed",
       "elapsedMs": 111
@@ -488,7 +488,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 9,
-      "renderMs": 4,
+      "renderMs": 3,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
       "elapsedMs": 4
@@ -515,10 +515,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 37,
-      "renderMs": 112,
+      "renderMs": 116,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. w6c.spatial_cache.preflight: Spatial cache reservation failed before native publication.",
       "outcome": "render_failed",
-      "elapsedMs": 114
+      "elapsedMs": 118
     },
     {
       "kind": "gm",
@@ -542,10 +542,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 106,
-      "renderMs": 38,
+      "renderMs": 43,
       "diagnostic": "unsupported.recording.core_primitive_analytic_shape_clip: Prepared analytic shapes currently require NoClip or ScissorOnly execution.",
       "outcome": "render_failed",
-      "elapsedMs": 39
+      "elapsedMs": 44
     },
     {
       "kind": "gm",
@@ -569,10 +569,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 3697,
-      "renderMs": 92,
+      "renderMs": 93,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 101
+      "elapsedMs": 103
     },
     {
       "kind": "gm",
@@ -599,7 +599,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 98
+      "elapsedMs": 100
     },
     {
       "kind": "gm",
@@ -650,10 +650,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 2317,
-      "renderMs": 128,
+      "renderMs": 134,
       "diagnostic": "w4a.command.not_migrated: Coverage is outside W4a",
       "outcome": "render_failed",
-      "elapsedMs": 139
+      "elapsedMs": 144
     },
     {
       "kind": "gm",
@@ -748,7 +748,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 97,
-      "renderMs": 391,
+      "renderMs": 396,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 49,
@@ -768,7 +768,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 521
+      "elapsedMs": 514
     },
     {
       "kind": "gm",
@@ -792,7 +792,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 65,
-      "renderMs": 91,
+      "renderMs": 90,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 33,
@@ -812,7 +812,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 275
+      "elapsedMs": 274
     },
     {
       "kind": "gm",
@@ -890,7 +890,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 49,
-      "renderMs": 410,
+      "renderMs": 593,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 33,
@@ -910,7 +910,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 1945
+      "elapsedMs": 2091
     },
     {
       "kind": "gm",
@@ -934,7 +934,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 19,
-      "renderMs": 550,
+      "renderMs": 358,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 19,
@@ -954,7 +954,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 1197
+      "elapsedMs": 1058
     },
     {
       "kind": "gm",
@@ -978,7 +978,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 19,
-      "renderMs": 212,
+      "renderMs": 208,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 19,
@@ -998,7 +998,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 716
+      "elapsedMs": 738
     },
     {
       "kind": "gm",
@@ -1022,7 +1022,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 19,
-      "renderMs": 205,
+      "renderMs": 202,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 19,
@@ -1042,7 +1042,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 699
+      "elapsedMs": 724
     },
     {
       "kind": "gm",
@@ -1096,7 +1096,7 @@
       "renderMs": 1,
       "diagnostic": "unsupported.material.runtime_effect.unregistered_semantics: Native capability w5a-solid-opacity-rect-v1 admits the scene except for its W5a material.",
       "outcome": "render_failed",
-      "elapsedMs": 4
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -1191,7 +1191,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 16,
+      "renderMs": 15,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -1235,7 +1235,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 7,
-      "renderMs": 215,
+      "renderMs": 228,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 7,
@@ -1255,7 +1255,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 648
+      "elapsedMs": 660
     },
     {
       "kind": "gm",
@@ -1323,10 +1323,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 29,
-      "renderMs": 4,
+      "renderMs": 5,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 6
+      "elapsedMs": 8
     },
     {
       "kind": "gm",
@@ -1370,7 +1370,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 122
+      "elapsedMs": 125
     },
     {
       "kind": "gm",
@@ -1394,7 +1394,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 3,
-      "renderMs": 1,
+      "renderMs": 2,
       "diagnostic": "unsupported.material.image.local-matrix-singular: W5e image planning refused the sealed unsupported.material.image.local-matrix-singular contract.",
       "outcome": "render_failed",
       "elapsedMs": 2
@@ -1421,10 +1421,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 20,
-      "renderMs": 11,
+      "renderMs": 13,
       "diagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 12
+      "elapsedMs": 13
     },
     {
       "kind": "gm",
@@ -1478,7 +1478,7 @@
       "renderMs": null,
       "diagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid",
       "outcome": "setup_failed",
-      "elapsedMs": 3
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -1502,7 +1502,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 142,
-      "renderMs": 7,
+      "renderMs": 6,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
       "elapsedMs": 7
@@ -1529,7 +1529,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 5,
-      "renderMs": 0,
+      "renderMs": 1,
       "diagnostic": "w4c.command.not_migrated: Antialiased path coverage is outside W4c",
       "outcome": "render_failed",
       "elapsedMs": 1
@@ -1637,7 +1637,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 104,
+      "renderMs": 103,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -1765,7 +1765,7 @@
       "renderMs": 0,
       "diagnostic": "unsupported.image.prepared.premultiplication: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 30
+      "elapsedMs": 31
     },
     {
       "kind": "gm",
@@ -1819,7 +1819,7 @@
       "renderMs": 0,
       "diagnostic": "unsupported.image.prepared.premultiplication: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 19
+      "elapsedMs": 20
     },
     {
       "kind": "gm",
@@ -1890,7 +1890,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 143
+      "elapsedMs": 142
     },
     {
       "kind": "gm",
@@ -1968,7 +1968,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 24,
+      "renderMs": 25,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -1988,7 +1988,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 142
+      "elapsedMs": 141
     },
     {
       "kind": "gm",
@@ -2032,7 +2032,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 134
+      "elapsedMs": 136
     },
     {
       "kind": "gm",
@@ -2137,7 +2137,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 54,
+      "renderMs": 55,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -2157,7 +2157,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 148
+      "elapsedMs": 149
     },
     {
       "kind": "gm",
@@ -2181,7 +2181,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 31,
-      "renderMs": 260,
+      "renderMs": 297,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 31,
@@ -2201,7 +2201,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 400
+      "elapsedMs": 438
     },
     {
       "kind": "gm",
@@ -2225,7 +2225,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 17,
-      "renderMs": 125,
+      "renderMs": 144,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 17,
@@ -2245,7 +2245,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 412
+      "elapsedMs": 425
     },
     {
       "kind": "gm",
@@ -2323,10 +2323,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 542,
-      "renderMs": 167,
+      "renderMs": 177,
       "diagnostic": "w4a.command.not_migrated: Coverage is outside W4a",
       "outcome": "render_failed",
-      "elapsedMs": 7084
+      "elapsedMs": 7183
     },
     {
       "kind": "gm",
@@ -2350,7 +2350,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 55,
-      "renderMs": 331,
+      "renderMs": 322,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 55,
@@ -2370,7 +2370,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 5940
+      "elapsedMs": 6037
     },
     {
       "kind": "gm",
@@ -2394,10 +2394,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 177,
-      "renderMs": 15,
+      "renderMs": 17,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 17
+      "elapsedMs": 19
     },
     {
       "kind": "gm",
@@ -2475,7 +2475,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 5,
-      "renderMs": 9,
+      "renderMs": 8,
       "diagnostic": "w4e.clip.geometry-limit: Clip math limit: EntryAttemptedEdgeLimit",
       "outcome": "render_failed",
       "elapsedMs": 9
@@ -2502,7 +2502,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 2,
-      "renderMs": 0,
+      "renderMs": 1,
       "diagnostic": "w4d.general.path-resource-limit: Math stroke limit: FlatteningDidNotConverge",
       "outcome": "render_failed",
       "elapsedMs": 1
@@ -2529,7 +2529,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 14,
+      "renderMs": 16,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -2549,7 +2549,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 31
+      "elapsedMs": 33
     },
     {
       "kind": "gm",
@@ -2573,7 +2573,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 17,
+      "renderMs": 24,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -2593,7 +2593,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 100
+      "elapsedMs": 115
     },
     {
       "kind": "gm",
@@ -2617,7 +2617,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 69,
+      "renderMs": 65,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 4,
@@ -2637,7 +2637,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 143
+      "elapsedMs": 131
     },
     {
       "kind": "gm",
@@ -2664,7 +2664,7 @@
       "renderMs": 1,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 2
+      "elapsedMs": 1
     },
     {
       "kind": "gm",
@@ -2688,7 +2688,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 24,
+      "renderMs": 25,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -2759,7 +2759,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 17,
-      "renderMs": 50,
+      "renderMs": 54,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 17,
@@ -2779,7 +2779,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 55
+      "elapsedMs": 59
     },
     {
       "kind": "gm",
@@ -2803,10 +2803,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 36,
-      "renderMs": 35,
+      "renderMs": 46,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. unsupported.prepared-scene-session.target-count: A prepared scene frame requires exactly one declared scene target used by rendering.",
       "outcome": "render_failed",
-      "elapsedMs": 35
+      "elapsedMs": 46
     },
     {
       "kind": "gm",
@@ -2830,7 +2830,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 13,
+      "renderMs": 16,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -2850,7 +2850,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 140
+      "elapsedMs": 133
     },
     {
       "kind": "gm",
@@ -2874,7 +2874,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 7,
-      "renderMs": 1,
+      "renderMs": 2,
       "diagnostic": "w4e.clip.capability-unavailable: W5b final blending requires the admitted single-sample W4e topology",
       "outcome": "render_failed",
       "elapsedMs": 2
@@ -2982,10 +2982,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 26,
-      "renderMs": 9,
+      "renderMs": 8,
       "diagnostic": "w4e.clip.capability-unavailable: W5b final blending requires the admitted single-sample W4e topology",
       "outcome": "render_failed",
-      "elapsedMs": 9
+      "elapsedMs": 8
     },
     {
       "kind": "gm",
@@ -3036,10 +3036,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 824,
-      "renderMs": 3992,
+      "renderMs": 3975,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 4021
+      "elapsedMs": 3991
     },
     {
       "kind": "gm",
@@ -3083,7 +3083,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 53
+      "elapsedMs": 57
     },
     {
       "kind": "gm",
@@ -3107,10 +3107,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 21,
-      "renderMs": 22,
+      "renderMs": 21,
       "diagnostic": "w4d.general.path-resource-limit: Math stroke limit: PathWorkLimit",
       "outcome": "render_failed",
-      "elapsedMs": 23
+      "elapsedMs": 22
     },
     {
       "kind": "gm",
@@ -3134,7 +3134,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 8,
-      "renderMs": 20,
+      "renderMs": 22,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 6,
@@ -3154,7 +3154,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 120
+      "elapsedMs": 125
     },
     {
       "kind": "gm",
@@ -3205,7 +3205,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 13,
+      "renderMs": 14,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -3279,7 +3279,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 19,
-      "renderMs": 33,
+      "renderMs": 32,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 10,
@@ -3299,7 +3299,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 184
+      "elapsedMs": 187
     },
     {
       "kind": "gm",
@@ -3353,7 +3353,7 @@
       "renderMs": 7,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. unsupported.prepared-scene-session.target-count: A prepared scene frame requires exactly one declared scene target used by rendering.",
       "outcome": "render_failed",
-      "elapsedMs": 7
+      "elapsedMs": 8
     },
     {
       "kind": "gm",
@@ -3377,7 +3377,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 14,
-      "renderMs": 28,
+      "renderMs": 27,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 14,
@@ -3397,7 +3397,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 46
+      "elapsedMs": 45
     },
     {
       "kind": "gm",
@@ -3421,7 +3421,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 10,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 5,
@@ -3495,7 +3495,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 25,
-      "renderMs": 13,
+      "renderMs": 14,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 13,
@@ -3515,7 +3515,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 69
+      "elapsedMs": 68
     },
     {
       "kind": "gm",
@@ -3559,7 +3559,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 127
+      "elapsedMs": 128
     },
     {
       "kind": "gm",
@@ -3610,7 +3610,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 340,
-      "renderMs": 740,
+      "renderMs": 684,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 171,
@@ -3630,7 +3630,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 992
+      "elapsedMs": 936
     },
     {
       "kind": "gm",
@@ -3654,7 +3654,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 340,
-      "renderMs": 2688,
+      "renderMs": 2602,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 171,
@@ -3674,7 +3674,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 3007
+      "elapsedMs": 2843
     },
     {
       "kind": "gm",
@@ -3806,7 +3806,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 80,
-      "renderMs": 189,
+      "renderMs": 157,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 29,
@@ -3826,7 +3826,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 206
+      "elapsedMs": 174
     },
     {
       "kind": "gm",
@@ -3850,7 +3850,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 13,
+      "renderMs": 12,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -3870,7 +3870,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 14
+      "elapsedMs": 13
     },
     {
       "kind": "gm",
@@ -3924,7 +3924,7 @@
       "renderMs": null,
       "diagnostic": "w4c.scene.invalid: Scene graph exceeds 4096 nodes",
       "outcome": "setup_failed",
-      "elapsedMs": 183
+      "elapsedMs": 188
     },
     {
       "kind": "gm",
@@ -3951,7 +3951,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 8
+      "elapsedMs": 7
     },
     {
       "kind": "gm",
@@ -3978,7 +3978,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 8
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -4137,10 +4137,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 427,
-      "renderMs": 32,
+      "renderMs": 33,
       "diagnostic": "w4e.clip.capability-unavailable: W4d.2 construction capability is unavailable",
       "outcome": "render_failed",
-      "elapsedMs": 33
+      "elapsedMs": 34
     },
     {
       "kind": "gm",
@@ -4164,10 +4164,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 302,
-      "renderMs": 53,
+      "renderMs": 52,
       "diagnostic": "w4e.clip.geometry-limit: W4d.2 rejected normalized W4e draw resources",
       "outcome": "render_failed",
-      "elapsedMs": 54
+      "elapsedMs": 53
     },
     {
       "kind": "gm",
@@ -4245,10 +4245,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 302,
-      "renderMs": 39,
+      "renderMs": 35,
       "diagnostic": "w4e.clip.geometry-limit: W4d.2 rejected normalized W4e draw resources",
       "outcome": "render_failed",
-      "elapsedMs": 40
+      "elapsedMs": 36
     },
     {
       "kind": "gm",
@@ -4272,10 +4272,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 302,
-      "renderMs": 32,
+      "renderMs": 36,
       "diagnostic": "w4e.clip.geometry-limit: W4d.2 rejected normalized W4e draw resources",
       "outcome": "render_failed",
-      "elapsedMs": 33
+      "elapsedMs": 37
     },
     {
       "kind": "gm",
@@ -4329,7 +4329,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 8
+      "elapsedMs": 7
     },
     {
       "kind": "gm",
@@ -4353,10 +4353,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 18,
-      "renderMs": 11,
+      "renderMs": 10,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. unsupported.prepared-scene-session.target-count: A prepared scene frame requires exactly one declared scene target used by rendering.",
       "outcome": "render_failed",
-      "elapsedMs": 12
+      "elapsedMs": 10
     },
     {
       "kind": "gm",
@@ -4380,10 +4380,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 18,
-      "renderMs": 10,
+      "renderMs": 9,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. unsupported.prepared-scene-session.target-count: A prepared scene frame requires exactly one declared scene target used by rendering.",
       "outcome": "render_failed",
-      "elapsedMs": 10
+      "elapsedMs": 9
     },
     {
       "kind": "gm",
@@ -4410,7 +4410,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 10
+      "elapsedMs": 7
     },
     {
       "kind": "gm",
@@ -4437,7 +4437,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -4464,7 +4464,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 8
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -4491,7 +4491,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -4518,7 +4518,7 @@
       "renderMs": 11,
       "diagnostic": "w4e.clip.capability-unavailable: W5b final blending requires the admitted single-sample W4e topology",
       "outcome": "render_failed",
-      "elapsedMs": 11
+      "elapsedMs": 12
     },
     {
       "kind": "gm",
@@ -4545,7 +4545,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -4572,7 +4572,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -4599,7 +4599,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -4626,7 +4626,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -4650,10 +4650,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 8,
-      "renderMs": 2,
+      "renderMs": 3,
       "diagnostic": "unsupported.material.sweep_gradient_stop_count: unsupported.material.sweep_gradient_stop_count",
       "outcome": "render_failed",
-      "elapsedMs": 3
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -4677,10 +4677,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 9,
-      "renderMs": 49,
+      "renderMs": 51,
       "diagnostic": "unsupported.material.noise.numeric-domain-unbounded: unsupported.material.noise.numeric-domain-unbounded",
       "outcome": "render_failed",
-      "elapsedMs": 49
+      "elapsedMs": 52
     },
     {
       "kind": "gm",
@@ -4704,7 +4704,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 34,
+      "renderMs": 35,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -4724,7 +4724,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 41
+      "elapsedMs": 42
     },
     {
       "kind": "gm",
@@ -4748,7 +4748,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 55,
-      "renderMs": 154,
+      "renderMs": 150,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 29,
@@ -4768,7 +4768,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 220
+      "elapsedMs": 215
     },
     {
       "kind": "gm",
@@ -4792,7 +4792,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 28,
-      "renderMs": 132,
+      "renderMs": 129,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 15,
@@ -4812,7 +4812,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 137
+      "elapsedMs": 133
     },
     {
       "kind": "gm",
@@ -4836,7 +4836,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 28,
-      "renderMs": 193,
+      "renderMs": 181,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 15,
@@ -4856,7 +4856,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 197
+      "elapsedMs": 185
     },
     {
       "kind": "gm",
@@ -4910,7 +4910,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -4961,7 +4961,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 30,
-      "renderMs": 70,
+      "renderMs": 76,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 30,
@@ -4981,7 +4981,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 169
+      "elapsedMs": 181
     },
     {
       "kind": "gm",
@@ -5059,7 +5059,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 145,
-      "renderMs": 407,
+      "renderMs": 405,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 144,
@@ -5079,7 +5079,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 628
+      "elapsedMs": 621
     },
     {
       "kind": "gm",
@@ -5106,7 +5106,7 @@
       "renderMs": 44,
       "diagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "outcome": "render_failed",
-      "elapsedMs": 46
+      "elapsedMs": 45
     },
     {
       "kind": "gm",
@@ -5133,7 +5133,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 40
+      "elapsedMs": 39
     },
     {
       "kind": "gm",
@@ -5157,10 +5157,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 40,
-      "renderMs": 32,
+      "renderMs": 30,
       "diagnostic": "w4d.general.path-resource-limit: Math fill limit: Geometry(value=VertexLimit)",
       "outcome": "render_failed",
-      "elapsedMs": 766
+      "elapsedMs": 760
     },
     {
       "kind": "gm",
@@ -5265,7 +5265,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 14,
-      "renderMs": 22,
+      "renderMs": 23,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -5285,7 +5285,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 62
+      "elapsedMs": 60
     },
     {
       "kind": "gm",
@@ -5309,7 +5309,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 31,
-      "renderMs": 37,
+      "renderMs": 38,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 16,
@@ -5353,7 +5353,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 151,
-      "renderMs": 115,
+      "renderMs": 104,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 81,
@@ -5373,7 +5373,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 563
+      "elapsedMs": 543
     },
     {
       "kind": "gm",
@@ -5397,7 +5397,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 8,
-      "renderMs": 23,
+      "renderMs": 21,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -5417,7 +5417,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 45
+      "elapsedMs": 43
     },
     {
       "kind": "gm",
@@ -5441,10 +5441,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 13,
-      "renderMs": 45,
+      "renderMs": 39,
       "diagnostic": "w4c.command.not_migrated: Antialiased path coverage is outside W4c",
       "outcome": "render_failed",
-      "elapsedMs": 59
+      "elapsedMs": 52
     },
     {
       "kind": "gm",
@@ -5495,7 +5495,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 14,
+      "renderMs": 13,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -5515,7 +5515,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 34
+      "elapsedMs": 32
     },
     {
       "kind": "gm",
@@ -5539,10 +5539,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 2,
-      "renderMs": 3,
+      "renderMs": 2,
       "diagnostic": "w4d.general.path-resource-limit: Math stroke limit: PathWorkLimit",
       "outcome": "render_failed",
-      "elapsedMs": 3
+      "elapsedMs": 2
     },
     {
       "kind": "gm",
@@ -5613,7 +5613,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 99
+      "elapsedMs": 95
     },
     {
       "kind": "gm",
@@ -5637,7 +5637,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 9,
-      "renderMs": 16,
+      "renderMs": 15,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -5657,7 +5657,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 39
+      "elapsedMs": 37
     },
     {
       "kind": "gm",
@@ -5681,7 +5681,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 9,
-      "renderMs": 12,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -5701,7 +5701,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 77
+      "elapsedMs": 55
     },
     {
       "kind": "gm",
@@ -5752,7 +5752,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 22,
+      "renderMs": 18,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -5772,7 +5772,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 182
+      "elapsedMs": 183
     },
     {
       "kind": "gm",
@@ -5796,7 +5796,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 145,
-      "renderMs": 6,
+      "renderMs": 5,
       "diagnostic": "w4e.clip.scene-invalid: W4e does not define inverse stroke-only coverage",
       "outcome": "render_failed",
       "elapsedMs": 6
@@ -5823,7 +5823,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 145,
-      "renderMs": 4,
+      "renderMs": 3,
       "diagnostic": "w4e.clip.scene-invalid: W4e does not define inverse stroke-only coverage",
       "outcome": "render_failed",
       "elapsedMs": 4
@@ -5850,7 +5850,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 19,
+      "renderMs": 17,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -5870,7 +5870,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 184
+      "elapsedMs": 179
     },
     {
       "kind": "gm",
@@ -5900,7 +5900,7 @@
       "dispatched": 1,
       "refused": 0,
       "actualRgbaSha256": "b7a05a273432024b06b54554d925dcc1b2dbb7b5a3daeea91d92f22247e17027",
-      "elapsedMs": 361
+      "elapsedMs": 356
     },
     {
       "kind": "gm",
@@ -5924,13 +5924,13 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 9,
-      "renderMs": 78,
+      "renderMs": 87,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 1,
       "refused": 0,
       "actualRgbaSha256": "30a97aca503008c23282e7996fb53a1f7694710ccd323c514357ed4243e8f5b3",
-      "elapsedMs": 81
+      "elapsedMs": 89
     },
     {
       "kind": "gm",
@@ -5974,7 +5974,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 163
+      "elapsedMs": 161
     },
     {
       "kind": "gm",
@@ -5998,13 +5998,13 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 25,
+      "renderMs": 23,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 1,
       "refused": 0,
       "actualRgbaSha256": "fe042558b5a99817ab2c110aec810bd7d51097d483f98ddd49d1240ef528a08a",
-      "elapsedMs": 26
+      "elapsedMs": 24
     },
     {
       "kind": "gm",
@@ -6028,10 +6028,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 25,
-      "renderMs": 14,
+      "renderMs": 13,
       "diagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 16
+      "elapsedMs": 15
     },
     {
       "kind": "gm",
@@ -6166,7 +6166,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 12
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -6271,7 +6271,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 102,
-      "renderMs": 519,
+      "renderMs": 491,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 102,
@@ -6291,7 +6291,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 3883
+      "elapsedMs": 3997
     },
     {
       "kind": "gm",
@@ -6315,7 +6315,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 34,
-      "renderMs": 165,
+      "renderMs": 156,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 18,
@@ -6335,7 +6335,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 564
+      "elapsedMs": 539
     },
     {
       "kind": "gm",
@@ -6359,7 +6359,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 10,
+      "renderMs": 12,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -6379,7 +6379,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 14
+      "elapsedMs": 16
     },
     {
       "kind": "gm",
@@ -6433,7 +6433,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -6538,7 +6538,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 161,
-      "renderMs": 362,
+      "renderMs": 356,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 161,
@@ -6558,7 +6558,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 398
+      "elapsedMs": 390
     },
     {
       "kind": "gm",
@@ -6582,10 +6582,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 506,
-      "renderMs": 38,
+      "renderMs": 41,
       "diagnostic": "invalid.material.filter.schema: invalid.material.filter.schema",
       "outcome": "render_failed",
-      "elapsedMs": 40
+      "elapsedMs": 43
     },
     {
       "kind": "gm",
@@ -6612,7 +6612,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 10
+      "elapsedMs": 8
     },
     {
       "kind": "gm",
@@ -6639,7 +6639,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 136
+      "elapsedMs": 111
     },
     {
       "kind": "gm",
@@ -6666,7 +6666,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 64
+      "elapsedMs": 65
     },
     {
       "kind": "gm",
@@ -6720,7 +6720,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 25
+      "elapsedMs": 27
     },
     {
       "kind": "gm",
@@ -6771,7 +6771,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 58,
+      "renderMs": 49,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 4,
@@ -6791,7 +6791,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 63
+      "elapsedMs": 54
     },
     {
       "kind": "gm",
@@ -6818,7 +6818,7 @@
       "renderMs": 3,
       "diagnostic": "unsupported.stroke.cap: unsupported.stroke.cap",
       "outcome": "render_failed",
-      "elapsedMs": 3
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -6842,7 +6842,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 82,
-      "renderMs": 5494,
+      "renderMs": 6020,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 82,
@@ -6862,7 +6862,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 5976
+      "elapsedMs": 6540
     },
     {
       "kind": "gm",
@@ -6886,10 +6886,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 20003,
-      "renderMs": 2,
+      "renderMs": 3,
       "diagnostic": "scene-node-limit: Capture has more than 4096 nodes",
       "outcome": "render_failed",
-      "elapsedMs": 19
+      "elapsedMs": 28
     },
     {
       "kind": "gm",
@@ -6913,7 +6913,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 7,
-      "renderMs": 1,
+      "renderMs": 0,
       "diagnostic": "w6a.layer.unsupported_spatial_filter: W6a does not admit image or mask filters in a layer frame.",
       "outcome": "render_failed",
       "elapsedMs": 1
@@ -6970,7 +6970,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 38
+      "elapsedMs": 40
     },
     {
       "kind": "gm",
@@ -7237,7 +7237,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 28,
+      "renderMs": 25,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -7257,7 +7257,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 88
+      "elapsedMs": 80
     },
     {
       "kind": "gm",
@@ -7281,7 +7281,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 15,
+      "renderMs": 12,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -7301,7 +7301,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 38
+      "elapsedMs": 35
     },
     {
       "kind": "gm",
@@ -7379,7 +7379,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 12,
-      "renderMs": 29,
+      "renderMs": 28,
       "diagnostic": "GM=256x128, reference=800x1000",
       "outcome": "reference_dimension_mismatch",
       "dispatched": 7,
@@ -7387,7 +7387,7 @@
       "actualRgbaSha256": "5f5bbe5b9a23485b50432323499aee66dc68e938d9bcc2aa13a11de1ce215f98",
       "referenceWidth": 800,
       "referenceHeight": 1000,
-      "elapsedMs": 318
+      "elapsedMs": 300
     },
     {
       "kind": "gm",
@@ -7411,7 +7411,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 12,
-      "renderMs": 29,
+      "renderMs": 28,
       "diagnostic": "GM=256x128, reference=800x1000",
       "outcome": "reference_dimension_mismatch",
       "dispatched": 7,
@@ -7419,7 +7419,7 @@
       "actualRgbaSha256": "5f5bbe5b9a23485b50432323499aee66dc68e938d9bcc2aa13a11de1ce215f98",
       "referenceWidth": 800,
       "referenceHeight": 1000,
-      "elapsedMs": 309
+      "elapsedMs": 306
     },
     {
       "kind": "gm",
@@ -7443,7 +7443,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 21,
-      "renderMs": 100,
+      "renderMs": 98,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 11,
@@ -7463,7 +7463,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 173
+      "elapsedMs": 174
     },
     {
       "kind": "gm",
@@ -7490,7 +7490,7 @@
       "renderMs": 9,
       "diagnostic": "w4d.command-not-migrated: Scene is outside W4d",
       "outcome": "render_failed",
-      "elapsedMs": 65
+      "elapsedMs": 67
     },
     {
       "kind": "gm",
@@ -7514,7 +7514,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 36,
-      "renderMs": 20,
+      "renderMs": 23,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 19,
@@ -7534,7 +7534,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 48
+      "elapsedMs": 55
     },
     {
       "kind": "gm",
@@ -7558,10 +7558,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 83,
-      "renderMs": 12,
+      "renderMs": 13,
       "diagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 13
+      "elapsedMs": 14
     },
     {
       "kind": "gm",
@@ -7585,13 +7585,13 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 13,
+      "renderMs": 16,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 5,
       "refused": 0,
       "actualRgbaSha256": "059c47e86dc9ac81a38493bec32626965d8e33499a2d8d9291e7e577adfc7bb5",
-      "elapsedMs": 15
+      "elapsedMs": 17
     },
     {
       "kind": "gm",
@@ -7615,7 +7615,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 15,
+      "renderMs": 16,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -7635,7 +7635,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 52
+      "elapsedMs": 50
     },
     {
       "kind": "gm",
@@ -7662,7 +7662,7 @@
       "renderMs": 3,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 3
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -7713,10 +7713,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 33,
-      "renderMs": 14,
+      "renderMs": 16,
       "diagnostic": "unsupported.surface.prepared.mixed-composite-topology: Prepared Surface composite frames cannot cover the picture topology.",
       "outcome": "render_failed",
-      "elapsedMs": 14
+      "elapsedMs": 16
     },
     {
       "kind": "gm",
@@ -7740,10 +7740,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 131,
-      "renderMs": 20,
+      "renderMs": 19,
       "diagnostic": "w4c.command.not_migrated: Antialiased path coverage is outside W4c",
       "outcome": "render_failed",
-      "elapsedMs": 756
+      "elapsedMs": 481
     },
     {
       "kind": "gm",
@@ -7983,7 +7983,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 15,
+      "renderMs": 17,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -8003,7 +8003,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 17
+      "elapsedMs": 19
     },
     {
       "kind": "gm",
@@ -8300,7 +8300,7 @@
       "renderMs": null,
       "diagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing",
       "outcome": "setup_failed",
-      "elapsedMs": 1
+      "elapsedMs": 2
     },
     {
       "kind": "gm",
@@ -8624,7 +8624,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 8
+      "elapsedMs": 7
     },
     {
       "kind": "gm",
@@ -8648,7 +8648,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 8,
-      "renderMs": 14,
+      "renderMs": 15,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -8668,7 +8668,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 172
+      "elapsedMs": 156
     },
     {
       "kind": "gm",
@@ -8692,7 +8692,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 12,
+      "renderMs": 13,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -8712,7 +8712,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 98
+      "elapsedMs": 93
     },
     {
       "kind": "gm",
@@ -8756,7 +8756,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 116
+      "elapsedMs": 106
     },
     {
       "kind": "gm",
@@ -8780,7 +8780,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 33,
-      "renderMs": 23,
+      "renderMs": 24,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 18,
@@ -8800,7 +8800,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 276
+      "elapsedMs": 250
     },
     {
       "kind": "gm",
@@ -8925,7 +8925,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 14
+      "elapsedMs": 13
     },
     {
       "kind": "gm",
@@ -8976,7 +8976,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 9,
+      "renderMs": 10,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -8996,7 +8996,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 109
+      "elapsedMs": 100
     },
     {
       "kind": "gm",
@@ -9020,7 +9020,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 6,
-      "renderMs": 53,
+      "renderMs": 50,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 6,
@@ -9040,7 +9040,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 69
+      "elapsedMs": 65
     },
     {
       "kind": "gm",
@@ -9121,7 +9121,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 6
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -9145,7 +9145,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 36,
-      "renderMs": 26,
+      "renderMs": 30,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 19,
@@ -9165,7 +9165,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 344
+      "elapsedMs": 319
     },
     {
       "kind": "gm",
@@ -9189,10 +9189,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 61,
-      "renderMs": 5,
+      "renderMs": 6,
       "diagnostic": "unsupported.material.gradient.numeric-domain-unbounded: Native capability w5a-solid-opacity-rect-v1 admits the scene except for its W5a material.",
       "outcome": "render_failed",
-      "elapsedMs": 5
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -9273,7 +9273,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -9378,7 +9378,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 12817,
-      "renderMs": 1,
+      "renderMs": 2,
       "diagnostic": "scene-node-limit: Capture has more than 4096 nodes",
       "outcome": "render_failed",
       "elapsedMs": 10
@@ -9405,7 +9405,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 25,
-      "renderMs": 30,
+      "renderMs": 40,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 25,
@@ -9449,7 +9449,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 200,
-      "renderMs": 389,
+      "renderMs": 347,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 101,
@@ -9469,7 +9469,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 1200
+      "elapsedMs": 1087
     },
     {
       "kind": "gm",
@@ -9493,7 +9493,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 49,
+      "renderMs": 42,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -9513,7 +9513,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 154
+      "elapsedMs": 139
     },
     {
       "kind": "gm",
@@ -9540,7 +9540,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 6
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -9567,7 +9567,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -9618,10 +9618,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 2,
-      "renderMs": 5,
+      "renderMs": 4,
       "diagnostic": "w4d.general.command-not-migrated: Scene is outside W4d.2",
       "outcome": "render_failed",
-      "elapsedMs": 6
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -9729,7 +9729,7 @@
       "renderMs": null,
       "diagnostic": "w4d.general.path-resource-limit: Math stroke limit: PathWorkLimit",
       "outcome": "excluded",
-      "elapsedMs": 11
+      "elapsedMs": 10
     },
     {
       "kind": "gm",
@@ -9756,7 +9756,7 @@
       "renderMs": 16,
       "diagnostic": "w3.lowering.incompatible_plan: The graph is not the exact W3 topology.",
       "outcome": "render_failed",
-      "elapsedMs": 24
+      "elapsedMs": 25
     },
     {
       "kind": "gm",
@@ -9780,7 +9780,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 26,
+      "renderMs": 20,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 4,
@@ -9800,7 +9800,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 29
+      "elapsedMs": 22
     },
     {
       "kind": "gm",
@@ -9851,7 +9851,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 27,
-      "renderMs": 115,
+      "renderMs": 95,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 27,
@@ -9871,7 +9871,7 @@
         0
       ],
       "declaredContractPass": false,
-      "elapsedMs": 200
+      "elapsedMs": 166
     },
     {
       "kind": "gm",
@@ -9895,10 +9895,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 217,
-      "renderMs": 1022,
+      "renderMs": 984,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. w6c.spatial_cache.preflight: Spatial cache reservation failed before native publication.",
       "outcome": "render_failed",
-      "elapsedMs": 1022
+      "elapsedMs": 984
     },
     {
       "kind": "gm",
@@ -9949,10 +9949,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 290,
-      "renderMs": 379,
+      "renderMs": 375,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. w6c.spatial_cache.preflight: Spatial cache reservation failed before native publication.",
       "outcome": "render_failed",
-      "elapsedMs": 380
+      "elapsedMs": 376
     },
     {
       "kind": "gm",
@@ -9976,10 +9976,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 264,
-      "renderMs": 210,
+      "renderMs": 215,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 210
+      "elapsedMs": 215
     },
     {
       "kind": "gm",
@@ -10168,7 +10168,7 @@
       "renderMs": 5,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 56
+      "elapsedMs": 57
     },
     {
       "kind": "gm",
@@ -10219,7 +10219,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 321,
-      "renderMs": 11,
+      "renderMs": 10,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
       "elapsedMs": 47
@@ -10249,7 +10249,7 @@
       "renderMs": 1,
       "diagnostic": "scene-node-limit: Capture has more than 4096 nodes",
       "outcome": "render_failed",
-      "elapsedMs": 6
+      "elapsedMs": 11
     },
     {
       "kind": "gm",
@@ -10273,7 +10273,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 10,
-      "renderMs": 89,
+      "renderMs": 76,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 8,
@@ -10293,7 +10293,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 227
+      "elapsedMs": 184
     },
     {
       "kind": "gm",
@@ -10347,7 +10347,7 @@
       "renderMs": 1,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 2
+      "elapsedMs": 1
     },
     {
       "kind": "gm",
@@ -10371,7 +10371,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 21,
+      "renderMs": 16,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -10391,7 +10391,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 25
+      "elapsedMs": 18
     },
     {
       "kind": "gm",
@@ -10418,7 +10418,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -10445,7 +10445,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 69
+      "elapsedMs": 62
     },
     {
       "kind": "gm",
@@ -10469,7 +10469,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 30,
+      "renderMs": 31,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -10540,7 +10540,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 7,
-      "renderMs": 34,
+      "renderMs": 32,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 7,
@@ -10560,7 +10560,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 116
+      "elapsedMs": 107
     },
     {
       "kind": "gm",
@@ -10587,7 +10587,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 7
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -10658,7 +10658,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 128
+      "elapsedMs": 105
     },
     {
       "kind": "gm",
@@ -10682,7 +10682,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 17,
-      "renderMs": 43,
+      "renderMs": 45,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 17,
@@ -10702,7 +10702,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 264
+      "elapsedMs": 254
     },
     {
       "kind": "gm",
@@ -10726,7 +10726,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 11,
-      "renderMs": 39,
+      "renderMs": 38,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 11,
@@ -10746,7 +10746,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 143
+      "elapsedMs": 125
     },
     {
       "kind": "gm",
@@ -10790,7 +10790,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 126
+      "elapsedMs": 117
     },
     {
       "kind": "gm",
@@ -10817,7 +10817,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 6
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -10841,7 +10841,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 12,
-      "renderMs": 2,
+      "renderMs": 1,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
       "elapsedMs": 2
@@ -10898,7 +10898,7 @@
       "renderMs": 8,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. unsupported.prepared-scene-session.target-count: A prepared scene frame requires exactly one declared scene target used by rendering.",
       "outcome": "render_failed",
-      "elapsedMs": 9
+      "elapsedMs": 8
     },
     {
       "kind": "gm",
@@ -10952,7 +10952,7 @@
       "renderMs": 14,
       "diagnostic": "w6a.layer.unsupported_child: This layer-frame command has no admitted source lane.",
       "outcome": "render_failed",
-      "elapsedMs": 20
+      "elapsedMs": 19
     },
     {
       "kind": "gm",
@@ -11023,7 +11023,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 525
+      "elapsedMs": 493
     },
     {
       "kind": "gm",
@@ -11050,7 +11050,7 @@
       "renderMs": null,
       "diagnostic": "unsupported.material.mapping.linear_gradient_tile_mode: Prepared Surface operation could not be lowered.",
       "outcome": "setup_failed",
-      "elapsedMs": 3606
+      "elapsedMs": 3129
     },
     {
       "kind": "gm",
@@ -11104,7 +11104,7 @@
       "renderMs": 1,
       "diagnostic": "scene-node-limit: Capture has more than 4096 nodes",
       "outcome": "render_failed",
-      "elapsedMs": 19
+      "elapsedMs": 17
     },
     {
       "kind": "gm",
@@ -11155,7 +11155,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 101,
-      "renderMs": 100,
+      "renderMs": 157,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 101,
@@ -11175,7 +11175,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 200
+      "elapsedMs": 254
     },
     {
       "kind": "gm",
@@ -11199,7 +11199,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 6,
-      "renderMs": 12,
+      "renderMs": 24,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 4,
@@ -11219,7 +11219,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 28
+      "elapsedMs": 40
     },
     {
       "kind": "gm",
@@ -11243,7 +11243,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 25,
-      "renderMs": 16,
+      "renderMs": 32,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 13,
@@ -11263,7 +11263,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 128
+      "elapsedMs": 130
     },
     {
       "kind": "gm",
@@ -11293,7 +11293,7 @@
       "dispatched": 18,
       "refused": 0,
       "actualRgbaSha256": "26118e9a78b3d6d799ba8ac651fbe3f534e2f9ffe738d26d04aff5ad3e90c5ce",
-      "elapsedMs": 18
+      "elapsedMs": 17
     },
     {
       "kind": "gm",
@@ -11320,7 +11320,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 12
+      "elapsedMs": 9
     },
     {
       "kind": "gm",
@@ -11391,7 +11391,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 60
+      "elapsedMs": 56
     },
     {
       "kind": "gm",
@@ -11469,7 +11469,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 13,
-      "renderMs": 3,
+      "renderMs": 2,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
       "elapsedMs": 16
@@ -11496,7 +11496,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 7,
-      "renderMs": 36,
+      "renderMs": 18,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -11516,7 +11516,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 69
+      "elapsedMs": 51
     },
     {
       "kind": "gm",
@@ -11648,7 +11648,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 159,
-      "renderMs": 109,
+      "renderMs": 102,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 81,
@@ -11668,7 +11668,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 136
+      "elapsedMs": 125
     },
     {
       "kind": "gm",
@@ -11820,7 +11820,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 101
+      "elapsedMs": 102
     },
     {
       "kind": "gm",
@@ -11844,10 +11844,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 6,
-      "renderMs": 88,
+      "renderMs": 79,
       "diagnostic": "w4d.general.path-resource-limit: Math fill limit: Geometry(value=VertexLimit)",
       "outcome": "render_failed",
-      "elapsedMs": 1982
+      "elapsedMs": 2001
     },
     {
       "kind": "gm",
@@ -11874,7 +11874,7 @@
       "renderMs": 1,
       "diagnostic": "scene-node-limit: Capture has more than 4096 nodes",
       "outcome": "render_failed",
-      "elapsedMs": 12
+      "elapsedMs": 15
     },
     {
       "kind": "gm",
@@ -11898,13 +11898,13 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 16,
+      "renderMs": 19,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 3,
       "refused": 0,
       "actualRgbaSha256": "3b42c0e780a925892cc89b4ec32a6477a8fded38875eae6af9c4660da7edf1da",
-      "elapsedMs": 17
+      "elapsedMs": 20
     },
     {
       "kind": "gm",
@@ -11928,7 +11928,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 7,
-      "renderMs": 5,
+      "renderMs": 6,
       "diagnostic": "w3.execution.submit_failure: GPU submission was refused. unsupported.prepared-scene-session.target-count: A prepared scene frame requires exactly one declared scene target used by rendering.",
       "outcome": "render_failed",
       "elapsedMs": 6
@@ -11982,7 +11982,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 8,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 4,
@@ -12002,7 +12002,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 54
+      "elapsedMs": 68
     },
     {
       "kind": "gm",
@@ -12026,7 +12026,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 8,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 4,
@@ -12046,7 +12046,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 49
+      "elapsedMs": 48
     },
     {
       "kind": "gm",
@@ -12114,7 +12114,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 9,
+      "renderMs": 10,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -12134,7 +12134,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 54
+      "elapsedMs": 52
     },
     {
       "kind": "gm",
@@ -12178,7 +12178,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 55
+      "elapsedMs": 51
     },
     {
       "kind": "gm",
@@ -12202,7 +12202,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 7,
-      "renderMs": 27,
+      "renderMs": 29,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 7,
@@ -12222,7 +12222,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 72
+      "elapsedMs": 71
     },
     {
       "kind": "gm",
@@ -12246,7 +12246,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 23,
+      "renderMs": 25,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -12266,7 +12266,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 47
+      "elapsedMs": 48
     },
     {
       "kind": "gm",
@@ -12290,7 +12290,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 27,
+      "renderMs": 28,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -12310,7 +12310,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 49
+      "elapsedMs": 44
     },
     {
       "kind": "gm",
@@ -12489,7 +12489,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 48
+      "elapsedMs": 47
     },
     {
       "kind": "gm",
@@ -12513,7 +12513,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 12,
-      "renderMs": 56,
+      "renderMs": 58,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 12,
@@ -12533,7 +12533,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 83
+      "elapsedMs": 78
     },
     {
       "kind": "gm",
@@ -12560,7 +12560,7 @@
       "renderMs": null,
       "diagnostic": "unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered.",
       "outcome": "setup_failed",
-      "elapsedMs": 2
+      "elapsedMs": 1
     },
     {
       "kind": "gm",
@@ -12638,10 +12638,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 2382,
-      "renderMs": 77,
+      "renderMs": 78,
       "diagnostic": "w4c.scene.invalid: Scene graph exceeds 4096 nodes",
       "outcome": "render_failed",
-      "elapsedMs": 81
+      "elapsedMs": 84
     },
     {
       "kind": "gm",
@@ -12692,13 +12692,13 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 397,
-      "renderMs": 2430,
+      "renderMs": 2357,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 397,
       "refused": 0,
       "actualRgbaSha256": "ea84f59e6659d445db6b2e16534617524e84f9cb9de281bfc5bc77ba9dcc783b",
-      "elapsedMs": 2432
+      "elapsedMs": 2359
     },
     {
       "kind": "gm",
@@ -12722,7 +12722,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 16,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -12742,7 +12742,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 26
+      "elapsedMs": 20
     },
     {
       "kind": "gm",
@@ -12766,7 +12766,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 10,
-      "renderMs": 21623,
+      "renderMs": 22246,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 10,
@@ -12786,7 +12786,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 21956
+      "elapsedMs": 22468
     },
     {
       "kind": "gm",
@@ -12810,7 +12810,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 220,
-      "renderMs": 1052,
+      "renderMs": 1085,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 220,
@@ -12830,7 +12830,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 1813
+      "elapsedMs": 1784
     },
     {
       "kind": "gm",
@@ -12857,7 +12857,7 @@
       "renderMs": null,
       "diagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "outcome": "setup_failed",
-      "elapsedMs": 15
+      "elapsedMs": 16
     },
     {
       "kind": "gm",
@@ -12911,7 +12911,7 @@
       "renderMs": 4,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 144
+      "elapsedMs": 149
     },
     {
       "kind": "gm",
@@ -12935,13 +12935,13 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 10,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 5,
       "refused": 0,
       "actualRgbaSha256": "55a5f471f5585aee255f069f62c3e0f75a9926684351ad69a37b45719966c8e8",
-      "elapsedMs": 11
+      "elapsedMs": 12
     },
     {
       "kind": "gm",
@@ -12968,7 +12968,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 11
+      "elapsedMs": 10
     },
     {
       "kind": "gm",
@@ -13019,7 +13019,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 8,
-      "renderMs": 81,
+      "renderMs": 82,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 8,
@@ -13039,7 +13039,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 120
+      "elapsedMs": 115
     },
     {
       "kind": "gm",
@@ -13063,10 +13063,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 20,
-      "renderMs": 22,
+      "renderMs": 19,
       "diagnostic": "w3.lowering.incompatible_plan: The graph is not the exact W3 topology.",
       "outcome": "render_failed",
-      "elapsedMs": 23
+      "elapsedMs": 19
     },
     {
       "kind": "gm",
@@ -13090,7 +13090,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 25,
+      "renderMs": 23,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 4,
@@ -13110,7 +13110,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 84
+      "elapsedMs": 77
     },
     {
       "kind": "gm",
@@ -13134,7 +13134,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 12,
-      "renderMs": 47,
+      "renderMs": 48,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -13154,7 +13154,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 192
+      "elapsedMs": 181
     },
     {
       "kind": "gm",
@@ -13205,7 +13205,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 151,
-      "renderMs": 224,
+      "renderMs": 206,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 69,
@@ -13225,7 +13225,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 328
+      "elapsedMs": 298
     },
     {
       "kind": "gm",
@@ -13249,7 +13249,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 13,
-      "renderMs": 154,
+      "renderMs": 143,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -13269,7 +13269,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 793
+      "elapsedMs": 702
     },
     {
       "kind": "gm",
@@ -13374,7 +13374,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 13,
-      "renderMs": 141,
+      "renderMs": 114,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -13394,7 +13394,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 736
+      "elapsedMs": 644
     },
     {
       "kind": "gm",
@@ -13448,7 +13448,7 @@
       "renderMs": null,
       "diagnostic": "w4d.general.capability-unavailable: Required W4d.2 device capability is unavailable",
       "outcome": "setup_failed",
-      "elapsedMs": 22
+      "elapsedMs": 23
     },
     {
       "kind": "gm",
@@ -13475,7 +13475,7 @@
       "renderMs": null,
       "diagnostic": "w4d.general.capability-unavailable: Required W4d.2 device capability is unavailable",
       "outcome": "setup_failed",
-      "elapsedMs": 17
+      "elapsedMs": 16
     },
     {
       "kind": "gm",
@@ -13499,7 +13499,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 13,
-      "renderMs": 40,
+      "renderMs": 41,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 13,
@@ -13519,7 +13519,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 237
+      "elapsedMs": 215
     },
     {
       "kind": "gm",
@@ -13563,7 +13563,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 32
+      "elapsedMs": 33
     },
     {
       "kind": "gm",
@@ -13634,7 +13634,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 67
+      "elapsedMs": 68
     },
     {
       "kind": "gm",
@@ -13766,7 +13766,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 48,
-      "renderMs": 422,
+      "renderMs": 409,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 25,
@@ -13786,7 +13786,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 488
+      "elapsedMs": 462
     },
     {
       "kind": "gm",
@@ -13810,7 +13810,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 7,
-      "renderMs": 162,
+      "renderMs": 150,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -13830,7 +13830,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 298
+      "elapsedMs": 272
     },
     {
       "kind": "gm",
@@ -13854,7 +13854,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 13,
-      "renderMs": 127,
+      "renderMs": 120,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 7,
@@ -13874,7 +13874,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 250
+      "elapsedMs": 242
     },
     {
       "kind": "gm",
@@ -13898,10 +13898,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 37,
-      "renderMs": 2,
+      "renderMs": 3,
       "diagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 3
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -13955,7 +13955,7 @@
       "renderMs": 5,
       "diagnostic": "unsupported.material.image.numeric-domain-unbounded: W5e image planning refused the sealed unsupported.material.image.numeric-domain-unbounded contract.",
       "outcome": "render_failed",
-      "elapsedMs": 5
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -13979,10 +13979,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 41,
-      "renderMs": 4,
+      "renderMs": 5,
       "diagnostic": "unsupported.material.image.numeric-domain-unbounded: W5e image planning refused the sealed unsupported.material.image.numeric-domain-unbounded contract.",
       "outcome": "render_failed",
-      "elapsedMs": 4
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -14006,7 +14006,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 97,
+      "renderMs": 50,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -14026,7 +14026,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 348
+      "elapsedMs": 271
     },
     {
       "kind": "gm",
@@ -14161,7 +14161,7 @@
       "renderMs": null,
       "diagnostic": "w6a.layer.unsupported_child: This layer-frame command has no admitted source lane.",
       "outcome": "setup_failed",
-      "elapsedMs": 65
+      "elapsedMs": 54
     },
     {
       "kind": "gm",
@@ -14242,7 +14242,7 @@
       "renderMs": null,
       "diagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "outcome": "setup_failed",
-      "elapsedMs": 1
+      "elapsedMs": 0
     },
     {
       "kind": "gm",
@@ -14350,7 +14350,7 @@
       "renderMs": 1,
       "diagnostic": "unsupported.core_primitive.point.round_cap_exact_lowering: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 2
+      "elapsedMs": 1
     },
     {
       "kind": "gm",
@@ -14377,7 +14377,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 8
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -14401,7 +14401,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 89,
-      "renderMs": 308,
+      "renderMs": 275,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 89,
@@ -14421,7 +14421,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 687
+      "elapsedMs": 591
     },
     {
       "kind": "gm",
@@ -14445,7 +14445,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 11,
+      "renderMs": 10,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -14465,7 +14465,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 121
+      "elapsedMs": 110
     },
     {
       "kind": "gm",
@@ -14489,7 +14489,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 6,
-      "renderMs": 20,
+      "renderMs": 18,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 6,
@@ -14509,7 +14509,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 80
+      "elapsedMs": 70
     },
     {
       "kind": "gm",
@@ -14553,7 +14553,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 19
+      "elapsedMs": 18
     },
     {
       "kind": "gm",
@@ -14607,7 +14607,7 @@
       "renderMs": 3,
       "diagnostic": "w4e.clip.scene-invalid: W4e does not define inverse stroke-only coverage",
       "outcome": "render_failed",
-      "elapsedMs": 4
+      "elapsedMs": 3
     },
     {
       "kind": "gm",
@@ -14631,7 +14631,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 22,
+      "renderMs": 17,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -14651,7 +14651,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 541
+      "elapsedMs": 484
     },
     {
       "kind": "gm",
@@ -14675,10 +14675,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 7,
-      "renderMs": 5,
+      "renderMs": 4,
       "diagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 5
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -14702,7 +14702,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 16,
+      "renderMs": 9,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -14722,7 +14722,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 132
+      "elapsedMs": 106
     },
     {
       "kind": "gm",
@@ -14746,7 +14746,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 10,
+      "renderMs": 8,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -14766,7 +14766,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 116
+      "elapsedMs": 100
     },
     {
       "kind": "gm",
@@ -14810,7 +14810,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 102
+      "elapsedMs": 84
     },
     {
       "kind": "gm",
@@ -14834,7 +14834,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 9,
+      "renderMs": 8,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -14854,7 +14854,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 124
+      "elapsedMs": 83
     },
     {
       "kind": "gm",
@@ -14878,7 +14878,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 10,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -14898,7 +14898,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 25
+      "elapsedMs": 24
     },
     {
       "kind": "gm",
@@ -14922,7 +14922,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 15,
-      "renderMs": 21,
+      "renderMs": 20,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 10,
@@ -14942,7 +14942,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 99
+      "elapsedMs": 80
     },
     {
       "kind": "gm",
@@ -14966,7 +14966,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 8,
-      "renderMs": 16,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 8,
@@ -14986,7 +14986,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 164
+      "elapsedMs": 138
     },
     {
       "kind": "gm",
@@ -15064,7 +15064,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 76,
-      "renderMs": 133,
+      "renderMs": 132,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 32,
@@ -15084,7 +15084,7 @@
         255
       ],
       "declaredContractPass": true,
-      "elapsedMs": 419
+      "elapsedMs": 304
     },
     {
       "kind": "gm",
@@ -15108,13 +15108,13 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 6,
-      "renderMs": 22,
+      "renderMs": 19,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 6,
       "refused": 0,
       "actualRgbaSha256": "53598928f317f4e7776c2545c9a7f0c246eb0299004f7cd816d5263bab873691",
-      "elapsedMs": 24
+      "elapsedMs": 20
     },
     {
       "kind": "gm",
@@ -15273,10 +15273,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 167,
-      "renderMs": 12,
+      "renderMs": 11,
       "diagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 13
+      "elapsedMs": 12
     },
     {
       "kind": "gm",
@@ -15327,7 +15327,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 45,
-      "renderMs": 93,
+      "renderMs": 88,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 45,
@@ -15347,7 +15347,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 215
+      "elapsedMs": 194
     },
     {
       "kind": "gm",
@@ -15371,7 +15371,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 45,
-      "renderMs": 92,
+      "renderMs": 107,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 45,
@@ -15391,7 +15391,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 208
+      "elapsedMs": 220
     },
     {
       "kind": "gm",
@@ -15415,10 +15415,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 20,
-      "renderMs": 2,
+      "renderMs": 3,
       "diagnostic": "w4e.clip.capability-unavailable: W5b final blending requires the admitted single-sample W4e topology",
       "outcome": "render_failed",
-      "elapsedMs": 2
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -15472,7 +15472,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 11
+      "elapsedMs": 9
     },
     {
       "kind": "gm",
@@ -15553,7 +15553,7 @@
       "renderMs": 3,
       "diagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "outcome": "render_failed",
-      "elapsedMs": 3
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -15580,7 +15580,7 @@
       "renderMs": 0,
       "diagnostic": "unsupported.material.runtime_effect.unregistered_semantics: Native capability w5a-solid-opacity-rect-v1 admits the scene except for its W5a material.",
       "outcome": "render_failed",
-      "elapsedMs": 1
+      "elapsedMs": 2
     },
     {
       "kind": "gm",
@@ -15742,7 +15742,7 @@
       "renderMs": 1,
       "diagnostic": "unsupported.vertices.material: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 12
+      "elapsedMs": 13
     },
     {
       "kind": "gm",
@@ -15793,7 +15793,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 9,
+      "renderMs": 8,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -15813,7 +15813,7 @@
         127
       ],
       "declaredContractPass": true,
-      "elapsedMs": 240
+      "elapsedMs": 213
     },
     {
       "kind": "gm",
@@ -15891,7 +15891,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 10,
+      "renderMs": 9,
       "diagnostic": "GM=960x720, reference=960x1200",
       "outcome": "reference_dimension_mismatch",
       "dispatched": 1,
@@ -15899,7 +15899,7 @@
       "actualRgbaSha256": "690b027fa57a99a59540cc81a75f751a0074e0e49a13fc08134bacfebffc1321",
       "referenceWidth": 960,
       "referenceHeight": 1200,
-      "elapsedMs": 344
+      "elapsedMs": 327
     },
     {
       "kind": "gm",
@@ -15926,7 +15926,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 15
+      "elapsedMs": 13
     },
     {
       "kind": "gm",
@@ -15970,7 +15970,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 180
+      "elapsedMs": 169
     },
     {
       "kind": "gm",
@@ -15994,7 +15994,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 10,
+      "renderMs": 9,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -16014,7 +16014,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 283
+      "elapsedMs": 275
     },
     {
       "kind": "gm",
@@ -16038,7 +16038,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 9,
+      "renderMs": 8,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -16058,7 +16058,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 264
+      "elapsedMs": 267
     },
     {
       "kind": "gm",
@@ -16190,7 +16190,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 121,
+      "renderMs": 129,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -16210,7 +16210,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 243
+      "elapsedMs": 249
     },
     {
       "kind": "gm",
@@ -16234,13 +16234,13 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 12,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 5,
       "refused": 0,
       "actualRgbaSha256": "38be56eb1488e00798b17afa3fa9fcdeede8ac85162c63c409b3384c1f5033e1",
-      "elapsedMs": 14
+      "elapsedMs": 12
     },
     {
       "kind": "gm",
@@ -16291,10 +16291,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 11,
-      "renderMs": 2,
+      "renderMs": 3,
       "diagnostic": "w4d.general.command-not-migrated: Scene is outside W4d.2",
       "outcome": "render_failed",
-      "elapsedMs": 10
+      "elapsedMs": 12
     },
     {
       "kind": "gm",
@@ -16345,7 +16345,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 16,
-      "renderMs": 32,
+      "renderMs": 36,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 13,
@@ -16365,7 +16365,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 66
+      "elapsedMs": 71
     },
     {
       "kind": "gm",
@@ -16389,7 +16389,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 7,
-      "renderMs": 23,
+      "renderMs": 27,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 7,
@@ -16409,7 +16409,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 272
+      "elapsedMs": 292
     },
     {
       "kind": "gm",
@@ -16433,7 +16433,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 7,
-      "renderMs": 20,
+      "renderMs": 24,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 7,
@@ -16453,7 +16453,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 280
+      "elapsedMs": 297
     },
     {
       "kind": "gm",
@@ -16531,7 +16531,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 10,
+      "renderMs": 19,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -16551,7 +16551,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 269
+      "elapsedMs": 283
     },
     {
       "kind": "gm",
@@ -16575,7 +16575,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 30,
+      "renderMs": 10,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -16595,7 +16595,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 296
+      "elapsedMs": 316
     },
     {
       "kind": "gm",
@@ -16639,7 +16639,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 270
+      "elapsedMs": 277
     },
     {
       "kind": "gm",
@@ -16663,7 +16663,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 9,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -16683,7 +16683,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 267
+      "elapsedMs": 268
     },
     {
       "kind": "gm",
@@ -16707,7 +16707,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 9,
+      "renderMs": 10,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -16727,7 +16727,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 272
+      "elapsedMs": 266
     },
     {
       "kind": "gm",
@@ -16751,7 +16751,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 10,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -16771,7 +16771,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 266
+      "elapsedMs": 272
     },
     {
       "kind": "gm",
@@ -16795,7 +16795,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 50,
-      "renderMs": 126,
+      "renderMs": 143,
       "diagnostic": "GM=720x740, reference=980x740",
       "outcome": "reference_dimension_mismatch",
       "dispatched": 44,
@@ -16803,7 +16803,7 @@
       "actualRgbaSha256": "43583c82e8e10dab7c898380622b3061bb8eb8997afa721f1c38527bffcbd801",
       "referenceWidth": 980,
       "referenceHeight": 740,
-      "elapsedMs": 385
+      "elapsedMs": 410
     },
     {
       "kind": "gm",
@@ -16854,10 +16854,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 34,
-      "renderMs": 1,
+      "renderMs": 2,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 1
+      "elapsedMs": 2
     },
     {
       "kind": "gm",
@@ -16884,7 +16884,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 6
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -16989,7 +16989,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 11,
-      "renderMs": 54,
+      "renderMs": 72,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 11,
@@ -17009,7 +17009,7 @@
         0
       ],
       "declaredContractPass": false,
-      "elapsedMs": 142
+      "elapsedMs": 159
     },
     {
       "kind": "gm",
@@ -17114,7 +17114,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 28,
+      "renderMs": 29,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -17134,7 +17134,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 48
+      "elapsedMs": 49
     },
     {
       "kind": "gm",
@@ -17158,7 +17158,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 21,
+      "renderMs": 8,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -17178,7 +17178,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 100
+      "elapsedMs": 86
     },
     {
       "kind": "gm",
@@ -17256,10 +17256,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 14,
-      "renderMs": 18,
+      "renderMs": 19,
       "diagnostic": "w4c.command.not_migrated: Clip is not a non-empty I32 device rectangle",
       "outcome": "render_failed",
-      "elapsedMs": 19
+      "elapsedMs": 20
     },
     {
       "kind": "gm",
@@ -17391,7 +17391,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 12,
+      "renderMs": 11,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -17435,7 +17435,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 13,
+      "renderMs": 14,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -17455,7 +17455,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 25
+      "elapsedMs": 28
     },
     {
       "kind": "gm",
@@ -17509,7 +17509,7 @@
       "renderMs": null,
       "diagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid",
       "outcome": "setup_failed",
-      "elapsedMs": 444
+      "elapsedMs": 439
     },
     {
       "kind": "gm",
@@ -17533,10 +17533,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 7,
-      "renderMs": 32,
+      "renderMs": 33,
       "diagnostic": "unsupported.material.composed.numeric-domain-unbounded: unsupported.material.composed.numeric-domain-unbounded",
       "outcome": "render_failed",
-      "elapsedMs": 32
+      "elapsedMs": 34
     },
     {
       "kind": "gm",
@@ -17563,7 +17563,7 @@
       "renderMs": 1,
       "diagnostic": "w4d.general.path-resource-limit: Math stroke limit: PathWorkLimit",
       "outcome": "render_failed",
-      "elapsedMs": 1
+      "elapsedMs": 2
     },
     {
       "kind": "gm",
@@ -17590,7 +17590,7 @@
       "renderMs": 4,
       "diagnostic": "unsupported.surface.prepared.mixed-composite-topology: Prepared Surface composite frames cannot cover the picture topology.",
       "outcome": "render_failed",
-      "elapsedMs": 4
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -17614,7 +17614,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 12,
-      "renderMs": 29,
+      "renderMs": 31,
       "diagnostic": "GM=256x128, reference=800x1000",
       "outcome": "reference_dimension_mismatch",
       "dispatched": 7,
@@ -17622,7 +17622,7 @@
       "actualRgbaSha256": "9b76eb4b83fb61be77b9a4ed59b176f98de75b3d79851566f58b6bb1c217cad2",
       "referenceWidth": 800,
       "referenceHeight": 1000,
-      "elapsedMs": 297
+      "elapsedMs": 306
     },
     {
       "kind": "gm",
@@ -17654,7 +17654,7 @@
       "actualRgbaSha256": "9b76eb4b83fb61be77b9a4ed59b176f98de75b3d79851566f58b6bb1c217cad2",
       "referenceWidth": 800,
       "referenceHeight": 1000,
-      "elapsedMs": 288
+      "elapsedMs": 302
     },
     {
       "kind": "gm",
@@ -17686,7 +17686,7 @@
       "actualRgbaSha256": "ab4c2bb32baa8bb0181a5c89961da9a8244b1979dad8d6aadd143a446def4666",
       "referenceWidth": 800,
       "referenceHeight": 1000,
-      "elapsedMs": 280
+      "elapsedMs": 316
     },
     {
       "kind": "gm",
@@ -17710,7 +17710,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 6,
-      "renderMs": 17,
+      "renderMs": 23,
       "diagnostic": "GM=128x128, reference=800x1000",
       "outcome": "reference_dimension_mismatch",
       "dispatched": 4,
@@ -17718,7 +17718,7 @@
       "actualRgbaSha256": "ab4c2bb32baa8bb0181a5c89961da9a8244b1979dad8d6aadd143a446def4666",
       "referenceWidth": 800,
       "referenceHeight": 1000,
-      "elapsedMs": 281
+      "elapsedMs": 298
     },
     {
       "kind": "gm",
@@ -17742,10 +17742,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 21,
-      "renderMs": 2,
+      "renderMs": 3,
       "diagnostic": "unsupported.stroke.join: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 2
+      "elapsedMs": 3
     },
     {
       "kind": "gm",
@@ -17769,10 +17769,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 13,
-      "renderMs": 5,
+      "renderMs": 6,
       "diagnostic": "unsupported.stroke.cap: unsupported.stroke.cap",
       "outcome": "render_failed",
-      "elapsedMs": 5
+      "elapsedMs": 6
     },
     {
       "kind": "gm",
@@ -17799,7 +17799,7 @@
       "renderMs": 12,
       "diagnostic": "w4d.general.path-resource-limit: Math stroke limit: PathWorkLimit",
       "outcome": "render_failed",
-      "elapsedMs": 12
+      "elapsedMs": 13
     },
     {
       "kind": "gm",
@@ -17904,7 +17904,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 35,
+      "renderMs": 38,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -17924,7 +17924,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 114
+      "elapsedMs": 106
     },
     {
       "kind": "gm",
@@ -17975,7 +17975,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 24,
-      "renderMs": 25,
+      "renderMs": 26,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 13,
@@ -17995,7 +17995,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 188
+      "elapsedMs": 149
     },
     {
       "kind": "gm",
@@ -18022,7 +18022,7 @@
       "renderMs": null,
       "diagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "outcome": "setup_failed",
-      "elapsedMs": 13
+      "elapsedMs": 11
     },
     {
       "kind": "gm",
@@ -18049,7 +18049,7 @@
       "renderMs": 0,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 0
+      "elapsedMs": 1
     },
     {
       "kind": "gm",
@@ -18073,7 +18073,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 11,
-      "renderMs": 24,
+      "renderMs": 25,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 9,
@@ -18093,7 +18093,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 126
+      "elapsedMs": 164
     },
     {
       "kind": "gm",
@@ -18522,13 +18522,13 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 103,
-      "renderMs": 209,
+      "renderMs": 211,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 103,
       "refused": 0,
       "actualRgbaSha256": "7c829ac67273ae2a61a78543cfc37406ac5512f8cfd47bc133d56386bd878580",
-      "elapsedMs": 222
+      "elapsedMs": 212
     },
     {
       "kind": "gm",
@@ -18552,7 +18552,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 5,
-      "renderMs": 22,
+      "renderMs": 25,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 5,
@@ -18572,7 +18572,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 25
+      "elapsedMs": 28
     },
     {
       "kind": "gm",
@@ -18599,7 +18599,7 @@
       "renderMs": 9,
       "diagnostic": "unsupported.stroke.width_budget: unsupported.stroke.width_budget",
       "outcome": "render_failed",
-      "elapsedMs": 9
+      "elapsedMs": 10
     },
     {
       "kind": "gm",
@@ -18623,7 +18623,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 85,
-      "renderMs": 154,
+      "renderMs": 157,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 85,
@@ -18643,7 +18643,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 228
+      "elapsedMs": 223
     },
     {
       "kind": "gm",
@@ -18667,10 +18667,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 667,
-      "renderMs": 41,
+      "renderMs": 55,
       "diagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "outcome": "render_failed",
-      "elapsedMs": 41
+      "elapsedMs": 55
     },
     {
       "kind": "gm",
@@ -18694,7 +18694,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 338,
-      "renderMs": 1072,
+      "renderMs": 1051,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 290,
@@ -18714,7 +18714,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 1088
+      "elapsedMs": 1063
     },
     {
       "kind": "gm",
@@ -18738,7 +18738,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 226,
-      "renderMs": 245,
+      "renderMs": 254,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 114,
@@ -18758,7 +18758,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 260
+      "elapsedMs": 266
     },
     {
       "kind": "gm",
@@ -18836,7 +18836,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 2,
-      "renderMs": 30,
+      "renderMs": 51,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -18856,7 +18856,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 216
+      "elapsedMs": 234
     },
     {
       "kind": "gm",
@@ -18883,7 +18883,7 @@
       "renderMs": 3,
       "diagnostic": "w6a.layer.unsupported_child: Layer segment is outside the admitted child geometry/source lanes.",
       "outcome": "render_failed",
-      "elapsedMs": 115
+      "elapsedMs": 114
     },
     {
       "kind": "gm",
@@ -18934,10 +18934,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 41,
-      "renderMs": 8,
+      "renderMs": 9,
       "diagnostic": "w4c.command.not_migrated: Antialiased path coverage is outside W4c",
       "outcome": "render_failed",
-      "elapsedMs": 9
+      "elapsedMs": 10
     },
     {
       "kind": "gm",
@@ -18964,7 +18964,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 6
+      "elapsedMs": 5
     },
     {
       "kind": "gm",
@@ -18991,7 +18991,7 @@
       "renderMs": null,
       "diagnostic": "excluded:excluded-font",
       "outcome": "excluded",
-      "elapsedMs": 19
+      "elapsedMs": 18
     },
     {
       "kind": "gm",
@@ -19015,7 +19015,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 17,
-      "renderMs": 41,
+      "renderMs": 42,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 17,
@@ -19035,7 +19035,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 148
+      "elapsedMs": 145
     },
     {
       "kind": "gm",
@@ -19059,7 +19059,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 14,
+      "renderMs": 15,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -19079,7 +19079,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 78
+      "elapsedMs": 76
     },
     {
       "kind": "gm",
@@ -19103,7 +19103,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 14,
+      "renderMs": 13,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 3,
@@ -19123,7 +19123,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 19
+      "elapsedMs": 17
     },
     {
       "kind": "gm",
@@ -19147,7 +19147,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 30259,
-      "renderMs": 3,
+      "renderMs": 2,
       "diagnostic": "scene-node-limit: Capture has more than 4096 nodes",
       "outcome": "render_failed",
       "elapsedMs": 22
@@ -19204,7 +19204,7 @@
       "renderMs": 9,
       "diagnostic": "w4d.general.path-resource-limit: Math stroke limit: VertexLimit",
       "outcome": "render_failed",
-      "elapsedMs": 9
+      "elapsedMs": 10
     },
     {
       "kind": "gm",
@@ -19258,7 +19258,7 @@
       "renderMs": 3,
       "diagnostic": "w4d.general.path-resource-limit: Math stroke limit: PathWorkLimit",
       "outcome": "render_failed",
-      "elapsedMs": 3
+      "elapsedMs": 4
     },
     {
       "kind": "gm",
@@ -19474,7 +19474,7 @@
       "renderMs": 18,
       "diagnostic": "unsupported.material.image.slice: W5e image planning refused the sealed unsupported.material.image.slice contract.",
       "outcome": "render_failed",
-      "elapsedMs": 22
+      "elapsedMs": 23
     },
     {
       "kind": "gm",
@@ -19545,10 +19545,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 25,
-      "renderMs": 829,
+      "renderMs": 835,
       "diagnostic": "unsupported.vertices.topology: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 845
+      "elapsedMs": 851
     },
     {
       "kind": "gm",
@@ -19572,7 +19572,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 3,
-      "renderMs": 335,
+      "renderMs": 338,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 2,
@@ -19592,7 +19592,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 374
+      "elapsedMs": 375
     },
     {
       "kind": "gm",
@@ -19646,7 +19646,7 @@
       "renderMs": null,
       "diagnostic": "w3.capability.texture_dimension: Target extent exceeds device texture limits",
       "outcome": "setup_failed",
-      "elapsedMs": 83
+      "elapsedMs": 84
     },
     {
       "kind": "gm",
@@ -19697,7 +19697,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 29,
+      "renderMs": 28,
       "diagnostic": null,
       "outcome": "rendered_uncompared",
       "dispatched": 1,
@@ -19781,7 +19781,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 30,
-      "renderMs": 72,
+      "renderMs": 73,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 30,
@@ -19825,7 +19825,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 178,
-      "renderMs": 733,
+      "renderMs": 729,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 61,
@@ -19845,7 +19845,7 @@
         255
       ],
       "declaredContractPass": true,
-      "elapsedMs": 1414
+      "elapsedMs": 1408
     },
     {
       "kind": "gm",
@@ -19869,10 +19869,10 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 953,
-      "renderMs": 61,
+      "renderMs": 58,
       "diagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
-      "elapsedMs": 65
+      "elapsedMs": 62
     },
     {
       "kind": "gm",
@@ -19896,7 +19896,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 233,
-      "renderMs": 11,
+      "renderMs": 10,
       "diagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered.",
       "outcome": "render_failed",
       "elapsedMs": 11
@@ -19926,7 +19926,7 @@
       "renderMs": null,
       "diagnostic": "w3.lowering.incompatible_plan: The graph is not the exact W3 topology.",
       "outcome": "excluded",
-      "elapsedMs": 296
+      "elapsedMs": 304
     },
     {
       "kind": "gm",
@@ -19950,7 +19950,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 7,
+      "renderMs": 8,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -19994,7 +19994,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 1,
-      "renderMs": 9,
+      "renderMs": 8,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 1,
@@ -20014,7 +20014,7 @@
         0
       ],
       "declaredContractPass": true,
-      "elapsedMs": 250
+      "elapsedMs": 255
     },
     {
       "kind": "gm",
@@ -20038,7 +20038,7 @@
       "attempted": true,
       "rendered": false,
       "operationCount": 21,
-      "renderMs": 22,
+      "renderMs": 21,
       "diagnostic": "unsupported.stroke.cap: unsupported.stroke.cap",
       "outcome": "render_failed",
       "elapsedMs": 22
@@ -20095,7 +20095,7 @@
       "renderMs": null,
       "diagnostic": "unsupported.geometry.descriptor_invalid: unsupported.geometry.descriptor_invalid",
       "outcome": "setup_failed",
-      "elapsedMs": 2
+      "elapsedMs": 3
     },
     {
       "kind": "gm",
@@ -20227,7 +20227,7 @@
       "attempted": true,
       "rendered": true,
       "operationCount": 4,
-      "renderMs": 44,
+      "renderMs": 45,
       "diagnostic": null,
       "outcome": "compared",
       "dispatched": 4,
