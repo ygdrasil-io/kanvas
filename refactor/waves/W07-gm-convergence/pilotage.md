@@ -33,10 +33,13 @@ Lot précédent : domaine de composition Surface, branche
 `codex/w7-surface-composition`, draft
 [#2422](https://github.com/ygdrasil-io/kanvas/pull/2422) empilée sur #2421 ;
 validation ciblée et revue finale terminées, réserves ci-dessous.
-Lot courant : Rect hairline entier et encodé, renderer `f80d94fb4`, branche
+Lot précédent : Rect hairline entier et encodé, renderer `f80d94fb4`, branche
 `codex/w7-encoded-hairline`, draft
 [#2423](https://github.com/ygdrasil-io/kanvas/pull/2423) empilée sur #2422 ;
 mesure terminée et réserves explicites ci-dessous, sans merge.
+Lot courant : port fidèle d'alphagradients et domaine explicite des GM,
+code `6259c38d8`, branche `codex/w7-alphagradients-port` ; cible draft
+empilée sur #2423, mesure et reviews terminées ci-dessous, sans merge.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -59,6 +62,118 @@ de rendu et timeouts éligibles restent au dénominateur.
 
 Les gates W6 relatives à la durée de vie et aux ressources restent suivies.
 Leur fermeture et la proximité visuelle sont deux mesures distinctes.
+
+## Lot alphagradients fidèle et diagnostic cohérent — 30 septembre 2026
+
+[Design](alphagradients-port-design.md), [plan](alphagradients-port-plan.md),
+[snapshot631](alphagradients-port-6259c38d8.json).
+Le domaine de composition devient une propriété explicite de `SkiaGm` :
+LINEAR par défaut, SRGB_ENCODED pour alphagradients uniquement. La déclaration
+prévaut sur le domaine du config appelant ; tous ses autres champs restent
+préservés par `copy`. Rendu, tentative terminale, inventaire et checkpoint
+utilisent le même contrat. Le config effectif traverse aussi DiagnosticRunner
+et tous les replays OpInspector, y compris leurs captures avant/après.
+
+Le port reprend les24 couples fill/Rect hairline, les12 paires de couleurs,
+le gradient diagonal et les placements Skia ; gauche STRAIGHT, droite
+PREMULTIPLIED, paints non-AA, strokeWidth0. Aucun renderer/shader/proof/cap,
+adaptateur ou CompositionEnvelope ne change. Le Minor du helper hairline
+de #2423 est fermé : le contrôle de largeur précède la boucle des caractères.
+
+### Preuves et reviews
+
+Task1 `3a24bebb7` : RED natif191 attendu contre205, puis image640×480
+indépendante complète, domaines par défaut/explicite, budget1 refusé, refus
+AA encodé sur les trois entrées et récupération. Sol demande des assertions
+de récupération complètes ; `7f8ac1ee5` compare les buffers entiers et vérifie
+zéro refus/diagnostic, contre-relecture approuvée. Task2 `17bbcab1f` : RED
+du PNG de replay187 contre127±2, puis conservation du config avec preuve
+PNG réelle dans les deux modes (≤50 et >50ops), review Sol approuvée.
+
+Astra ne relève aucun Critical/Important. Les deux Minor — taille16 du PNG
+avant et témoin natif191±2 conforme à la spec, oracle indépendant toujours
+exact191 — sont corrigés ensemble dans `6259c38d8`, contre-relecture Sol
+sans nouvelle casse. **Validation finale7/7** (4AlphaGradients+3GmCanvas),
+toutes les7 identités de Task2 conservées, sorties0 ; classe hairline
+**13/13**, identités parent inchangées, exécutée après son unique modification.
+Zéro skip/error/doublon/runner. Warnings Java/LWJGL/Gradle/unsigned hérités
+restent explicitement présents ; les sorties ne sont pas dites « pristine ».
+
+Les essais de compilation/setup ratés sont conservés et séparés des RED
+causaux. Le premier oracle avait omis le bord droit inclusif : corrigé contre
+le contrat géométrique préexistant, pas en copiant un résultat GPU. Aucun
+test d'infrastructure, mock, forwarding ou inspection de source n'est ajouté.
+
+### Gain mesuré, sans modification des critères
+
+Le corpus final mesure exactement `6259c38d8c6e00fa72d25b9a3e62915c957c4ee0`.
+Les trois tranches [0,607), [607,608), [608,631) sortent Gradle/wrapper0/1/0 ;
+le1 est le timeout interne30s de vertices (processus mesure124), pas une
+nouvelle panne ni un dépassement des wrappers externes.
+
+**alphagradients :33,882161% →100% de pixels ±2**,94,528971% exactement égaux,
+écart maximalRGB1/alpha0, SSIM0,9998747112,49dispatch/0refus. Les83256pixels
+de fond et15840pixels de contour sont tous strictement égaux à la référence
+décodée ; les208104pixels intérieurs sont tous à≤1 (191297exactement égaux).
+Les PNG actual/diff ont été inspectés ; les points du diff ne représentent
+que des écarts d'un code RGB. Un contrôle F64 indépendant sur184704pixels
+intérieurs donne écart0 pour le rendu et≤1 pour la référence décodée. C'est
+un gain du **port fidèle utilisant les capacités moteur déjà livrées**, pas
+une nouvelle capacité moteur ni une preuve de parité universelle.
+
+**631 identités/443 éligibles,198 rendus,176 comparaisons** ;197 anciennes
+images autres qu'alphagradients sont byte-identiques, aucune perte/nouveau
+rendu. Références et empreintes, dimensions, scopes, seuils, diagnostics et
+résultats non ciblés inchangés. Métadonnée additive auditée séparément :
+630LINEAR/1SRGB_ENCODED, y compris LINEAR sur le timeout vertices.
+**37cas à≥99%** (contre36), **50 à≥95%** (contre49), médiane72,010742%.
+Restent194 échecs de rendu,50 de setup,14 rendus non comparés,8 dimensions
+différentes et1timeout. Le seuil historique0 d'alphagradients est inchangé ;
+le gain ci-dessus provient des pixels, pas de son statut PASS permissif.
+
+La globale Kanvas héritée reste rouge/incomplète :678PASS/40FAIL/
+1interrompu/25nonatteints ; elle n'est pas fraîchement rejouée ni blanchie.
+Les69/69 du moteur parent sont une preuve historique, pas une nouvelle suite.
+Replay SetClip/layers approximatif, budgets des graphes partiels et Surfaces
+internes des autres GM ne sont pas déclarés universellement corrigés.
+Provenance du générateur PNG historique inconnue ; aucune conclusion sur
+tous les domaines Skia. Fonts, codecs/décodage externe et jpg-color-cube
+restent exclus. Pas de promesse ABI pour le module de tests diagnostiques.
+W7 et les gates W6/W0 restent ouverts ; draft uniquement.
+
+Archives : `/private/tmp/kanvas-w7-alphagradients.QVeKNw/`, dont
+`RUN-red-alpha`, `RUN-final-hairline-getter`, `RUN-review-fix-round1-green`,
+`RUN-task2-red-causal`, `RUN-task2-green-retry`, `RUN-final-fix-escalated`,
+`corpus-*` et `parity/` (journaux et PNG). Analyse PNG read-only :
+`/private/tmp/kanvas-w7-alpha-audit.S67HDe/png-samples.mjs`, déjà auditée.
+
+### Arbitrages de ce lot, dans l'ordre
+
+1. Exécuter sous carte blanche sans nouvelle approbation : risque de reprise
+   réversible du port/config/design sur draft, pas de merge.
+2. Faire primer le domaine du GM : un appelant voulant le remplacer doit
+   désormais modifier la déclaration de scène ; les autres champs restent.
+3. Témoins natifs + corpus borné, sans globale ni Runner écrivant les scores :
+   coût, chemins non ciblés non fraîchement testés ; baseline rouge conservée.
+4. Inclure le config du replay en seconde tâche : coût, raccords/API de
+   diagnostic supplémentaires, sans extension des algorithmes clip/layer.
+5. Conserver les limites écartées explicitement par la revue finale tout en
+   achevant le corpus : un futur cas peut imposer une extension replay,
+   offscreen, ABI ou validation baseline ; aucune promesse universelle.
+
+### Prochaine cause sélectionnée : ports hardstop
+
+Reconnaissance read-only, pas encore un gain attribué :
+`hardstop_gradients` utilise localement des cellules170×64 sur512, tandis
+que la [source Skia épinglée](https://github.com/google/skia/blob/8019e2e0629f3516b9d829737de2553b1d0ecb4a/gm/hardstop_gradients.cpp)
+calcule166×62 sur500 dans une image512×512 ; marge/décalage visibles dans
+les images. `hardstop_gradients_many` place localement bleu et blanc à0,
+rendant la première rampe blanche, et utilise bottom18 au lieu de19 ; la
+[source épinglée](https://github.com/google/skia/blob/8019e2e0629f3516b9d829737de2553b1d0ecb4a/gm/hardstop_gradients_many.cpp)
+décrit une rampe bleu0→blanc1 et MakeXYWH(0,1,1000,18). Les deux ports ont
+AAtrue par défaut contre le paint Skia non-AA. Scores actuels16,113281% et
+10,65515%. Prochain petit lot : attentes indépendantes, RED des vrais GM,
+port fidèle, review puis mesure séparée, sans retoucher les références.
 
 ## Lot Rect hairline entier et encodé — 30 septembre 2026
 

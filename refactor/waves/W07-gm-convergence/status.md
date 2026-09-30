@@ -3,6 +3,29 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot alphagradients fidèle et diagnostic cohérent — 30 septembre 2026
+
+Branche `codex/w7-alphagradients-port`, cible draft empilée sur #2423.
+[Design](alphagradients-port-design.md), [plan](alphagradients-port-plan.md),
+[bilan et arbitrages](pilotage.md#lot-alphagradients-fidèle-et-diagnostic-cohérent--30-septembre-2026).
+Domaine déclaré par GM, LINEAR par défaut et encodé pour alphagradients,
+config conservé au rendu et au replay diagnostique. Port des deux colonnes
+fidèle, sans changement moteur ni relâchement des proofs/caps/tolérances.
+
+**alphagradients33,882161%→100% des pixels ±2**, maximumRGB1/alpha0 ; fond
+et contours exacts. [Corpus631 final](alphagradients-port-6259c38d8.json)
+sur `6259c38d8` :198/443 rendus,176comparaisons,197autres images inchangées,
+aucune perte/nouveau rendu, références/scopes/seuils préservés.37cas≥99%,
+50≥95%, médiane72,010742%. Métadonnée630LINEAR/1encoded, vertices30s conservé.
+
+Reviews Sol des deux tâches, revue finale Astra sans Critical/Important,
+deux Minor corrigés ensemble puis relus. Validation finale7/7 Skia ;
+hairline13/13 après son unique modification. Aucun test d'infrastructure.
+Warnings hérités maintenus. Globale historique rouge/incomplète, pas rejouée ;
+limites replay clip/layer et provenance des références explicites.
+Prochain lot : écarts de port hardstop identifiés dans les sources épinglées.
+W7 reste ouvert, aucune parité globale ni merge revendiqué.
+
 ## Lot Rect hairline entier et encodé — 30 septembre 2026
 
 Branche `codex/w7-encoded-hairline`, draft
