@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.gradient
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.GradientAlphaMode
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
@@ -11,6 +12,7 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.render.ir.CompositionDomain
 
 /**
  * Port of Skia's gm/alphagradients.cpp.
@@ -25,6 +27,7 @@ class AlphaGradientsGm : SkiaGm {
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 480
+    override val compositionDomain = CompositionDomain.SRGB_ENCODED
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val white = ColorARGB.fromRGBA(1f, 1f, 1f, 1f)
@@ -52,7 +55,13 @@ class AlphaGradientsGm : SkiaGm {
         for (col in 0..1) {
             canvas.save()
             for ((c0, c1) in pairs) {
-                drawGrad(canvas, r, c0, c1)
+                drawGrad(
+                    canvas,
+                    r,
+                    c0,
+                    c1,
+                    if (col == 0) GradientAlphaMode.STRAIGHT else GradientAlphaMode.PREMULTIPLIED,
+                )
                 canvas.translate(0f, r.height() + 8f)
             }
             canvas.restore()
@@ -60,17 +69,28 @@ class AlphaGradientsGm : SkiaGm {
         }
     }
 
-    private fun drawGrad(canvas: GmCanvas, r: RectF32, c0: ColorARGB, c1: ColorARGB) {
+    private fun drawGrad(
+        canvas: GmCanvas,
+        r: RectF32,
+        c0: ColorARGB,
+        c1: ColorARGB,
+        alphaMode: GradientAlphaMode,
+    ) {
         val stops = listOf(
             GradientStop(0f, c0),
             GradientStop(1f, c1),
         )
         val paint = Paint(shader = Shader.LinearGradient(
             start = Point2F32(r.left, r.top), end = Point2F32(r.right, r.bottom),
-            stops = stops, tileMode = TileMode.CLAMP,
-        ))
+            stops = stops, tileMode = TileMode.CLAMP, alphaMode = alphaMode,
+        ), antiAlias = false)
         canvas.drawRect(r, paint)
-        val strokePaint = Paint(color = ColorARGB.Black, style = org.graphiks.kanvas.paint.PaintStyle.STROKE)
+        val strokePaint = Paint(
+            color = ColorARGB.Black,
+            style = org.graphiks.kanvas.paint.PaintStyle.STROKE,
+            strokeWidth = 0f,
+            antiAlias = false,
+        )
         canvas.drawRect(r, strokePaint)
     }
 }

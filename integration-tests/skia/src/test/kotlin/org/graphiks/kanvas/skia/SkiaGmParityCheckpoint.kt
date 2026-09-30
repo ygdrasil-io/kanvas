@@ -55,7 +55,7 @@ fun main(args: Array<String>) {
             row.putAll(mapOf("family" to gm.renderFamily.name, "width" to gm.width, "height" to gm.height,
                 "referenceName" to gm.referenceName, "tolerance" to gm.tolerance,
                 "minSimilarity" to gm.minSimilarity, "requiresZeroRefusals" to gm.requiresZeroRefusals,
-                "initialScope" to initialDecision.scope.wireName))
+                "initialScope" to initialDecision.scope.wireName, "compositionDomain" to gm.compositionDomain.name))
             val referenceFile = File("src/test/resources/reference/${gm.referenceName}.png")
             row["referenceStatus"] = when {
                 !referenceFile.isFile -> "missing"
@@ -84,7 +84,7 @@ fun main(args: Array<String>) {
             var renderMs: Long? = null
             try {
                 val evidence = captureInventoryEvidence(gm) {
-                    val surface = Surface(gm.width, gm.height)
+                    val surface = Surface(gm.width, gm.height, config = gm.compositionConfig())
                     object : InventorySurfaceCapture {
                         override fun canvas() = surface.canvas()
                         override fun snapshotOperationCount() = surface.snapshotOps().size

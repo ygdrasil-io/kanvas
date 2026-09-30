@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.skia
 
+import org.graphiks.kanvas.render.ir.CompositionDomain
+import org.graphiks.kanvas.surface.RenderConfig
+
 enum class RenderFamily {
     PATH,
     GRADIENT,
@@ -36,6 +39,7 @@ interface SkiaGm {
     val tolerance: Int get() = 2
     val width: Int get() = 800
     val height: Int get() = 600
+    val compositionDomain: CompositionDomain get() = CompositionDomain.LINEAR
 
     fun onOnceBeforeDraw(canvas: GmCanvas) {}
 
@@ -43,3 +47,6 @@ interface SkiaGm {
 
     fun draw(canvas: GmCanvas, width: Int, height: Int)
 }
+
+internal fun SkiaGm.compositionConfig(base: RenderConfig = RenderConfig.DEFAULT): RenderConfig =
+    base.copy(compositionDomain = compositionDomain)
