@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot alphagradients fidèle et diagnostic cohérent — 30 septembre 2026
 
-Branche `codex/w7-alphagradients-port`, cible draft empilée sur #2423.
+Branche `codex/w7-alphagradients-port`, draft
+[#2424](https://github.com/ygdrasil-io/kanvas/pull/2424) empilée sur #2423.
 [Design](alphagradients-port-design.md), [plan](alphagradients-port-plan.md),
 [bilan et arbitrages](pilotage.md#lot-alphagradients-fidèle-et-diagnostic-cohérent--30-septembre-2026).
 Domaine déclaré par GM, LINEAR par défaut et encodé pour alphagradients,

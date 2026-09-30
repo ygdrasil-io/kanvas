@@ -38,8 +38,9 @@ Lot précédent : Rect hairline entier et encodé, renderer `f80d94fb4`, branche
 [#2423](https://github.com/ygdrasil-io/kanvas/pull/2423) empilée sur #2422 ;
 mesure terminée et réserves explicites ci-dessous, sans merge.
 Lot courant : port fidèle d'alphagradients et domaine explicite des GM,
-code `6259c38d8`, branche `codex/w7-alphagradients-port` ; cible draft
-empilée sur #2423, mesure et reviews terminées ci-dessous, sans merge.
+code `6259c38d8`, branche `codex/w7-alphagradients-port`, draft
+[#2424](https://github.com/ygdrasil-io/kanvas/pull/2424) empilée sur #2423 ;
+mesure et reviews terminées ci-dessous, sans merge.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
