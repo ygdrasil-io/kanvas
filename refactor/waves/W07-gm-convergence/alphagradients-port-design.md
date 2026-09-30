@@ -41,6 +41,15 @@ Le checkpoint ajoute le domaine déclaré à chaque ligne GM, avant la copie
 d'identité du watchdog, pour que les timeouts conservent aussi cette provenance.
 Il ne change ni identité de registre ni timeout ni dénominateur.
 
+Un cinquième chemin de recréation a été trouvé pendant la lecture :
+DiagnosticRunner -> OpInspector.renderPartial utilise RenderConfig.DEFAULT.
+Une Task2 séquentielle transmet le config effectif dans RunnerInput,
+OpInspector.inspect et chaque replay Surface. Le Runner GM fournit le même
+config projeté que son rendu principal. Les appels existants gardent DEFAULT.
+La correction est limitée au domaine/config du replay ; les limites héritées
+SetClip ignoré et replay partiel des layers restent explicites, sans promesse
+de diagnostic fidèle universel.
+
 AlphaGradientsGm déclare SRGB_ENCODED. Les12 paires, dimensions640×480,
 rectangles300×30, translation initiale(10,10), pas vertical38 et horizontal310,
 gradient diagonal et ordre fill puis stroke noir restent identiques à la
@@ -74,6 +83,14 @@ exercent la Surface réelle, pas un mock de config ni une inspection de plan.
 Le Minor reporté de #2423 est corrigé mécaniquement dans le helper des grilles
 hairline : déplacer l'assertion de largeur avant la boucle des caractères.
 Rejouer sa classe publique13cas, sans ajouter un test d'infrastructure du helper.
+
+La Task2 ajoute un témoin de pixels PNG issus du replay natif réel : noir
+alpha128 sur blanc2×2 en encoded, par le chemin séquentiel (deux ops) et le
+chemin checkpoint (plus de50ops, préfixe blanc opaque). La référence de ce
+diagnostic est volontairement blanche pour déclencher les captures avant/après.
+Le PNG avant reste blanc255, le PNG après vaut127±2, alpha255, comme le rendu
+principal ; LINEAR187±2 est discriminé. Aucun mock, introspection de config
+ou test de source ; lecture des artefacts publics de DiagnosticRunner.
 
 ## Validation et livraison
 

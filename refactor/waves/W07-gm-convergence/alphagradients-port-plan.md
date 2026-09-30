@@ -22,7 +22,7 @@
 
 ## Review Focus
 
-1. A second renderer entry silently uses LINEAR: terminal/inventory encoded-AA refusal witness plus static audit of checkpoint and delegated scanner/generator/runner routes.
+1. A second renderer entry silently uses LINEAR: Task1 terminal/inventory encoded-AA refusal witness, checkpoint/delegation audit; Task2 actual per-op PNG replay pixels for both sequential and checkpoint branches.
 2. Config replacement discards caller budget: public budget1 refusal and healthy recovery with the same declared GM domain.
 3. Both columns use same alpha policy or gradient becomes horizontal: two literal pixel witnesses and entire independently computed image.
 4. Hairline becomes localwidth1 or remains AA: exact complete ring and neighboring background, including right/bottom/corners across24cells.
@@ -51,6 +51,23 @@
 - [ ] **Step 4: Verify and report.** Run new class plus GmCanvasSurfacePixelTest on Skia task; run W7RectHairlineSurfacePixelTest13cases on Kanvas separately, distinct evidence directories. Assert expected count/no skips, exits0, preserve3baseline identities, all13existinghairline identities. Static audit: every harness Surface uses projection; only target GM changes scene/domain; all non-domain config fields copied. No global Kanvas/corpus or Runner/SimilarityTracker invocation by worker. Report covering commands/output, RED cause, warnings, and limits; don't infer native Green from a crash.
 - [ ] **Step 5: Self-review and commit.** Commit only six task files, report to own SDD workspace. Root owns refactor docs. Independent task review required, no worker subagents.
 
+### Task 2: Preserve the effective composition config in diagnostic replay
+
+**Files:**
+- Modify: integration-tests/diagnostic/src/main/kotlin/org/graphiks/kanvas/diagnostic/DiagnosticRunner.kt.
+- Modify: integration-tests/diagnostic/src/main/kotlin/org/graphiks/kanvas/diagnostic/OpInspector.kt.
+- Modify: integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmRunner.kt.
+- Modify: integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/AlphaGradientsSurfacePixelTest.kt.
+
+**Interfaces:**
+- Consumes Task1 `SkiaGm.compositionConfig(base)` and the existing SkiaRenderResult.ops/rgba public results.
+- Adds final `RunnerInput.renderConfig: RenderConfig = RenderConfig.DEFAULT` and final `OpInspector.inspect(..., config: RenderConfig = RenderConfig.DEFAULT)` parameters. Pass config through all private renderPartial invocations and its Surface constructor.
+- RunnerInput in SkiaGmRunner receives gm.compositionConfig(config), identical to its primary render. Existing direct callers retain DEFAULT; no global/environment lookup in replay.
+
+- [ ] **Step 1: Causal public replay RED.** Add `encodedDiagnosticReplayKeepsPixelsInBothReplayModes` to the existing public pixel class. Real encoded2x2 GM renders black alpha128 over white. Use two recording sizes (background+black <=50ops, prefix of60white draws+black >50ops); main pixels127±2/alpha255 before diagnostics. Independent reference bytes are all255 so the black draw produces a suspect and public before/after PNGs. Run DiagnosticRunner with existing API before adding renderConfig, DebugLevel.OP, temporary output directory; read non-null last suspect beforeUrl/afterUrl through existing ComparisonUtils, assert whole before255 and after127±2/alpha255. Expected RED: after PNG near187, not127. No private calls, mocks, config equality or source-text assertions.
+- [ ] **Step 2: Thread effective config.** Add exact trailing parameters above, pass through DiagnosticRunner to OpInspector and every sequential/checkpoint renderPartial call, including before-image branches. Extend the test call with explicit encoded config after new API exists, preserving unchanged127 expectations. Wire GM Runner with the projected Task1 config. Leave replayOp/clip/layer algorithms and all scoring/output conventions unchanged.
+- [ ] **Step 3: GREEN and commit.** Run the complete AlphaGradientsSurfacePixelTest plus3baseline GmCanvas controls under the same isolated command; no unrestricted Runner (would write historical scores), no global/corpus. Validate complete expected identities and normal process exits; report prior RED, code/config static audit, inherited warnings and unchanged replay limitations. Self-review and commit only the four Task2 files; root handles independent review and final whole-branch review.
+
 ## Verification commands and controller work
 
 Evidence root /private/tmp/kanvas-w7-alphagradients.QVeKNw; own bounded-run.rb,
@@ -61,7 +78,7 @@ existing init /private/tmp/kanvas-w7-image-opacity.YmtXjI/isolated.init.gradle.
 For hairline use :kanvas:test and only its fully-qualified class, separateRUN.
 
 - [x] Fresh baseline GmCanvasSurfacePixelTest3/3, child/wrapper0; parent renderer69/69 and global red/incomplete retained as prior evidence, not rerun or relabeled.
-- [ ] Task1 reviewed, fixes verified. Whole-branch final Astra review, at most one grouped fix and scoped Sol re-review, residuals adjudicated visibly.
+- [ ] Tasks1/2 reviewed, fixes verified. Whole-branch final Astra review, at most one grouped fix and scoped Sol re-review, residuals adjudicated visibly.
 - [ ] Corpus after final code: measureSkiaParity631/443, slices[0,607),[607,608),[608,631), timeout30s, imagestrue, rendererCommit exactHEAD. Compare to encoded-hairline-f80d94fb4.json. Expect only alphagradients pixels to change; investigate any other difference. Explicitly audit new domain field630LINEAR/1SRGB_ENCODED. No reference/threshold/score update.
 - [ ] Inspect actual/diff PNG and report alphagradients whole-image/edge/interior evidence without inventing provenance of reference. Save one durable final snapshot and update pilotage/status/README.
 - [ ] Publish and attach stacked draft on2423; keep W7 active and select next measured root cause from remaining corpus, not another approval loop.
