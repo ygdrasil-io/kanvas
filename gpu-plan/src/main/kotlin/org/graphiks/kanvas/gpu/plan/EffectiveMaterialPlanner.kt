@@ -325,8 +325,12 @@ public object EffectiveMaterialPlanner {
             (domain != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
                 premultipliedLinear.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP))
             return SourceNormalizationV4.Refused("unsupported.material.gradient.alpha-mode")
-        if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild &&
-            premultipliedLinear?.alphaMode != org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED) {
+        // The V4 transport is needed only for the newly admitted encoded linear-gradient
+        // leaf.  Direct solid sources retain Task 1's authenticated encoded plan.
+        if (!(compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
+                leaf is MaterialNode.LinearGradient) &&
+            (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild &&
+            premultipliedLinear?.alphaMode != org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED)) {
             return when (val original = normalize(draw,targetClamp,true,coverage,sample,elideNoOp=!imageMaskChild,
                 gradientDeviceBoundsI32=legacyGradientBoundsI32,imageMaskChild=imageMaskChild,compositionDomain=compositionDomain)) {
                 Normalization.NoOp -> SourceNormalizationV4.NoOp
@@ -359,7 +363,9 @@ public object EffectiveMaterialPlanner {
             is MaterialCoordinatePlanV2.Build.Ready -> SourceCoordinatesV4.V2(built.coordinates)
             is MaterialCoordinatePlanV2.Build.Refused -> return SourceNormalizationV4.Refused(built.code)
         }
-        return when (val captured = MaterialSourceConstructionV4.capture(draw,coordinates,actualBounds,blend,imageMaskChild,runtimeCatalog)) {
+        return when (val captured = MaterialSourceConstructionV4.capture(
+            draw,coordinates,actualBounds,blend,imageMaskChild,runtimeCatalog,compositionDomain=compositionDomain,
+        )) {
             is SourceConstructionResultV4.Built -> if (!collapses) SourceNormalizationV4.Source(captured.value)
                 else when (val solid = collapseOriginalStopV4(captured.value)) {
                     is Result.Ready -> SourceNormalizationV4.Source(MaterialSourceConstructionV4.retain(draw,solid,actualBounds))
@@ -373,7 +379,9 @@ public object EffectiveMaterialPlanner {
         val metadata = requireNotNull(source.gradient)
         val color = requireNotNull(metadata.stops.solidColor)
         require(metadata.family != GradientFamilyV2.CONICAL && source.coordinates == SourceCoordinatesV4.None)
-        var table = MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
+        val solidProgram = if (metadata.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED)
+            MaterialProgramPlan.SolidEncodedPremulV1 else MaterialProgramPlan.SolidLinearPremulV1
+        var table = MaterialPlanTable.of(listOf(MaterialPlanEntry(solidProgram,
             MaterialBindingPlan.SolidRgbaF32V1.of(ColorF32.of(color.redNormalized,color.greenNormalized,
                 color.blueNormalized,color.alphaNormalized)))))
         for (wrapper in metadata.wrappers) {

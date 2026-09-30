@@ -17,10 +17,13 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.GradientAlphaMode
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.render.ir.CompositionDomain
@@ -28,6 +31,7 @@ import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.AfterAll
@@ -73,6 +77,184 @@ class W7SurfaceCompositionPixelTest {
                 "domain=$domain format=$format scopes=${second.nativeEvidenceScopeKinds}")
             W7CompositionCpuOracle.assertAdmits(W7CompositionCpuOracle.swizzle(expected.getValue(domain), format), second.pixels)
             assertContentEquals(first.pixels, second.pixels)
+        }
+    }
+
+    @Test
+    fun gradientAlphaModeIsIndependentFromCompositionDomain() {
+        val whiteToTransparent = ColorARGB.White to ColorARGB.Transparent
+        val colored = ColorARGB.of(128, 255, 0, 0) to ColorARGB.of(64, 0, 0, 255)
+        val expectations = listOf(whiteToTransparent, colored).associateWith { (left, right) ->
+            GradientAlphaMode.entries.flatMap { mode -> CompositionDomain.entries.map { domain ->
+                mode to domain to gradientOverWhite(left, right, mode, domain)
+            } }.toMap()
+        }
+        val white = expectations.getValue(whiteToTransparent)
+        val coloredExpected = expectations.getValue(colored)
+        for (domain in CompositionDomain.entries) {
+            assertDisjoint("white alpha-mode domain=$domain",
+                white.getValue(GradientAlphaMode.STRAIGHT to domain),
+                white.getValue(GradientAlphaMode.PREMULTIPLIED to domain))
+            assertDisjoint("colored alpha-mode domain=$domain",
+                coloredExpected.getValue(GradientAlphaMode.STRAIGHT to domain),
+                coloredExpected.getValue(GradientAlphaMode.PREMULTIPLIED to domain))
+        }
+        for (mode in GradientAlphaMode.entries) {
+            assertDisjoint("colored domain mode=$mode",
+                coloredExpected.getValue(mode to CompositionDomain.LINEAR),
+                coloredExpected.getValue(mode to CompositionDomain.SRGB_ENCODED))
+            val linear = white.getValue(mode to CompositionDomain.LINEAR)
+            val encoded = white.getValue(mode to CompositionDomain.SRGB_ENCODED)
+            if (mode == GradientAlphaMode.PREMULTIPLIED)
+                assertOverlaps("white premultiplied domain mode=$mode", linear, encoded)
+            else assertDisjoint("white straight domain mode=$mode", linear, encoded)
+        }
+
+        for ((stops, expectedByModeDomain) in expectations) for (mode in GradientAlphaMode.entries)
+            for (domain in CompositionDomain.entries) for (format in PixelFormat.entries) {
+                val surface = Surface(1, 1, format, RenderConfig(compositionDomain = domain))
+                surface.canvas {
+                    drawRect(pixel, Paint(ColorARGB.White, antiAlias = false))
+                    drawRect(pixel, Paint(shader = Shader.LinearGradient(
+                        Point2F32(0f, 0f), Point2F32(1f, 0f),
+                        listOf(GradientStop(0f, stops.first), GradientStop(1f, stops.second)),
+                        alphaMode = mode,
+                    ), antiAlias = false))
+                }
+                val expected = expectedByModeDomain.getValue(mode to domain)
+                val first = surface.render()
+                assertColoredResult(first, expected, format, domain)
+                val second = surface.render()
+                assertColoredResult(second, expected, format, domain)
+                assertContentEquals(first.pixels, second.pixels, "stops=$stops mode=$mode domain=$domain format=$format")
+            }
+    }
+
+    @Test
+    fun gradientDomainSurvivesLayerPictureAndRepeatedTargets() {
+        val left = ColorARGB.of(128, 255, 0, 0)
+        val right = ColorARGB.of(64, 0, 0, 255)
+        val originalStops = mutableListOf(
+            GradientStop(0f, left),
+            GradientStop(1f, right),
+        )
+        fun shader(mode: GradientAlphaMode, stops: List<GradientStop> = listOf(GradientStop(0f, left), GradientStop(1f, right))) = Shader.LinearGradient(
+            Point2F32(0f, 0f), Point2F32(1f, 0f), stops, alphaMode = mode,
+        )
+        fun paint(mode: GradientAlphaMode) = Paint(
+            color = ColorARGB.of(128, 0, 0, 0), shader = shader(mode), antiAlias = false,
+        )
+        fun directExpected(mode: GradientAlphaMode, domain: CompositionDomain) =
+            W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.opacity(
+                W7CompositionCpuOracle.gradient(left, right, .5f, mode, domain), 128,
+            ), domain)
+        fun layerExpected(mode: GradientAlphaMode, domain: CompositionDomain): W7CompositionCpuOracle.CompositionEnvelope {
+            val root = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(ColorARGB.White, domain), domain)
+            val child = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.opacity(
+                W7CompositionCpuOracle.gradient(left, right, .5f, mode, domain), 128,
+            ), domain)
+            val restored = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+                W7CompositionCpuOracle.storedSample(child, domain), W7CompositionCpuOracle.storedSample(root, domain),
+            ), domain)
+            return W7CompositionCpuOracle.trace(root, child, restored)
+        }
+
+        for (mode in GradientAlphaMode.entries) {
+            originalStops[0] = GradientStop(0f, left)
+            originalStops[1] = GradientStop(1f, right)
+            val recorder = PictureRecorder()
+            recorder.beginRecording(pixel).drawRect(pixel, Paint(
+                color = ColorARGB.of(128, 0, 0, 0), shader = shader(mode, originalStops), antiAlias = false,
+            ))
+            val memory = recorder.finishRecordingAsPicture()
+            val wire = assertNotNull(Picture.fromByteArray(memory.toByteArray()))
+            // Picture owns the recorded immutable stops, rather than the mutable caller list.
+            originalStops[0] = GradientStop(0f, ColorARGB.Green)
+            originalStops[1] = GradientStop(1f, ColorARGB.Green)
+            for (domain in listOf(CompositionDomain.LINEAR, CompositionDomain.SRGB_ENCODED,
+                CompositionDomain.LINEAR, CompositionDomain.SRGB_ENCODED)) {
+                val direct = Surface(1, 1, config = RenderConfig(compositionDomain = domain))
+                direct.canvas { drawRect(pixel, paint(mode)) }
+                val directExpected = directExpected(mode, domain)
+                val directFirst = direct.render()
+                assertColoredResult(directFirst, directExpected, PixelFormat.RGBA8, domain)
+                assertContentEquals(directFirst.pixels, direct.render().pixels, "direct mode=$mode domain=$domain")
+
+                val layered = Surface(1, 1, config = RenderConfig(compositionDomain = domain))
+                layered.canvas {
+                    drawRect(pixel, Paint(ColorARGB.White, antiAlias = false))
+                    saveLayer()
+                    drawRect(pixel, paint(mode))
+                    restore()
+                }
+                val layeredExpected = layerExpected(mode, domain)
+                val layeredFirst = layered.render()
+                assertColoredResult(layeredFirst, layeredExpected, PixelFormat.RGBA8, domain)
+                assertContentEquals(layeredFirst.pixels, layered.render().pixels, "layer mode=$mode domain=$domain")
+
+                for (picture in listOf(memory, wire)) {
+                    val replay = Surface(1, 1, config = RenderConfig(compositionDomain = domain))
+                    replay.canvas { picture.playback(this) }
+                    val first = replay.render()
+                    assertColoredResult(first, directExpected, PixelFormat.RGBA8, domain)
+                    assertContentEquals(first.pixels, replay.render().pixels, "picture=$picture mode=$mode domain=$domain")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun encodedGradientHardStopsDegenerateAndZeroAlpha() {
+        val encoded = CompositionDomain.SRGB_ENCODED
+        val blue = ColorARGB.of(128, 0, 0, 255)
+        val cases = listOf(
+            "one-stop" to Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f),
+                listOf(GradientStop(.3f, blue))),
+            "hard-stop" to Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f), listOf(
+                GradientStop(0f, ColorARGB.of(128, 255, 0, 0)), GradientStop(.5f, ColorARGB.of(64, 0, 255, 0)),
+                GradientStop(.5f, blue), GradientStop(1f, blue),
+            )),
+            "degenerate-clamp-last-stop" to Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(0f, 0f), listOf(
+                GradientStop(0f, ColorARGB.of(128, 255, 0, 0)), GradientStop(.5f, ColorARGB.Green),
+                GradientStop(.5f, blue), GradientStop(1f, blue),
+            )),
+            "both-zero" to Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f), listOf(
+                GradientStop(0f, ColorARGB.Transparent), GradientStop(1f, ColorARGB.Transparent),
+            )),
+            "alpha-one" to Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f), listOf(
+                GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue),
+            )),
+        )
+        for ((name, shader) in cases) {
+            val expectedColor = when (name) {
+                "both-zero" -> ColorARGB.Transparent
+                "alpha-one" -> ColorARGB.of(255, 127, 0, 127)
+                else -> blue
+            }
+            val expected = W7CompositionCpuOracle.drawOnClear(
+                W7CompositionCpuOracle.solid(expectedColor, encoded), encoded,
+            )
+            val surface = Surface(1, 1, config = RenderConfig(compositionDomain = encoded))
+            surface.canvas { drawRect(pixel, Paint(shader = shader, antiAlias = false)) }
+            val first = surface.render()
+            assertColoredResult(first, expected, PixelFormat.RGBA8, encoded)
+            assertContentEquals(first.pixels, surface.render().pixels, name)
+        }
+
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
+        val exclusions: List<Pair<String, Shader>> = listOf(
+            "linear-interpolation" to Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f), stops,
+                interpolation = org.graphiks.kanvas.paint.ColorSpaceInterpolation.LINEAR),
+            "repeat" to Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f), stops, tileMode = TileMode.REPEAT),
+            "mirror" to Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f), stops, tileMode = TileMode.MIRROR),
+            "radial" to Shader.RadialGradient(Point2F32(0f, 0f), 1f, stops),
+            "sweep" to Shader.SweepGradient(Point2F32(0f, 0f), stops = stops),
+            "composed" to Shader.Blend(BlendMode.SRC_OVER, Shader.SolidColor(ColorARGB.Red),
+                Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f), stops)),
+        )
+        val full = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        exclusions.forEach { (name, shader) ->
+            assertEncodedExclusion(name, "source", full) { drawRect(full, Paint(shader = shader, antiAlias = false)) }
         }
     }
 
@@ -737,6 +919,20 @@ class W7SurfaceCompositionPixelTest {
             domain,
         )
         return W7CompositionCpuOracle.trace(storedBackground, result)
+    }
+
+    private fun gradientOverWhite(
+        left: ColorARGB,
+        right: ColorARGB,
+        alphaMode: GradientAlphaMode,
+        domain: CompositionDomain,
+    ): W7CompositionCpuOracle.CompositionEnvelope {
+        val white = W7CompositionCpuOracle.drawOnClear(W7CompositionCpuOracle.solid(ColorARGB.White, domain), domain)
+        val result = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+            W7CompositionCpuOracle.gradient(left, right, .5f, alphaMode, domain),
+            W7CompositionCpuOracle.storedSample(white, domain),
+        ), domain)
+        return W7CompositionCpuOracle.trace(white, result)
     }
 
     private fun assertColoredResult(

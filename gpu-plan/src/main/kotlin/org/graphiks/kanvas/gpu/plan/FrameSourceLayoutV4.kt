@@ -175,7 +175,8 @@ internal class FrameSourceLayoutV4 private constructor(
                     val definition = PreparedSourceDefinitionV4.fromPrepared(this,source,prepared)
                     val leaf = GradientInterpolationBindingV4.seal(definition)
                     MaterialPlanTable.of(listOf(MaterialPlanEntry(
-                        GradientInterpolationProgramV4(definition.addressing,definition.domain,definition.metadata.alphaMode),leaf,definition.slab)))
+                        GradientInterpolationProgramV4(definition.addressing,definition.domain,definition.metadata.alphaMode,
+                            definition.compositionDomain),leaf,definition.slab)))
                 }
                 source.wrappers.forEach { wrapper ->
                     val child = MaterialPlanRef(table.sizeI32-1)

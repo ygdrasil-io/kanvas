@@ -1,18 +1,22 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.render.ir.ColorInterpolation
 
 /** Code shape only: the addressing program is not an evaluated sRGB child. */
 public class GradientInterpolationProgramV4(public val addressing: GradientAddressingProgramV2,
     public val domain: ColorInterpolation,
-    public val alphaMode: org.graphiks.kanvas.render.ir.GradientAlphaMode) : MaterialProgramPlan {
+    public val alphaMode: org.graphiks.kanvas.render.ir.GradientAlphaMode,
+    public val compositionDomain: CompositionDomain = CompositionDomain.LINEAR) : MaterialProgramPlan {
     override val versionI32: Int = 4
     override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId(if (alphaMode ==
         org.graphiks.kanvas.render.ir.GradientAlphaMode.STRAIGHT) {
-        "gradient-interpolation-v4:$domain:oklab-srgb-2021-v1:polar-achromatic-original-srgb-v1:shortest-positive-tie-v1:${addressing.structuralId.value}"
+        "gradient-interpolation-v4:$domain:oklab-srgb-2021-v1:polar-achromatic-original-srgb-v1:shortest-positive-tie-v1:${addressing.structuralId.value}" +
+            if (compositionDomain == CompositionDomain.SRGB_ENCODED) ":${compositionDomain.name}" else ""
     } else {
-        "gradient-interpolation-v4:$domain:${alphaMode.name}:oklab-srgb-2021-v1:polar-achromatic-original-srgb-v1:shortest-positive-tie-v1:${addressing.structuralId.value}"
+        "gradient-interpolation-v4:$domain:${alphaMode.name}:oklab-srgb-2021-v1:polar-achromatic-original-srgb-v1:shortest-positive-tie-v1:${addressing.structuralId.value}" +
+            if (compositionDomain == CompositionDomain.SRGB_ENCODED) ":${compositionDomain.name}" else ""
     })
     override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.colorSourceV4()
 }
@@ -27,6 +31,7 @@ public class GradientInterpolationBindingV4 private constructor(
     public val canonicalIdentity: String = "gradient-interpolation-binding-v4:${definition.executionIdentity}:${sourceProof.canonicalIdentity}"
     internal fun authenticates(program: GradientInterpolationProgramV4,slab: GradientStopSlabPlanV1?): Boolean =
             slab === definition.slab && program.domain == definition.domain && program.alphaMode == definition.metadata.alphaMode &&
+            program.compositionDomain == definition.compositionDomain &&
             program.addressing.structuralId == definition.addressing.structuralId &&
             sourceProof.preparedDefinition === definition && sourceProof.sourceIdentity == definition.definitionIdentity
     internal fun rebase(range: GradientStopRangeV1,slab: GradientStopSlabPlanV1): GradientInterpolationBindingV4 =
@@ -73,6 +78,7 @@ internal class PreparedSourceDefinitionV4 private constructor(
 ) {
     val metadata = requireNotNull(captured.gradient)
     val domain: ColorInterpolation = metadata.interpolation
+    val compositionDomain: CompositionDomain = metadata.compositionDomain
     val coordinates: MaterialCoordinatePlanV2 = (captured.coordinates as SourceCoordinatesV4.V2).plan
     val deviceBoundsF32 get() = captured.deviceBoundsF32
     val addressing: GradientAddressingProgramV2 = GradientAddressingProgramV2(metadata.family,
@@ -163,7 +169,8 @@ internal class PreparedSourceDefinitionV4 private constructor(
         numericWordsF32Bits = java.util.Collections.unmodifiableMap(words)
         val alphaModeIdentity = if (metadata.alphaMode == org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED)
             ":${metadata.alphaMode.name}" else ""
-        definitionIdentity = "gradient-source-definition-v4:$allocationIdentity:${addressing.structuralId.value}:$domain$alphaModeIdentity:" +
+        definitionIdentity = "gradient-source-definition-v4:$allocationIdentity:${addressing.structuralId.value}:$domain$alphaModeIdentity" +
+            (if (compositionDomain == CompositionDomain.SRGB_ENCODED) ":${compositionDomain.name}" else "") + ":" +
             "${metadata.recipeIdentity}:${metadata.degeneracy}:$average:$preparedRangeIdentity:" +
             "${coordinates.canonicalIdentity}:${numericWordsF32Bits}:${integerWordsU32.filterKeys { it > 1L }}"
         executionIdentity = "$definitionIdentity:physical=$range:${slab.canonicalIdentity}"

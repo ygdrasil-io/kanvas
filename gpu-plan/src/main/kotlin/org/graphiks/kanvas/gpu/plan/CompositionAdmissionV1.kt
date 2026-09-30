@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.ColorInterpolation
 import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawOrigin
@@ -10,6 +11,7 @@ import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 import org.graphiks.kanvas.render.ir.ImagePixelFormat
 import org.graphiks.kanvas.render.ir.ImageResourceSnapshot
+import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
@@ -100,10 +102,16 @@ public object CompositionAdmissionV1 {
         if (!node.blend.isSrcOver() || paint.blendMode != BlendMode.SRC_OVER || node.operationBlendMode != null) {
             return diagnostic("blend", index, "Encoded composition admits only SrcOver blending.")
         }
-        if (paint.shader != null || paint.blender != null || paint.colorFilter != null ||
+        if (paint.blender != null || paint.colorFilter != null ||
             paint.maskFilter != null || paint.pathEffect != null || paint.imageFilter != null ||
             node.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty || node.resource != null
         ) return diagnostic("source", index, "Encoded composition admits only direct solid paint sources at this stage.")
+        val shader = paint.shader ?: return null
+        val gradient = shader as? MaterialNode.LinearGradient
+            ?: return diagnostic("source", index, "Encoded composition admits only solid or LinearGradient paint sources.")
+        if (gradient.interpolation != ColorInterpolation.SRGB ||
+            gradient.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP
+        ) return diagnostic("source", index, "Encoded composition LinearGradient requires sRGB interpolation and CLAMP tile mode.")
         return null
     }
 

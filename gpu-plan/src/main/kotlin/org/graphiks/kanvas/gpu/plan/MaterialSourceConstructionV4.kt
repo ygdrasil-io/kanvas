@@ -4,6 +4,7 @@ import org.graphiks.kanvas.render.ir.GeometryNode
 
 import org.graphiks.kanvas.color.ColorInterpolationProgramV1
 import org.graphiks.kanvas.render.ir.ColorInterpolation
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.kanvas.render.ir.GradientStop
@@ -225,6 +226,7 @@ internal class MaterialSourceConstructionV4 private constructor(
     class GradientMetadata internal constructor(
         val leaf: MaterialNode,
         val interpolation: ColorInterpolation,
+        val compositionDomain: CompositionDomain,
         val family: GradientFamilyV2,
         val tile: GradientTileOperationGraphV2,
         val degeneracy: GradientDegeneracyV1,
@@ -793,7 +795,8 @@ internal class MaterialSourceConstructionV4 private constructor(
             blend: BlendPlan,imageMaskChild: Boolean = false,
             runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
             composedV6: Boolean = false,
-            imageOriginLeaf: Boolean = false): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
+            imageOriginLeaf: Boolean = false,
+            compositionDomain: CompositionDomain = CompositionDomain.LINEAR): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
             require(bounds.isFinite() && bounds.isSorted()) { W5fPlanDiagnostics.Schema }
             if (composedV6 || containsComposed(draw.material)) {
                 require(!imageMaskChild) { W5gPlanDiagnostics.Unpromoted }
@@ -879,6 +882,10 @@ internal class MaterialSourceConstructionV4 private constructor(
                 else -> error(W5fPlanDiagnostics.Unpromoted)
             }
             interpolation = selectedDomain ?: interpolation
+            if (compositionDomain == CompositionDomain.SRGB_ENCODED) require(
+                leaf is MaterialNode.LinearGradient && selectedDomain == null &&
+                    interpolation == ColorInterpolation.SRGB && requested == GradientTileModeV2.CLAMP
+            ) { "unsupported.surface.composition.source" }
             val scalars = when (degeneracy) {
                 is LinearGradientDegeneracyV1 -> degeneracy.copyScalarsF32()
                 is RadialGradientDegeneracyV1 -> listOf(degeneracy.radialRadiusF32)
@@ -902,11 +909,12 @@ internal class MaterialSourceConstructionV4 private constructor(
             if (!imageMaskChild && orderedWrappers.any { it is SourceUnaryMetadataV4.Filter }) require(
                 draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.PATH) && draw.paint?.style == PaintStyleNode.FILL
             ) { W5fPlanDiagnostics.Unpromoted }
-            val metadata = GradientMetadata(leaf, interpolation, family, tile, degeneracy, cursor, orderedWrappers)
+            val metadata = GradientMetadata(leaf, interpolation, compositionDomain, family, tile, degeneracy, cursor, orderedWrappers)
             val identity = "captured-source-v4:${draw.material.canonicalId.value}:${draw.paint?.canonicalId?.value}:" +
                 (if (imageMaskChild) "child:${original.canonicalId.value}:" else "") +
                 "${coordinates.identityV4()}:${bounds.left.toRawBits()}:${bounds.top.toRawBits()}:" +
-                "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}:$blend:${metadata.rangeIdentity}"
+                "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}:$blend:${metadata.rangeIdentity}" +
+                if (compositionDomain == CompositionDomain.SRGB_ENCODED) ":${compositionDomain.name}" else ""
             SourceConstructionResultV4.Built(MaterialSourceConstructionV4(original, draw.paint,
                 coordinates, bounds, blend, identity, null, metadata,runtimeCatalog=runtimeCatalog))
             }

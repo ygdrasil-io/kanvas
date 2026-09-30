@@ -138,7 +138,8 @@ internal class W5aMaterialSourceStage private constructor(
                     $code
                 }
             """.trimIndent(),requirements.bindingCountI32,false,slab,"w5f_device_point",image,
-                proof.takeIf { it.composedBindingLayout != null },proof.copyOperationGraph().consumesDevicePositionF32)
+                proof.takeIf { it.composedBindingLayout != null },proof.copyOperationGraph().consumesDevicePositionF32,
+                compositionDomain=proof.compositionDomain)
         }
         fun imageV3(table: MaterialPlanTable, root: MaterialPlanRef): W5aMaterialSourceStage {
             val execution = (table.entry(root).bindings as org.graphiks.kanvas.gpu.plan.ImageSampleV3).execution

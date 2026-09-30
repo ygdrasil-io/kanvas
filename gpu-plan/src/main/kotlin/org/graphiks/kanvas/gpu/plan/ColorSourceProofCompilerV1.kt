@@ -377,7 +377,10 @@ internal object ColorSourceProofCompilerV1 {
                 ColorOperationGraphV1.conversion(straight.take(3),org.graphiks.kanvas.color.ColorInterpolationProgramV1.RecipeKind.OKLCH_TO_OKLAB),
                 org.graphiks.kanvas.color.ColorInterpolationProgramV1.RecipeKind.OKLAB_TO_LINEAR_RGB)
         }
-        val output = List(4) { if (it == 3) straight[3] else S.Multiply(linear[it],straight[3]) }
+        val output = List(4) { channel ->
+            if (channel == 3) straight[3] else if (definition.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED)
+                S.Multiply(straight[channel], straight[3]) else S.Multiply(linear[channel],straight[3])
+        }
         return ColorOperationGraphV1(vectorBranch(valid,output,List(4) { zero }))
     }
 

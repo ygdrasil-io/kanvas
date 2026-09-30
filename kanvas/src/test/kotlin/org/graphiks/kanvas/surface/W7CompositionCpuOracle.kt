@@ -4,6 +4,7 @@ package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.paint.GradientAlphaMode
 import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.math.color.ColorARGB
 
@@ -47,6 +48,69 @@ internal object W7CompositionCpuOracle {
                 val component = if (domain == CompositionDomain.LINEAR)
                     WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(encoded) else encoded
                 WgslFloatEnvelopeV1Oracle.gradientMultiply(component, alpha)
+            }
+        }
+    }
+
+    /**
+     * Independent sRGB-stop interpolation for W7's admitted LinearGradient.
+     * STRAIGHT interpolates straight sRGB then premultiplies; PREMULTIPLIED
+     * interpolates sRGB-premultiplied endpoints.  LINEAR retains the existing
+     * transfer before premultiplication, while the encoded target writes
+     * sRGB-premultiplied source values directly.
+     */
+    fun gradient(
+        left: ColorARGB,
+        right: ColorARGB,
+        tF32: Float,
+        alphaMode: GradientAlphaMode,
+        domain: CompositionDomain,
+    ): Array<WgslFloatEnvelopeV1Oracle.Interval> {
+        val t = WgslFloatEnvelopeV1Oracle.Interval.input(tF32)
+        val inverse = WgslFloatEnvelopeV1Oracle.gradientSubtract(WgslFloatEnvelopeV1Oracle.Interval.ONE, t)
+        fun component(color: ColorARGB, channel: Int): WgslFloatEnvelopeV1Oracle.Interval =
+            WgslFloatEnvelopeV1Oracle.Interval.input(
+                when (channel) {
+                    0 -> color.red / 255f
+                    1 -> color.green / 255f
+                    2 -> color.blue / 255f
+                    else -> color.alpha / 255f
+                },
+            )
+        fun interpolate(a: WgslFloatEnvelopeV1Oracle.Interval, b: WgslFloatEnvelopeV1Oracle.Interval) =
+            WgslFloatEnvelopeV1Oracle.gradientAdd(
+                WgslFloatEnvelopeV1Oracle.gradientMultiply(inverse, a),
+                WgslFloatEnvelopeV1Oracle.gradientMultiply(t, b),
+            )
+        val alpha = interpolate(component(left, 3), component(right, 3))
+        if (left.alpha == 0 && right.alpha == 0) return Array(4) { zero }
+        val encodedPremul = when (alphaMode) {
+            GradientAlphaMode.STRAIGHT -> Array(3) { channel ->
+                WgslFloatEnvelopeV1Oracle.gradientMultiply(
+                    interpolate(component(left, channel), component(right, channel)), alpha,
+                )
+            }
+            GradientAlphaMode.PREMULTIPLIED -> Array(3) { channel ->
+                interpolate(
+                    WgslFloatEnvelopeV1Oracle.gradientMultiply(component(left, channel), component(left, 3)),
+                    WgslFloatEnvelopeV1Oracle.gradientMultiply(component(right, channel), component(right, 3)),
+                )
+            }
+        }
+        return Array(4) { channel ->
+            if (channel == 3) alpha else if (domain == CompositionDomain.SRGB_ENCODED) encodedPremul[channel]
+            else {
+                val straight = when (alphaMode) {
+                    GradientAlphaMode.STRAIGHT -> interpolate(component(left, channel), component(right, channel))
+                    GradientAlphaMode.PREMULTIPLIED -> when {
+                        left.alpha == 0 -> component(right, channel)
+                        right.alpha == 0 -> component(left, channel)
+                        else -> WgslFloatEnvelopeV1Oracle.gradientDivide(encodedPremul[channel], alpha)
+                    }
+                }
+                WgslFloatEnvelopeV1Oracle.gradientMultiply(
+                    WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(straight), alpha,
+                )
             }
         }
     }
