@@ -21,8 +21,9 @@ internal object W5bDestinationGraphSealer {
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
         w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
     ): RenderGraph {
-        return construct(id, capabilityId, extent, capabilities, budget, draws, material, targetBytesI64, stagingBytesI64, rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource).publish()
+        return construct(id, capabilityId, extent, capabilities, budget, draws, material, targetBytesI64, stagingBytesI64, rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource, colorFormat).publish()
     }
 
     fun construct(
@@ -41,9 +42,10 @@ internal object W5bDestinationGraphSealer {
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
         w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
     ): RenderGraphConstruction {
         val sizing = sizeLayout(capabilityId, extent, capabilities, budget, draws, targetBytesI64, stagingBytesI64, rowBytesI64,
-            geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource)
+            geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource, colorFormat)
         val sourceRequirements = draws.filter { it.materialAuthority.colorSourceCoordinatesV4() == null }.map { draw ->
             RawMaterialRequirementsV2.of(requireNotNull(material), draw.materialAuthority.materialPlanRef()).also { source ->
                 require(source.fitsUniformBinding(capabilities)) {

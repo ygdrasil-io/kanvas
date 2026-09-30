@@ -131,94 +131,127 @@ class W7RectHairlineSurfacePixelTest {
         val gradientLeft = ColorARGB.of(128, 0, 255, 0)
         val gradientRight = ColorARGB.of(64, 0, 0, 255)
         val drawColor = ColorARGB.of(160, 23, 91, 173)
-        val image = Image.fromPixels(1, 1, byteArrayOf(37, 101, -37, -1), alphaType = AlphaType.PREMUL)
-        val sourceRect = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val imagePixel = byteArrayOf(37, 101, -37, -1)
+        val image = Image.fromPixels(4, 4, ByteArray(4 * 4 * imagePixel.size) { imagePixel[it % imagePixel.size] },
+            alphaType = AlphaType.PREMUL)
+        val sourceRect = RectF32.ofLTRB(1f, 1f, 5f, 5f)
         val hairlineRect = RectF32.ofLTRB(3f, 3f, 6f, 6f)
+        val layerBounds = RectF32.ofLTRB(1f, 1f, 7f, 7f)
         data class Source(
             val name: String,
-            val colorAtSource: () -> Array<WgslFloatEnvelopeV1Oracle.Interval>,
+            val colorAtUnsharedPixel: () -> Array<WgslFloatEnvelopeV1Oracle.Interval>,
+            val colorAtOverlapPixel: () -> Array<WgslFloatEnvelopeV1Oracle.Interval>,
             val record: Canvas.() -> Unit,
-            val coversHairline: Boolean = false,
         )
         val sources = listOf(
-            Source("solid", { W7CompositionCpuOracle.solid(solid, domain) }, {
+            Source("solid", { W7CompositionCpuOracle.solid(solid, domain) }, { W7CompositionCpuOracle.solid(solid, domain) }, {
                 drawRect(sourceRect, Paint(solid, antiAlias = false))
             }),
             Source("gradient-straight", { W7CompositionCpuOracle.gradient(
                 gradientLeft, gradientRight, .5f, GradientAlphaMode.STRAIGHT, domain,
+            ) }, { W7CompositionCpuOracle.gradient(
+                gradientLeft, gradientRight, 1f, GradientAlphaMode.STRAIGHT, domain,
             ) }, {
                 drawRect(sourceRect, Paint(shader = Shader.LinearGradient(
-                    Point2F32(0f, 0f), Point2F32(1f, 0f),
+                    Point2F32(0f, 1f), Point2F32(0f, 2f),
                     listOf(GradientStop(0f, gradientLeft), GradientStop(1f, gradientRight)),
                     alphaMode = GradientAlphaMode.STRAIGHT,
                 ), antiAlias = false))
             }),
             Source("gradient-premultiplied", { W7CompositionCpuOracle.gradient(
                 gradientLeft, gradientRight, .5f, GradientAlphaMode.PREMULTIPLIED, domain,
+            ) }, { W7CompositionCpuOracle.gradient(
+                gradientLeft, gradientRight, 1f, GradientAlphaMode.PREMULTIPLIED, domain,
             ) }, {
                 drawRect(sourceRect, Paint(shader = Shader.LinearGradient(
-                    Point2F32(0f, 0f), Point2F32(1f, 0f),
+                    Point2F32(0f, 1f), Point2F32(0f, 2f),
                     listOf(GradientStop(0f, gradientLeft), GradientStop(1f, gradientRight)),
                     alphaMode = GradientAlphaMode.PREMULTIPLIED,
                 ), antiAlias = false))
             }),
             Source("image", { W7CompositionCpuOracle.sourceSpacePremul(
-                requireNotNull(image.pixels), image.colorType, image.alphaType, domain,
+                imagePixel, image.colorType, image.alphaType, domain,
+            ) }, { W7CompositionCpuOracle.sourceSpacePremul(
+                imagePixel, image.colorType, image.alphaType, domain,
             ) }, {
                 drawImage(image, sourceRect, SamplingOptions.NEAREST, Paint(antiAlias = false))
             }),
-            Source("draw-color", { W7CompositionCpuOracle.solid(drawColor, domain) }, {
+            Source("draw-color", { W7CompositionCpuOracle.solid(drawColor, domain) }, { W7CompositionCpuOracle.solid(drawColor, domain) }, {
                 save()
-                clipRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), antiAlias = false)
+                clipRect(RectF32.ofLTRB(1f, 1f, 5f, 5f), antiAlias = false)
                 drawColor(drawColor)
                 restore()
-            }, coversHairline = true),
+            }),
         )
         val hairlineSource = W7CompositionCpuOracle.solid(hairline, domain)
         val hairlineOnClear = W7CompositionCpuOracle.drawOnClear(hairlineSource, domain)
-        for (format in PixelFormat.entries) for (source in sources) for (sourceFirst in listOf(true, false)) {
-            val sourceOnClear = W7CompositionCpuOracle.drawOnClear(source.colorAtSource(), domain)
-            val hairlineExpected = if (source.coversHairline) {
-                val first = if (sourceFirst) sourceOnClear else hairlineOnClear
-                val second = if (sourceFirst) hairlineSource else source.colorAtSource()
+        val clear = W7CompositionCpuOracle.clear()
+        for (format in PixelFormat.entries) for (source in sources) for (sourceFirst in listOf(true, false))
+            for (inLayer in listOf(false, true)) for (restoreAlpha in if (inLayer) listOf(255, 128) else listOf(255)) {
+            val sourceOnClear = W7CompositionCpuOracle.drawOnClear(source.colorAtUnsharedPixel(), domain)
+            val overlapSource = source.colorAtOverlapPixel()
+            val overlapSourceOnClear = W7CompositionCpuOracle.drawOnClear(overlapSource, domain)
+            val firstStored = if (sourceFirst) overlapSourceOnClear else hairlineOnClear
+            val secondSource = if (sourceFirst) hairlineSource else overlapSource
+            val overlap = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+                secondSource, W7CompositionCpuOracle.storedSample(firstStored, domain),
+            ), domain)
+            val oppositeFirst = if (sourceFirst) hairlineOnClear else overlapSourceOnClear
+            val oppositeSecond = if (sourceFirst) overlapSource else hairlineSource
+            val oppositeOverlap = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+                oppositeSecond, W7CompositionCpuOracle.storedSample(oppositeFirst, domain),
+            ), domain)
+            fun restored(value: W7CompositionCpuOracle.CompositionEnvelope) = if (!inLayer) value else
                 W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
-                    second, W7CompositionCpuOracle.storedSample(first, domain),
+                    W7CompositionCpuOracle.opacity(W7CompositionCpuOracle.storedSample(value, domain), restoreAlpha),
+                    W7CompositionCpuOracle.storedSample(clear, domain),
                 ), domain)
-            } else hairlineOnClear
-            if (source.coversHairline) {
-                val oppositeFirst = if (sourceFirst) hairlineOnClear else sourceOnClear
-                val oppositeSecond = if (sourceFirst) source.colorAtSource() else hairlineSource
-                val oppositeOrder = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
-                    oppositeSecond, W7CompositionCpuOracle.storedSample(oppositeFirst, domain),
-                ), domain)
+            val expectedSource = restored(sourceOnClear)
+            val expectedOverlap = restored(overlap)
+            val expectedHairline = restored(hairlineOnClear)
+            assertDisjointHairlineExpectations(
+                expectedOverlap,
+                restored(oppositeOverlap),
+                "source order source=${source.name} layer=$inLayer alpha=$restoreAlpha format=$format first=$sourceFirst",
+            )
+            if (inLayer && restoreAlpha == 128) {
+                val twiceRestored = restored(restored(overlap))
                 assertDisjointHairlineExpectations(
-                    hairlineExpected,
-                    oppositeOrder,
-                    "source order source=${source.name} format=$format first=$sourceFirst",
+                    expectedOverlap,
+                    overlap,
+                    "restore omission source=${source.name} format=$format first=$sourceFirst",
+                )
+                assertDisjointHairlineExpectations(
+                    expectedOverlap,
+                    twiceRestored,
+                    "restore duplication source=${source.name} format=$format first=$sourceFirst",
                 )
             }
             val surface = Surface(8, 8, format, RenderConfig(compositionDomain = domain))
             surface.canvas {
+                if (inLayer) saveLayer(layerBounds, Paint(ColorARGB.of(restoreAlpha, 0, 0, 0), antiAlias = false))
                 if (sourceFirst) source.record(this)
                 drawRect(hairlineRect, Paint(hairline, antiAlias = false, style = PaintStyle.STROKE, strokeWidth = 0f))
                 if (!sourceFirst) source.record(this)
+                if (inLayer) restore()
             }
-            val first = surface.render()
+            val firstRender = surface.render()
             W7CompositionCpuOracle.assertAdmits(
-                W7CompositionCpuOracle.swizzle(sourceOnClear, format), first.pixelAt(0, 0),
-            )
-            W7CompositionCpuOracle.assertAdmits(
-                W7CompositionCpuOracle.swizzle(hairlineExpected, format), first.pixelAt(3, 3),
+                W7CompositionCpuOracle.swizzle(expectedSource, format), firstRender.pixelAt(1, 1),
             )
             W7CompositionCpuOracle.assertAdmits(
-                W7CompositionCpuOracle.swizzle(hairlineOnClear, format), first.pixelAt(6, 6),
+                W7CompositionCpuOracle.swizzle(expectedOverlap, format), firstRender.pixelAt(3, 3),
             )
-            if (!source.coversHairline) W7CompositionCpuOracle.assertAdmits(
-                W7CompositionCpuOracle.swizzle(W7CompositionCpuOracle.clear(), format), first.pixelAt(7, 7),
+            W7CompositionCpuOracle.assertAdmits(
+                W7CompositionCpuOracle.swizzle(expectedHairline, format), firstRender.pixelAt(6, 6),
             )
-            assertTrue(first.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), source.name)
-            val second = surface.render()
-            assertContentEquals(first.pixels, second.pixels, "source=${source.name} first=$sourceFirst format=$format")
+            W7CompositionCpuOracle.assertAdmits(
+                W7CompositionCpuOracle.swizzle(clear, format), firstRender.pixelAt(7, 7),
+            )
+            assertTrue(firstRender.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), source.name)
+            val secondRender = surface.render()
+            assertContentEquals(firstRender.pixels, secondRender.pixels,
+                "source=${source.name} first=$sourceFirst layer=$inLayer alpha=$restoreAlpha format=$format")
         }
     }
 
@@ -614,8 +647,8 @@ class W7RectHairlineSurfacePixelTest {
         val blue = ColorARGB.of(255, 17, 61, 211)
         val red = ColorARGB.of(255, 239, 51, 73)
         val expected = listOf(
-            "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBRRRR",
-            "BBBRBBR", "BBBRBBR", "BBBRRRR", "BBBBBBBB",
+            "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBRRRRB",
+            "BBBRBBRB", "BBBRBBRB", "BBBRRRRB", "BBBBBBBB",
         )
         val surface = Surface(8, 8)
         surface.canvas {
@@ -688,7 +721,9 @@ private fun assertRepeatedPixelTable(surface: Surface, expected: List<String>, b
 }
 
 private fun assertPixelTable(expected: List<String>, blue: ColorARGB, red: ColorARGB, actual: RenderResult) {
+    assertEquals(actual.height, expected.size, "expected row count")
     expected.forEachIndexed { y, row -> row.forEachIndexed { x, marker ->
+        assertEquals(actual.width, row.length, "expected width row=$y")
         val color = if (marker == 'R') red else blue
         val offset = (y * 8 + x) * 4
         assertContentEquals(

@@ -94,12 +94,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private val imageProjection: ImageOriginGeometryProjectionV6? = null,
     /** Closed W6-only sibling of the colour source. It never changes colour-source admission. */
     private val w6AaCoverageSource: Boolean = false,
+    /** The public Rect projection must not become an implicit encoded-composition entry. */
+    private val requiresPublicEncodedAdmission: Boolean = false,
 ) : GpuPlanCompiler {
     internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, w6RootAaRectStrokeSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource)
+        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, w6RootAaRectStrokeSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource,requiresPublicEncodedAdmission)
     internal fun withImageOriginProjection(projection: ImageOriginGeometryProjectionV6?): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,w6RootAaRectStrokeSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource)
-    public constructor() : this(PathStrokePolicyF64())
+        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,w6RootAaRectStrokeSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource,requiresPublicEncodedAdmission)
+    public constructor() : this(PathStrokePolicyF64(), requiresPublicEncodedAdmission = true)
 
     /**
      * Computes the complete W4d.2 physical lifetime inventory without issuing a RenderGraph or
@@ -143,6 +145,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
         if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid) return invalid("Scene validation failed")
         if (scene.colorSpace != ColorSpace.SRGB) return gap("W4d.2 supports only sRGB")
+        if (requiresPublicEncodedAdmission) CompositionAdmissionV1.validate(scene, target).firstOrNull()?.let { diagnostic ->
+            return GpuPlanSelection.InvalidScene(listOf(diagnostic))
+        }
         when (val preflight = preflight(scene)) {
             Preflight.Member -> Unit
             Preflight.Outside -> return gap("Scene is outside W4d.2")
@@ -1633,6 +1638,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         public fun standaloneRectPathFrames(): W4dGeneralPathPlanCompiler = W4dGeneralPathPlanCompiler(
             PathStrokePolicyF64(),
             admitsStandaloneRectPathFrames = true,
+            requiresPublicEncodedAdmission = true,
         )
 
         internal fun w6AaColorSource(
