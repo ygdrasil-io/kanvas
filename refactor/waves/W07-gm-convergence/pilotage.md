@@ -30,8 +30,9 @@ Lot précédent : politique alpha du LinearGradient, renderer `09d9574b5`,
 branche `codex/w7-gradient-alpha-mode`, draft
 [#2421](https://github.com/ygdrasil-io/kanvas/pull/2421) empilée sur #2420.
 Lot courant : domaine de composition Surface, branche
-`codex/w7-surface-composition`, base #2421 ; validation ciblée et revue finale
-terminées, publication draft avec les réserves ci-dessous.
+`codex/w7-surface-composition`, draft
+[#2422](https://github.com/ygdrasil-io/kanvas/pull/2422) empilée sur #2421 ;
+validation ciblée et revue finale terminées, réserves ci-dessous.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -187,7 +188,8 @@ accidentellement par l'agent y ont été restaurés par patch inverse ; le
 contrôleur a vérifié le retour aux seuls deux fichiers utilisateurs déjà
 modifiés. Ces essais exit1 ne sont ni des GREEN ni une preuve de panne GPU.
 Seule la sélection finale50 sur le bon worktree est retenue.
-PR draft empilée sur #2421 avec cette réserve ; aucune readiness pour merge.
+PR draft [#2422](https://github.com/ygdrasil-io/kanvas/pull/2422) empilée sur
+#2421 avec cette réserve ; aucune readiness pour merge.
 Archives, commandes et comparaison nominative :
 `/private/tmp/kanvas-w7-composition.25GaUn/`.
 Fonts, codecs, `jpg-color-cube`, GM/adaptateurs, références, seuils,

@@ -5,7 +5,8 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Lot domaine de composition Surface — 30 septembre 2026
 
-Branche `codex/w7-surface-composition`, base draft
+Branche `codex/w7-surface-composition`, draft
+[#2422](https://github.com/ygdrasil-io/kanvas/pull/2422) empilée sur
 [#2421](https://github.com/ygdrasil-io/kanvas/pull/2421).
 [Design](surface-composition-design.md), [plan](surface-composition-plan.md)
 et [bilan](pilotage.md#lot-domaine-de-composition-surface--30-septembre-2026).
