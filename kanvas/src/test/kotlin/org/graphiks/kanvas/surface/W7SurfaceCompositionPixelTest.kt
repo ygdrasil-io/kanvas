@@ -307,6 +307,73 @@ class W7SurfaceCompositionPixelTest {
     }
 
     @Test
+    fun drawColorComposesWithEveryAdmittedEncodedSourceInBothOrdersAndPlainLayer() {
+        // Removing W6's ordered root ownership makes every direct encoded mixed
+        // frame below refuse; flattening the layer or losing a source store makes
+        // the independently closed trace reject its result.
+        val background = ColorARGB.of(160, 23, 91, 173)
+        val solid = ColorARGB.of(128, 197, 41, 113)
+        val gradientLeft = ColorARGB.of(128, 255, 0, 0)
+        val gradientRight = ColorARGB.of(64, 0, 0, 255)
+        val image = Image.fromPixels(1, 1, byteArrayOf(37, 101, -37, -1), alphaType = AlphaType.PREMUL)
+        data class Source(
+            val name: String,
+            val source: (CompositionDomain) -> Array<WgslFloatEnvelopeV1Oracle.Interval>,
+            val record: Canvas.() -> Unit,
+        )
+        val sources = listOf(
+            Source("solid", { domain -> W7CompositionCpuOracle.solid(solid, domain) }) {
+                drawRect(pixel, Paint(solid, antiAlias = false))
+            },
+            Source("gradient", { domain -> W7CompositionCpuOracle.gradient(
+                gradientLeft, gradientRight, .5f, GradientAlphaMode.STRAIGHT, domain,
+            ) }) {
+                drawRect(pixel, Paint(shader = Shader.LinearGradient(
+                    Point2F32(0f, 0f), Point2F32(1f, 0f),
+                    listOf(GradientStop(0f, gradientLeft), GradientStop(1f, gradientRight)),
+                ), antiAlias = false))
+            },
+            Source("image", { domain -> W7CompositionCpuOracle.sourceSpacePremul(
+                requireNotNull(image.pixels), image.colorType, image.alphaType, domain,
+            ) }) {
+                drawImage(image, pixel, SamplingOptions.NEAREST, Paint(antiAlias = false))
+            },
+        )
+        // The historical LINEAR mixed route is not a native W7 owner; its
+        // admitted controls remain in drawColorPreservesDomainDirect().
+        for (domain in listOf(CompositionDomain.SRGB_ENCODED)) for (format in PixelFormat.entries)
+            for (source in sources) for (colorFirst in listOf(true, false)) for (inLayer in listOf(false, true)) {
+                val colorSource = W7CompositionCpuOracle.solid(background, domain)
+                val firstSource = if (colorFirst) colorSource else source.source(domain)
+                val secondSource = if (colorFirst) source.source(domain) else colorSource
+                val first = W7CompositionCpuOracle.drawOnClear(firstSource, domain)
+                val second = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+                    secondSource, W7CompositionCpuOracle.storedSample(first, domain),
+                ), domain)
+                val expected = if (inLayer) {
+                    val restored = W7CompositionCpuOracle.store(W7CompositionCpuOracle.srcOver(
+                        W7CompositionCpuOracle.storedSample(second, domain),
+                        W7CompositionCpuOracle.storedSample(W7CompositionCpuOracle.clear(), domain),
+                    ), domain)
+                    W7CompositionCpuOracle.trace(first, second, restored)
+                } else W7CompositionCpuOracle.trace(first, second)
+                val surface = Surface(1, 1, format, RenderConfig(compositionDomain = domain))
+                surface.canvas {
+                    if (inLayer) saveLayer()
+                    if (colorFirst) drawColor(background) else source.record(this)
+                    if (colorFirst) source.record(this) else drawColor(background)
+                    if (inLayer) restore()
+                }
+                val firstRender = surface.render()
+                assertColoredResult(firstRender, expected, format, domain)
+                val secondRender = surface.render()
+                assertColoredResult(secondRender, expected, format, domain)
+                assertContentEquals(firstRender.pixels, secondRender.pixels,
+                    "source=${source.name} colorFirst=$colorFirst layer=$inLayer domain=$domain format=$format")
+            }
+    }
+
+    @Test
     fun surfaceDomainsAlternateWithoutCrossTargetCacheReuse() {
         val background = ColorARGB.of(255, 31, 79, 151)
         val foreground = ColorARGB.of(128, 223, 55, 107)
@@ -549,6 +616,12 @@ class W7SurfaceCompositionPixelTest {
             Triple("nested-layer", "layer") { saveLayer(); saveLayer(); restore(); restore() },
             Triple("sibling-layer", "layer") { saveLayer(); restore(); saveLayer(); restore() },
             Triple("scaled-image", "geometry") { drawImage(image, full, SamplingOptions.NEAREST, Paint(antiAlias = false)) },
+            Triple("scaled-image-src", "geometry") { drawImage(image, full, SamplingOptions.NEAREST,
+                Paint(blendMode = BlendMode.SRC, antiAlias = false)) },
+            Triple("scaled-image-unpremul", "geometry") { drawImage(
+                Image.fromPixels(1, 1, byteArrayOf(37, 101, -37, -1), alphaType = AlphaType.UNPREMUL),
+                full, SamplingOptions.NEAREST, Paint(antiAlias = false),
+            ) },
             Triple("nonnearest-image", "geometry") { drawImage(image, pixel, SamplingOptions.LINEAR, Paint(antiAlias = false)) },
             Triple("image-shader", "source") { drawRect(pixel, Paint(shader = Shader.Image(image), antiAlias = false)) },
             Triple("nine", "image") { drawImageNine(image, pixel, full, Paint(antiAlias = false)) },
@@ -637,6 +710,37 @@ class W7SurfaceCompositionPixelTest {
             assertEquals(0, first.stats.opsRefused)
             val second = surface.render()
             assertContentEquals(first.pixels, second.pixels)
+        }
+    }
+
+    @Test
+    fun emptyEncodedSurfaceRendersSnapshotsAndReplaysTransparentAfterDiscard() {
+        // Removing the encoded empty-frame owner makes the first render and the
+        // snapshots refuse; changing SOURCE_SPACE or introducing a fake draw
+        // makes these exact transparent bytes or replay assertions fail.
+        val full = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val subset = pixel
+        val clear = W7CompositionCpuOracle.clear()
+        for (format in PixelFormat.entries) {
+            val fresh = Surface(2, 2, format, RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
+            repeat(2) { assertEveryPixelResult(fresh.render(), clear, format, CompositionDomain.SRGB_ENCODED) }
+            val discarded = Surface(2, 2, format, RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
+            discarded.canvas { drawRect(full, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+            assertTrue(discarded.render().pixels.any { it != 0.toUByte() })
+            discarded.discardRecordedOperations()
+            repeat(2) { assertEveryPixelResult(discarded.render(), clear, format, CompositionDomain.SRGB_ENCODED) }
+            for (snapshot in listOf(
+                fresh.makeImageSnapshot(), requireNotNull(fresh.makeImageSnapshot(subset)),
+                discarded.makeImageSnapshot(), requireNotNull(discarded.makeImageSnapshot(subset)),
+            )) {
+                assertEquals(ImagePremultiplicationV1.SOURCE_SPACE, snapshot.premultiplication)
+                assertContentEquals(UByteArray(snapshot.width * snapshot.height * 4), requireNotNull(snapshot.pixels).toUByteArray())
+                val replay = Surface(snapshot.width, snapshot.height, format,
+                    RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
+                replay.canvas { drawImage(snapshot, RectF32.ofLTRB(0f, 0f, snapshot.width.toFloat(), snapshot.height.toFloat()),
+                    SamplingOptions.NEAREST, Paint(antiAlias = false)) }
+                repeat(2) { assertEveryPixelResult(replay.render(), clear, format, CompositionDomain.SRGB_ENCODED) }
+            }
         }
     }
 

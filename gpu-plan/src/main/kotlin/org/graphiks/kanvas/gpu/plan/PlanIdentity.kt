@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.render.ir.CompositionDomain
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+
 @JvmInline
 public value class PlanId(public val value: String) {
     init { require(value.isNotBlank()) { "Plan ID must not be blank" } }
@@ -38,10 +41,25 @@ internal fun canonicalPathAtomicGroup(draw: PathDraw): PlanAtomicGroupId = when 
 internal fun canonicalGeneralPathAtomicGroup(draw: GeneralPathDraw): PlanAtomicGroupId =
     PlanAtomicGroupId("w4d.2:${draw.commandIndex}")
 
-/** Canonical capability facts that affect texture allocation or resolve availability. */
-internal fun planCapabilityIdentityFacts(capabilities: PlanCapabilitySnapshot): List<String> = buildList {
+/**
+ * Identity is target-relative: a LINEAR plan keeps its historical capability
+ * sequence, while encoded plans authenticate the physical encoded capability.
+ * Planning, validation and native seals continue to use the complete snapshot.
+ */
+internal fun PlanCapabilitySnapshot.identitySupportedFormats(target: RenderTargetDescriptor): Set<PlanLogicalColorFormat> =
+    if (target.compositionDomain == CompositionDomain.LINEAR)
+        supportedFormats() - PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
+    else supportedFormats()
+
+/** Canonical target-relative capability facts that affect identity allocation or resolve availability. */
+internal fun planCapabilityIdentityFacts(
+    capabilities: PlanCapabilitySnapshot,
+    target: RenderTargetDescriptor,
+): List<String> = buildList {
     add("texture-sample-supports-v1")
     capabilities.supportedTextureSampleSupports()
+        .filter { support -> target.compositionDomain != CompositionDomain.LINEAR ||
+            (support.format as? PlanTextureFormat.Color)?.value != PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL }
         .map { support ->
             "${textureFormatIdentity(support.format)}:${support.sampleCountI32}:${support.usages().map { it.name }.sorted().joinToString(",")}"
         }

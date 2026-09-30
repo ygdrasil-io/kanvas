@@ -7057,7 +7057,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             preparedSceneTarget.targetGeneration != generationSeal.targetGeneration ||
             preparedSceneTarget.width != witness.graph.targetExtent.width ||
             preparedSceneTarget.height != witness.graph.targetExtent.height ||
-            framePlan.corePrimitiveSceneTargetDescriptor(witness.target)?.format != GPUColorFormat.RGBA8UnormSrgb ||
+            framePlan.corePrimitiveSceneTargetDescriptor(witness.target)?.format != when (witness.graph.colorFormat) {
+                org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> GPUColorFormat.RGBA8UnormSrgb
+                org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> GPUColorFormat.RGBA8Unorm
+            } ||
             resources.ordinaryResources.singleOrNull()?.let { it.logicalResource == witness.target &&
                 it.role == GPUFrameResourceRole.SceneTarget && it.deviceGeneration == generationSeal.deviceGeneration } != true ||
             staging.stagingResource != witness.staging || staging.request != readbackStep.request ||

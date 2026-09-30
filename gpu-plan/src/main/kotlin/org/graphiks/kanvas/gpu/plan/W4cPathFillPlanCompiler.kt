@@ -777,7 +777,7 @@ public class W4cPathFillPlanCompiler internal constructor(private val runtimeCat
             capabilities.maxTextureDimension2D.toString(),
             capabilities.maxBufferSizeBytes.toString(),
             capabilities.copyBytesPerRowAlignment.toString(),
-            capabilities.supportedFormats().map { it.name }.sorted().joinToString(","),
+            capabilities.identitySupportedFormats(target).map { it.name }.sorted().joinToString(","),
             capabilities.minUniformBufferOffsetAlignment.toString(),
             capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(),
             capabilities.supportedOperations().map { it.name }.sorted().joinToString(","),
@@ -787,7 +787,7 @@ public class W4cPathFillPlanCompiler internal constructor(private val runtimeCat
             capabilities.bufferAllocationPolicy.growth.name,
             capabilities.supportedDepthStencilFormats().map { it.name }.sorted().joinToString(","),
             budget.maxFrameLocalBytes.toString(),
-        ) + planCapabilityIdentityFacts(capabilities)
+        ) + planCapabilityIdentityFacts(capabilities, target)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { value ->
             val bytes = value.encodeToByteArray()

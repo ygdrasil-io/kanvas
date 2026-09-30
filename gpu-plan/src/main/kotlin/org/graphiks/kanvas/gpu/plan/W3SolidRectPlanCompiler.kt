@@ -38,7 +38,8 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
     override fun select(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
-    ): GpuPlanSelection = selectValidated(scene, target, false)
+    ): GpuPlanSelection = selectValidated(scene, target, target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
+        scene.all { it is SceneCommand.Annotation || it is SceneCommand.SetTransform || it is SceneCommand.SetClip })
 
     /** Internal construction seam after W5e has retained and authenticated every
      * original semantic NoOp. Ordinary W3 admission still requires its own draw. */
@@ -494,14 +495,14 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
             capabilityId, sceneCanonicalId.value, target.extent.width.toString(), target.extent.height.toString(),
             target.colorSpace.name, target.colorSpace.transferFunction.name, target.colorSpace.gamut.name,
             capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(),
-            capabilities.copyBytesPerRowAlignment.toString(), capabilities.supportedFormats().map { it.name }.sorted().joinToString(","),
+            capabilities.copyBytesPerRowAlignment.toString(), capabilities.identitySupportedFormats(target).map { it.name }.sorted().joinToString(","),
             capabilities.minUniformBufferOffsetAlignment.toString(), capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(),
             capabilities.supportedOperations().map { it.name }.sorted().joinToString(","),
             capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
             capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name,
             budget.maxFrameLocalBytes.toString(),
         ) + (if (target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED)
-            listOf(target.compositionDomain.name) else emptyList()) + planCapabilityIdentityFacts(capabilities)
+            listOf(target.compositionDomain.name) else emptyList()) + planCapabilityIdentityFacts(capabilities, target)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { field ->
             val bytes = field.encodeToByteArray()

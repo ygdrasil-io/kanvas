@@ -75,7 +75,9 @@ public class W6aLayerPlanCompiler public constructor(
         val ownsW6b = W6bFilterGraphConstruction.owns(scene)
         val hasLayerBoundary = commands.any { it is SceneCommand.BeginLayer || it is SceneCommand.EndLayer }
         val ownsMixedRootAaRect = !hasLayerBoundary && !ownsW6b && ownsMixedRootAaRectFrame(commands)
-        if (!hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect) {
+        val ownsEncodedRootSegments = !hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect &&
+            ownsEncodedRootSegmentFrame(scene, target, commands)
+        if (!hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect && !ownsEncodedRootSegments) {
             return GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Scene has no layer boundary.")))
         }
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
@@ -182,7 +184,8 @@ public class W6aLayerPlanCompiler public constructor(
             }
         }
         if (stack.isNotEmpty()) return invalid(W6aPlanDiagnostics.MalformedStack, "BeginLayer has no matching EndLayer.")
-        if (scopes.isEmpty() && !ownsW6b && !ownsMixedRootAaRect) return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
+        if (scopes.isEmpty() && !ownsW6b && !ownsMixedRootAaRect && !ownsEncodedRootSegments)
+            return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
 
         val segments = mutableListOf<Segment>()
         val immutableScopes = scopes.map { occurrence -> ScopeOccurrence(
@@ -263,7 +266,7 @@ public class W6aLayerPlanCompiler public constructor(
                 is GpuPlanSelection.MaterialOnlyRefusal -> return selection
                 is GpuPlanSelection.InvalidScene -> return selection
                 is GpuPlanSelection.ResourceLimitExceeded -> return selection
-                is GpuPlanSelection.NotCandidate -> return if (ownsMixedRootAaRect)
+                is GpuPlanSelection.NotCandidate -> return if (ownsMixedRootAaRect || ownsEncodedRootSegments)
                     GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild,
                         "Mixed root frame is outside its complete child source lanes.")))
                 else invalid(W6aPlanDiagnostics.UnsupportedChild, "Layer segment is outside the admitted child geometry/source lanes.")
@@ -289,6 +292,17 @@ public class W6aLayerPlanCompiler public constructor(
         }
         return stroke && gradient
     }
+
+    /** The W7 root extension is closed to an already-admitted encoded DrawColor mixture. */
+    private fun ownsEncodedRootSegmentFrame(
+        scene: SceneSnapshot,
+        target: RenderTargetDescriptor,
+        commands: List<SceneCommand>,
+    ): Boolean = target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
+        CompositionAdmissionV1.validate(scene, target).isEmpty() &&
+        commands.any { it is SceneCommand.DrawColor } && commands.any { it is SceneCommand.Draw } &&
+        commands.all { it is SceneCommand.DrawColor || it is SceneCommand.Draw ||
+            it is SceneCommand.SetTransform || it is SceneCommand.SetClip || it is SceneCommand.Annotation }
 
     /** Root ownership is whole-frame: every non-stroke sibling is a direct, bounded Rect fill. */
     private fun acceptsMixedRootRectFill(draw: DrawNode): Boolean {
@@ -343,7 +357,8 @@ public class W6aLayerPlanCompiler public constructor(
                 is RenderPlanResult.GapOnPromotedScope -> return result
                 is RenderPlanResult.InvalidScene -> return result
             }
-            val frame = W6aLayerGraphConstruction(PlanId("w6a.${selected.sceneCanonicalId.value}"), org.graphiks.math.geometry.SizeI32(selected.target.extent.width, selected.target.extent.height),
+            val frame = W6aLayerGraphConstruction(PlanId("w6a.${selected.sceneCanonicalId.value}" +
+                if (selected.target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED) ".SRGB_ENCODED" else ""), org.graphiks.math.geometry.SizeI32(selected.target.extent.width, selected.target.extent.height),
                 capabilities, budget, selected.occurrences, bindings, selected.scene, runtimeCatalog,
                 logicalColorFormat(selected.target))
             when (val layout = FrameSourceLayoutV4.layeredFrame(frame)) {

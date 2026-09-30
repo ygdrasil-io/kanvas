@@ -105,7 +105,7 @@ public object CompositionAdmissionV1 {
         if (paint.blender != null || paint.colorFilter != null ||
             paint.maskFilter != null || paint.pathEffect != null || paint.imageFilter != null ||
             node.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty || node.resource != null
-        ) return diagnostic("source", index, "Encoded composition admits only direct solid paint sources at this stage.")
+        ) return diagnostic("source", index, "Encoded composition admits only direct solid or LinearGradient paint sources at this stage.")
         val shader = paint.shader ?: return null
         val gradient = shader as? MaterialNode.LinearGradient
             ?: return diagnostic("source", index, "Encoded composition admits only solid or LinearGradient paint sources.")
@@ -124,6 +124,11 @@ public object CompositionAdmissionV1 {
             node.coverage != CoverageRequest.HARD_EDGE || !node.transform.isIdentityOrIntegerTranslation() ||
             !node.clip.isHardIntegerRectOrEmpty() || patch.sampling != org.graphiks.kanvas.render.ir.ImageSampling.Nearest
         ) return diagnostic("geometry", index, "Encoded composition image requires a non-AA integer nearest 1:1 patch.")
+        val source = patch.copySource()
+        val destination = patch.copyDestination()
+        if (!source.isIntegerRect() || !destination.isIntegerRect() ||
+            source.width() != destination.width() || source.height() != destination.height()
+        ) return diagnostic("geometry", index, "Encoded composition image requires integer equal-extent source and destination.")
         if (!node.blend.isSrcOver() || paint?.blendMode?.let { it != BlendMode.SRC_OVER } == true ||
             node.operationBlendMode != null) {
             return diagnostic("blend", index, "Encoded composition image requires SrcOver blending.")
@@ -139,11 +144,6 @@ public object CompositionAdmissionV1 {
             pixels.colorSpace != org.graphiks.kanvas.color.ColorSpace.SRGB ||
             pixels.premultiplication != ImagePremultiplicationV1.SOURCE_SPACE
         ) return diagnostic("image", index, "Encoded composition image requires SOURCE_SPACE PREMUL SRGB RGBA/BGRA pixels.")
-        val source = patch.copySource()
-        val destination = patch.copyDestination()
-        if (!source.isIntegerRect() || !destination.isIntegerRect() ||
-            source.width() != destination.width() || source.height() != destination.height()
-        ) return diagnostic("geometry", index, "Encoded composition image requires integer equal-extent source and destination.")
         return null
     }
 

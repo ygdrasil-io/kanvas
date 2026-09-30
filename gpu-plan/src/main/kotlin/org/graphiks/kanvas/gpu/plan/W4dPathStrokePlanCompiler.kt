@@ -487,7 +487,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
         val fields = listOf(
             "w4d-plan-w5a-material-v2", sceneIdentity.value, selected.target.canonicalId.value,
             caps.deviceGeneration.toString(), caps.maxTextureDimension2D.toString(), caps.maxBufferSizeBytes.toString(),
-            caps.copyBytesPerRowAlignment.toString(), caps.supportedFormats().map { it.name }.sorted().joinToString(","),
+            caps.copyBytesPerRowAlignment.toString(), caps.identitySupportedFormats(selected.target).map { it.name }.sorted().joinToString(","),
             caps.minUniformBufferOffsetAlignment.toString(), caps.maxDynamicUniformBuffersPerPipelineLayout.toString(),
             caps.supportedOperations().map { it.name }.sorted().joinToString(","),
             caps.bufferAllocationPolicy.vertexFloorBytes.toString(), caps.bufferAllocationPolicy.indexFloorBytes.toString(),
@@ -504,7 +504,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
             strokePolicyF64.limitsI32.maxEmittedIndexCountPerFrameI32.toString(),
             strokePolicyF64.limitsI64.maxSnapshotByteCountPerPathI64.toString(),
             strokePolicyF64.limitsI64.maxSnapshotByteCountPerFrameI64.toString(),
-        ) + planCapabilityIdentityFacts(caps)
+        ) + planCapabilityIdentityFacts(caps, selected.target)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { value ->
             val bytes = value.encodeToByteArray()

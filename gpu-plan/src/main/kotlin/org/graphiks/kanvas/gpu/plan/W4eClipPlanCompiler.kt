@@ -1359,7 +1359,7 @@ public class W4eClipPlanCompiler internal constructor(
         val fields = listOf(
             "w4e-clip-plan-v2-material-v1", sceneIdentity.value, selected.target.canonicalId.value,
             if (aa) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID, budget.maxFrameLocalBytes.toString(),
-        ) + selected.stacks.map { it.identity } + planCapabilityIdentityFacts(capabilities)
+        ) + selected.stacks.map { it.identity } + planCapabilityIdentityFacts(capabilities, selected.target)
         fields.forEach { field ->
             val bytes = field.encodeToByteArray()
             digest.update(bytes.size.toString().encodeToByteArray()); digest.update(0); digest.update(bytes); digest.update(0)
