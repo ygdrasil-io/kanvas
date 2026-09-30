@@ -41,6 +41,16 @@ internal object WgslFloatEnvelopeV1Oracle {
 
     fun clearAttachment(): AttachmentState = AttachmentState(Array(4) { Interval.ZERO })
 
+    /** Narrow test-oracle accessors for fixed-function UNORM store and sampling. */
+    internal fun unormStoreCodes(value: Interval): Set<Int> = codesFor(value)
+    internal fun srgbStoreCodes(value: Interval): Set<Int> = codesForSrgbAttachment(attachmentEncode(value))
+    internal fun unormSample(codes: Set<Int>): Interval = Interval.input(codes.minOrNull()!! / 255f)
+        .hull(Interval.input(codes.maxOrNull()!! / 255f))
+    internal fun unormCodeEnvelope(codes: Set<Int>): Interval = hull(*codes.map { imageUnorm8(it) }.toTypedArray())
+    internal fun decodeStoredCodes(codes: List<Set<Int>>): Array<Interval> = decodeStoredAttachment(codes)
+    internal fun nativeSrcOver(source: Array<Interval>, destination: Array<Interval>): Array<Interval> =
+        Array(4) { channel -> blendAndCoverage(source[channel], source[3], destination[channel], Interval.ONE) }
+
     /** Exclusion proof only: deliberately not a DrawResult and never admitted by assertAdmits. */
     class ConservativeExclusion internal constructor(internal val channels: List<Set<Int>>)
 

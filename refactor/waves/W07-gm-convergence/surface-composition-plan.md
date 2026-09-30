@@ -19,7 +19,8 @@ Base `b1ba6d0f3622d8cab8f41605ddf6e3f404ddf8be`, parent PR2421.
 - Aucun GM/adaptateur, PNG de référence, seuil, exclusion ou score historique modifié.
 - Pas de test d'infrastructure ajouté : Surface/Picture publiques, pixels natifs, refus/sentinel/récupération, deuxième rendu.
 - Géométrie dans math ; nomenclature I/F32/64 pour ses valeurs et types.
-- Pas de plafond augmenté, epsilon ajouté, enveloppe élargie, seal/authentification assoupli ou formule WGSL indépendante de la preuve.
+- Pas de plafond augmenté, epsilon ajouté, borne primitive élargie, seal/authentification assoupli ou formule WGSL indépendante de la preuve.
+- Tests W7 de composition : type CompositionEnvelope distinct avec ensembles complets et trace des stores, acceptation moins précise approuvée ; DrawResult.Bounded et gates historiques inchangés, discriminants calculés avant GPU.
 - CompositionDomain.LINEAR est le défaut ; SRGB_ENCODED explicite est porté par la cible, pas par SceneSnapshot/Picture.
 - PixelFormat est exclusivement l'ordre des octets publics, pas un choix de domaine.
 - Un seul runtime Gradle/GPU, tests bornés240s, --offline --no-daemon --no-build-cache ; native133 n'est pas GREEN.
@@ -27,6 +28,37 @@ Base `b1ba6d0f3622d8cab8f41605ddf6e3f404ddf8be`, parent PR2421.
 - Documents durables dans refactor, PR draft empilée, aucun merge/clôture W7.
 
 ## Review Focus
+
+### Amendement approuvé après la review Task1 — 30 septembre 2026
+
+La sélection initiale44/44 a terminé normalement, mais la review a invalidé
+son oracle : `quantize(midpoint)` supprimait les bornes. La correction utilise
+les conversions natives store/sample et la fermeture SrcOver existantes.
+Le préflight CPU-only `FIX1_CPU_PREFLIGHT` (1/1, exits0, aucun Surface/GPU)
+montre que l'incertitude accumulée dépasse deux codes adjacents, même sur
+le témoin prévu rougeA128/bleuA64 avec restore128/255.
+
+Astra relève une obstruction indépendante de la corrélation alpha : dans
+l'abstraction des arrondis autorisés, les alpha stockés127/129 peuvent donner
+159/161 après le second enfant, puis les verts96/94 au restore255 sur blanc.
+Le critère historique de deux codes adjacents ne contient pas ces deux
+possibilités. Cela n'affirme pas que tout GPU les produit.
+
+**Amendement approuvé par la carte blanche W7 de l'utilisateur :** un type d'enveloppe accumulée
+distinct pour les seuls tests de composition, calculé avant rendu avec trace
+des stores et assertions d'appartenance aux ensembles complets. Les bornes
+des primitives, preuves/admission produit, tests historiques et seuils GM
+restent inchangés. L'acceptation de ces tests est néanmoins moins précise.
+Exiger des enveloppes disjointes contre mauvais domaine/opacité/canaux ;
+déclarer toute non-détection d'un store omis si leurs enveloppes se recouvrent.
+Ni type large baptisé `DrawResult.Bounded`, ni tolérance choisie d'après GPU.
+
+Cet amendement autorise la reprise de la correction et s'applique aussi à
+l'oracle de Task2. Les six findings de review restent sous correction ;
+Task1 n'est pas close et Task2 n'a pas commencé. Pas de nouvelle
+PR de composition ni de revendication de gain GM.
+
+### Points de contrôle initiaux
 
 1. Domaine perdu au ré-emballage d'une occurrence enfant : witness layer + restore alpha dans Task1.
 2. Snapshot mal étiqueté ou canaux BGRA changés : full/subset/copy/Picture/replay croisé coloré dans Task1.
@@ -60,10 +92,10 @@ Base `b1ba6d0f3622d8cab8f41605ddf6e3f404ddf8be`, parent PR2421.
 - Produces `PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL`; target resolution maps domain↔logical/native format without guessing from PixelFormat.
 - Produces `ColorSourceProofV1.compositionDomain`; private issuance, source deferred construction and native joins bind/check it. LINEAR identities unchanged; encoded identities cannot alias.
 - Consumes existing SOURCE_SPACE/PREMUL/SRGB image semantics; only DrawOrigin.IMAGE + GeometryNode.ImagePatch, integer source/destination of equal extent, nearest1:1 and admitted CTM. ImageShader/nine/lattice/atlas excluded; no new archive version or image representation enum member.
-- Tests produce oracle helpers using existing Interval/DrawResult primitives: `solid(color: ColorARGB, domain: CompositionDomain): Array<Interval>`, `srcOver(source: Array<Interval>, destination: Array<Interval>): Array<Interval>`, `store(value: Array<Interval>, domain: CompositionDomain): DrawResult`, and `storedSample(value: DrawResult, domain: CompositionDomain): Array<Interval>`. These helpers model each actual UNORM store, no production evaluator.
+- Tests produce oracle helpers using existing Interval primitives: `solid(color: ColorARGB, domain: CompositionDomain): Array<Interval>`, `srcOver(source: Array<Interval>, destination: Array<Interval>): Array<Interval>`, `store(value: Array<Interval>, domain: CompositionDomain): CompositionEnvelope`, and `storedSample(value: CompositionEnvelope, domain: CompositionDomain): Array<Interval>`. The distinct test-only envelope retains complete channel sets and store trace; these helpers model each actual UNORM store, no production evaluator. Historical DrawResult.Bounded semantics remain unchanged. Snapshot copies compare exact bytes to the independently validated producer; replay expectations use fixed input bytes before replay.
 - Intermediate Task1 intentionally still refuses gradients in the encoded domain; Task2 enables them after this task review.
 
-- [ ] **Step 1: Public RED and oracle preflight.** Add API transport minimally with default historical behavior, without claiming a capability. Write `encodedSolidSrcOverDiffersFromLinearAndIgnoresByteLayout`: 1×1 white then black `ColorARGB.of(128,0,0,0)`, non-AA/SrcOver, both domains and both PixelFormats. Compute all expected intervals before render; encoded center is 127, linear center187. Require bounded, disjoint oracle RGB sets; do not pick tolerances from actual output. Assert all channels through `W5fSurfacePixelFixtures.assertNativePixels`, Render/Readback, and identical second render. Run this test to a genuine behavior/refusal RED (compile failure is not RED).
+- [ ] **Step 1: Public RED and oracle preflight.** Add API transport minimally with default historical behavior, without claiming a capability. Write `encodedSolidSrcOverDiffersFromLinearAndIgnoresByteLayout`: 1×1 white then black `ColorARGB.of(128,0,0,0)`, non-AA/SrcOver, both domains and both PixelFormats. Compute all expected intervals before render; encoded center is 127, linear center187. Require complete, disjoint oracle RGB sets; do not pick tolerances from actual output. Assert all channels through a W7 CompositionEnvelope membership helper, Render/Readback, and identical second render. Do not broaden W5fSurfacePixelFixtures' historical acceptance. Run this test to a genuine behavior/refusal RED (compile failure is not RED).
 
 - [ ] **Step 2: Target/domain source-to-native path.** Resolve AUTO at the Surface boundary; reject target contradictions before fallback. Apply CompositionAdmissionV1 to the complete encoded scene before general compiler selection and resource acquisition. Carry domain through target, candidate, deferred source and occurrence child target reconstruction. Parameterize existing W3/solid/image proof graphs and plain W6 layer joins, logical/native capability, materialization/cache and output; keep excluded recipes closed. Parameterize the separate W3 recognizeDrawColor path, preserving its identity-only CTM constraint. Carry the image target through W5e's source-deferred projection; admission must distinguish ImagePatch from Rect FILL without admitting other image origins. Encoded image loading retains swizzle, coordinate/texel guards and ZERO_ALPHA_GUARD; omit only unpremultiply/EOTF/repremultiply. Native RGBA8Unorm receives encoded-premul values, not linear values with a changed format. Every accepted source/target domain pair is authenticated.
 
@@ -92,7 +124,7 @@ Base `b1ba6d0f3622d8cab8f41605ddf6e3f404ddf8be`, parent PR2421.
 - Produces sRGB/CLAMP LinearGradient in SRGB_ENCODED, both existing GradientAlphaModes, directly `C_srgb * alpha`; no EOTF round trip and no new interpolation semantics.
 - Oracle adds `gradient(left: ColorARGB, right: ColorARGB, tF32: Float, alphaMode: GradientAlphaMode, domain: CompositionDomain): Array<Interval>` using independent published interpolation equations and existing directed primitives. Source-only formula is then fed to Task1's SrcOver/store helpers.
 
-- [ ] **Step 1: RED.** `gradientAlphaModeIsIndependentFromCompositionDomain` uses t=.5, stops white255→black0 alpha0, then red A128→blue A64; all two alpha modes × two domains. Compute and require bounded expected outputs before GPU, with white destination; assert disjoint relevant alternatives. A valid but unsupported encoded gradient must RED before enabling it. If the existing envelope cannot bound a proposed fixture, report the CPU evidence before substituting a finite a-priori witness; never widen it.
+- [ ] **Step 1: RED.** `gradientAlphaModeIsIndependentFromCompositionDomain` uses t=.5, stops white255→black0 alpha0, then red A128→blue A64; all two alpha modes × two domains. Compute complete CompositionEnvelope outputs before GPU, with white destination; assert disjoint relevant alternatives per the amended spec. A valid but unsupported encoded gradient must RED before enabling it. If an alternative overlaps, report CPU evidence before substituting a finite a-priori discriminator; never widen primitive bounds or fit an expectation to native pixels.
 - [ ] **Step 2: Source graph and identities.** Carry the target domain into the existing prepared definition and graph compiler; select encoded straight/premul output before domain transfer. Keep physical stop/slab preparation independent of execution domain; include domain in execution/proof/native identities. Domain guard before one-stop collapse and after wrapper unwrapping; reject unadmitted interpolation/tile/source wrappers instead of falling to legacy.
 - [ ] **Step 3: Integration witnesses.** `gradientDomainSurvivesLayerPictureAndRepeatedTargets` reuses the same gradient in direct root, one plain layer, memory and wire Picture; validates both alpha modes, paint opacity, mutated original stop list after recording, second render and alternating Surface domains. `encodedGradientHardStopsDegenerateAndZeroAlpha` covers equal-position stops, last-stop selection for degenerate CLAMP, both-zero and alpha1 endpoints. Negative LINEAR interpolation/REPEAT/MIRROR/sweep/radial/composed shader cases retain transactionality. No new AA/stroke support.
 - [ ] **Step 4: Final targeted GREEN and commit.** Run the entire Task1 selection plus updated W7SurfaceCompositionPixelTest; verify no omitted prior identity, every XML/exit, budget/refusal recovery. Commit changes; scoped task review, correction/re-review if needed.

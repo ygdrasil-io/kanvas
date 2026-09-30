@@ -29,40 +29,48 @@ import org.graphiks.math.matrix.Matrix3x3F32
 public object CompositionAdmissionV1 {
     public fun validate(scene: SceneSnapshot, target: RenderTargetDescriptor): List<RenderDiagnostic> {
         if (target.compositionDomain != CompositionDomain.SRGB_ENCODED) return emptyList()
+        topologyRefusal(scene)?.let { return listOf(it) }
+        scene.forEachIndexed { index, command ->
+            when (command) {
+                is SceneCommand.BeginLayer -> plainLayerRefusal(command, index)?.let { return listOf(it) }
+                SceneCommand.EndLayer -> Unit
+                else -> refusal(command, index)?.let { return listOf(it) }
+            }
+        }
+        return emptyList()
+    }
+
+    /** Layer topology precedes command-order refusal in the encoded contract. */
+    private fun topologyRefusal(scene: SceneSnapshot): RenderDiagnostic? {
         var layerDepthI32 = 0
         var layerCountI32 = 0
         scene.forEachIndexed { index, command ->
             when (command) {
                 is SceneCommand.BeginLayer -> {
                     if (layerDepthI32 != 0 || layerCountI32 != 0) {
-                        return listOf(diagnostic("layer", index, "Encoded composition admits exactly one non-nested plain layer."))
+                        return diagnostic("layer", index, "Encoded composition admits exactly one non-nested plain layer.")
                     }
-                    plainLayerRefusal(command, index)?.let { return listOf(it) }
                     layerDepthI32 = 1
                     layerCountI32 = 1
-                    return@forEachIndexed
                 }
                 SceneCommand.EndLayer -> {
                     if (layerDepthI32 != 1) {
-                        return listOf(diagnostic("layer", index, "Encoded composition layer boundaries are unbalanced."))
+                        return diagnostic("layer", index, "Encoded composition layer boundaries are unbalanced.")
                     }
                     layerDepthI32 = 0
-                    return@forEachIndexed
                 }
                 else -> Unit
             }
-            refusal(command, index)?.let { return listOf(it) }
         }
-        if (layerDepthI32 != 0) return listOf(diagnostic("layer", -1, "Encoded composition layer is not restored."))
-        return emptyList()
+        return if (layerDepthI32 != 0) diagnostic("layer", -1, "Encoded composition layer is not restored.") else null
     }
 
     private fun refusal(command: SceneCommand, index: Int): RenderDiagnostic? = when (command) {
         is SceneCommand.Draw -> drawRefusal(command, index)
         is SceneCommand.DrawColor -> when {
-            command.mode != BlendMode.SRC_OVER -> diagnostic("blend", index, "drawColor requires SrcOver.")
             !command.transform.isIdentity() -> diagnostic("geometry", index, "drawColor requires an identity transform.")
             !command.clip.isHardIntegerRectOrEmpty() -> diagnostic("geometry", index, "drawColor requires an empty or hard integer rectangle clip.")
+            command.mode != BlendMode.SRC_OVER -> diagnostic("blend", index, "drawColor requires SrcOver.")
             else -> null
         }
         is SceneCommand.BeginLayer, is SceneCommand.EndLayer ->
@@ -134,6 +142,11 @@ public object CompositionAdmissionV1 {
     private fun plainLayerRefusal(command: SceneCommand.BeginLayer, index: Int): RenderDiagnostic? {
         val descriptor = command.descriptor
         val paint = descriptor.paint
+        val material = descriptor.material
+        if (descriptor.initWithPrevious || descriptor.backdrop != org.graphiks.kanvas.render.ir.EffectStack.Empty ||
+            descriptor.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty ||
+            (material != null && (material !is org.graphiks.kanvas.render.ir.MaterialNode.Solid || material.color != paint?.color))
+        ) return diagnostic("layer", index, "Encoded composition admits only a plain initialized layer restore.")
         if (paint?.shader != null || paint?.blender != null ||
             paint?.colorFilter != null || paint?.maskFilter != null || paint?.pathEffect != null ||
             paint?.imageFilter != null || !descriptor.blend.isSrcOver()
@@ -144,6 +157,9 @@ public object CompositionAdmissionV1 {
         }
         if (!descriptor.transform.isIdentityOrIntegerTranslation()) {
             return diagnostic("geometry", index, "Encoded composition layer transform must be identity or an integer translation.")
+        }
+        if (!descriptor.clip.isHardIntegerRectOrEmpty()) {
+            return diagnostic("geometry", index, "Encoded composition layer clip must be empty or a hard integer rectangle.")
         }
         val clip = descriptor.compositeClip
         if (clip != null && !clip.isHardIntegerRectOrEmpty()) {

@@ -128,7 +128,9 @@ promis identiques au bit près lorsqu'un store supplémentaire arrondit.
 `ColorSourceProofV1.compositionDomain` est authentifié, et toute jonction
 source/blend/target vérifie l'égalité de domaine. Les valeurs identiques ne
 permettent pas d'échanger les owners/certificats. Pas de seconde formule WGSL,
-epsilon, plafond nouveau, enveloppe élargie ni désactivation de seal.
+epsilon, plafond nouveau, borne primitive élargie ni désactivation de seal.
+L'amendement de validation ci-dessous concerne seulement l'acceptation des
+tests d'intégration W7 ; il ne change pas les preuves du moteur.
 
 ## Snapshots et replay
 
@@ -149,6 +151,26 @@ sans pixels. Aucun rendu natif caché dans ce mode.
 
 Tests Surface/Picture uniquement, oracle indépendant avec les primitives
 d'enveloppe existantes, bornes calculées avant rendu. Cas minimum :
+
+Amendement approuvé le 30 septembre 2026 par la carte blanche W7, après
+présentation de sa moindre précision : les compositions multi-stores utilisent
+un type de test distinct `CompositionEnvelope`, avec ensembles complets par
+canal et trace de chaque store. Il n'est pas un `DrawResult.Bounded` historique
+(au plus deux codes adjacents). Les assertions vérifient l'appartenance aux
+ensembles calculés avant GPU, sans midpoint ni tolérance empirique. Les bornes
+des primitives, gates historiques, preuves produit et seuils GM restent intacts.
+Les tests W7 directs peuvent utiliser ce même type, sans supprimer leurs
+exigences de discrimination.
+
+Avant GPU, les témoins choisis doivent séparer le bon résultat de ceux obtenus
+avec mauvais domaine, opacité de restore omise/doublée ou inversion R/B
+(au moins un canal disjoint par alternative). Si l'omission d'un store
+intermédiaire n'est pas séparée, déclarer cette limite : répétition et trace
+ne prouvent pas sa détection. Cette validation fonctionnelle n'établit pas
+une parité Skia à un code près. Pour les snapshots, valider d'abord le
+producteur avec son enveloppe ; copie/subset/layout peuvent ensuite vérifier
+exactement les bytes du producteur. L'oracle d'un replay peut prendre ces bytes
+validés comme entrée fixe avant le replay, jamais son résultat comme attendu.
 
 1. Noir alpha128/255 sur blanc : 127 environ en encodé, 187 en linéaire ;
    répétition et alternance des domaines, Render/Readback natifs.

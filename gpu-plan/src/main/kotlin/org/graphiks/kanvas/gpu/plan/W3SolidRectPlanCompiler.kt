@@ -493,7 +493,6 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
         val fields = listOf(
             capabilityId, sceneCanonicalId.value, target.extent.width.toString(), target.extent.height.toString(),
             target.colorSpace.name, target.colorSpace.transferFunction.name, target.colorSpace.gamut.name,
-            target.compositionDomain.name,
             capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(),
             capabilities.copyBytesPerRowAlignment.toString(), capabilities.supportedFormats().map { it.name }.sorted().joinToString(","),
             capabilities.minUniformBufferOffsetAlignment.toString(), capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(),
@@ -501,7 +500,8 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
             capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
             capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name,
             budget.maxFrameLocalBytes.toString(),
-        ) + planCapabilityIdentityFacts(capabilities)
+        ) + if (target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED)
+            listOf(target.compositionDomain.name) else emptyList<String>() + planCapabilityIdentityFacts(capabilities)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { field ->
             val bytes = field.encodeToByteArray()

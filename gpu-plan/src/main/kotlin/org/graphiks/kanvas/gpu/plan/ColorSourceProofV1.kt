@@ -177,7 +177,8 @@ public class ColorSourceProofV1 private constructor(
                 is ImageMaterialProgramV3.ColorV3 -> program.compositionDomain
                 else -> CompositionDomain.LINEAR
             }
-            val identity = "color-source-proof-v1:$source:${coordinates.identityV4()}:${compositionDomain.name}:" +
+            val identity = "color-source-proof-v1:$source:${coordinates.identityV4()}:" +
+                (if (compositionDomain == CompositionDomain.SRGB_ENCODED) "${compositionDomain.name}:" else "") +
                 listOf(boundsF32.left, boundsF32.top, boundsF32.right, boundsF32.bottom).joinToString { it.toRawBits().toString() } +
                 ":${graph.canonicalIdentity}:${words.entries.joinToString { "${it.key}=${it.value}" }}:${tables.entries.joinToString { "${it.key}=${it.value.canonicalId.value}" }}:${proof.map { Triple(it.taken,it.left,it.right) }}" +
                 if (integers.isEmpty() && stops == null) "" else ":u32=$integers:stops=${stops?.canonicalIdentity}"

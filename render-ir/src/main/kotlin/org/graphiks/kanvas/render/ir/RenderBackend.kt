@@ -22,7 +22,8 @@ public data class RenderTargetDescriptor(
     init { require(label == null || label.isNotBlank()) { "RenderTargetDescriptor.label must not be blank" } }
     override val canonicalId: CanonicalId = canonicalId(
         "render-target-v1", extent.canonicalId.value, colorSpace.name,
-        colorSpace.transferFunction.name, colorSpace.gamut.name, label.orEmpty(), compositionDomain.name,
+        colorSpace.transferFunction.name, colorSpace.gamut.name, label.orEmpty(),
+        *if (compositionDomain == CompositionDomain.SRGB_ENCODED) arrayOf(compositionDomain.name) else emptyArray(),
     )
 }
 

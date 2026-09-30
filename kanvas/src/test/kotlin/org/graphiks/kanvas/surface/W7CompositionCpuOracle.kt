@@ -2,8 +2,6 @@
 
 package org.graphiks.kanvas.surface
 
-import java.math.BigDecimal
-import java.math.RoundingMode
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.render.ir.CompositionDomain
@@ -12,7 +10,33 @@ import org.graphiks.math.color.ColorARGB
 /** Independent one-pixel composition oracle for the bounded W7 Surface contract. */
 internal object W7CompositionCpuOracle {
     private val zero = WgslFloatEnvelopeV1Oracle.Interval.ZERO
-    private val one = WgslFloatEnvelopeV1Oracle.Interval.ONE
+
+    /**
+     * W7's multi-target composition has one fixed-function store per target
+     * write.  Those independent stores are deliberately not squeezed through
+     * W5f's historical two-adjacent-code [DrawResult.Bounded] gate: this test
+     * only envelope retains every code admitted by the existing primitives.
+     */
+    internal class CompositionEnvelope private constructor(
+        internal val channels: List<Set<Int>>,
+        internal val storeTrace: List<List<Set<Int>>>,
+    ) {
+        init {
+            require(channels.size == 4)
+            require(channels.all { it.isNotEmpty() && it.all { code -> code in 0..255 } })
+            require(storeTrace.isNotEmpty())
+        }
+
+        internal fun withStoreTrace(trace: List<List<Set<Int>>>): CompositionEnvelope =
+            CompositionEnvelope(channels, trace)
+
+        companion object {
+            internal fun stored(codes: List<Set<Int>>): CompositionEnvelope {
+                val copied = codes.map { it.toSet() }
+                return CompositionEnvelope(copied, listOf(copied))
+            }
+        }
+    }
 
     fun solid(color: ColorARGB, domain: CompositionDomain): Array<WgslFloatEnvelopeV1Oracle.Interval> {
         val alpha = WgslFloatEnvelopeV1Oracle.Interval.input(color.alpha / 255f)
@@ -31,10 +55,7 @@ internal object W7CompositionCpuOracle {
         source: Array<WgslFloatEnvelopeV1Oracle.Interval>,
         destination: Array<WgslFloatEnvelopeV1Oracle.Interval>,
     ): Array<WgslFloatEnvelopeV1Oracle.Interval> {
-        val inverseAlpha = WgslFloatEnvelopeV1Oracle.gradientSubtract(one, source[3])
-        return Array(4) { channel -> WgslFloatEnvelopeV1Oracle.gradientAdd(
-            source[channel], WgslFloatEnvelopeV1Oracle.gradientMultiply(destination[channel], inverseAlpha),
-        ) }
+        return WgslFloatEnvelopeV1Oracle.nativeSrcOver(source, destination)
     }
 
     /** Restore opacity scales premultiplied RGB and alpha exactly once before SrcOver. */
@@ -50,27 +71,23 @@ internal object W7CompositionCpuOracle {
     fun store(
         value: Array<WgslFloatEnvelopeV1Oracle.Interval>,
         domain: CompositionDomain,
-    ): WgslFloatEnvelopeV1Oracle.DrawResult {
-        val codes = value.mapIndexed { channel, component -> setOf(quantize(
-            if (channel == 3 || domain == CompositionDomain.SRGB_ENCODED) component
-            else WgslFloatEnvelopeV1Oracle.filterLinearToSrgb(component),
-        )) }
-        return WgslFloatEnvelopeV1Oracle.DrawResult.Bounded(
-            codes,
-            WgslFloatEnvelopeV1Oracle.AttachmentState(Array(4) { zero }),
-        )
+    ): CompositionEnvelope {
+        val codes = value.mapIndexed { channel, component ->
+            if (channel == 3 || domain == CompositionDomain.SRGB_ENCODED)
+                WgslFloatEnvelopeV1Oracle.unormStoreCodes(component)
+            else WgslFloatEnvelopeV1Oracle.srgbStoreCodes(component)
+        }
+        return CompositionEnvelope.stored(codes)
     }
 
     fun storedSample(
-        value: WgslFloatEnvelopeV1Oracle.DrawResult,
+        value: CompositionEnvelope,
         domain: CompositionDomain,
     ): Array<WgslFloatEnvelopeV1Oracle.Interval> {
-        val bounded = value as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded
+        val linear = WgslFloatEnvelopeV1Oracle.decodeStoredCodes(value.channels)
         return Array(4) { channel ->
-            val code = bounded.channels[channel].single()
-            val encoded = WgslFloatEnvelopeV1Oracle.Interval.input(code / 255f)
-            if (channel == 3 || domain == CompositionDomain.SRGB_ENCODED) encoded
-            else WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(encoded)
+            if (domain == CompositionDomain.LINEAR) linear[channel]
+            else WgslFloatEnvelopeV1Oracle.unormCodeEnvelope(value.channels[channel])
         }
     }
 
@@ -94,18 +111,25 @@ internal object W7CompositionCpuOracle {
         }
     }
 
-    fun swizzle(value: WgslFloatEnvelopeV1Oracle.DrawResult, format: PixelFormat): WgslFloatEnvelopeV1Oracle.DrawResult {
+    fun trace(vararg stores: CompositionEnvelope): CompositionEnvelope {
+        require(stores.isNotEmpty())
+        return stores.last().withStoreTrace(stores.flatMap { it.storeTrace })
+    }
+
+    fun swizzle(value: CompositionEnvelope, format: PixelFormat): CompositionEnvelope {
         if (format == PixelFormat.RGBA8) return value
-        val bounded = value as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded
-        return WgslFloatEnvelopeV1Oracle.DrawResult.Bounded(
-            listOf(bounded.channels[2], bounded.channels[1], bounded.channels[0], bounded.channels[3]),
-            WgslFloatEnvelopeV1Oracle.AttachmentState(Array(4) { zero }),
+        val order = listOf(2, 1, 0, 3)
+        return CompositionEnvelope.stored(order.map(value.channels::get)).withStoreTrace(
+            value.storeTrace.map { store -> order.map(store::get) },
         )
     }
 
-    private fun quantize(value: WgslFloatEnvelopeV1Oracle.Interval): Int {
-        val midpoint = value.lower.add(value.upper).divide(BigDecimal.TWO)
-            .coerceIn(BigDecimal.ZERO, BigDecimal.ONE)
-        return midpoint.multiply(BigDecimal(255)).setScale(0, RoundingMode.HALF_UP).intValueExact()
+    fun assertAdmits(expected: CompositionEnvelope, observed: UByteArray) {
+        require(observed.size == 4)
+        expected.channels.forEachIndexed { channel, codes ->
+            require(observed[channel].toInt() in codes) {
+                "channel=$channel observed=${observed[channel]} expected=$codes trace=${expected.storeTrace}"
+            }
+        }
     }
 }

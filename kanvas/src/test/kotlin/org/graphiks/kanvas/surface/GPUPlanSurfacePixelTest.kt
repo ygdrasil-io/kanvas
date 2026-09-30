@@ -8,6 +8,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 import org.graphiks.kanvas.surface.gpu.GPUPlanSurfaceTerminalException
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
@@ -2751,11 +2752,16 @@ class GPUPlanSurfacePixelTest {
                 drawColor(ColorARGB.of(128, 255, 0, 0), BlendMode.SRC)
             }
 
-            assertPixelsEqual(
+            val expected =
                 if (format == PixelFormat.RGBA8) ubyteArrayOf(188u, 0u, 0u, 128u)
-                else ubyteArrayOf(0u, 0u, 188u, 128u),
-                surface.render().pixels,
-            )
+                else ubyteArrayOf(0u, 0u, 188u, 128u)
+            val first = surface.render()
+            assertPixelsEqual(expected, first.pixels)
+            assertEquals(ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL, first.premultiplication)
+            val second = surface.render()
+            assertPixelsEqual(expected, second.pixels)
+            assertEquals(first.premultiplication, second.premultiplication)
+            assertContentEquals(first.pixels, second.pixels)
         }
     }
 
