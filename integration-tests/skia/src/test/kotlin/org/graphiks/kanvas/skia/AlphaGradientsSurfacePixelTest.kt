@@ -68,12 +68,17 @@ class AlphaGradientsSurfacePixelTest {
         }
         assertEquals("w3.budget.frame_local_exceeded", budgetFailure.message.orEmpty().substringBefore(':'))
         val recovered = SkiaGmRenderer.render(encoded)
-        assertPixelNear(recovered.rgba, recovered.width, 0, 0, 127, 2)
+        assertTrue(recovered.rgba.contentEquals(encodedFirst.rgba), "budget recovery differs from healthy encoded bytes")
+        assertEquals(0, recovered.refusedCount, recovered.diagnostics.toString())
+        assertTrue(recovered.diagnostics.isEmpty(), recovered.diagnostics.toString())
     }
 
     @Test
     fun encodedUnsupportedDrawRefusesAcrossHarnessEntriesAndRecovers() {
         GpuAvailability.requireWebGpu()
+        val healthyGm = EncodedCompositionProbeGm("encoded-healthy", antiAlias = false)
+        val healthyBeforeUnsupported = SkiaGmRenderer.render(healthyGm)
+        assertPixelNear(healthyBeforeUnsupported.rgba, healthyBeforeUnsupported.width, 0, 0, 127, 2)
         val unsupported = EncodedCompositionProbeGm("encoded-aa-unsupported", antiAlias = true)
         val renderFailure = assertThrows<IllegalStateException> { SkiaGmRenderer.render(unsupported) }
         assertEquals("unsupported.surface.composition.geometry", renderFailure.message.orEmpty().substringBefore(':'))
@@ -89,8 +94,10 @@ class AlphaGradientsSurfacePixelTest {
         assertEquals("render-failure", evidence.route)
         assertEquals("unsupported.surface.composition.geometry", evidence.diagnostics.single().substringBefore(':'))
 
-        val healthy = SkiaGmRenderer.render(EncodedCompositionProbeGm("encoded-healthy", antiAlias = false))
-        assertPixelNear(healthy.rgba, healthy.width, 0, 0, 127, 2)
+        val healthy = SkiaGmRenderer.render(healthyGm)
+        assertTrue(healthy.rgba.contentEquals(healthyBeforeUnsupported.rgba), "unsupported-draw recovery differs from healthy encoded bytes")
+        assertEquals(0, healthy.refusedCount, healthy.diagnostics.toString())
+        assertTrue(healthy.diagnostics.isEmpty(), healthy.diagnostics.toString())
     }
 }
 
