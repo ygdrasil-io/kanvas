@@ -3,10 +3,14 @@
 package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.diagnostic.DiagnosticRunner
+import org.graphiks.kanvas.diagnostic.RunnerInput
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.render.ir.CompositionDomain
+import org.graphiks.kanvas.surface.DebugLevel
 import org.graphiks.kanvas.skia.gm.gradient.AlphaGradientsGm
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.test.ComparisonUtils
 import org.graphiks.kanvas.test.GpuAvailability
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
@@ -15,9 +19,14 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
 import kotlin.math.roundToInt
 
 class AlphaGradientsSurfacePixelTest {
+    @TempDir
+    lateinit var tempDir: File
+
     @AfterEach
     fun disposeSharedBackend() {
         GPUBackendRuntimeFactory.dispose()
@@ -99,6 +108,45 @@ class AlphaGradientsSurfacePixelTest {
         assertEquals(0, healthy.refusedCount, healthy.diagnostics.toString())
         assertTrue(healthy.diagnostics.isEmpty(), healthy.diagnostics.toString())
     }
+
+    @Test
+    fun encodedDiagnosticReplayKeepsPixelsInBothReplayModes() {
+        GpuAvailability.requireWebGpu()
+        val reference = ByteArray(2 * 2 * 4) { 255.toByte() }
+
+        listOf(
+            "sequential" to 0,
+            "checkpoint" to 60,
+        ).forEach { (replayMode, whitePrefixCount) ->
+            val gm = EncodedDiagnosticReplayProbeGm("encoded-diagnostic-$replayMode", whitePrefixCount)
+            val result = SkiaGmRenderer.render(gm)
+            assertWholeImageRgbNear(result.rgba, 127, 2)
+
+            val outputDir = File(tempDir, replayMode).also { it.mkdirs() }
+            val manifest = DiagnosticRunner.run(RunnerInput(
+                gmName = gm.name,
+                minSimilarity = gm.minSimilarity,
+                actualRgba = result.rgba,
+                referenceRgba = reference,
+                width = result.width,
+                height = result.height,
+                tolerance = gm.tolerance,
+                ops = result.ops,
+                dispatchedCount = result.dispatchedCount,
+                refusedCount = result.refusedCount,
+                diagnostics = result.diagnostics,
+                debugLevel = DebugLevel.OP,
+                outputDir = outputDir,
+                renderConfig = RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED),
+            ))
+
+            val suspect = requireNotNull(requireNotNull(manifest.opTrace).ops.lastOrNull { it.afterUrl != null })
+            val before = ComparisonUtils.loadPngAsSrgbRgba(File(outputDir, requireNotNull(suspect.beforeUrl)))
+            val after = ComparisonUtils.loadPngAsSrgbRgba(File(outputDir, requireNotNull(suspect.afterUrl)))
+            assertTrue(before.all { it.toInt() and 255 == 255 }, "$replayMode before PNG was not opaque white")
+            assertWholeImageRgbNear(after, 127, 2)
+        }
+    }
 }
 
 private open class CompositionProbeGm(
@@ -122,6 +170,26 @@ private open class CompositionProbeGm(
 private class EncodedCompositionProbeGm(name: String, antiAlias: Boolean) :
     CompositionProbeGm(name, antiAlias) {
     override val compositionDomain = CompositionDomain.SRGB_ENCODED
+}
+
+private class EncodedDiagnosticReplayProbeGm(
+    override val name: String,
+    private val whitePrefixCount: Int,
+) : SkiaGm {
+    override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.FAST
+    override val minSimilarity = 0.0
+    override val width = 2
+    override val height = 2
+    override val compositionDomain = CompositionDomain.SRGB_ENCODED
+
+    override fun draw(canvas: GmCanvas, width: Int, height: Int) {
+        val bounds = RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())
+        repeat(whitePrefixCount) {
+            canvas.drawRect(bounds, Paint(ColorARGB.of(255, 255, 255, 255), antiAlias = false))
+        }
+        canvas.drawRect(bounds, Paint(ColorARGB.of(128, 0, 0, 0), antiAlias = false))
+    }
 }
 
 private fun independentAlphaGradientsRgba(): ByteArray {
@@ -228,5 +296,17 @@ private fun assertPixelNear(pixels: ByteArray, width: Int, x: Int, y: Int, expec
         val actual = pixels[offset + channel].toInt() and 255
         assertTrue(kotlin.math.abs(actual - expectedRgb) <= tolerance,
             "pixel ($x,$y) channel=$channel expected=$expectedRgb±$tolerance actual=$actual")
+    }
+}
+
+private fun assertWholeImageRgbNear(pixels: ByteArray, expectedRgb: Int, tolerance: Int) {
+    assertEquals(16, pixels.size, "expected complete 2x2 RGBA buffer")
+    for (offset in pixels.indices step 4) {
+        for (channel in 0..2) {
+            val actual = pixels[offset + channel].toInt() and 255
+            assertTrue(kotlin.math.abs(actual - expectedRgb) <= tolerance,
+                "pixel offset=$offset channel=$channel expected=$expectedRgb±$tolerance actual=$actual")
+        }
+        assertEquals(255, pixels[offset + 3].toInt() and 255, "alpha offset=$offset")
     }
 }
