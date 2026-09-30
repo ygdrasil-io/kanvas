@@ -37,10 +37,13 @@ Lot précédent : Rect hairline entier et encodé, renderer `f80d94fb4`, branche
 `codex/w7-encoded-hairline`, draft
 [#2423](https://github.com/ygdrasil-io/kanvas/pull/2423) empilée sur #2422 ;
 mesure terminée et réserves explicites ci-dessous, sans merge.
-Lot courant : port fidèle d'alphagradients et domaine explicite des GM,
+Lot précédent : port fidèle d'alphagradients et domaine explicite des GM,
 code `6259c38d8`, branche `codex/w7-alphagradients-port`, draft
 [#2424](https://github.com/ygdrasil-io/kanvas/pull/2424) empilée sur #2423 ;
 mesure et reviews terminées ci-dessous, sans merge.
+Lot courant : ports fidèles des deux hardstop, code `34e3d4e98`, branche
+`codex/w7-hardstop-ports`, empilée sur #2424 ; mesure et reviews terminées
+ci-dessous, publication draft uniquement.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -63,6 +66,115 @@ de rendu et timeouts éligibles restent au dénominateur.
 
 Les gates W6 relatives à la durée de vie et aux ressources restent suivies.
 Leur fermeture et la proximité visuelle sont deux mesures distinctes.
+
+## Lot ports hardstop fidèles — 30 septembre 2026
+
+[Contrat et plan](hardstop-ports-plan.md),
+[snapshot complet](hardstop-ports-34e3d4e98.json).
+Les deux scènes restent en domaine LINEAR ; aucun moteur, shader, planner,
+adaptateur, preuve numérique, budget ou configuration globale ne change.
+
+`hardstop_gradients` conserve son image 512×512, mais retrouve la disposition
+Skia calculée sur 500×500 : cellules 166×62, rectangles 160×56, marge 3 et
+gradient horizontal de longueur 100. Couleurs, stops et modes CLAMP/REPEAT/
+MIRROR sont inchangés. `hardstop_gradients_many` retrouve les 2N stops par
+bande : bleu à 0, blanc puis bleu à chaque position interne k/N, blanc à 1.
+Le rectangle XYWH(0,1,1000,18) couvre les lignes 1 à 18, et non 1 à 17.
+Les paints des deux ports sont non-AA, comme les sources Skia épinglées à
+`8019e2e0629f3516b9d829737de2553b1d0ecb4a`, relues indépendamment par Astra.
+
+### Preuves et reviews
+
+Le commit `02802171b` porte les deux corrections et les deux tests natifs
+à image entière. Les attentes sont construites avant GPU, à partir de
+données littérales indépendantes du produit : coordonnées/stops F32,
+interpolation Double, sélection continue à droite, traitement des valeurs
+hors CLAMP avant les doubles stops aux extrémités. Tous les pixels sont
+vérifiés, sans retirer les ruptures : fond et alpha exacts, RGB ±2 dans les
+rectangles. Le deuxième rendu doit être byte-identique, sans refus ni
+diagnostic, avec dispatch natif effectif.
+
+RED causal : deux échecs natifs sur les anciens ports, `(164,10)` dans une
+marge de la grille et `(0,1)` dans la première rampe de many. Puis GREEN
+séparés 1/1 et 1/1. Les premiers essais refusés par le sandbox et en échec
+de compilation du test sont archivés séparément, pas comptés comme RED.
+
+Sol approuve conformité et qualité, aucun Critical/Important. Astra confirme
+la fidélité aux deux C++ épinglés et relève un Minor nouveau : le témoin
+interpolé natif `(499,21)` exigeait RGB exact au lieu du ±2 déjà spécifié.
+`34e3d4e98` aligne cette seule assertion au contrat ; l'oracle littéral reste
+exact et l'alpha exact. Contre-relecture Sol : corrigé, sans nouvelle casse.
+Le Minor des avertissements Java/LWJGL/Gradle reste hérité et différé.
+
+Validation après la dernière correction : **9/9 tests, trois classes**,
+toutes les sept identités de baseline conservées, zéro échec/error/skip/
+doublon/runner, processus et wrapper 0. Aucun test d'infrastructure, mock,
+forwarding ou inspection de code source n'est ajouté.
+
+### Résultat mesuré et limites
+
+Code mesuré exactement `34e3d4e980f7dce59260285e6523c002b45ad5cf` :
+
+| GM | Pixels ±2 avant → après | Pixels exactement égaux après | Écart maximal RGBA |
+| --- | --- | --- | --- |
+| hardstop_gradients | 16,11328125 % → **100 %** | 90,472412109375 % | 2, 1, 1, 0 |
+| hardstop_gradients_many | 10,65515 % → **100 %** | 96,382 % | 1, 1, 0, 0 |
+
+SSIM respectifs 0,9999390936 et 0,9999963262 ; 25 et 101 dispatches, aucun
+refus. Les PNG actual/diff ont été inspectés : les marques du diff signalent
+les derniers écarts de 1–2 codes RGB, pas des écarts alpha. Ce résultat est
+un gain du **port fidèle**, sans nouvelle capacité moteur ni preuve de
+parité numérique universelle entre GPU. Les seuils historiques permissifs
+à 0 sont inchangés ; le bilan repose sur les pixels, pas le statut PASS.
+
+Le corpus reste **631 identités / 443 éligibles, 198 rendus et 176 comparés**.
+Les **196 autres anciennes images**, dont alphagradients, sont strictement
+byte-identiques. Aucune perte ni nouveau rendu, aucun changement d'identité,
+de référence/empreinte, dimensions, scope, seuil ou diagnostic. Métadonnées
+de domaines auditées séparément : 630 LINEAR et un SRGB_ENCODED inchangés.
+On passe de 37 à **39 cas ≥99 %**, de 50 à **52 cas ≥95 %**, avec médiane
+73,264678 % contre 72,010742 %. Restent 194 échecs de rendu, 50 de setup,
+14 rendus non comparés, huit dimensions différentes et le timeout vertices.
+
+Les tranches [0,607), [607,608), [608,631) terminent avec sorties Gradle/
+wrapper 0/1/0. Le 1 correspond au timeout interne vertices de 30 s, processus
+de mesure 124 ; aucun wrapper externe ne dépasse sa limite. Ce cas reste
+au dénominateur. La globale historique reste **678 PASS / 40 FAIL /
+1 interrompu / 25 non atteints**, non rejouée et non déclarée verte.
+Les fonts, codecs/décodage externe et jpg-color-cube restent exclus.
+Provenance du générateur PNG historique toujours inconnue ; fidélité aux
+sources et proximité des références sont deux preuves distinctes.
+W7 et les gates W6/W0 restent ouverts, aucune fusion autorisée.
+
+Archives : `/private/tmp/kanvas-w7-hardstop.pVPuxL/`, dont `RED-task1c`,
+`GREEN-grid-task1`, `GREEN-many-task1`, `FINAL-task1`, `FINAL-review-fix`,
+`corpus-*` et `parity/`. Les journaux complets et PNG restent disponibles.
+
+### Arbitrages de ce lot, dans l'ordre
+
+1. Exécuter ce lot borné sous carte blanche, avec un contrat/plan compact et
+   le workflow SDD choisi : risque de reprise réversible des scènes/tests
+   sur une draft, sans nouvel aller-retour d'approbation.
+2. Réparer les ports et conserver LINEAR avant d'envisager le moteur : un
+   écart résiduel peut nécessiter un lot moteur distinct, jamais un ajustement
+   des scores. La provenance des références reste une limite explicite.
+3. Fixer avant GPU un oracle indépendant F32/Double, RGB ±2 et géométrie/
+   alpha exacts : une divergence numérique valide sur un autre GPU peut
+   demander un diagnostic supplémentaire, sans pixels ignorés ni seuil élargi.
+4. Utiliser témoins natifs et corpus borné sans globale ni Runner écrivant
+   les scores : les chemins non ciblés ne sont pas fraîchement exercés ;
+   l'état global rouge/incomplet et les warnings hérités restent visibles.
+
+### Suite sélectionnée : capacités des sources de layers
+
+La prochaine boucle revient aux capacités moteur : 38 premiers refus
+partagent `w6a.layer.unsupported_child`, sans prouver une cause unique.
+La reconnaissance statique de `PlusMergesAA` distingue les triangles AA
+SrcOver à la racine et les enfants AA PLUS dans une layer. Le contrat actuel
+des sources AA n'admet que le fill solide SrcOver sans filtre ; retirer sa
+garde ne créerait pas une sémantique de blend correcte. Isoler cette cause
+sur Surface publique, puis évaluer une extension cohérente avant de mesurer
+ses gains réels. Aucun support PLUS/filtre supplémentaire n'est livré ici.
 
 ## Lot alphagradients fidèle et diagnostic cohérent — 30 septembre 2026
 
@@ -162,7 +274,7 @@ Archives : `/private/tmp/kanvas-w7-alphagradients.QVeKNw/`, dont
    achevant le corpus : un futur cas peut imposer une extension replay,
    offscreen, ABI ou validation baseline ; aucune promesse universelle.
 
-### Prochaine cause sélectionnée : ports hardstop
+### Reconnaissance préalable aux ports hardstop
 
 Reconnaissance read-only, pas encore un gain attribué :
 `hardstop_gradients` utilise localement des cellules170×64 sur512, tandis
