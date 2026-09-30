@@ -169,6 +169,20 @@ class W7GradientAlphaSurfacePixelTest {
     }
 
     @Test fun wrappersAndMixedAaRootPreserveAlphaMode() {
+        val alphaBounds = RectF32.ofLTRB(8f, 0f, 9f, 1f)
+        val alphaLeft = ColorARGB.White
+        val alphaRight = ColorARGB.of(0, 204, 204, 204)
+        val alphaModes = listOf(GradientAlphaMode.STRAIGHT, GradientAlphaMode.PREMULTIPLIED)
+        // Establish that transparent-destination SrcOver separates the modes using only
+        // the independent CPU oracle, before any native render in this test.
+        val alphaExpectations = alphaModes.associateWith { mode ->
+            W5fColorCpuOracle.expectedGradientPixel(ColorSpaceInterpolation.SRGB, alphaLeft, alphaRight,
+                .5f, finalBlend = BlendMode.SRC_OVER, alphaMode = mode)
+                .also(W5fSurfacePixelFixtures::requireBounded)
+        }
+        assertDisjoint(alphaExpectations.getValue(GradientAlphaMode.STRAIGHT),
+            alphaExpectations.getValue(GradientAlphaMode.PREMULTIPLIED))
+
         val left = ColorARGB.of(128, 255, 255, 255)
         val right = ColorARGB.of(64, 0, 0, 255)
         val leaf = Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f),
@@ -189,15 +203,21 @@ class W7GradientAlphaSurfacePixelTest {
             listOf(GradientStop(0f, ColorARGB.White), GradientStop(.5f, ColorARGB.White),
                 GradientStop(.5f, ColorARGB.Blue), GradientStop(1f, ColorARGB.Blue)),
             alphaMode = GradientAlphaMode.PREMULTIPLIED)
-        val mixed = Surface(8, 8)
-        mixed.canvas {
-            drawRect(full, Paint(shader = rootGradient, antiAlias = false))
-            drawRect(ring, Paint(ColorARGB.Red, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 1f))
+        alphaModes.forEach { mode ->
+            val alphaShader = Shader.LinearGradient(Point2F32(8f, 0f), Point2F32(9f, 0f),
+                listOf(GradientStop(0f, alphaLeft), GradientStop(1f, alphaRight)), alphaMode = mode)
+            val mixed = Surface(9, 8)
+            mixed.canvas {
+                drawRect(full, Paint(shader = rootGradient, antiAlias = false))
+                drawRect(alphaBounds, Paint(shader = alphaShader, antiAlias = false, blendMode = BlendMode.SRC_OVER))
+                drawRect(ring, Paint(ColorARGB.Red, antiAlias = true, style = PaintStyle.STROKE, strokeWidth = 1f))
+            }
+            val pixels = renderTwice(mixed).pixels
+            WgslFloatEnvelopeV1Oracle.assertAdmits(alphaExpectations.getValue(mode), pixels.copyOfRange(8 * 4, 9 * 4))
+            assertPixel(pixels, 2, 2, 255, 0, 0, 255, 9)
+            assertPixel(pixels, 3, 3, 255, 255, 255, 255, 9)
+            assertPixel(pixels, 0, 0, 255, 255, 255, 255, 9)
         }
-        val pixels = renderTwice(mixed).pixels
-        assertPixel(pixels, 2, 2, 255, 0, 0, 255, 8)
-        assertPixel(pixels, 3, 3, 255, 255, 255, 255, 8)
-        assertPixel(pixels, 0, 0, 255, 255, 255, 255, 8)
     }
 
     @Test fun unsupportedAlphaCombinationsRefuseBeforePublicationAndRecover() {
@@ -212,19 +232,36 @@ class W7GradientAlphaSurfacePixelTest {
                 listOf(GradientStop(0f, ColorARGB.White), GradientStop(1f, ColorARGB.Black)),
                 alphaMode = GradientAlphaMode.PREMULTIPLIED), ColorSpaceInterpolation.OKLAB),
         )
-        unsupported.forEach { source ->
-            val surface = Surface(1, 1)
-            surface.canvas { drawRect(onePixel, Paint(shader = source, antiAlias = false, blendMode = BlendMode.SRC)) }
-            val sentinel = UByteArray(4) { 0x5au }
-            val before = sentinel.copyOf()
-            val refusal = assertFailsWith<IllegalStateException> { surface.readPixels(onePixel, sentinel) }
-            assertTrue(refusal.message.orEmpty().startsWith("unsupported.material.gradient.alpha-mode:"), refusal.message)
-            assertContentEquals(before, sentinel)
-            surface.discardRecordedOperations()
-            val healthyColor = ColorARGB.Blue
-            surface.canvas { drawRect(onePixel, Paint(healthyColor, antiAlias = false)) }
-            repeat(2) { assertContentEquals(ubyteArrayOf(0u, 0u, 255u, 255u), renderTwice(surface).pixels) }
-        }
+        unsupported.forEach(::assertRefusesAndRecovers)
+    }
+
+    @Test fun composedNonClampSingleStopRefusesBeforeCollapseAndRecovers() = assertRefusesAndRecovers(
+        Shader.Blend(BlendMode.SRC_OVER, Shader.SolidColor(ColorARGB.Transparent),
+            Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f),
+                listOf(GradientStop(0f, ColorARGB.White)), tileMode = TileMode.REPEAT,
+                alphaMode = GradientAlphaMode.PREMULTIPLIED)),
+    )
+
+    @Test fun composedNonSrgbWorkingSpaceRefusesBeforePublicationAndRecovers() = assertRefusesAndRecovers(
+        Shader.Blend(BlendMode.SRC_OVER, Shader.SolidColor(ColorARGB.Transparent),
+            Shader.WithWorkingColorSpace(Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(1f, 0f),
+                listOf(GradientStop(0f, ColorARGB.White), GradientStop(1f, ColorARGB.Black)),
+                alphaMode = GradientAlphaMode.PREMULTIPLIED), ColorSpaceInterpolation.OKLAB)),
+    )
+
+    private fun assertRefusesAndRecovers(source: Shader) {
+        val surface = Surface(1, 1)
+        surface.canvas { drawRect(onePixel, Paint(shader = source, antiAlias = false, blendMode = BlendMode.SRC)) }
+        val sentinel = UByteArray(4) { 0x5au }
+        val before = sentinel.copyOf()
+        val refusal = assertFailsWith<IllegalStateException> { surface.readPixels(onePixel, sentinel) }
+        assertTrue(refusal.message.orEmpty().startsWith("unsupported.material.gradient.alpha-mode:"),
+            refusal.message)
+        assertContentEquals(before, sentinel)
+        surface.discardRecordedOperations()
+        val healthyColor = ColorARGB.Blue
+        surface.canvas { drawRect(onePixel, Paint(healthyColor, antiAlias = false)) }
+        repeat(2) { assertContentEquals(ubyteArrayOf(0u, 0u, 255u, 255u), renderTwice(surface).pixels) }
     }
 
     @Test fun premultipliedBudgetRefusesPreciselyAndRecovers() {

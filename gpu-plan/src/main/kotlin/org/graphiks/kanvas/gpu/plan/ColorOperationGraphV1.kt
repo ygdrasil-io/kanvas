@@ -353,7 +353,9 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 Scalar.DiscardF32 -> "fragment-discard"
                 is Scalar.StopInterpolationInput -> "stop-interpolation-input:${node.slotI32}"
                 is Scalar.GradientStopComponent -> node.selection.let { selected ->
-                    "gradient-upper-bound-65538-scaled-le-interpolate-v4:${selected.domain}:${selected.alphaMode}:${selected.rangeWordOffsetU32}:first=${selected.firstOnly}:" +
+                    val alphaModeIdentity = if (selected.alphaMode == org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED)
+                        "${selected.alphaMode.name}:" else ""
+                    "gradient-upper-bound-65538-scaled-le-interpolate-v4:${selected.domain}:$alphaModeIdentity${selected.rangeWordOffsetU32}:first=${selected.firstOnly}:" +
                         "${identity(selected.numerator)}:${identity(selected.scale)}:${identity(selected.parameter)}:${selected.interpolationGraph.canonicalIdentity}:${node.channelI32}" }
                 is Scalar.BranchComponent -> "vector-lazy:${predicate(node.branch.predicate)}:" +
                     "${node.branch.yes.joinToString(",",transform=::identity)}:${node.branch.no.joinToString(",",transform=::identity)}:${node.channelI32}"

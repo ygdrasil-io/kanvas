@@ -8,8 +8,12 @@ public class GradientInterpolationProgramV4(public val addressing: GradientAddre
     public val domain: ColorInterpolation,
     public val alphaMode: org.graphiks.kanvas.render.ir.GradientAlphaMode) : MaterialProgramPlan {
     override val versionI32: Int = 4
-    override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId(
-        "gradient-interpolation-v4:$domain:$alphaMode:oklab-srgb-2021-v1:polar-achromatic-original-srgb-v1:shortest-positive-tie-v1:${addressing.structuralId.value}")
+    override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId(if (alphaMode ==
+        org.graphiks.kanvas.render.ir.GradientAlphaMode.STRAIGHT) {
+        "gradient-interpolation-v4:$domain:oklab-srgb-2021-v1:polar-achromatic-original-srgb-v1:shortest-positive-tie-v1:${addressing.structuralId.value}"
+    } else {
+        "gradient-interpolation-v4:$domain:${alphaMode.name}:oklab-srgb-2021-v1:polar-achromatic-original-srgb-v1:shortest-positive-tie-v1:${addressing.structuralId.value}"
+    })
     override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.colorSourceV4()
 }
 
@@ -157,7 +161,9 @@ internal class PreparedSourceDefinitionV4 private constructor(
         integers.keys.forEach(words::remove)
         integerWordsU32 = java.util.Collections.unmodifiableMap(integers)
         numericWordsF32Bits = java.util.Collections.unmodifiableMap(words)
-        definitionIdentity = "gradient-source-definition-v4:$allocationIdentity:${addressing.structuralId.value}:$domain:${metadata.alphaMode}:" +
+        val alphaModeIdentity = if (metadata.alphaMode == org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED)
+            ":${metadata.alphaMode.name}" else ""
+        definitionIdentity = "gradient-source-definition-v4:$allocationIdentity:${addressing.structuralId.value}:$domain$alphaModeIdentity:" +
             "${metadata.recipeIdentity}:${metadata.degeneracy}:$average:$preparedRangeIdentity:" +
             "${coordinates.canonicalIdentity}:${numericWordsF32Bits}:${integerWordsU32.filterKeys { it > 1L }}"
         executionIdentity = "$definitionIdentity:physical=$range:${slab.canonicalIdentity}"

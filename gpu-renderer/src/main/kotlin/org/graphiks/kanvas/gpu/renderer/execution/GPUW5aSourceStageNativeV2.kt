@@ -219,7 +219,7 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
     val directSrc = target.colorBlend == null && target.alphaBlend == null
     require(target.format == GPUTextureFormat.RGBA8UnormSrgb &&
         (if (destination == null) directSrc || blend.size == 2 && blend.all { it.operation == GPUBlendOperation.Add }
-        else blend.all {
+        else blend.size == 2 && blend.all {
             it.operation == GPUBlendOperation.Add && it.srcFactor == GPUBlendFactor.One && it.dstFactor == GPUBlendFactor.Zero
         } && destination.sealedW5b?.compositionAbiI32 in 3..4)) {
         "W5b source DAG requires an authenticated premultiplied fixed-function sRGB attachment tail"

@@ -53,9 +53,13 @@ public sealed interface MaterialNode : CanonicalValue {
     ) : MaterialNode {
         private val values: List<GradientStop> = immutableList(stops)
         public fun stops(): List<GradientStop> = values
-        override val canonicalId: CanonicalId = canonicalId(
+        override val canonicalId: CanonicalId = if (alphaMode == GradientAlphaMode.STRAIGHT) canonicalId(
             "material-linear-gradient-v1", pointId(start).value, pointId(end).value,
-            canonicalSequenceId("stops", values.map { it.canonicalId.value }).value, tileMode.name, interpolation.name, alphaMode.name,
+            canonicalSequenceId("stops", values.map { it.canonicalId.value }).value, tileMode.name, interpolation.name,
+        ) else canonicalId(
+            "material-linear-gradient-v1", pointId(start).value, pointId(end).value,
+            canonicalSequenceId("stops", values.map { it.canonicalId.value }).value, tileMode.name, interpolation.name,
+            alphaMode.name,
         )
         override fun equals(other: Any?): Boolean = other is LinearGradient && canonicalId == other.canonicalId
         override fun hashCode(): Int = canonicalId.hashCode()

@@ -841,6 +841,11 @@ internal class MaterialSourceConstructionV4 private constructor(
             val degeneracy: GradientDegeneracyV1
             when (val source = leaf) {
                 is MaterialNode.LinearGradient -> {
+                    val effectiveDomain = selectedDomain ?: source.interpolation
+                    require(source.alphaMode != org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED ||
+                        effectiveDomain == ColorInterpolation.SRGB && source.tileMode == org.graphiks.kanvas.render.ir.TileMode.CLAMP) {
+                        "unsupported.material.gradient.alpha-mode"
+                    }
                     require(listOf(source.start.x, source.start.y, source.end.x, source.end.y).all(Float::isFinite)) { W5cPlanDiagnostics.NonFinite }
                     interpolation = source.interpolation; family = GradientFamilyV2.LINEAR
                     requested = GradientTileModeV2.valueOf(source.tileMode.name); stops = source.stops()

@@ -99,8 +99,8 @@ class W6bFilterPictureTest {
         val decoded = assertNotNull(Picture.fromByteArray(fixture("format-13-drop-shadow-composite.base64")))
 
         assertEquals(DropShadowMode.COMPOSITE, (filtersFromPublicTraversal(decoded).single() as ImageFilter.DropShadow).mode)
-        assertEquals(14, ByteBuffer.wrap(decoded.toByteArray()).getInt(4))
-        assertEquals(8, ByteBuffer.wrap(decoded.toByteArray()).getInt(28))
+        assertEquals(16, ByteBuffer.wrap(decoded.toByteArray()).getInt(4))
+        assertEquals(10, ByteBuffer.wrap(decoded.toByteArray()).getInt(28))
         assertPlaybackRenders(decoded)
     }
 
@@ -111,7 +111,7 @@ class W6bFilterPictureTest {
         val filters = filtersFromPublicTraversal(decoded)
         assertEquals(2, filters.size)
         assertNotSame(filters[0], filters[1])
-        assertEquals(14, ByteBuffer.wrap(decoded.toByteArray()).getInt(4))
+        assertEquals(16, ByteBuffer.wrap(decoded.toByteArray()).getInt(4))
         assertNotNull(Picture.fromByteArray(decoded.toByteArray()))
         assertPlaybackRenders(decoded)
     }
