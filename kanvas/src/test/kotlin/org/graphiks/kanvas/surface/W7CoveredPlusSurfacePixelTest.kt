@@ -34,7 +34,7 @@ class W7CoveredPlusSurfacePixelTest {
         val oldLaw = WgslFloatEnvelopeV1Oracle.destinationExclusion(
             source, MaterialPlanRef(1), destination, BlendMode.PLUS, .5f,
         )
-        assertDisjoint(edge, oldLaw)
+        assertGreenAndAlphaDisjoint(edge, oldLaw)
         val full = WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(greenIntervals(), destination, 1f)
         val picture = PictureRecorder().also { recorder -> recorder.beginRecording(BOUNDS).apply {
             drawRect(BOUNDS, Paint(shader = Shader.SolidColor(BACKGROUND_COLOR), antiAlias = true))
@@ -64,27 +64,58 @@ class W7CoveredPlusSurfacePixelTest {
         val oldLaw = WgslFloatEnvelopeV1Oracle.destinationExclusion(
             source, MaterialPlanRef(1), destination, BlendMode.PLUS, encodedCoverage, scalarMask = true,
         )
-        assertDisjoint(edge, oldLaw)
+        assertGreenAndAlphaDisjoint(edge, oldLaw)
         val picture = PictureRecorder().also { recorder ->
             recorder.beginRecording(W4E_BOUNDS).drawPath(Path().apply {
-                addRect(RectF32.ofLTRB(-1f, -1f, 5f, 5f))
+                addRect(RectF32.ofLTRB(-1f, -1f, 7f, 7f))
             }, Paint(
                 shader = sourceShader(), blendMode = BlendMode.PLUS, antiAlias = false,
             ))
         }.finishRecordingAsPicture()
-        val surface = Surface(4, 4).also { target -> target.canvas {
-            drawPath(Path().apply { addRect(RectF32.ofLTRB(-1f, -1f, 5f, 5f)) },
+        val surface = Surface(6, 6).also { target -> target.canvas {
+            drawPath(Path().apply { addRect(RectF32.ofLTRB(-1f, -1f, 7f, 7f)) },
                 Paint(shader = Shader.SolidColor(BACKGROUND_COLOR), antiAlias = false))
             save()
-            clipPath(Path().apply { moveTo(0f, 0f); lineTo(4f, 0f); lineTo(0f, 4f); close() }, antiAlias = false)
-            clipRect(RectF32.ofLTRB(.5f, .5f, 4f, 4f), org.graphiks.kanvas.pipeline.ClipOp.DIFFERENCE, antiAlias = true)
+            clipPath(Path().apply { moveTo(0f, 0f); lineTo(6f, 0f); lineTo(0f, 6f); close() }, antiAlias = false)
+            clipRect(RectF32.ofLTRB(1.5f, 1.5f, 6f, 6f), org.graphiks.kanvas.pipeline.ClipOp.DIFFERENCE, antiAlias = true)
             picture.playback(this)
             restore()
         } }
         val result = renderTwice(surface)
-        WgslFloatEnvelopeV1Oracle.assertAdmits(edge, result.pixels.copyOfRange(0, 4))
-        WgslFloatEnvelopeV1Oracle.assertAdmits(full, result.pixels.copyOfRange(4, 8))
-        WgslFloatEnvelopeV1Oracle.assertAdmits(background, result.pixels.copyOfRange(60, 64))
+        // The hard 6x6 triangle and extended source path both contain (0,0), (1,1), and (2,2).
+        // The AA difference removes 0, 1/4, and 1 of those pixels, yielding C=1, 191/255, and 0.
+        assertAdmits(full, result.pixels, width = 6, x = 0, y = 0)
+        assertAdmits(edge, result.pixels, width = 6, x = 1, y = 1)
+        assertAdmits(background, result.pixels, width = 6, x = 5, y = 5)
+
+        // This repeats the same scalar-mask geometry with nonzero black source alpha. At (2,2)
+        // that source path and hard triangle both apply, but the difference mask stores C=0.
+        val zeroMaskBackground = ColorARGB.of(64, 0, 0, 0)
+        val zeroMaskDestination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            W5aSolidOpacityCpuOracle.draw(zeroMaskBackground, 1f),
+        ))
+        val zeroCoverage = WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            blackIntervals(.25f), zeroMaskDestination, 0f, scalarMask = true,
+        )
+        val nonzeroCoverage = WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            blackIntervals(.25f), zeroMaskDestination, encodedCoverage, scalarMask = true,
+        )
+        assertAlphaDisjoint(zeroCoverage, nonzeroCoverage)
+        val zeroMaskPicture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(W4E_BOUNDS).drawPath(Path().apply {
+                addRect(RectF32.ofLTRB(-1f, -1f, 7f, 7f))
+            }, Paint(shader = blackSourceShader(.25f), blendMode = BlendMode.PLUS, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val zeroMaskSurface = Surface(6, 6).also { target -> target.canvas {
+            drawPath(Path().apply { addRect(RectF32.ofLTRB(-1f, -1f, 7f, 7f)) },
+                Paint(shader = Shader.SolidColor(zeroMaskBackground), antiAlias = false))
+            save()
+            clipPath(Path().apply { moveTo(0f, 0f); lineTo(6f, 0f); lineTo(0f, 6f); close() }, antiAlias = false)
+            clipRect(RectF32.ofLTRB(1.5f, 1.5f, 6f, 6f), org.graphiks.kanvas.pipeline.ClipOp.DIFFERENCE, antiAlias = true)
+            zeroMaskPicture.playback(this)
+            restore()
+        } }
+        assertAdmits(zeroCoverage, renderTwice(zeroMaskSurface).pixels, width = 6, x = 2, y = 2)
     }
 
     @Test fun `covered PLUS controls retain zero source zero coverage full coverage and a nonsaturating edge`() {
@@ -165,16 +196,29 @@ class W7CoveredPlusSurfacePixelTest {
         return first
     }
 
-    private fun assertAdmits(expected: WgslFloatEnvelopeV1Oracle.DrawResult, pixels: UByteArray, x: Int, y: Int) {
-        val offset = (y * 5 + x) * 4
+    private fun assertAdmits(expected: WgslFloatEnvelopeV1Oracle.DrawResult, pixels: UByteArray,
+        x: Int, y: Int, width: Int = 5) {
+        val offset = (y * width + x) * 4
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(offset, offset + 4))
     }
 
-    private fun assertDisjoint(expected: WgslFloatEnvelopeV1Oracle.DrawResult,
+    private fun assertGreenAndAlphaDisjoint(expected: WgslFloatEnvelopeV1Oracle.DrawResult,
         counterfactual: WgslFloatEnvelopeV1Oracle.ConservativeExclusion) {
         check(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "Expected: $expected" }
-        check(expected.channels.zip(counterfactual.channels).any { (actual, old) -> actual.intersect(old).isEmpty() }) {
-            "V2 covered PLUS must be disjoint from V1 post-lerp: ${expected.channels} versus ${counterfactual.channels}"
+        check(expected.channels[1].intersect(counterfactual.channels[1]).isEmpty()) {
+            "V2 covered PLUS green channel must be disjoint from V1 post-lerp: ${expected.channels[1]} versus ${counterfactual.channels[1]}"
+        }
+        check(expected.channels[3].intersect(counterfactual.channels[3]).isEmpty()) {
+            "V2 covered PLUS alpha channel must be disjoint from V1 post-lerp: ${expected.channels[3]} versus ${counterfactual.channels[3]}"
+        }
+    }
+
+    private fun assertAlphaDisjoint(zeroCoverage: WgslFloatEnvelopeV1Oracle.DrawResult,
+        nonzeroCoverage: WgslFloatEnvelopeV1Oracle.DrawResult) {
+        check(zeroCoverage is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "Expected bounded C=0: $zeroCoverage" }
+        check(nonzeroCoverage is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "Expected bounded C>0: $nonzeroCoverage" }
+        check(zeroCoverage.channels[3].intersect(nonzeroCoverage.channels[3]).isEmpty()) {
+            "C=0 and C>0 must be alpha-disjoint: ${zeroCoverage.channels[3]} versus ${nonzeroCoverage.channels[3]}"
         }
     }
 
@@ -202,7 +246,7 @@ class W7CoveredPlusSurfacePixelTest {
 
     private companion object {
         val BOUNDS: RectF32 = RectF32.ofLTRB(0f, 0f, 5f, 5f)
-        val W4E_BOUNDS: RectF32 = RectF32.ofLTRB(0f, 0f, 4f, 4f)
+        val W4E_BOUNDS: RectF32 = RectF32.ofLTRB(0f, 0f, 6f, 6f)
         val BACKGROUND_COLOR: ColorARGB = ColorARGB.of(191, 0, 255, 0)
         const val SOURCE_OPACITY = .75f
     }
