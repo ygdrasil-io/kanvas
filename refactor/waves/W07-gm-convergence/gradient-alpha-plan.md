@@ -78,7 +78,7 @@ nécessaires du nouveau champ, sans refonte générale des fichiers existants.
 - Refusal prefix for unsupported alpha combinations:
   `unsupported.material.gradient.alpha-mode`.
 
-- [ ] **Step 0: Rendre le remplacement SRC natif cohérent avec l'oracle.**
+- [x] **Step 0: Rendre le remplacement SRC natif cohérent avec l'oracle.**
   Suivre exactement le prérequis borné de la spec, relu par Astra : direct
   PremulSrc/coverage None/single-sample, sans AA/masque/clip analytique.
   Représenter blend=null dans template, identité/cache et descripteur ;
@@ -88,7 +88,7 @@ nécessaires du nouveau champ, sans refonte générale des fichiers existants.
   Exécuter les contrôles avant activation de la formule alpha ; documenter
   si le Mac passe déjà avant correction, sans inventer de RED natif.
 
-- [ ] **Step 1: Écrire les témoins publics avant les changements de sémantique.**
+- [x] **Step 1: Écrire les témoins publics avant les changements de sémantique.**
   Noms/contrats :
   `premultipliedTransparentEndpointPreservesSourceColor` : t=.5, blanc255→noir0,
   SRC sans fond, premul RGB187–188 et straight91–92, alpha127–128 ;
@@ -110,14 +110,14 @@ nécessaires du nouveau champ, sans refonte générale des fichiers existants.
   Ne pas activer la nouvelle formule avant d'avoir observé son refus ou
   les mauvais pixels via l'API réelle. Conserver séparément cette étape API.
 
-- [ ] **Step 2: Exécuter le RED et préserver les preuves.**
+- [x] **Step 2: Exécuter le RED et préserver les preuves.**
   Commande de base ci-dessous, sélection
   `org.graphiks.kanvas.surface.W7GradientAlphaSurfacePixelTest` et archive
   `/private/tmp/kanvas-w7-alpha-mode.vpi7cG/red`.
   Attendu : refus typé ou différence de pixels pour le nouveau mode, pas
   une erreur de setup/GPU. Noter commande, code, message et cause avant patch.
 
-- [ ] **Step 3: Transporter puis exécuter exactement le contrat de la spec.**
+- [x] **Step 3: Transporter puis exécuter exactement le contrat de la spec.**
   Capture/reconstruction/DSL/canonical ids/archive ; propagation dans les
   métadonnées et la définition V4 ; admission effective sRGB/CLAMP et refus
   legacy ; recipe F32 par classes exactes d'alphas dans le graphe commun.
@@ -126,7 +126,7 @@ nécessaires du nouveau champ, sans refonte générale des fichiers existants.
   pseudo-certificat, ni invalid→transparent. Si un cas ne se prouve pas,
   remonter le graphe et l'intervalle fautifs avant toute modification de preuve.
 
-- [ ] **Step 4: Étendre les mêmes tests aux frontières et intégrations publiques.**
+- [x] **Step 4: Étendre les mêmes tests aux frontières et intégrations publiques.**
   `mixedModesKeepCaptureRangesAndOrder` : mêmes stops 2/16/17, deux ordres,
   mutations après enregistrement, Rect et Path fill admis, deux rendus.
   `wrappersAndMixedAaRootPreserveAlphaMode` : Opacity, working SRGB, local
@@ -148,14 +148,14 @@ nécessaires du nouveau champ, sans refonte générale des fichiers existants.
   comptant un seul slab partagé : ne pas seulement tester chaque mode isolé.
   Ne pas rechercher B en exécutant les budgets jusqu'à trouver le seuil.
 
-- [ ] **Step 5: GREEN ciblé et contrôles voisins.**
+- [x] **Step 5: GREEN ciblé et contrôles voisins.**
   Rejouer la nouvelle classe, puis W5cGradientSurfacePixelTest,
   les deux `mixedHistoricalAndWorkingSrgb*` W5f et
   W7MixedRootAaRectSurfacePixelTest. Réutiliser les fixtures existantes.
   Un succès requiert assertions, XML et exit Gradle0 ; crash natif après
   assertions n'est pas un run vert. Rapporter les warnings existants.
 
-- [ ] **Step 6: Auto-revue et commit de la tâche.**
+- [x] **Step 6: Auto-revue et commit de la tâche.**
   Vérifier les chemins de reconstruction/canonicalisation contre la carte
   de la spec, l'immutabilité et les refus. Rapport complet avec RED/GREEN,
   calcul B avant essai et limites ; commit des fichiers explicitement nommés.
@@ -164,13 +164,76 @@ nécessaires du nouveau champ, sans refonte générale des fichiers existants.
 
 **Commande ciblée :** `rtk proxy ./gradlew :kanvas:test --offline --no-daemon --no-build-cache --tests '<selection>' -I /private/tmp/kanvas-w7-image-opacity.YmtXjI/isolated.init.gradle -Pw7.validationDir=<archive neuve> --console=plain`.
 
+### État d'exécution au 30 septembre 2026
+
+Code et correctifs de tâche committés jusqu'à `032cd9466`. Les cases ci-dessus
+attestent l'exécution, pas une suite globale verte. Step0 a été exécutée
+**après** le premier GREEN alpha, contrairement à l'ordre prescrit : les
+contrôles SRC ont ensuite été rejoués sur le correctif natif borné. Aucun RED
+natif One/Zero n'est inventé. `red-src` est le RED causal du mode ignoré,
+deux écarts de pixels publics, pas les essais d'oracle non borné/setup.
+
+Après les cinq corrections demandées par Sol, le run combiné
+`fix1-final-tests-b` donne **26/26, XML complets, wrapper/Gradle0** : alpha13,
+mixed-rootAA7, fractionalRect1, W5f3 et deux fixtures Picture13/schema7.
+Le témoin mixed-AA distingue les modes sur un pixel intermédiaire : blanc
+opaque vers gris204 transparent, t=.5, STRAIGHT RGB168–169 et PREMULTIPLIED
+187–188, alpha127–128. Choix fixé sur CPU avant rendu, enveloppe inchangée.
+
+W5c reste à22/27 assertions PASS, les cinq échecs connus et une terminaison
+native133. Les anciens runs W5f terminés133 ne deviennent pas verts du fait
+du dernier run combiné réussi. SRC partiel+AA reste une limite non validée :
+le contrôle exploratoire refuse au host-template préflight, sans relaxation
+d'admission. Les versions Picture13/14/15 restent acceptées ; les deux tests
+schema7 gardent leurs identités historiques, mais attendent maintenant le
+writer16/schema10. Un éventuel gain de ces tests n'est pas un gain GM.
+
 ## Vérification et livraison du lot par le contrôleur
 
-- [ ] Revue Sol de tâche, corrections/re-review si nécessaire.
-- [ ] Tests ciblés finaux, une globale `:kanvas:test` bornée à 240 s,
+### Commande finale reproductible (sélection39)
+
+Commande réellement exécutée après le correctif Picture. Pour un nouveau
+rejeu, utiliser une archive neuve ; le wrapper refuse d'écraser les journaux.
+
+```sh
+rtk proxy ruby /private/tmp/kanvas-w7-alpha-mode.vpi7cG/bounded-run.rb /private/tmp/kanvas-w7-alpha-mode.vpi7cG/fix2-final-controls-regressions 240 ./gradlew :kanvas:test --offline --no-daemon --no-build-cache \
+  --tests org.graphiks.kanvas.surface.W7GradientAlphaSurfacePixelTest \
+  --tests org.graphiks.kanvas.surface.W7MixedRootAaRectSurfacePixelTest \
+  --tests 'org.graphiks.kanvas.surface.W5bBlendSurfacePixelTest.geometry fractional Rect retains fixed DST and destination blends' \
+  --tests 'org.graphiks.kanvas.surface.W5fGradientInterpolationSurfacePixelTest.workingSpaceOnSolidPreservesOrderedColorWithoutConversion' \
+  --tests 'org.graphiks.kanvas.surface.W5fGradientInterpolationSurfacePixelTest.mixedHistoricalAndWorkingSrgb*' \
+  --tests 'org.graphiks.kanvas.picture.W6bFilterPictureTest.schema7*' \
+  --tests 'org.graphiks.kanvas.picture.PictureTest.version 9 round trips every public serialized enum value' \
+  --tests 'org.graphiks.kanvas.picture.PictureTest.writer emits version 15 schema 9 pictures' \
+  --tests 'org.graphiks.kanvas.picture.PictureTest.version 12 preserves expanded text and clip provenance through round trip and playback' \
+  --tests 'org.graphiks.kanvas.picture.PictureTest.roundtrip preserves deferred outer clip on a save layer' \
+  --tests 'org.graphiks.kanvas.picture.PictureTest.version 9 picture roundtrip preserves ordered hard clip payload through public serialization' \
+  --tests 'org.graphiks.kanvas.picture.PictureTest.version 9 picture roundtrip keeps a typed perspective clip from replay authority' \
+  --tests org.graphiks.kanvas.picture.W5gNoisePictureCompatibilityTest.currentNoisePictureRoundtripsSchema5ComplexClipAndPreservesBoundedRefusal \
+  --tests org.graphiks.kanvas.picture.W6FilterBoundsRecipePictureTest.sharedAndEqualDistinctPictureFiltersKeepDemandAndIdentityAcrossWire \
+  --tests org.graphiks.kanvas.picture.W6bFilterPictureTest.picture15PreservesSharedFilterIdentityWithoutValueAliasing \
+  --tests org.graphiks.kanvas.picture.W6dLightingPictureTest.picture15PreservesLightingZThroughMemoryAndWireReplay \
+  --tests org.graphiks.kanvas.picture.W6dPictureRuntimeEffectPictureTest.historicalPicture14Schema8NonLightingReplaysWhileOldTwoDimensionalLightingFailsClosed \
+  --tests org.graphiks.kanvas.picture.W6eEffectsConvergencePictureTest.coreShardMemoryAndWireReplayAreStable \
+  --tests 'org.graphiks.kanvas.surface.SurfaceTest.picture replay retains singular and overflow rect clips for a typed terminal refusal' \
+  -I /private/tmp/kanvas-w7-image-opacity.YmtXjI/isolated.init.gradle \
+  -Pw7.validationDir=/private/tmp/kanvas-w7-alpha-mode.vpi7cG/fix2-final-controls-regressions --console=plain
+```
+
+### État de livraison
+
+- [x] Revue Sol de tâche, corrections/re-review si nécessaire : rounds1 et2
+  approuvés, zéro finding ouvert. Le round2 corrige13 régressions Picture
+  révélées par la globale ; correctif `fadbd80e3`, 39/39 tests ciblés, exit0.
+- [x] Tests ciblés finaux, une globale `:kanvas:test` bornée à 240 s,
   résultats nommés, comparaison avec la dernière globale rouge/incomplète.
-- [ ] Corpus631/443, mêmes références/seuils/scopes, comparaison des198 anciennes
+  La globale725/671PASS/53FAIL/1interrompu précède le correctif Picture ;
+  elle reste rouge/incomplète et n'a pas été relancée. Les13 régressions
+  appariées passent ensuite dans la sélection39/39, pas une globale verte.
+- [x] Corpus631/443, mêmes références/seuils/scopes, comparaison des198 anciennes
   empreintes RGBA et issues contre `mixed-root-ff628a94d.json`. Pas de gain
-  revendiqué pour un GM qui n'active pas le nouveau mode.
+  revendiqué pour un GM qui n'active pas le nouveau mode. Snapshot
+  `gradient-alpha-fadbd80e3.json` :198/198 anciennes RGBA identiques, aucun
+  changement d'issue/diagnostic/score ; rendus198 et comparaisons176 inchangés.
 - [ ] Revue finale Sol de toute la branche, preuves et réserves dans
   `pilotage.md`/`status.md`, PR draft stackée sur #2420 ; W7 reste actif.

@@ -23,9 +23,11 @@ Lot précédent : source AA racine, renderer `470f62e63`, branche
 Lot précédent : couverture AA filtrée, renderer `82893045c`, branche
 `codex/w7-aa-mask-coverage`, draft
 [#2419](https://github.com/ygdrasil-io/kanvas/pull/2419) empilée sur #2418.
-Lot courant : Rect stroke AA dans un mélange racine, renderer `ff628a94d`,
+Lot précédent : Rect stroke AA dans un mélange racine, renderer `ff628a94d`,
 branche `codex/w7-mixed-root-aa-rect`, draft
 [#2420](https://github.com/ygdrasil-io/kanvas/pull/2420) empilée sur #2419.
+Lot courant : politique alpha du LinearGradient, renderer `fadbd80e3`,
+branche `codex/w7-gradient-alpha-mode`, future draft empilée sur #2420.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,
@@ -48,6 +50,161 @@ de rendu et timeouts éligibles restent au dénominateur.
 
 Les gates W6 relatives à la durée de vie et aux ressources restent suivies.
 Leur fermeture et la proximité visuelle sont deux mesures distinctes.
+
+## Lot politique alpha du gradient — 30 septembre 2026
+
+Le [design](gradient-alpha-design.md) et le [plan](gradient-alpha-plan.md)
+livrent `GradientAlphaMode.STRAIGHT/PREMULTIPLIED` pour LinearGradient.
+STRAIGHT reste le défaut et conserve ses identités historiques. Le nouveau
+mode est admis seulement dans l'espace effectif SRGB avec tile CLAMP ;
+les feuilles composées sont contrôlées avant réduction, y compris à un stop.
+Le transport paint/IR/Picture/V4 conserve le mode sans doubler les slabs de
+stops. La recipe F32 appartient au graphe partagé preuve/WGSL, sans formule
+indépendante de l'émetteur. Picture16/schema10 écrit les wire IDs0/1 ;
+la façade conserve explicitement les versions13/14/15.
+
+Prérequis natif borné : blending désactivé (`blend=null`) seulement pour
+PremulSrc, single-sample et programme direct authentifié, dont la route
+garantit coverage None. AA, masque, clip analytique et destination-read ne
+reçoivent pas cette optimisation. Le template, son identité et le descripteur
+représentent fidèlement l'absence de blending ; les contrôles d'autorité
+restent en place. Ni GM/adaptateur, référence, seuil, score historique,
+exclusion, plafond de budget, enveloppe numérique ni composition de Surface
+n'est changé.
+
+### Preuves publiques et corrections de review
+
+Le RED causal `red-src` contient deux vrais écarts de pixels : R92 contre
+187–188 pour blanc opaque→noir transparent, R80 contre108–109 pour
+rouge alpha128→bleu alpha64. Les contrôles STRAIGHT passent. Les essais
+`red2` (oracle non borné avant GPU) et `red3` (destination incohérente) ne sont
+pas des RED valides. La fixture Picture15 provient du writer historique,
+capturée avant modification ; ses583 octets et sa base64 ont été comparés
+au XML de capture. L'assertion volontaire d'export quitte1, pas un succès.
+Le replay réel direct/décodé, les mutations après capture, les alphas zéro
+et1/255, stops2/16/17, hard stops, axe dégénéré CLAMP t=1, wrappers et refus
+transactionnels sont couverts par la Surface publique.
+
+Le budget mixte est dérivé **avant essai** :
+`B=4+256+16384+4096+4096+2×(112+48)+64=25220` octets.
+Les deux programmes V4 partagent un slab de64 octets. B passe, B−1 refuse
+avec `resource.material.gradient.stop-budget`, sentinel intact ; discard et
+deux rendus sains vérifient la récupération. Aucun seuil n'a été recherché
+par essais successifs.
+
+La première review Sol trouve quatre Important et un Minor : garde bypassée
+en capture composée, identités STRAIGHT modifiées, Picture13 perdu, témoin
+mixed-AA non discriminant et liste de blend vide acceptée pour destination.
+Le commit `032cd9466` corrige ces cinq points. La re-review Sol de
+`1ce59fdcc..032cd9466` approuve conformité et qualité : cinq constats clos,
+zéro Critical/Important/Minor, aucune nouvelle casse trouvée. Le mixed-AA compare désormais
+un vrai pixel intermédiaire SrcOver blanc opaque→gris204 transparent à t=.5 :
+STRAIGHT RGB168–169 contre PREMULTIPLIED187–188, alpha127–128. La première
+valeur bornée/disjointe est figée après un tableau CPU, **avant** rendu GPU ;
+aucune attente n'est copiée des pixels observés. Le stroke AA sibling et ses
+trois contrôles restent présents.
+
+Validation finale ciblée `fix1-final-tests-b` : **26/26**, XML complets,
+wrapper/Gradle0, sans terminal native133. Répartition : alpha13, mixed-rootAA7,
+fractional Rect1, trois contrôles W5f et deux fixtures Picture13/schema7.
+Les méthodes schema7 conservent leurs noms pour l'appariement historique ;
+seules leurs attentes obsolètes du writer14/schema8 deviennent16/schema10.
+Cela ne constitue pas un gain de rendu GM.
+
+### Réserves conservées
+
+Step0 a été validée après le premier GREEN alpha, contrairement au séquencement
+prescrit ; les contrôles ont ensuite été rejoués sur la portée native corrigée.
+Aucun RED natif One/Zero n'est revendiqué. Un contrôle exploratoire SRC+AA
+refuse au préflight (`Every material packet must have its sealed geometry
+host template`) : retiré sans ouvrir l'admission. **Les pixels SRC à couverture
+partielle AA ne sont donc pas validés** par ce lot.
+
+Le run voisin W5c compte22/27 assertions PASS, puis executor133/Gradle1.
+Les cinq identités déjà en échec sur le parent sont
+`conicalGradientMasksFragmentsWithoutValidRoot`,
+`conicalGradientCoversFourLanesAndSelectsLargestValidRoot`,
+`mixedGradientFramePreservesOrderRangesOpacityAndBlend`,
+`radialGradientCoversFourGeometryLanes` et
+`conicalGradientCoversAllDegeneracyBranches`.
+Les anciens runs W5f (sélections1/2/3) ont leurs assertions PASS mais terminent
+aussi native133 : ils ne sont pas verts et leur cause native commune n'est
+pas établie. Le dernier run combiné exit0 n'efface pas ces réserves.
+Warnings JVM native-access/Unsafe et dépréciations Gradle restent présents.
+Archives : `/private/tmp/kanvas-w7-alpha-mode.vpi7cG/`.
+
+### Arbitrages
+
+1. Design décidé dans la délégation de pilotage utilisateur, avec review :
+   coût en cas d'erreur, reprise réversible du design/code sur draft.
+2. Livraison end-to-end atomique, pas un flag public sans comportement :
+   coût, review plus large et éventuel découpage si couplage réel.
+3. Recipe F32 propre, partition exacte des alphas et calcul depuis leur minimum :
+   coût, reprise de preuve/intégration ; pas d'identité bit-à-bit Skia promise.
+4. Témoins SRC source seule et prérequis natif borné : coût, risque de régression
+   SRC/template à contrôler ; témoin numérique sur destination blanche différé.
+   Aucune enveloppe ni authentification n'est assouplie.
+
+### Globale bornée et régressions Picture corrigées
+
+La seule globale `global-240` sur `032cd9466` atteint725 identités :
+**671 PASS,53 FAIL,1 interrompu**, sans doublon ; wrapper124/enfant143 après
+TERM à240s, XML non finalisés. Elle ne prouve pas une suite verte ni complète.
+Les708 identités du parent sont toutes appariées :13 anciens succès deviennent
+des échecs Picture, trois anciens échecs passent (deux fixtures schema7 et le
+refus de version inconnue), et `generalCoordinateUniformBudgetRefusesPreciselyAndRecovers`
+passe après l'interruption parente. Les17 cas supplémentaires comptent15 succès,
+un échec et un interrompu (`cubicDrawImageMatchesMitchellNetravaliOracle`).
+Leur échec `excludedLinearPaintLanesPreservePreparedRefusals` était déjà présent
+dans le run AA-mask antérieur, non atteint dans le relevé parent immédiat.
+
+Les13 régressions Picture mêlent attentes de header devenues obsolètes et vrais
+retours `null` au décodage public. La cause est `ArchiveReader.clip()` :
+le writer schema10 émet toujours `clipTransformV2`, mais le reader ne reconnaît
+que schemas2..9. Le commit `fadbd80e3` ajoute10 à cette branche et met à jour
+les seules attentes du writer courant16/10 dans les13 cas. Aucun format de
+clip, fixture historique, nom de méthode ou assertion sémantique n'est modifié.
+
+Le témoin public isolé `fix2-red-picture-enums` confirme le défaut avant patch
+(un échec requireNotNull, Gradle1). Le run `fix2-final-controls-regressions`
+valide ensuite **39/39 tests sur12 classes, XML complets, Gradle0 en26s**, sans
+native133 : les13 régressions et les26 contrôles précédents. Le contrôleur
+a vérifié exit/log/XML indépendamment du rapport. La globale ci-dessus reste
+le résultat **avant ce dernier correctif** ; aucune seconde globale ni garantie
+sur le reste de la suite n'en est déduite. Ces39 tests ne sont pas un gain GM.
+La re-review Sol de `032cd9466..fadbd80e3` approuve conformité et qualité,
+les deux constats sont clos sans nouveau Critical/Important/Minor.
+
+### Corpus constant après correction
+
+Le [snapshot631](gradient-alpha-fadbd80e3.json) étiquette exactement
+`fadbd80e3508fb7024ef9ec2a9bbde6bf2b87108`. Les631 identités,443 éligibles,
+empreintes de références PNG, scopes, seuils, dimensions et paramètres
+restent identiques à [la base](mixed-root-ff628a94d.json). Les trois tranches
+`[0,607)`, `[607,608)`, `[608,631)` sont sérialisées, exits Gradle0/1/0 ;
+le1 est le processus de mesure124 après timeout30s de `vertices`, conservé
+au dénominateur. La première tranche termine en2m09, sans valeur de benchmark.
+
+| Indicateur | Parent #2420 | Alpha explicite |
+| --- | ---: | ---: |
+| Rendus / comparaisons | 198 / 176 | 198 / 176 |
+| Cas à≥99% / ≥95% des pixels ±2 | 36 / 49 | 36 / 49 |
+| Échecs rendu / setup | 194 / 50 | 194 / 50 |
+| Non comparés / dimensions incompatibles | 14 / 8 | 14 / 8 |
+| Timeouts | 1 | 1 |
+| Médiane des176 comparaisons | 71,7349% | 71,7349% |
+
+**Les198 anciennes empreintes RGBA sont identiques, aucun rendu perdu ou
+nouveau, aucun changement d'issue ni de diagnostic.** Aucun GM n'active
+encore le nouveau mode ; cette livraison apporte un contrat public testé,
+pas un gain de parité mesuré. Les journaux sont dans
+`/private/tmp/kanvas-w7-alpha-mode.vpi7cG/corpus`. L'agrégateur contrôle
+complétude/unicité et métadonnées ; la comparaison appariée vérifie aussi
+les références, scopes, scores et empreintes, pas seulement les compteurs.
+
+Revue finale de branche encore à compléter avant publication.
+La suite prévue est le contrat de composition de Surface, puis le port GM
+dans un lot distinct. W7 reste ouvert ; aucune autorisation de merge.
 
 ## Audit alpha et domaine de composition — 29 septembre 2026
 
