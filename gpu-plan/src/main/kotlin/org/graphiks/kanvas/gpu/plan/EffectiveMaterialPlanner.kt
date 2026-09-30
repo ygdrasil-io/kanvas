@@ -315,7 +315,13 @@ public object EffectiveMaterialPlanner {
                 is SourceConstructionResultV4.Refused -> SourceNormalizationV4.Refused(captured.diagnosticCode)
             }
         }
-        if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild) {
+        val premultipliedLinear = leaf as? MaterialNode.LinearGradient
+        if (premultipliedLinear?.alphaMode == org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED &&
+            (domain != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
+                premultipliedLinear.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP))
+            return SourceNormalizationV4.Refused("unsupported.material.gradient.alpha-mode")
+        if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild &&
+            premultipliedLinear?.alphaMode != org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED) {
             return when (val original = normalize(draw,targetClamp,true,coverage,sample,elideNoOp=!imageMaskChild,
                 gradientDeviceBoundsI32=legacyGradientBoundsI32,imageMaskChild=imageMaskChild)) {
                 Normalization.NoOp -> SourceNormalizationV4.NoOp
@@ -540,6 +546,9 @@ public object EffectiveMaterialPlanner {
         elideNoOp: Boolean = true,
         gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null, imageMaskChild: Boolean = false): Normalization {
         val sourceMaterial = if (imageMaskChild) imageMaskMaterial(draw) else draw.material
+        if (sourceMaterial.containsLegacyPremultipliedLinearGradient()) {
+            return Normalization.Refused("unsupported.material.gradient.alpha-mode")
+        }
         var filteredMaterial = sourceMaterial
         var filteredDepthI32 = 0
         while (filteredMaterial is MaterialNode.Opacity || filteredMaterial is MaterialNode.WithWorkingColorSpace) {
@@ -759,6 +768,9 @@ public object EffectiveMaterialPlanner {
         val radial = capture.leaf as? MaterialNode.RadialGradient
         val sweep = capture.leaf as? MaterialNode.SweepGradient
         val conical = capture.leaf as? MaterialNode.ConicalGradient
+        if (linear?.alphaMode == org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED) {
+            return Normalization.Refused("unsupported.material.gradient.alpha-mode")
+        }
         val interpolation = linear?.interpolation ?: radial?.interpolation ?: sweep?.interpolation
             ?: conical?.interpolation ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         if (interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
@@ -898,4 +910,22 @@ public object EffectiveMaterialPlanner {
         }
         return source(MaterialPlanEntry(program, binding, stops))
     }
+}
+
+/** V1/V2 descriptors cannot carry this mode; inspect only the unary wrapper chain they admit. */
+private fun MaterialNode.containsLegacyPremultipliedLinearGradient(): Boolean {
+    var current = this
+    repeat(65) {
+        current = when (current) {
+            is MaterialNode.LinearGradient -> return current.alphaMode ==
+                org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED
+            is MaterialNode.WithLocalMatrix -> current.material
+            is MaterialNode.WithColorFilter -> current.material
+            is MaterialNode.WithWorkingColorSpace -> current.material
+            is MaterialNode.CoordClamp -> current.material
+            is MaterialNode.Opacity -> current.material
+            else -> return false
+        }
+    }
+    return false
 }

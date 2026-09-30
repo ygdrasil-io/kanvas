@@ -3,6 +3,40 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Lot politique alpha LinearGradient — 30 septembre 2026
+
+Renderer `09d9574b5`, branche `codex/w7-gradient-alpha-mode`, draft
+[#2421](https://github.com/ygdrasil-io/kanvas/pull/2421) empilée sur #2420,
+revue finale corrigée et validée. [Design](gradient-alpha-design.md),
+[plan et commandes](gradient-alpha-plan.md),
+[snapshot631](gradient-alpha-09d9574b5.json) et
+[bilan](pilotage.md#lot-politique-alpha-du-gradient--30-septembre-2026).
+
+`STRAIGHT` reste le défaut ; `PREMULTIPLIED` est maintenant une capacité
+publique sRGB/CLAMP, conservée dans capture, V4 et Picture16/schema10.
+Les anciennes versions Picture13/14/15 restent acceptées. Prérequis natif
+SRC sans blending strictement limité au direct single-sample/coverage None ;
+composition, AA, images et enveloppes restent inchangés.
+
+**46/46 tests ciblés, XML complets, Gradle0.** La globale unique240s sur le
+code précédent est rouge/incomplète (671 PASS,53 FAIL,1 interrompu) ; elle
+a révélé13 régressions Picture corrigées et rejouées dans les tests finaux.
+Elle n'a pas été relancée après ce correctif. Les deux re-reviews Sol de
+tâche approuvent les corrections. La revue globale Astra relève ensuite un
+Important sur la perte du mode dans un Rect stroke non-AA legacy, reproduit
+sur Surface puis corrigé : mapper/planners/admission refusent avant publication.
+Le run final comprend les39 cas précédents, ce nouveau refus et six contrôles
+strokes. La re-review ciblée finale Sol approuve conformité et qualité,
+zéro Critical/Important/Minor résiduel ; pas de seconde correction finale.
+
+**198/443 rendus,176 comparaisons ; les198 images précédentes sont strictement
+pixel-identiques.** Identités, références, scopes, seuils, résultats et diagnostics
+inchangés :36 cas à≥99%,49 à≥95%,194 render failures,50 setup failures et
+`vertices` toujours timeout30s. Aucun gain GM annoncé pour un mode encore
+inutilisé par les ports. SRC partiel AA reste non validé ; anciens native133
+et warnings conservés au bilan. Prochain contrat : composition de Surface,
+puis port GM séparé. W7 reste ouvert, pas de merge readiness.
+
 ## Audit `alphagradients` — 29 septembre 2026
 
 [Diagnostic causal](alphagradients-audit.md) sans modification de code ni du

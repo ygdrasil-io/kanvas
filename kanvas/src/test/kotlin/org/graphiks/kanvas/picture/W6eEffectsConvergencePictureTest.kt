@@ -66,8 +66,8 @@ class W6eEffectsConvergencePictureTest {
 
         captured.forEach { (fixture, picture) ->
             val bytes = picture.toByteArray()
-            assertEquals(15, ByteBuffer.wrap(bytes).getInt(4), fixture.name)
-            assertEquals(9, ByteBuffer.wrap(bytes).getInt(28), fixture.name)
+            assertEquals(16, ByteBuffer.wrap(bytes).getInt(4), fixture.name)
+            assertEquals(10, ByteBuffer.wrap(bytes).getInt(28), fixture.name)
             val decoded = assertNotNull(Picture.fromByteArray(bytes), fixture.name)
             assertContentEquals(bytes, decoded.toByteArray(), fixture.name)
             listOf(picture, decoded).forEach { replay -> fixture.assertPixels(render(fixture, replay)) }

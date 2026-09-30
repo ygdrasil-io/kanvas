@@ -231,6 +231,8 @@ internal class MaterialSourceConstructionV4 private constructor(
         val stops: GradientStopCursorV4,
         wrappers: List<SourceUnaryMetadataV4>,
     ) {
+        val alphaMode: org.graphiks.kanvas.render.ir.GradientAlphaMode =
+            (leaf as? MaterialNode.LinearGradient)?.alphaMode ?: org.graphiks.kanvas.render.ir.GradientAlphaMode.STRAIGHT
         val wrappers: List<SourceUnaryMetadataV4> = immutableList(wrappers)
         val recipeIdentity: String? = when (interpolation) {
             ColorInterpolation.SRGB -> null
@@ -239,6 +241,7 @@ internal class MaterialSourceConstructionV4 private constructor(
             ColorInterpolation.HSL -> ColorInterpolationProgramV1.recipe(ColorInterpolationProgramV1.RecipeKind.SRGB_TO_HSL_STOP).identity
             ColorInterpolation.OKLCH -> ColorInterpolationProgramV1.recipe(ColorInterpolationProgramV1.RecipeKind.SRGB_TO_OKLCH_STOP).identity
         }
+        // The physical prepared-stop range deliberately excludes alpha policy.
         val rangeIdentity: String = "stop-domain-v4:$interpolation:$recipeIdentity:${stops.sequenceIdentity}"
     }
 
@@ -838,6 +841,11 @@ internal class MaterialSourceConstructionV4 private constructor(
             val degeneracy: GradientDegeneracyV1
             when (val source = leaf) {
                 is MaterialNode.LinearGradient -> {
+                    val effectiveDomain = selectedDomain ?: source.interpolation
+                    require(source.alphaMode != org.graphiks.kanvas.render.ir.GradientAlphaMode.PREMULTIPLIED ||
+                        effectiveDomain == ColorInterpolation.SRGB && source.tileMode == org.graphiks.kanvas.render.ir.TileMode.CLAMP) {
+                        "unsupported.material.gradient.alpha-mode"
+                    }
                     require(listOf(source.start.x, source.start.y, source.end.x, source.end.y).all(Float::isFinite)) { W5cPlanDiagnostics.NonFinite }
                     interpolation = source.interpolation; family = GradientFamilyV2.LINEAR
                     requested = GradientTileModeV2.valueOf(source.tileMode.name); stops = source.stops()

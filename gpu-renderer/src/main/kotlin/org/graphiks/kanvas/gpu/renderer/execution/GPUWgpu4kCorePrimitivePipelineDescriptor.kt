@@ -888,6 +888,18 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.isLegacyPathStencilCover(): Bo
 private fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticPathStencilCover(): Boolean =
     isPathStencilCover() && !isLegacyPathStencilCover()
 
+/** The authenticated direct structural lane has sourceCoverage=None and no shader coverage term. */
+private fun GPUWgpu4kCorePrimitivePipelineProgram.isDirectColorProgram(): Boolean = when (this) {
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectLinearGradient,
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectLinearGradientRepeat,
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectRadialGradient,
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectSweepGradient,
+    -> true
+    else -> false
+}
+
 internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticShape(): Boolean =
         this == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver ||
         this == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectRegular ||
@@ -1086,7 +1098,9 @@ internal fun corePrimitiveColorTargetStateV1(identity: GPUWgpu4kCorePrimitiveRen
         "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
         else -> error("Validated CorePrimitive target format became unsupported")
     },
-    blend = if (producer) null else identity.blendProgram.toWgpuBlendStateOrNull(),
+    blend = if (producer) null else identity.blendProgram.toWgpuBlendStateOrNull(
+        directSingleSampleSource = identity.sampleCount == 1 && identity.program.isDirectColorProgram(),
+    ),
     writeMask = if (identity.blendProgram.writesColor()) GPUColorWrite.All else GPUColorWrite.None,
 )
 
@@ -1361,8 +1375,13 @@ private fun GPUWgpu4kCorePrimitiveBlendProgram.writesColor(): Boolean =
     this != GPUWgpu4kCorePrimitiveBlendProgram.ColorWriteNone &&
         this != GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp
 
-private fun GPUWgpu4kCorePrimitiveBlendProgram.toWgpuBlendStateOrNull(): BlendState? {
+private fun GPUWgpu4kCorePrimitiveBlendProgram.toWgpuBlendStateOrNull(
+    directSingleSampleSource: Boolean,
+): BlendState? {
     if (!writesColor()) return null
+    // Direct, single-sample SRC replaces the attachment without coverage. Every other route
+    // keeps the existing fixed-function One/Zero factors so partial coverage is preserved.
+    if (directSingleSampleSource && this == GPUWgpu4kCorePrimitiveBlendProgram.PremulSrc) return null
     return BlendState(
         color = BlendComponent(
             requireNotNull(colorOperation).toWgpuBlendOperation(),

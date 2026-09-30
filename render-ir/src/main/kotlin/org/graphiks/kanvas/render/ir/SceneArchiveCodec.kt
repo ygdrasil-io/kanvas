@@ -32,7 +32,7 @@ import org.graphiks.math.vector.Vector3F32
 /**
  * The owner of the versioned Picture payload.
  *
- * A v8/v9/v10/v11/v12/v13/v14 archive starts with the public `KPIC` magic, its version integer and the
+ * A v8/v9/v10/v11/v12/v13/v14/v15/v16 archive starts with the public `KPIC` magic, its version integer and the
  * cull rectangle.  The following negative marker occupies the old v8
  * `opCount` slot: it can therefore never be mistaken for a valid historical
  * v8 op count.  Historical Task 8 v8 streams deliberately return [LegacyV8]
@@ -40,9 +40,9 @@ import org.graphiks.math.vector.Vector3F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 15
+    private const val pictureVersion: Int = 16
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 9
+    private const val schemaVersion: Int = 10
 
     /** Encodes a deeply immutable Scene IR as the sole v14 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
@@ -85,6 +85,7 @@ public object SceneArchiveCodec {
                 13 -> 7
                 14 -> 8
                 15 -> 9
+                16 -> 10
                 else -> 0
             }
             if (decodedSchemaVersion !in 1..maxSchema) {
@@ -317,7 +318,7 @@ private class ArchiveWriter {
         when (value) {
             MaterialNode.Transparent -> i32(1)
             is MaterialNode.Solid -> { i32(2); color(value.color) }
-            is MaterialNode.LinearGradient -> { i32(3); point(value.start); point(value.end); stops(value.stops()); enum(value.tileMode); enum(value.interpolation) }
+            is MaterialNode.LinearGradient -> { i32(3); point(value.start); point(value.end); stops(value.stops()); enum(value.tileMode); enum(value.interpolation); i32(if (value.alphaMode == GradientAlphaMode.STRAIGHT) 0 else 1) }
             is MaterialNode.RadialGradient -> { i32(4); point(value.center); f32(value.radius); stops(value.stops()); enum(value.tileMode); enum(value.interpolation) }
             is MaterialNode.SweepGradient -> { i32(5); point(value.center); f32(value.startAngle); f32(value.endAngle); stops(value.stops()); enum(value.tileMode); enum(value.interpolation) }
             is MaterialNode.ConicalGradient -> { i32(6); point(value.start); f32(value.startRadius); point(value.end); f32(value.endRadius); stops(value.stops()); enum(value.tileMode); enum(value.interpolation) }
@@ -702,7 +703,7 @@ private class ArchiveReader(private val data: ByteArray) {
         }
     }; builder.build() }
     fun material(): MaterialNode = nested { when (i32()) {
-        1 -> MaterialNode.Transparent; 2 -> MaterialNode.Solid(color()); 3 -> MaterialNode.LinearGradient.of(point(), point(), stops(), enum(), enum())
+        1 -> MaterialNode.Transparent; 2 -> MaterialNode.Solid(color()); 3 -> MaterialNode.LinearGradient.of(point(), point(), stops(), enum(), enum(), if (sceneArchiveSchemaVersion < 10) GradientAlphaMode.STRAIGHT else when (i32()) { 0 -> GradientAlphaMode.STRAIGHT; 1 -> GradientAlphaMode.PREMULTIPLIED; else -> failTag("gradient alpha mode") })
         4 -> MaterialNode.RadialGradient.of(point(), f32(), stops(), enum(), enum()); 5 -> MaterialNode.SweepGradient.of(point(), f32(), f32(), stops(), enum(), enum())
         6 -> MaterialNode.ConicalGradient.of(point(), f32(), point(), f32(), stops(), enum(), enum()); 7 -> MaterialNode.ImageSample(image(), enum(), enum(), sampling())
         8 -> MaterialNode.Blend(enum(), material(), material())
@@ -814,7 +815,7 @@ private class ArchiveReader(private val data: ByteArray) {
                         perspectiveCaptureRefusal = bool(),
                         transformClass = text(),
                     )
-                    2, 3, 4, 5, 6, 7, 8, 9 -> clipTransformV2()
+                    2, 3, 4, 5, 6, 7, 8, 9, 10 -> clipTransformV2()
                     else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
                 }
                 ClipEntry(geometry, operation, antiAlias, transform)

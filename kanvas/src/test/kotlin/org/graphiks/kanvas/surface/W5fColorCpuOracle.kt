@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.GradientAlphaMode
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
@@ -188,7 +189,7 @@ internal object W5fColorCpuOracle {
             val degenerate=kotlin.math.sqrt(lengthF32) <= .000030517578125f
             gradientStops(working ?: shader.interpolation,shader.stops,
                 if(degenerate) Interval.ONE else dot(qx,qy,dx,dy),
-                if(degenerate) Interval.ONE else Interval.input(lengthF32),shader.tileMode,degenerate)
+                if(degenerate) Interval.ONE else Interval.input(lengthF32),shader.tileMode,degenerate,shader.alphaMode)
         }
         is Shader.RadialGradient -> {
             val (px,py)=mapSegment(x,y,pending)
@@ -296,7 +297,8 @@ internal object W5fColorCpuOracle {
     }
 
     private fun gradientStops(domain: ColorSpaceInterpolation,input: List<GradientStop>,
-        numerator: Interval,scale: Interval,tile: TileMode,degenerate: Boolean = false): Array<Interval> {
+        numerator: Interval,scale: Interval,tile: TileMode,degenerate: Boolean = false,
+        alphaMode: GradientAlphaMode = GradientAlphaMode.STRAIGHT): Array<Interval> {
         require(input.isNotEmpty() && input.all { it.position.isFinite() })
         if(input.size == 1) return source(input.single().color)
         if(degenerate && tile == TileMode.DECAL) return Array(4) { Interval.ZERO }
@@ -343,7 +345,7 @@ internal object W5fColorCpuOracle {
         if(tile == TileMode.DECAL && (raw.upper.signum() < 0 || raw.lower > BigDecimal.ONE)) return alternatives.single()
         val searched=if(tile == TileMode.CLAMP) numerator else t
         val searchScale=if(tile == TileMode.CLAMP) scale else Interval.ONE
-        if(searched.lower.signum() < 0) alternatives += gradientSource(domain,stops.first().color,stops.first().color,Interval.ZERO)
+        if(searched.lower.signum() < 0) alternatives += gradientSource(domain,stops.first().color,stops.first().color,Interval.ZERO,alphaMode)
         // Enumerate every possible upper-bound choice with independent rounded
         // scaled comparisons; equal positions skip to the last stop in the run.
         for(index in 1 until stops.size) {
@@ -353,10 +355,10 @@ internal object W5fColorCpuOracle {
             val hi=mul(Interval.input(right.position),searchScale)
             if(searched.upper < lo.lower || searched.lower >= hi.upper) continue
             val ratio=div(sub(t,Interval.input(left.position)),sub(Interval.input(right.position),Interval.input(left.position)))
-            alternatives += gradientSource(domain,left.color,right.color,ratio)
+            alternatives += gradientSource(domain,left.color,right.color,ratio,alphaMode)
         }
         val last=mul(Interval.input(stops.last().position),searchScale)
-        if(searched.upper >= last.lower) alternatives += gradientSource(domain,stops.last().color,stops.last().color,Interval.ONE)
+        if(searched.upper >= last.lower) alternatives += gradientSource(domain,stops.last().color,stops.last().color,Interval.ONE,alphaMode)
         require(alternatives.isNotEmpty()) { "No bounded gradient segment" }
         return Array(4) { channel -> hull(*alternatives.map { it[channel] }.toTypedArray()) }
     }
@@ -468,15 +470,18 @@ internal object W5fColorCpuOracle {
     /** Independent host preparation followed by the rounded fragment schedule. */
     fun expectedGradientPixel(domain: ColorSpaceInterpolation, left: ColorARGB, right: ColorARGB,
         tF32: Float, external: ColorFilter? = null, destination: ColorARGB = ColorARGB.Transparent,
-        finalBlend: BlendMode = BlendMode.SRC_OVER, coverageF32: Float = 1f): WgslFloatEnvelopeV1Oracle.DrawResult =
-        expectedGradientPixel(domain,left,right,Interval.input(tF32),external,destination,finalBlend,coverageF32)
+        finalBlend: BlendMode = BlendMode.SRC_OVER, coverageF32: Float = 1f,
+        alphaMode: GradientAlphaMode = GradientAlphaMode.STRAIGHT): WgslFloatEnvelopeV1Oracle.DrawResult =
+        expectedGradientPixel(domain,left,right,Interval.input(tF32),external,destination,finalBlend,coverageF32,
+            alphaMode = alphaMode)
 
     fun expectedGradientPixel(domain: ColorSpaceInterpolation, left: ColorARGB, right: ColorARGB,
         parameter: Interval, external: ColorFilter? = null, destination: ColorARGB = ColorARGB.Transparent,
         finalBlend: BlendMode = BlendMode.SRC_OVER, coverageF32: Float = 1f,
         destinationBlend: BlendMode = BlendMode.SRC_OVER, shaderOpacityF32: Float = 1f,
-        paintAlphaF32: Float = 1f): WgslFloatEnvelopeV1Oracle.DrawResult {
-        var result = gradientSource(domain,left,right,parameter)
+        paintAlphaF32: Float = 1f,
+        alphaMode: GradientAlphaMode = GradientAlphaMode.STRAIGHT): WgslFloatEnvelopeV1Oracle.DrawResult {
+        var result = gradientSource(domain,left,right,parameter,alphaMode)
         if (shaderOpacityF32 != 1f) result = result.map { mul(it,Interval.input(shaderOpacityF32)) }.toTypedArray()
         if (paintAlphaF32 != 1f) result = result.map { mul(it,Interval.input(paintAlphaF32)) }.toTypedArray()
         if (external != null) result = applyFilter(result,external)
@@ -484,7 +489,33 @@ internal object W5fColorCpuOracle {
     }
 
     private fun gradientSource(domain: ColorSpaceInterpolation,left: ColorARGB,right: ColorARGB,
-        parameter: Interval): Array<Interval> {
+        parameter: Interval, alphaMode: GradientAlphaMode = GradientAlphaMode.STRAIGHT): Array<Interval> {
+        if (alphaMode == GradientAlphaMode.PREMULTIPLIED) {
+            require(domain == ColorSpaceInterpolation.SRGB)
+            val t = clamp(parameter)
+            val inverse = sub(Interval.ONE,t)
+            val leftAlpha = Interval.input(left.alphaNormalized)
+            val rightAlpha = Interval.input(right.alphaNormalized)
+            val alpha = when {
+                left.alpha == 0 && right.alpha == 0 -> Interval.ZERO
+                left.alpha == 0 -> mul(t,rightAlpha)
+                right.alpha == 0 -> mul(inverse,leftAlpha)
+                left.alpha <= right.alpha -> add(leftAlpha,mul(t,sub(rightAlpha,leftAlpha)))
+                else -> add(rightAlpha,mul(inverse,sub(leftAlpha,rightAlpha)))
+            }
+            if (left.alpha == 0 && right.alpha == 0) return Array(4) { Interval.ZERO }
+            val straight = when {
+                left.alpha == 0 -> Array(3) { Interval.input(component(right,it)) }
+                right.alpha == 0 -> Array(3) { Interval.input(component(left,it)) }
+                else -> Array(3) { channel ->
+                    val numerator = add(mul(mul(inverse,Interval.input(component(left,channel))),leftAlpha),
+                        mul(mul(t,Interval.input(component(right,channel))),rightAlpha))
+                    div(numerator,alpha)
+                }
+            }
+            return Array(4) { channel -> if (channel == 3) alpha
+                else mul(WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(straight[channel]),alpha) }
+        }
         val a = preparedStop(left,domain)
         val b = preparedStop(right,domain)
         val t = clamp(parameter)
@@ -530,6 +561,12 @@ internal object W5fColorCpuOracle {
             }
         }
         return Array(4) { if (it == 3) interpolated[3] else mul(linear[it],interpolated[3]) }
+    }
+
+    private fun component(color: ColorARGB, channel: Int): Float = when (channel) {
+        0 -> color.redNormalized
+        1 -> color.greenNormalized
+        else -> color.blueNormalized
     }
 
     private fun preparedStop(color: ColorARGB, domain: ColorSpaceInterpolation): Array<Interval> {
