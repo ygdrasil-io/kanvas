@@ -45,6 +45,7 @@ import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.geometry.PathStrokeWorkUsageI64
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.rectHairlineCoverageBandsI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.Matrix3x3F64
@@ -304,7 +305,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             is DrawScope.Gap -> return DrawResult.Gap(classified.message)
             is DrawScope.Invalid -> return DrawResult.Invalid(classified.message)
         }
-        return when (val prepared = prepare(scope, frameWorkUsageI64)) {
+        return when (val prepared = prepare(scope, frameWorkUsageI64, targetBounds)) {
             is Prepared.Ready -> {
                 // A W6 coverage source is localized only after W6b has frozen its raw demand.
                 // In particular, an offscreen edge may blur into a terminal clip; pruning it here
@@ -366,8 +367,44 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
     }
 
-    private fun prepare(scope: DrawScope.Ready, frameWorkUsageI64: PathStrokeWorkUsageI64): Prepared =
-        if (scope.fill) {
+    private fun prepare(
+        scope: DrawScope.Ready,
+        frameWorkUsageI64: PathStrokeWorkUsageI64,
+        targetBounds: RectI32,
+    ): Prepared {
+        val rectHairlineDeviceRectI32 = scope.rectHairlineDeviceRectI32
+        if (rectHairlineDeviceRectI32 != null) {
+            val effectiveClipI32 = scope.clip?.let { intersect(targetBounds, it) }
+                ?: if (scope.clip == null) targetBounds.copy() else return Prepared.Empty(frameWorkUsageI64)
+            val bandsI32 = rectHairlineCoverageBandsI32(rectHairlineDeviceRectI32, effectiveClipI32)
+            if (bandsI32.isEmpty()) return Prepared.Empty(frameWorkUsageI64)
+            val coveragePath = PathBuilder(FillRule.WINDING).apply {
+                bandsI32.forEach { bandI32 ->
+                    addRect(RectF32.ofLTRB(
+                        bandI32.left.toFloat(), bandI32.top.toFloat(),
+                        bandI32.right.toFloat(), bandI32.bottom.toFloat(),
+                    ))
+                }
+            }.build()
+            return when (val result = Matrix3x3F64().preparePathFillGeometryF32(
+                path = coveragePath,
+                strokePolicyF64 = strokePolicyF64,
+                frameWorkUsageBeforeI64 = frameWorkUsageI64,
+            )) {
+                is PathTransformedFillPreparationResult.Ready -> Prepared.Ready(
+                    result.geometryF32,
+                    PathDrawGeometry.Fill(result.geometryF32),
+                    result.frameWorkUsageAfterI64,
+                )
+                is PathTransformedFillPreparationResult.Empty -> Prepared.Empty(result.frameWorkUsageAfterI64)
+                is PathTransformedFillPreparationResult.InvalidScene -> Prepared.Invalid(
+                    "Math rejected Rect hairline scene: ${result.reason}",
+                )
+                is PathTransformedFillPreparationResult.ResourceLimitExceeded ->
+                    Prepared.Limit("Math Rect hairline limit: ${result.reason}")
+            }
+        }
+        return if (scope.fill) {
             when (val result = scope.matrixF64.preparePathFillGeometryF32(
                 path = scope.path,
                 strokePolicyF64 = strokePolicyF64,
@@ -412,6 +449,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     Prepared.Limit("Math stroke limit: ${result.reason}")
             }
         }
+    }
 
     /** Semantic source scope only; selection additionally proves the prepared direct strategy. */
     internal fun acceptsW6AaColorSourceScope(node: DrawNode): Boolean =
@@ -491,6 +529,15 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     is BlendNode.Custom -> false
                 }
             )) return DrawScope.Gap("W7 root AA Rect source requires a solid SrcOver MITER stroke")
+        val rectHairlineDeviceRectI32 = if (admitsStandaloneRectPathFrames && rectProjection &&
+            node.coverage == CoverageRequest.HARD_EDGE && paint.style == PaintStyleNode.STROKE &&
+            paint.strokeWidth == 0f && node.material is MaterialNode.Solid && paint.shader == null &&
+            paint.colorFilter == null && paint.pathEffect == null && node.effects == EffectStack.Empty &&
+            paint.strokeCap == StrokeCapNode.BUTT && paint.strokeJoin == StrokeJoinNode.MITER &&
+            paint.strokeMiter.isFinite() && paint.strokeMiter >= 2f &&
+            matrixF64.classifyPathTransform() in setOf(PathTransformClass.Identity, PathTransformClass.AxisAlignedAffine) &&
+            matrixF64.sxF64 != 0.0 && matrixF64.syF64 != 0.0 && srcOver(node.blend)
+        ) projectedIntegralRectI32(requireNotNull(rect), matrixF64) else null
         return DrawScope.Ready(
             path = path,
             matrixF64 = matrixF64,
@@ -501,6 +548,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             styleF64 = style,
             requestsAntiAlias = node.coverage == CoverageRequest.ANTIALIASED,
             rectProjection = rectProjection,
+            rectHairlineDeviceRectI32 = rectHairlineDeviceRectI32,
         )
     }
 
@@ -1441,6 +1489,26 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     }
     private fun finite(shape: org.graphiks.math.geometry.RRectF32): Boolean = finite(shape.rect) && listOf(shape.topLeft.x, shape.topLeft.y, shape.topRight.x, shape.topRight.y, shape.bottomRight.x, shape.bottomRight.y, shape.bottomLeft.x, shape.bottomLeft.y).all(Float::isFinite)
     private fun w4Blend(blend: BlendNode): Boolean = when (blend) { BlendNode.SrcOver -> true; is BlendNode.Mode -> true; is BlendNode.Paint -> blend.blender == null; is BlendNode.Custom -> false }
+    private fun srcOver(blend: BlendNode): Boolean = when (blend) {
+        BlendNode.SrcOver -> true
+        is BlendNode.Mode -> blend.mode == BlendMode.SRC_OVER
+        is BlendNode.Paint -> blend.mode == BlendMode.SRC_OVER && blend.blender == null
+        is BlendNode.Custom -> false
+    }
+    private fun projectedIntegralRectI32(rect: RectF32, matrix: Matrix3x3F64): RectI32? {
+        fun coordinate(value: Double): Int? = value.takeIf { it.isFinite() &&
+            it >= Int.MIN_VALUE.toDouble() && it <= Int.MAX_VALUE.toDouble() &&
+            it == it.toLong().toDouble() }?.toLong()?.toInt()
+        val firstX = rect.left.toDouble() * matrix.sxF64 + matrix.txF64
+        val secondX = rect.right.toDouble() * matrix.sxF64 + matrix.txF64
+        val firstY = rect.top.toDouble() * matrix.syF64 + matrix.tyF64
+        val secondY = rect.bottom.toDouble() * matrix.syF64 + matrix.tyF64
+        val left = coordinate(minOf(firstX, secondX)) ?: return null
+        val right = coordinate(maxOf(firstX, secondX)) ?: return null
+        val top = coordinate(minOf(firstY, secondY)) ?: return null
+        val bottom = coordinate(maxOf(firstY, secondY)) ?: return null
+        return RectI32(left, top, right, bottom).takeUnless(RectI32::isEmpty64)
+    }
     private fun materialMatchesPaintAuthority(node: DrawNode): Boolean { val paint = node.paint ?: return false; val paintMaterial = paint.shader ?: MaterialNode.Solid(paint.color); return node.material.canonicalId == paintMaterial.canonicalId }
     private fun appendMaterialPlan(entries: MutableList<MaterialPlanEntry>, incoming: MaterialPlanTable, root: MaterialPlanRef): MaterialPlanRef { val offset = entries.size; incoming.entries().forEach { entry -> entries += entry }; return MaterialPlanRef(offset + root.indexI32) }
     private fun validAllocationFacts(capabilities: PlanCapabilitySnapshot): Boolean = listOf(
@@ -1495,7 +1563,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private sealed interface Preflight { data object Member : Preflight; data object Outside : Preflight; data class Invalid(val message: String) : Preflight; data class Limit(val message: String) : Preflight }
     private sealed interface Recognition { data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition; data class Ready(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable?, val elidedNoOpsI32: Int, val requestedAa: Boolean,val sources: MaterialSourceConstructionTableV4) : Recognition; data class Gap(val message: String) : Recognition; data class Invalid(val message: String) : Recognition; data class Horizon(val message: String) : Recognition; data class Limit(val message: String) : Recognition }
     private sealed interface DrawScope {
-        data class Ready(val path: PathF32, val matrixF64: Matrix3x3F64, val transformClass: PathTransformClass, val clip: RectI32?, val fill: Boolean, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val requestsAntiAlias: Boolean, val rectProjection: Boolean = false) : DrawScope
+        data class Ready(val path: PathF32, val matrixF64: Matrix3x3F64, val transformClass: PathTransformClass, val clip: RectI32?, val fill: Boolean, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val requestsAntiAlias: Boolean, val rectProjection: Boolean = false, val rectHairlineDeviceRectI32: RectI32? = null) : DrawScope
         data class Gap(val message: String) : DrawScope
         data class Invalid(val message: String) : DrawScope
     }
