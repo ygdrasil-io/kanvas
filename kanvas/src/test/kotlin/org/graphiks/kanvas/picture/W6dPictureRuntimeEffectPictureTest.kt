@@ -135,8 +135,8 @@ class W6dPictureRuntimeEffectPictureTest {
         )
 
         val roundTripBytes = historical.toByteArray()
-        assertEquals(15, ByteBuffer.wrap(roundTripBytes).getInt(4))
-        assertEquals(9, ByteBuffer.wrap(roundTripBytes).getInt(28))
+        assertEquals(16, ByteBuffer.wrap(roundTripBytes).getInt(4))
+        assertEquals(10, ByteBuffer.wrap(roundTripBytes).getInt(28))
         val roundTrip = assertNotNull(Picture.fromByteArray(roundTripBytes))
         val expected = UByteArray(8 * 8 * 4) { channel -> when (channel % 4) {
             2, 3 -> 255u

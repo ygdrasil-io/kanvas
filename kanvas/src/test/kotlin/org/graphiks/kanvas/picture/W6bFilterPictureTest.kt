@@ -39,8 +39,8 @@ class W6bFilterPictureTest {
         val memoryFilters = filtersFromPublicTraversal(picture)
         assertSame(memoryFilters[0], memoryFilters[1])
         assertNotSame(memoryFilters[0], memoryFilters[2])
-        assertEquals(15, ByteBuffer.wrap(bytes).getInt(4))
-        assertEquals(9, ByteBuffer.wrap(bytes).getInt(28))
+        assertEquals(16, ByteBuffer.wrap(bytes).getInt(4))
+        assertEquals(10, ByteBuffer.wrap(bytes).getInt(28))
 
         val decoded = assertNotNull(Picture.fromByteArray(bytes))
         val wireFilters = filtersFromPublicTraversal(decoded)
