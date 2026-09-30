@@ -114,13 +114,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
         val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
-        if (!coreCapabilities(capabilities, extent)) return promoted("Required W4d.2 device capability is unavailable")
+        val colorFormat = logicalColorFormat(selected.target)
+        if (!coreCapabilities(capabilities, extent, colorFormat)) return promoted("Required W4d.2 device capability is unavailable")
         val anyAa = forceAaFrame || selected.requestedAa
         val anyHard = selected.draws.any { !it.requestsAntiAlias }
         val aaStencil = selected.draws.any { it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
         val hardStencil = selected.draws.any { !it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
         val aaDepthStencil = requiresAaDepthStencil(anyAa, aaStencil)
-        textureRefusal(capabilities, anyAa, anyHard, aaDepthStencil, hardStencil)?.let { return it }
+        textureRefusal(capabilities, colorFormat, anyAa, anyHard, aaDepthStencil, hardStencil)?.let { return it }
         if ((aaDepthStencil || hardStencil) && PlanOperationCapability.DepthStencilAttachment !in capabilities.supportedOperations()) {
             return promoted("W4d.2 depth-stencil capability is unavailable")
         }
@@ -148,7 +149,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             is Preflight.Invalid -> return invalid(preflight.message)
             is Preflight.Limit -> return limit(preflight.message)
         }
-        return when (val recognized = recognize(scene)) {
+        return when (val recognized = recognize(scene, target)) {
             is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(
                 if (forceAaFrame || scene.any { it is SceneCommand.Draw && it.node.coverage == CoverageRequest.ANTIALIASED }) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
                 scene.canonicalId, target, recognized.refusals,
@@ -233,7 +234,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         return if (visualDrawCountI32 > MAX_DRAWS) Preflight.Limit("W4d.2 accepts at most 512 visual path draws") else Preflight.Member
     }
 
-    private fun recognize(scene: SceneSnapshot): Recognition {
+    private fun recognize(scene: SceneSnapshot, target: RenderTargetDescriptor): Recognition {
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
         // The standalone AA extension already proves a whole frame of plain solid
         // SrcOver draws. Normalize those solids directly while retaining their original
@@ -257,7 +258,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     if (visualDrawCountI32 >= MAX_DRAWS) return Recognition.Limit("W4d.2 accepts at most 512 visual path draws")
                     visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
                     requestedAa = requestedAa || command.node.coverage == CoverageRequest.ANTIALIASED
-                    when (val result = recognizeDraw(command.node, commandIndex, targetBounds, frameWorkUsageI64, materialEntries,sources,standaloneAaSolids)) {
+                    when (val result = recognizeDraw(command.node, commandIndex, targetBounds, frameWorkUsageI64, materialEntries,sources,standaloneAaSolids, target)) {
                         is DrawResult.MaterialRefused -> { materialRefusals += result.refusal; frameWorkUsageI64 = result.frameWorkUsageI64 }
                         is DrawResult.Ready -> {
                             draws += result.draw
@@ -266,6 +267,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                         is DrawResult.NoOp -> { elidedNoOpsI32++; frameWorkUsageI64 = result.frameWorkUsageI64 }
                         is DrawResult.Empty -> {
                             if (imageProjection?.owns(commandIndex,command.node) == true) emptyImageCandidatesI32++
+                            if (result.elidedAdmittedRectHairline) elidedNoOpsI32++
                             frameWorkUsageI64 = result.frameWorkUsageI64
                         }
                         is DrawResult.Gap -> return Recognition.Gap(result.message)
@@ -299,6 +301,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         materialEntries: MutableList<MaterialPlanEntry>,
         sources: MutableList<MaterialSourceConstructionV4>,
         standaloneAaSolids: Boolean,
+        target: RenderTargetDescriptor,
     ): DrawResult {
         val scope = when (val classified = classifyDrawScope(node)) {
             is DrawScope.Ready -> classified
@@ -312,16 +315,21 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 // would erase that input before the filter has a chance to produce its halo.
                 val targetScissor = if (w6AaCoverageSource) prepared.geometry.copyConservativeScissorI32() else
                     intersect(prepared.geometry.copyConservativeScissorI32(), targetBounds)
-                        ?: return DrawResult.Empty(prepared.frameWorkUsageI64)
+                        ?: return DrawResult.Empty(prepared.frameWorkUsageI64, scope.rectHairlineDeviceRectI32 != null)
                 val scissor = if (w6AaCoverageSource) targetScissor else
                     scope.clip?.let { intersect(targetScissor, it) } ?: targetScissor
-                if (scissor.isEmpty) return DrawResult.Empty(prepared.frameWorkUsageI64)
+                if (scissor.isEmpty) return DrawResult.Empty(prepared.frameWorkUsageI64, scope.rectHairlineDeviceRectI32 != null)
                 if (prepared.geometry.fillRule == FillRule.WINDING &&
                     prepared.geometry.copyStencilEdgeFanF32OrNull() != null &&
                     prepared.geometry.emittedNonZeroClosedEdgeCountI32 > UByte.MAX_VALUE.toInt()
                 ) return DrawResult.Limit("W4d.2 winding path exceeds the stencil edge limit")
+                val colorFormat = logicalColorFormat(target)
                 val normalizedSource = if (standaloneAaSolids) {
-                    when (val normalized = EffectiveMaterialPlanner.normalize(node, FORMAT.blendTargetClampV1())) {
+                    when (val normalized = EffectiveMaterialPlanner.normalize(
+                        node,
+                        colorFormat.blendTargetClampV1(),
+                        compositionDomain = target.compositionDomain,
+                    )) {
                         EffectiveMaterialPlanner.Normalization.NoOp -> EffectiveMaterialPlanner.SourceNormalizationV4.NoOp
                         is EffectiveMaterialPlanner.Normalization.Refused ->
                             EffectiveMaterialPlanner.SourceNormalizationV4.Refused(normalized.diagnosticCode)
@@ -333,7 +341,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     }
                 } else EffectiveMaterialPlanner.normalizeSourcesV4(
                     if (node.paint?.colorFilter == null) node.copy(effects = EffectStack.Empty) else node,
-                    FORMAT.blendTargetClampV1(),scissor,runtimeCatalog=runtimeCatalog)
+                    colorFormat.blendTargetClampV1(),scissor,runtimeCatalog=runtimeCatalog,
+                    compositionDomain=target.compositionDomain)
                 val source = when (val planned = normalizedSource) {
                     is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> return DrawResult.MaterialRefused(
                         EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), prepared.frameWorkUsageI64)
@@ -360,7 +369,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     prepared.frameWorkUsageI64,
                 )
             }
-            is Prepared.Empty -> DrawResult.Empty(prepared.frameWorkUsageI64)
+            is Prepared.Empty -> DrawResult.Empty(prepared.frameWorkUsageI64, scope.rectHairlineDeviceRectI32 != null)
             is Prepared.Invalid -> DrawResult.Invalid(prepared.message)
             is Prepared.Horizon -> DrawResult.Horizon(prepared.message)
             is Prepared.Limit -> DrawResult.Limit(prepared.message)
@@ -569,7 +578,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         if (anyAa && successor) promoted("W5b final blending requires the admitted single-sample W4d.2 topology")
         else if (!anyAa && selected.draws.isEmpty()) RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(
             W5bGeometryLanePlanV3.constructClearOnly(PlanId(identity(selected,capabilities,budget,W5B_HARD_CAPABILITY_ID)),
-                W5B_HARD_CAPABILITY_ID,SizeI32(selected.target.extent.width,selected.target.extent.height),capabilities,budget,null)))
+                W5B_HARD_CAPABILITY_ID,SizeI32(selected.target.extent.width,selected.target.extent.height),capabilities,budget,null,
+                logicalColorFormat(selected.target))))
         else if (anyAa) planAa(selected,capabilities,budget,geometry,anyHard,hardStencil)
         else planHard(selected,capabilities,budget,geometry,hardStencil)
     }
@@ -593,7 +603,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     MaterialPlanRef(refs.indexOf(ref).also { require(it >= 0) }) }
                 val source = SourceDeferredRenderConstructionV4.of(
                     PlanId(identity(selected,capabilities,budget,W5A_HARD_CAPABILITY_ID)),W5A_HARD_CAPABILITY_ID,
-                    SizeI32(selected.target.extent.width,selected.target.extent.height),FORMAT,capabilities,budget,selected.draws.size,
+                    SizeI32(selected.target.extent.width,selected.target.extent.height),logicalColorFormat(selected.target),capabilities,budget,selected.draws.size,
                     topology.resources,symbolic,topology.dependencies,selected.sources,DeferredLaneTopologyV4.Ordinary,
                     null,emptyList(),emptyMap(),emptyMap(),
                 preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, W5A_HARD_CAPABILITY_ID, scene)) })
@@ -650,7 +660,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         return when (val source = SourceDeferredRenderConstructionV4.of(
             PlanId(identity(selected, capabilities, budget, w6AaSourceCapabilityId())),
             w6AaSourceCapabilityId(),
-            SizeI32(selected.target.extent.width, selected.target.extent.height), FORMAT, capabilities, budget,
+            SizeI32(selected.target.extent.width, selected.target.extent.height), logicalColorFormat(selected.target), capabilities, budget,
             selected.draws.size, topology.resources, symbolic, topology.dependencies, selected.sources,
             if (w6AaCoverageSource) DeferredLaneTopologyV4.AaResolvedCoverage else DeferredLaneTopologyV4.AaResolvedColor,
             null, emptyList(), emptyMap(), emptyMap(),
@@ -706,10 +716,11 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         fun buffer(role: PlanResourceRole, bytes: Long, usages: Set<PlanResourceUsage>) =
             PlanResource.of(role, 0, PlanResourceKind.Buffer, null, null, bytes, usages,
                 PlanResourceLifetime.FrameLocal, 0, passes.size)
+        val colorFormat = logicalColorFormat(selected.target)
         val resources = buildList {
-            add(texture(PlanResourceRole.MultisampleColorTarget, PlanTextureFormat.Color(FORMAT), aa.multisampleColorBytes,
+            add(texture(PlanResourceRole.MultisampleColorTarget, PlanTextureFormat.Color(colorFormat), aa.multisampleColorBytes,
                 setOf(PlanResourceUsage.RenderAttachment), 4))
-            add(texture(if (coverage) PlanResourceRole.CoverageSource else PlanResourceRole.PathAaResolvedColor, PlanTextureFormat.Color(FORMAT), base.targetBytes,
+            add(texture(if (coverage) PlanResourceRole.CoverageSource else PlanResourceRole.PathAaResolvedColor, PlanTextureFormat.Color(colorFormat), base.targetBytes,
                 setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 1))
             if (depth != null) add(texture(PlanResourceRole.DepthStencil,
                 PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), aa.multisampleDepthStencilBytes,
@@ -732,13 +743,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
         val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
-        if (!coreCapabilities(capabilities, extent)) return promoted("Required W4d.2 device capability is unavailable")
+        val colorFormat = logicalColorFormat(selected.target)
+        if (!coreCapabilities(capabilities, extent, colorFormat)) return promoted("Required W4d.2 device capability is unavailable")
         val anyAa = forceAaFrame || selected.requestedAa
         val anyHard = selected.draws.any { !it.requestsAntiAlias }
         val aaStencil = selected.draws.any { it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
         val hardStencil = selected.draws.any { !it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
         val aaDepthStencil = requiresAaDepthStencil(anyAa, aaStencil)
-        textureRefusal(capabilities, anyAa, anyHard, aaDepthStencil, hardStencil)?.let { return it }
+        textureRefusal(capabilities, colorFormat, anyAa, anyHard, aaDepthStencil, hardStencil)?.let { return it }
         if ((aaDepthStencil || hardStencil) && PlanOperationCapability.DepthStencilAttachment !in capabilities.supportedOperations()) {
             return promoted("W4d.2 depth-stencil capability is unavailable")
         }
@@ -1022,14 +1034,15 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         memory: PathFillMemoryFootprint,
         usesStencil: Boolean,
     ): RenderGraphConstruction {
-        val topology = hardSourceTopology(selected,memory,usesStencil)
+        val colorFormat = logicalColorFormat(selected.target)
+        val topology = hardSourceTopology(selected,memory,usesStencil, colorFormat)
         return RenderGraph.construct(PlanId(identity(selected,capabilities,budget,W5A_HARD_CAPABILITY_ID)),W5A_HARD_CAPABILITY_ID,
-            SizeI32(selected.target.extent.width,selected.target.extent.height),FORMAT,capabilities,budget,selected.draws.size,
+            SizeI32(selected.target.extent.width,selected.target.extent.height),colorFormat,capabilities,budget,selected.draws.size,
             topology.resources,topology.passes,topology.dependencies,topology.peakI64,selected.materialPlanTable)
     }
 
     private fun hardSourceTopology(selected: Candidate,memory: PathFillMemoryFootprint,
-        usesStencil: Boolean): W5bDestinationGraphSealer.DestinationTopologyV4 {
+        usesStencil: Boolean, colorFormat: PlanLogicalColorFormat = logicalColorFormat(selected.target)): W5bDestinationGraphSealer.DestinationTopologyV4 {
         val pathPassCount = selected.draws.sumOf { if (it.strategy == PathFillStrategy.DirectTriangle) 1 else 2 }
         val passCount = Math.addExact(pathPassCount, 1)
         val readbackIndex = pathPassCount
@@ -1045,7 +1058,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             samples: Int = 1,
         ) = PlanResource.of(role, 0, kind, format, if (kind == PlanResourceKind.Texture2D) extent else null,
             bytes, usages, PlanResourceLifetime.FrameLocal, first, last, samples)
-        val target = resource(PlanResourceRole.LogicalTarget, PlanResourceKind.Texture2D, PlanTextureFormat.Color(FORMAT),
+        val target = resource(PlanResourceRole.LogicalTarget, PlanResourceKind.Texture2D, PlanTextureFormat.Color(colorFormat),
             memory.targetBytes, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource))
         val staging = resource(PlanResourceRole.ReadbackStaging, PlanResourceKind.Buffer, null, memory.readbackBytes,
             setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), readbackIndex, passCount)
@@ -1080,7 +1093,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             clear = false
         }
         passes += PlanPass.ReadbackPass(0, target.id, staging.id, memory.readbackBytesPerRow)
-        return W5bDestinationGraphSealer.DestinationTopologyV4(FORMAT,listOfNotNull(target,staging,vertex,index,uniform,depth),
+        return W5bDestinationGraphSealer.DestinationTopologyV4(colorFormat,listOfNotNull(target,staging,vertex,index,uniform,depth),
             passes,dependencies(passes),memory.peakBytes)
     }
 
@@ -1179,9 +1192,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         fun buffer(role: PlanResourceRole, bytes: Long, usages: Set<PlanResourceUsage>, first: Int, last: Int) =
             PlanResource.of(role, 0, PlanResourceKind.Buffer, null, null, bytes, usages,
                 PlanResourceLifetime.FrameLocal, first, last)
-        resources += texture(PlanResourceRole.MultisampleColorTarget, 0, PlanTextureFormat.Color(FORMAT),
+        val colorFormat = logicalColorFormat(selected.target)
+        resources += texture(PlanResourceRole.MultisampleColorTarget, 0, PlanTextureFormat.Color(colorFormat),
             memory.multisampleColorBytes, setOf(PlanResourceUsage.RenderAttachment), 0, readbackIndex, 4)
-        resources += texture(PlanResourceRole.LogicalTarget, 0, PlanTextureFormat.Color(FORMAT), memory.base.targetBytes,
+        resources += texture(PlanResourceRole.LogicalTarget, 0, PlanTextureFormat.Color(colorFormat), memory.base.targetBytes,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), 0, passCount, 1)
         resources += texture(PlanResourceRole.DepthStencil, 0, PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
             memory.multisampleDepthStencilBytes, setOf(PlanResourceUsage.DepthStencilAttachment), 0, readbackIndex, 4)
@@ -1205,7 +1219,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             id = PlanId(identity(selected, capabilities, budget, W5A_AA_CAPABILITY_ID)),
             capabilityId = W5A_AA_CAPABILITY_ID,
             targetExtent = extent,
-            colorFormat = FORMAT,
+            colorFormat = colorFormat,
             capabilities = capabilities,
             budget = budget,
             visualCommandCount = selected.draws.size,
@@ -1228,9 +1242,18 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         GeneralPathDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.geometry, sealed.strategy, sealed.scissorI32, coverage, sample,
             coordinates = sealed.coordinates, coordinatesV2 = sealed.coordinatesV2, coordinatesV4 = sealed.coordinatesV4)
 
-    private fun coreCapabilities(capabilities: PlanCapabilitySnapshot, extent: SizeI32): Boolean =
+    private fun logicalColorFormat(target: RenderTargetDescriptor): PlanLogicalColorFormat = when (target.compositionDomain) {
+        org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+        org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
+    }
+
+    private fun coreCapabilities(
+        capabilities: PlanCapabilitySnapshot,
+        extent: SizeI32,
+        colorFormat: PlanLogicalColorFormat,
+    ): Boolean =
         extent.width <= capabilities.maxTextureDimension2D && extent.height <= capabilities.maxTextureDimension2D &&
-            FORMAT in capabilities.supportedFormats() && capabilities.maxDynamicUniformBuffersPerPipelineLayout >= 1 &&
+            colorFormat in capabilities.supportedFormats() && capabilities.maxDynamicUniformBuffersPerPipelineLayout >= 1 &&
             REQUIRED.all { it in capabilities.supportedOperations() } && validAllocationFacts(capabilities)
 
     /**
@@ -1243,12 +1266,13 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
     private fun textureRefusal(
         caps: PlanCapabilitySnapshot,
+        colorFormat: PlanLogicalColorFormat,
         anyAa: Boolean,
         anyHard: Boolean,
         aaDepthStencil: Boolean,
         hardStencil: Boolean,
     ): RenderPlanResult.GapOnPromotedScope? {
-        val logical = PlanTextureFormat.Color(FORMAT)
+        val logical = PlanTextureFormat.Color(colorFormat)
         if (!caps.supportsTexture(logical, 1, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource))) {
             return promoted(W4dGeneralPlanDiagnostics.TextureSampleSupportUnavailable, "W4d.2 logical target support is unavailable")
         }
@@ -1567,7 +1591,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         data class Gap(val message: String) : DrawScope
         data class Invalid(val message: String) : DrawScope
     }
-    private sealed interface DrawResult { data class NoOp(val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Ready(val draw: SealedDraw, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Horizon(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
+    private sealed interface DrawResult { data class NoOp(val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Ready(val draw: SealedDraw, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64, val elidedAdmittedRectHairline: Boolean = false) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Horizon(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
     private sealed interface Prepared { data class Ready(val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val pathGeometry: PathDrawGeometry, val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Invalid(val message: String) : Prepared; data class Horizon(val message: String) : Prepared; data class Limit(val message: String) : Prepared }
     private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val geometry: PathDrawGeometry, val strategy: PathFillStrategy, val scissorI32: RectI32, val requestsAntiAlias: Boolean, val blend: BlendPlan, val coordinates: MaterialCoordinatePlanV1?, val coordinatesV2: MaterialCoordinatePlanV2?, val coordinatesV4: SourceCoordinatesV4?)
     private data class ResourceLife(val ordinal: Int, val first: Int, val last: Int)
@@ -1614,6 +1638,15 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             runtimeCatalog = catalog,
         )
 
+        /** W6-only hard source retaining the Task 1 Rect hairline projection. */
+        internal fun w6EncodedRectHairlineSource(
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): W4dGeneralPathPlanCompiler = W4dGeneralPathPlanCompiler(
+            PathStrokePolicyF64(),
+            admitsStandaloneRectPathFrames = true,
+            runtimeCatalog = catalog,
+        )
+
         /** Root-only W7 source; this is deliberately not the broad W6 path source. */
         internal fun w6RootAaRectStrokeSource(
             catalog: RuntimeEffectSemanticCatalogSnapshot,
@@ -1646,7 +1679,6 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
         public fun isAaCapabilityId(capabilityId: String): Boolean =
             capabilityId == AA_CAPABILITY_ID || capabilityId == W5A_AA_CAPABILITY_ID
-        private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         private val REQUIRED = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)
         private const val MAX_DRAWS = 512
     }

@@ -406,6 +406,7 @@ internal fun encodeW4eNativePasses(
     owned: GPUW4eNativeOwnedHandles,
     attachment: (String) -> GPUPreparedNativeTextureViewOperand,
     isCoverageMaskResource: (String) -> Boolean,
+    targetFormatForResource: (String) -> GPUTextureFormat,
     scene: GPUPreparedNativeTextureViewOperand,
     sceneMsaa: GPUPreparedNativeTextureViewOperand?,
     targetBounds: GPUPixelBounds,
@@ -1276,7 +1277,7 @@ internal fun encodeW4eNativePasses(
                         val depth = sealedPath.depthStencilResourceId?.let(attachment)
                             ?: throw refusal("invalid.native-core-primitive.w4e-path-depth", "W4e scan-span producer lacks its sealed D24S8 attachment.")
                         val sampleCount = if (sealedPath.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
-                        val format = if (isCoverageMaskResource(sealedPath.targetResourceId)) GPUTextureFormat.RGBA8Unorm else GPUTextureFormat.RGBA8UnormSrgb
+                        val format = targetFormatForResource(sealedPath.targetResourceId)
                         val load = if (entry.render.loadStore.loadOp == "clear") GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load
                         val semantic = requireNotNull(entry.packet.semanticPayload) {
                             "W4e scan-span producer requires its one frozen semantic packet payload."
@@ -1335,7 +1336,7 @@ internal fun encodeW4eNativePasses(
                     )
                     val maskTarget = isCoverageMaskResource(sealedPath.targetResourceId)
                     val sampleCount = if (sealedPath.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
-                    val format = if (maskTarget) GPUTextureFormat.RGBA8Unorm else GPUTextureFormat.RGBA8UnormSrgb
+                    val format = targetFormatForResource(sealedPath.targetResourceId)
                     val depth = sealedPath.depthStencilResourceId?.let(attachment)
                         ?: throw refusal("invalid.native-core-primitive.w4e-path-depth", "W4e stencil producer lacks its sealed D24S8 attachment.")
                     val evenOdd = producerGeometry.fillRule == org.graphiks.math.geometry.FillRule.EVEN_ODD ||
@@ -1381,7 +1382,7 @@ internal fun encodeW4eNativePasses(
                         .GPUW4ePreparedClipConsumerAuthority.InverseDomain || preservesZeroInverseSource || retainedInverseInterior) && isStencilCover) {
                     val sampleCount = if (sealedPath.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
                     val maskTarget = isCoverageMaskResource(sealedPath.targetResourceId)
-                    val format = if (maskTarget) GPUTextureFormat.RGBA8Unorm else GPUTextureFormat.RGBA8UnormSrgb
+                    val format = targetFormatForResource(sealedPath.targetResourceId)
                     val depth = sealedPath.depthStencilResourceId?.let(attachment)
                         ?: throw refusal("invalid.native-core-primitive.w4e-path-depth", "W4e stencil cover lacks its sealed D24S8 attachment.")
                     val inverseDomain = consumer as? org.graphiks.kanvas.gpu.renderer.passes
@@ -5055,6 +5056,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val renders = encodeW4eNativePasses(device, generationSeal.deviceGeneration,
                 entries.map { GPUW4eNativePassEntry(it.index, it.render, it.packet) }, nativePayload,
                 sealedVertex, sealedIndex, sealedUniform, owned, ::attachment, attachments::isCoverageMaskResource,
+                { id -> if (attachments.isCoverageMaskResource(id)) GPUTextureFormat.RGBA8Unorm else GPUTextureFormat.RGBA8UnormSrgb },
                 scene, sceneMsaa, GPUPixelBounds(0, 0, preparedSceneTarget.width, preparedSceneTarget.height),
                 w4eFinal != null, { w4eFinal?.authority?.consumerFor(it) }, ::Refusal)
             val readbackOperand = output?.let { output ->
@@ -5291,6 +5293,20 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         fun uniqueFact(role: PlanResourceRole) = authority.allBindings().singleOrNull { binding ->
             binding.fact.role == role
         }
+        fun nativeColorFormat(
+            binding: org.graphiks.kanvas.gpu.renderer.passes.W4dGeneralNativeResourceBinding,
+        ): GPUTextureFormat = when (val format = binding.fact.format) {
+            is PlanTextureFormat.Color -> when (format.value) {
+                org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ->
+                    GPUTextureFormat.RGBA8UnormSrgb
+                org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL ->
+                    GPUTextureFormat.RGBA8Unorm
+            }
+            else -> throw PostCheckoutRefusal(
+                "invalid.native-core-primitive.w4d-general-resource",
+                "W4d.2 color attachment is not one sealed logical color format.",
+            )
+        }
         fun aliasedTransientFact(
             role: PlanResourceRole,
         ): org.graphiks.kanvas.gpu.renderer.passes.W4dGeneralNativeResourceBinding? {
@@ -5342,7 +5358,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 targetGeneration = generationSeal.targetGeneration,
                 width = width,
                 height = height,
-                format = GPUTextureFormat.RGBA8UnormSrgb,
+                format = nativeColorFormat(binding),
                 sampleCount = binding.fact.sampleCountI32,
             )
         }
@@ -5594,7 +5610,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     rowsPerImage = output.layout.rowsPerImage,
                     bufferOffset = output.layout.bufferOffset,
                     mappedSize = output.layout.totalBufferBytes,
-                    format = GPUTextureFormat.RGBA8UnormSrgb,
+                    format = nativeColorFormat(requireNotNull(uniqueFact(PlanResourceRole.LogicalTarget))),
                 ),
             )
             val operandsByStep = (renderOperands + readbackOperand)

@@ -469,9 +469,13 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
             ).toSet() || pathPassFacts.any { fact ->
                 val structural = structuralKeysByPathPass[fact.pathPassId] ?: return null
                 val target = factsByTarget[fact.targetResourceId] ?: return null
-                val colorFormat = when (target.format) {
-                    is PlanTextureFormat.Color ->
-                        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb
+                val colorFormat = when (val format = target.format) {
+                    is PlanTextureFormat.Color -> when (format.value) {
+                        org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ->
+                            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb
+                        org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL ->
+                            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
+                    }
                     PlanTextureFormat.CoverageMask ->
                         GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
                     else -> return null

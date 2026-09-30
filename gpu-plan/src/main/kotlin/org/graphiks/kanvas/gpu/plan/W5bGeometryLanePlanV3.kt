@@ -49,8 +49,9 @@ public class W5bGeometryLanePlanV3 internal constructor(
             return constructClearOnly(id,capabilityId,extent,capabilities,budget,material).publish()
         }
         internal fun constructClearOnly(id: PlanId, capabilityId: String, extent: SizeI32,
-            capabilities: PlanCapabilitySnapshot, budget: PlanBudget, material: MaterialPlanTable?): RenderGraphConstruction {
-            val topology = describeClearOnly(capabilityId,extent,capabilities,budget)
+            capabilities: PlanCapabilitySnapshot, budget: PlanBudget, material: MaterialPlanTable?,
+            colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL): RenderGraphConstruction {
+            val topology = describeClearOnly(capabilityId,extent,capabilities,budget,colorFormat)
             // The historical empty-draw sealer discards material and charges only
             // the clear target/readback. Keep that exact budget and null table.
             RawMaterialRequirementsV2.requireFrameBudget(emptyList(),topology.peakI64,budget,
@@ -59,13 +60,15 @@ public class W5bGeometryLanePlanV3 internal constructor(
                 topology.resources,topology.passes,topology.dependencies,topology.peakI64,null)
         }
         internal fun describeClearOnly(capabilityId: String,extent: SizeI32,
-            capabilities: PlanCapabilitySnapshot,budget: PlanBudget): W5bDestinationGraphSealer.DestinationTopologyV4 {
+            capabilities: PlanCapabilitySnapshot,budget: PlanBudget,
+            colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL): W5bDestinationGraphSealer.DestinationTopologyV4 {
             val targetBytesI64 = Math.multiplyExact(Math.multiplyExact(extent.width.toLong(), extent.height.toLong()), 4L)
             val widthBytesI64 = Math.multiplyExact(extent.width.toLong(), 4L)
             val alignmentI64 = capabilities.copyBytesPerRowAlignment.toLong()
             val rowBytesI64 = Math.addExact(widthBytesI64, (alignmentI64 - widthBytesI64 % alignmentI64) % alignmentI64)
             return W5bDestinationGraphSealer.describeSources(capabilityId, extent, capabilities, budget, emptyList(),
-                targetBytesI64, Math.multiplyExact(rowBytesI64, extent.height.toLong()), rowBytesI64)
+                targetBytesI64, Math.multiplyExact(rowBytesI64, extent.height.toLong()), rowBytesI64,
+                colorFormat = colorFormat)
         }
     }
 }

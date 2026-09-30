@@ -10,7 +10,9 @@ import org.graphiks.kanvas.gpu.renderer.recording.*
 internal enum class GPUW4eMaterialGeometryRecipeV1 { Consumer, BinaryConsumer, MaskedPath, UnmaskedCover, UnmaskedPath }
 
 internal fun sealW4eMaterialGeometryHostV1(packet: GPUDrawPacket,
-    commonFinalSource: Boolean = packet.w5bFinalFrameWitnessV3?.w4eLane != null): GPUW5aGeometryHostTemplateV1? {
+    commonFinalSource: Boolean = packet.w5bFinalFrameWitnessV3?.w4eLane != null,
+    targetFormat: GPUTextureFormat = GPUTextureFormat.RGBA8UnormSrgb,
+): GPUW5aGeometryHostTemplateV1? {
     if (packet.w4ePreparedFrameAuthority == null) return null
     val path = packet.w4ePreparedPath ?: return null
     val consumer = packet.w4ePreparedClipConsumer
@@ -38,7 +40,7 @@ internal fun sealW4eMaterialGeometryHostV1(packet: GPUDrawPacket,
     val finalBlend = packet.blendPlan.takeIf { commonFinalSource &&
         recipe != GPUW4eMaterialGeometryRecipeV1.BinaryConsumer }
     return GPUW5aGeometryHostTemplateV1(packet.packetId.value, recipe.name, w4eMaterialGeometrySourceV1(recipe),
-        "vs_main", "fs_main", ColorTargetState(GPUTextureFormat.RGBA8UnormSrgb, w4eFinalBlendState(finalBlend)).hostTargetV1(),
+        "vs_main", "fs_main", ColorTargetState(targetFormat, w4eFinalBlendState(finalBlend)).hostTargetV1(),
         w4eMaterialGeometryLayoutV1(recipe).hostLayoutV1(),
         if (unmasked) GPUW5bInlineCoverageV3.NativeFull else if (recipe == GPUW4eMaterialGeometryRecipeV1.BinaryConsumer) null
             else GPUW5bInlineCoverageV3.NativeMask,

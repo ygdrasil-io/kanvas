@@ -75,8 +75,12 @@ public class W6aLayerPlanCompiler public constructor(
         val ownsW6b = W6bFilterGraphConstruction.owns(scene)
         val hasLayerBoundary = commands.any { it is SceneCommand.BeginLayer || it is SceneCommand.EndLayer }
         val ownsMixedRootAaRect = !hasLayerBoundary && !ownsW6b && ownsMixedRootAaRectFrame(commands)
+        val ownsEncodedHairlineFrame = !ownsW6b && target.compositionDomain ==
+            org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
+            CompositionAdmissionV1.validate(scene, target).isEmpty() &&
+            commands.filterIsInstance<SceneCommand.Draw>().any(CompositionAdmissionV1::isAdmittedEncodedRectHairline)
         val ownsEncodedRootSegments = !hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect &&
-            ownsEncodedRootSegmentFrame(scene, target, commands)
+            (ownsEncodedRootSegmentFrame(scene, target, commands) || ownsEncodedHairlineFrame)
         if (!hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect && !ownsEncodedRootSegments) {
             return GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Scene has no layer boundary.")))
         }
@@ -230,6 +234,7 @@ public class W6aLayerPlanCompiler public constructor(
             val aaSource = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
             val rootAaRectSource = W4dGeneralPathPlanCompiler.w6RootAaRectStrokeSource(runtimeCatalog)
             val aaCoverageSource = W4dGeneralPathPlanCompiler.w6AaCoverageSource(runtimeCatalog)
+            val encodedHairlineSource = W4dGeneralPathPlanCompiler.w6EncodedRectHairlineSource(runtimeCatalog)
             val originalDraw = (recordedCommand as? SceneCommand.Draw)?.node
             val unfilteredDraw = (recordedCommand as? SceneCommand.Draw)?.let {
                 stripW6bPayload(it, drawIndexI32 in directInputDemandCommands).node
@@ -241,6 +246,8 @@ public class W6aLayerPlanCompiler public constructor(
                 aaSource.acceptsW6AaColorSourceScope(requireNotNull(originalDraw))
             val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&
                 originalDraw?.let(rootAaRectSource::acceptsW6RootAaRectStrokeScope) == true
+            val encodedHairline = ownsEncodedHairlineFrame &&
+                (recordedCommand as? SceneCommand.Draw)?.let(CompositionAdmissionV1::isAdmittedEncodedRectHairline) == true
             val rootAaCoverage = scopeI32 == null && ownsW6b &&
                 originalDraw?.coverage == CoverageRequest.ANTIALIASED &&
                 originalDraw.paint?.let { paint ->
@@ -251,6 +258,7 @@ public class W6aLayerPlanCompiler public constructor(
             val generalPath = when {
                 rootAaCoverage -> aaCoverageSource
                 rootAaRectStroke -> rootAaRectSource
+                encodedHairline -> encodedHairlineSource
                 (scopeI32 != null && originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true) || rootAaSource -> aaSource
                 else -> W4dGeneralPathPlanCompiler()
             }
