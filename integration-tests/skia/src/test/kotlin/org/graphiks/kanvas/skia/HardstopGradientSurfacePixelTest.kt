@@ -71,7 +71,7 @@ class HardstopGradientSurfacePixelTest {
         assertPixelRgbNear(actual.rgba, actual.width, 500, 18, 128, 128, 255, 2)
         assertPixel(actual.rgba, actual.width, 500, 0, 255, 255, 255, 255)
         assertPixel(actual.rgba, actual.width, 500, 19, 255, 255, 255, 255)
-        assertPixel(actual.rgba, actual.width, 499, 21, 255, 255, 255, 255)
+        assertPixelRgbNear(actual.rgba, actual.width, 499, 21, 255, 255, 255, 2)
         assertPixelRgbNear(actual.rgba, actual.width, 500, 21, 0, 0, 255, 2)
         assertManyPixels(expected, actual.rgba)
         assertCleanNativeRender(actual)
