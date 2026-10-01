@@ -78,6 +78,11 @@ internal fun validateW6aLayerTopology(
                 byId.getValue(id).copyExtent() == row.copyExtent() && byId.getValue(id).sampleCountI32 == row.sampleCountI32) }
             pass.resolveTarget?.let { id -> require(byId.getValue(id).format == PlanTextureFormat.CoverageMask &&
                 byId.getValue(id).copyExtent() == row.copyExtent() && byId.getValue(id).sampleCountI32 == 1) }
+            val scissor = pass.copyScissorI32()
+            if (pass.realization == PlanPass.W4eClipMaskProducerRealizationV1.Raster) {
+                require(!scissor.isEmpty && scissor.left >= 0 && scissor.top >= 0 &&
+                    scissor.right <= requireNotNull(row.copyExtent()).width && scissor.bottom <= requireNotNull(row.copyExtent()).height)
+            } else require(!pass.inverseCoverage && scissor.isEmpty)
             preparedMasks += pass.resolveTarget ?: pass.target
         }
         is PlanPass.ClipMaskFold -> {

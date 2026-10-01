@@ -62,9 +62,16 @@ internal fun PlanPass.rebindW4eV6(ordinalI32: Int, resource: (PlanResourceId) ->
     }
     return when (this) {
         is PlanPass.ClipMaskInitialize -> PlanPass.ClipMaskInitialize(ordinalI32, resource(output), domain(copyDomainI32()), clearCoverageF32, atomicGroup)
-        is PlanPass.ClipMaskProducer -> PlanPass.ClipMaskProducer(ordinalI32, resource(target), resolveTarget?.let(resource),
-            depthStencil?.let(resource), sampleCountI32, if (mapping == null) copyGeometryF32() else
-                requireNotNull(mapping.mapDeviceClipToLayerF32OrNull(copyGeometryF32())), atomicGroup, inverseCoverage, antiAlias)
+        is PlanPass.ClipMaskProducer -> {
+            val scissor = if (mapping == null) copyScissorI32() else requireNotNull(
+                mapping.mapDeviceScissorToLayerI32OrNull(copyScissorI32(), requireNotNull(targetDomainI32)),
+            )
+            PlanPass.ClipMaskProducer(ordinalI32, resource(target), resolveTarget?.let(resource),
+                depthStencil?.let(resource), sampleCountI32, if (mapping == null) copyGeometryF32() else
+                    requireNotNull(mapping.mapDeviceClipToLayerF32OrNull(copyGeometryF32())), scissor, atomicGroup,
+                inverseCoverage, antiAlias,
+                if (!inverseCoverage && scissor.isEmpty) PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero else realization)
+        }
         is PlanPass.ClipMaskFold -> PlanPass.ClipMaskFold(ordinalI32, resource(previous), resource(source), resource(output),
             operation, domain(copyDomainI32()), atomicGroup)
         is PlanPass.PathRenderPass -> PlanPass.PathRenderPass(ordinalI32, resource(target), path(draw), phase,

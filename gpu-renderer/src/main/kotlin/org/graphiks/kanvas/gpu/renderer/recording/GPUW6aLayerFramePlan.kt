@@ -299,6 +299,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val clipMaskInitializeRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskInitializeRecipeV1>()
     /** Each final analytic W4e producer packet retains its planner owner and packet ordinal. */
     private val clipMaskProducerRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerRecipeV1>()
+    private val clipMaskProducerConstantRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerConstantRecipeV1>()
     private val clipMaskProducerDirectTriangleRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerDirectTriangleRecipeV1>()
     private val clipMaskProducerStencilEdgeRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerStencilEdgeRecipeV1>()
     /** The same producer packet owns bundle 1; native encoding must never rediscover this cover. */
@@ -559,6 +560,19 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             }
                             require(clipMaskProducerRecipesByPacket.put(packet, recipe) == null) {
                                 "W4e ClipMaskProducer recipe projected more than once."
+                            }
+                        }
+                        val constant = physical.w4eClipMaskProducerConstantRecipes()[native.id]
+                        if (constant != null) {
+                            require(native.realization == PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero &&
+                                constant.passId == native.id && constant.packetOrdinalI32 == native.ordinal &&
+                                constant.target.id == native.target && constant.resolveTarget?.id == native.resolveTarget &&
+                                constant.depthStencil?.id == native.depthStencil && constant.sampleCountI32 == native.sampleCountI32 &&
+                                constant.coverageF32 == 0f && constant.fullscreenVertexCountI32 == 3) {
+                                "W4e ConstantZero ClipMaskProducer recipe differs from the final bound pass."
+                            }
+                            require(clipMaskProducerConstantRecipesByPacket.put(packet, constant) == null) {
+                                "W4e ConstantZero ClipMaskProducer recipe projected more than once."
                             }
                         }
                         val direct = physical.w4eClipMaskProducerDirectTriangleRecipes()[native.id]
@@ -1099,6 +1113,11 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             clipMaskProducerRecipesByPacket.size == physical.w4eClipMaskProducerRecipes().size) {
             "Every frozen W4e analytic ClipMaskProducer recipe must project to exactly one packet."
         }
+        require(clipMaskProducerConstantRecipesByPacket.values.map { it.passId }.toSet() ==
+            physical.w4eClipMaskProducerConstantRecipes().keys &&
+            clipMaskProducerConstantRecipesByPacket.size == physical.w4eClipMaskProducerConstantRecipes().size) {
+            "Every frozen W4e ConstantZero ClipMaskProducer recipe must project to exactly one packet."
+        }
         require(clipMaskProducerDirectTriangleRecipesByPacket.values.map { it.passId }.toSet() ==
             physical.w4eClipMaskProducerDirectTriangleRecipes().keys &&
             clipMaskProducerDirectTriangleRecipesByPacket.size == physical.w4eClipMaskProducerDirectTriangleRecipes().size)
@@ -1133,6 +1152,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     /** Returns only the analytic producer recipe attached during W6 recording. */
     internal fun w4eClipMaskProducerRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerRecipeV1? =
         clipMaskProducerRecipesByPacket[packet]
+    internal fun w4eClipMaskProducerConstantRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerConstantRecipeV1? =
+        clipMaskProducerConstantRecipesByPacket[packet]
     internal fun w4eClipMaskProducerDirectTriangleRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerDirectTriangleRecipeV1? =
         clipMaskProducerDirectTriangleRecipesByPacket[packet]
     internal fun w4eClipMaskProducerStencilEdgeRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerStencilEdgeRecipeV1? =

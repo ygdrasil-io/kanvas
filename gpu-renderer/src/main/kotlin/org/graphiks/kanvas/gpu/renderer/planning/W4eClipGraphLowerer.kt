@@ -207,7 +207,7 @@ internal class W4eClipGraphLowerer {
                     },
             )
         }
-        val frameAuthority = authority.issueFrameAuthority(request.frameId.value, seal.sealHash, renders)
+        val frameAuthority = authority.issueRootFrameAuthority(graph, refs, request.frameId.value, seal.sealHash, renders)
         renders.forEach { render ->
             render.drawPackets.single().attachW4ePreparedFrameAuthority(frameAuthority)
         }

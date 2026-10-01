@@ -1553,8 +1553,19 @@ private class WgpuBackendSession(
                                         fact.resolveTargetResourceId == authority.readbackSourceResourceId
                                 } == true
                         } ?: false
+                        val sealedW4eRootResolve = target?.let { sceneTarget ->
+                            val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+                            val packets = renders.flatMap(GPUTask.Render::drawPackets)
+                            val readback = taskList.tasks.filterIsInstance<GPUTask.Readback>().singleOrNull()
+                            val authority = packets.firstOrNull()?.w4ePreparedFrameAuthority
+                            authority != null && packets.isNotEmpty() &&
+                                packets.all { it.w4ePreparedFrameAuthority === authority } &&
+                                authority.validatesRootResolve(
+                                    taskList.frameId.value, taskList.capabilitySeal.sealHash, sceneTarget, readback, renders,
+                                )
+                        } ?: false
                         when {
-                            target == null || (target !in renderTargets && !sealedW4dGeneralFrame) -> executionDiagnostic(
+                            target == null || (target !in renderTargets && !sealedW4dGeneralFrame && !sealedW4eRootResolve) -> executionDiagnostic(
                                 "unsupported.prepared-scene-session.target-count",
                                 "A prepared scene frame requires exactly one declared scene target used by rendering.",
                             )

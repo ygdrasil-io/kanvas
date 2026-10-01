@@ -205,7 +205,9 @@ public class W4eNativePayloadPlan private constructor(
 
             passes.forEach { pass ->
                 when (pass) {
-                    is PlanPass.ClipMaskProducer -> when (val geometry = pass.copyGeometryF32()) {
+                    is PlanPass.ClipMaskProducer -> if (pass.realization == PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero) {
+                        require(!pass.inverseCoverage && pass.copyScissorI32().isEmpty)
+                    } else when (val geometry = pass.copyGeometryF32()) {
                         is ClipGeometryF32.Path -> if (!addGeometry(pass.id.value, PRODUCER_PATH, geometry.copyPathGeometryF32())) {
                             return null
                         }

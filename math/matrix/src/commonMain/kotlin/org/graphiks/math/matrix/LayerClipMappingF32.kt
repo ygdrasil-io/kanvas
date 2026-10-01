@@ -17,6 +17,30 @@ public fun LayerMappingF64.mapDeviceDomainToLayerI32OrNull(domainI32: RectI32, t
     return if (clippedI32.isEmpty) null else mapDeviceRectToLayerI32OrNull(clippedI32)
 }
 
+/** Rebase a producer coverage scissor without changing the non-empty domain contract above. */
+public fun LayerMappingF64.mapDeviceScissorToLayerI32OrNull(
+    scissorI32: RectI32,
+    targetDomainI32: RectI32,
+): RectI32? = try {
+    val clipped = RectI32(
+        maxOf(scissorI32.left, targetDomainI32.left),
+        maxOf(scissorI32.top, targetDomainI32.top),
+        minOf(scissorI32.right, targetDomainI32.right),
+        minOf(scissorI32.bottom, targetDomainI32.bottom),
+    )
+    if (clipped.isEmpty) RectI32.Empty else {
+        val origin = copyLayerOriginDeviceI32()
+        RectI32(
+            Math.subtractExact(clipped.left, origin.x),
+            Math.subtractExact(clipped.top, origin.y),
+            Math.subtractExact(clipped.right, origin.x),
+            Math.subtractExact(clipped.bottom, origin.y),
+        )
+    }
+} catch (_: ArithmeticException) {
+    null
+}
+
 public fun LayerMappingF64.mapDeviceInverseToLayerF32OrNull(geometryF32: InversePathGeometryF32,
     targetDomainI32: RectI32 = geometryF32.copyDomainI32()): InversePathGeometryF32? {
     val domainI32 = mapDeviceDomainToLayerI32OrNull(geometryF32.copyDomainI32(), targetDomainI32) ?: return null

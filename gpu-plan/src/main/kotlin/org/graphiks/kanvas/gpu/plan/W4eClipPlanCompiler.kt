@@ -138,8 +138,10 @@ public class W4eClipPlanCompiler internal constructor(
                 entry.geometryF32 is ClipGeometryF32.Path -> ids.hardDepth
                 else -> null
             }
+            val scissor = entry.copyConservativeScissorI32()
             passes += PlanPass.ClipMaskProducer(indexI32, target, resolve, depth, if (useAa) 4 else 1,
-                entry.geometryF32, group, inverseCoverage = entry.inverseFill, antiAlias = entry.antiAlias)
+                entry.geometryF32, scissor, group, inverseCoverage = entry.inverseFill, antiAlias = entry.antiAlias,
+                realization = if (!entry.inverseFill && scissor.isEmpty) PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero else PlanPass.W4eClipMaskProducerRealizationV1.Raster)
             val output = if (accumulator == ids.firstAccumulator) ids.secondAccumulator else ids.firstAccumulator
             passes += PlanPass.ClipMaskFold(indexI32, accumulator, resolve ?: target, output,
                 entry.operation.toPlanOperation(), domain, group)
@@ -603,6 +605,7 @@ public class W4eClipPlanCompiler internal constructor(
                             entry.geometryF32 is ClipGeometryF32.Path -> ids.hardDepth
                             else -> null
                         }
+                        val scissor = entry.copyConservativeScissorI32()
                         prefix += PlanPass.ClipMaskProducer(
                             ordinal * MAX_CLIP_ENTRIES + entryIndex,
                             target,
@@ -610,9 +613,11 @@ public class W4eClipPlanCompiler internal constructor(
                             depth,
                             if (useAa) 4 else 1,
                             entry.geometryF32,
+                            scissor,
                             group,
                             inverseCoverage = entry.inverseFill,
                             antiAlias = entry.antiAlias,
+                            realization = if (!entry.inverseFill && scissor.isEmpty) PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero else PlanPass.W4eClipMaskProducerRealizationV1.Raster,
                         )
                         val output = if (accumulator == ids.firstAccumulator) ids.secondAccumulator else ids.firstAccumulator
                         prefix += PlanPass.ClipMaskFold(

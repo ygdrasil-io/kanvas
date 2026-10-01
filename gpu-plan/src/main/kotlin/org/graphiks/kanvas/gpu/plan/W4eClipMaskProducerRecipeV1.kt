@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.SizeI32
+import org.graphiks.math.geometry.RectI32
 
 /** The two analytic producer forms admitted by I1; Path and Empty never reach this recipe. */
 public enum class W4eClipMaskProducerGeometryV1 { Rect, RRect }
@@ -59,6 +60,7 @@ public class W4eClipMaskProducerRecipeV1 internal constructor(
     public val uniformByteSizeI64: Long,
     public val geometry: W4eClipMaskProducerGeometryV1,
     geometryF32: ClipGeometryF32,
+    scissorI32: RectI32,
     public val inverseCoverage: Boolean,
     public val antiAlias: Boolean,
     public val sampleCountI32: Int,
@@ -68,6 +70,7 @@ public class W4eClipMaskProducerRecipeV1 internal constructor(
     public val store: W4eClipMaskProducerStoreV1,
     public val fullscreenVertexCountI32: Int = 3,
 ) {
+    private val scissorSnapshot = scissorI32.copy()
     private val geometrySnapshot = when (geometryF32) {
         is ClipGeometryF32.Rect -> ClipGeometryF32.Rect(geometryF32.copyRectF32())
         is ClipGeometryF32.RRect -> ClipGeometryF32.RRect(geometryF32.copyRRectF32())
@@ -79,6 +82,7 @@ public class W4eClipMaskProducerRecipeV1 internal constructor(
         is ClipGeometryF32.RRect -> ClipGeometryF32.RRect(value.copyRRectF32())
         is ClipGeometryF32.Path, ClipGeometryF32.Empty -> error("unreachable")
     }
+    public fun copyScissorI32(): RectI32 = scissorSnapshot.copy()
     init {
         require(packetOrdinalI32 >= 0 && sampleCountI32 in setOf(1, 4))
         require(uniformPurpose == W4eNativePayloadPlan.PRODUCER_UNIFORM && uniformOffsetBytesI64 >= 0L && uniformByteSizeI64 == 64L)
@@ -127,6 +131,7 @@ public class W4eClipMaskProducerNativeSiteRecipeV1 internal constructor(
             }
             is ClipGeometryF32.Path, ClipGeometryF32.Empty -> error("I1 only catalogs analytic clip producers.")
         }
+        rect("scissor", host.copyScissorI32())
         int("inverseCoverage", if (host.inverseCoverage) 1 else 0); int("antiAlias", if (host.antiAlias) 1 else 0); int("sampleCount", host.sampleCountI32)
         enum("shader", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); int("draw.fullscreenVertexCount", host.fullscreenVertexCountI32)
     }
@@ -140,6 +145,7 @@ public fun freezeW4eClipMaskProducerRecipesV1(bindings: List<PlanW4eGeometryBind
     val recipes = linkedMapOf<PlanPassId, W4eClipMaskProducerRecipeV1>()
     bindings.forEach { binding -> binding.nativePasses().forEach { pass ->
         val producer = pass as? PlanPass.ClipMaskProducer ?: return@forEach
+        if (producer.realization != PlanPass.W4eClipMaskProducerRealizationV1.Raster) return@forEach
         val geometry = when (producer.copyGeometryF32()) {
             is ClipGeometryF32.Rect -> W4eClipMaskProducerGeometryV1.Rect
             is ClipGeometryF32.RRect -> W4eClipMaskProducerGeometryV1.RRect
@@ -154,7 +160,7 @@ public fun freezeW4eClipMaskProducerRecipesV1(bindings: List<PlanW4eGeometryBind
             W4eClipMaskProducerPhysicalOperandV1(target), resolve?.let(::W4eClipMaskProducerPhysicalOperandV1), depth?.let(::W4eClipMaskProducerPhysicalOperandV1),
             depth?.let { W4eClipMaskProducerDepthStencilStateV1(1f, W4eClipMaskProducerDepthStencilLoadV1.Clear, W4eClipMaskProducerDepthStencilStoreV1.Store, false, 0u, W4eClipMaskProducerDepthStencilLoadV1.Clear, W4eClipMaskProducerDepthStencilStoreV1.Store, false) },
             W4eClipMaskProducerPhysicalOperandV1(uniform), slice.purpose, slice.offsetBytes, slice.byteSize, geometry,
-            producer.copyGeometryF32(), producer.inverseCoverage, producer.antiAlias, producer.sampleCountI32,
+            producer.copyGeometryF32(), producer.copyScissorI32(), producer.inverseCoverage, producer.antiAlias, producer.sampleCountI32,
             W4eClipMaskProducerShaderFamilyV1.AnalyticCoverage, W4eClipMaskProducerGroupZeroAbiV1.ProducerUniform,
             W4eClipMaskProducerLoadV1.Clear, W4eClipMaskProducerStoreV1.Store)) == null)
     } }

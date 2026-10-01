@@ -14,6 +14,11 @@ import org.graphiks.kanvas.gpu.plan.PathFillStrategy
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilAccess
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
 import org.graphiks.kanvas.gpu.plan.PlanResource
+import org.graphiks.kanvas.gpu.plan.PlanResourceKind
+import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
+import org.graphiks.kanvas.gpu.plan.PlanResourceRole
+import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.PathDrawGeometry
 import org.graphiks.kanvas.gpu.plan.PathRenderPhase
 import org.graphiks.kanvas.gpu.plan.RenderGraph
@@ -26,6 +31,11 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.geometry.PathFillGeometryF32
@@ -106,8 +116,10 @@ public sealed interface GPUW4ePreparedClipPassAuthority {
         public val depthStencilResourceId: String?,
         public val sampleCount: Int,
         public val geometry: GPUW4ePreparedClipGeometry,
+        public val scissor: GPUPixelBounds,
         public val inverseCoverage: Boolean,
         public val antiAlias: Boolean,
+        public val realization: PlanPass.W4eClipMaskProducerRealizationV1,
         override val atomicGroupId: String,
     ) : GPUW4ePreparedClipPassAuthority {
         override val kind: Kind = Kind.Producer
@@ -208,6 +220,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
     private val passesById: Map<String, GPUW4ePreparedClipPassAuthority>,
     private val pathsById: Map<String, GPUW4ePreparedClipPassAuthority.Path>,
     private val nativePayload: W4eNativePayloadPlan,
+    private val rootGraph: RenderGraph? = null,
 ) {
     /** Returns only an already-copied W4e fact; it never maps or reclassifies a clip. */
     fun consumerFor(passId: String): GPUW4ePreparedClipConsumerAuthority? = consumersByPassId[passId]
@@ -234,6 +247,19 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
         renders,
         nativePayload,
     )
+
+    /** Only the complete root graph can authenticate a resolve-only scene target. */
+    fun issueRootFrameAuthority(
+        graph: RenderGraph,
+        refs: Map<String, GPUFrameResourceRef>,
+        frameId: Long,
+        capabilitySealHash: String,
+        renders: List<GPUTask.Render>,
+    ): GPUW4ePreparedFrameAuthority = GPUW4ePreparedFrameAuthority.issueRoot(
+        this, graph, refs, frameId, capabilitySealHash, renders,
+    )
+
+    fun revalidatesRoot(graph: RenderGraph): Boolean = rootGraph === graph && revalidates(graph)
 
     fun revalidates(graph: RenderGraph): Boolean =
         version == versionForCapability(capabilityId) &&
@@ -291,6 +317,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                     it.id.value to pathFact(it, Point2I32.Origin, graph.targetExtent)
                 },
                 nativePayload,
+                rootGraph = graph,
             )
         }
 
@@ -403,7 +430,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
             )
             is PlanPass.ClipMaskProducer -> GPUW4ePreparedClipPassAuthority.Producer(
                 pass.id.value, pass.target.value, pass.resolveTarget?.value, pass.depthStencil?.value,
-                pass.sampleCountI32, clipGeometryFor(pass.copyGeometryF32()), pass.inverseCoverage, pass.antiAlias,
+                pass.sampleCountI32, clipGeometryFor(pass.copyGeometryF32()), domainFor(pass.copyScissorI32()), pass.inverseCoverage, pass.antiAlias, pass.realization,
                 pass.atomicGroup.value,
             )
             is PlanPass.ClipMaskFold -> GPUW4ePreparedClipPassAuthority.Fold(
@@ -459,9 +486,35 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
     private val frameId: Long,
     private val capabilitySealHash: String,
     private val facts: List<Fact>,
+    private val rootResolve: RootResolveWitness?,
     /** Shared V/I/U byte authority issued from the compiler-authenticated W4e graph. */
     internal val nativePayload: W4eNativePayloadPlan,
 ) {
+    private data class RootResolveWitness(
+        val sceneTarget: GPUFrameTargetRef,
+        val readbackStaging: GPUFrameBufferRef,
+        val multisampleTarget: GPUFrameTargetRef,
+        val finalScenePassId: String,
+        val continuation: GPUW4eSceneContinuationRequest,
+    )
+
+    fun validatesRootResolve(
+        candidateFrameId: Long,
+        candidateSealHash: String,
+        sceneTarget: GPUFrameTargetRef,
+        readback: GPUTask.Readback?,
+        renders: List<GPUTask.Render>,
+    ): Boolean {
+        val witness = rootResolve ?: return false
+        if (readback == null) return false
+        if (!validatesRenders(candidateFrameId, candidateSealHash, renders)) return false
+        val finalRender = renders.lastOrNull() ?: return false
+        return sceneTarget == witness.sceneTarget &&
+            readback.source == witness.sceneTarget && readback.staging == witness.readbackStaging &&
+            finalRender.target == witness.multisampleTarget &&
+            finalRender.drawPackets.single().passId == witness.finalScenePassId &&
+            finalRender.w4eSceneContinuation == witness.continuation
+    }
     private data class Fact(
         val taskId: String,
         val passId: String,
@@ -555,6 +608,101 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
             capabilitySealHash: String,
             renders: List<GPUTask.Render>,
             nativePayload: W4eNativePayloadPlan,
+        ): GPUW4ePreparedFrameAuthority = issueSealed(
+            graphId, graphCapabilityId, frameId, capabilitySealHash, renders, nativePayload, null,
+        )
+
+        internal fun issueRoot(
+            authority: GPUPlanW4ePreparedAuthority,
+            graph: RenderGraph,
+            refs: Map<String, GPUFrameResourceRef>,
+            frameId: Long,
+            capabilitySealHash: String,
+            renders: List<GPUTask.Render>,
+        ): GPUW4ePreparedFrameAuthority {
+            require(authority.revalidatesRoot(graph)) { "W4e root resolve requires the validated root graph" }
+            val passes = graph.passes()
+            val finalScene = passes.dropLast(1).lastOrNull() as? PlanPass.PathRenderPass
+            // Direct 1x frames retain their existing admission, including mixed frames ending at 1x.
+            if (finalScene == null || finalScene.draw.sample != SamplePlan.Multisample4 || finalScene.resolveTarget == null) {
+                return authority.issueFrameAuthority(frameId, capabilitySealHash, renders)
+            }
+            val readback = passes.last() as? PlanPass.ReadbackPass
+                ?: throw IllegalArgumentException("W4e root resolve requires terminal readback")
+            require(passes.filterIsInstance<PlanPass.ReadbackPass>().size == 1)
+            val resources = graph.resources()
+            val scene = resources.single { it.role == PlanResourceRole.LogicalTarget }
+            val staging = resources.single { it.role == PlanResourceRole.ReadbackStaging }
+            val multisample = resources.single { it.id == finalScene.target }
+            require(readback.source == scene.id && readback.staging == staging.id && finalScene.resolveTarget == scene.id)
+            // A hard draw in an AA4 frame broadcasts its binary mask into the 4x scene
+            // attachment. Its color cover, not its 1x mask producer, owns the final resolve.
+            require(finalScene.phase == PathRenderPhase.MultisampleDirectColor ||
+                finalScene.phase == PathRenderPhase.MultisampleStencilColorCover ||
+                (finalScene.phase == PathRenderPhase.HardEdgeBinaryColorCover &&
+                    finalScene.draw.coverage == CoveragePlan.BinaryMaskCover4))
+            require(scene.kind == PlanResourceKind.Texture2D && scene.sampleCountI32 == 1 &&
+                scene.format is PlanTextureFormat.Color && scene.copyExtent() == graph.targetExtent &&
+                scene.usages().containsAll(setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource)))
+            require(multisample.role == PlanResourceRole.MultisampleColorTarget &&
+                multisample.kind == PlanResourceKind.Texture2D && multisample.sampleCountI32 == 4 &&
+                multisample.format == scene.format && multisample.copyExtent() == scene.copyExtent() &&
+                PlanResourceUsage.RenderAttachment in multisample.usages())
+            require(staging.kind == PlanResourceKind.Buffer &&
+                staging.usages().containsAll(setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead)))
+            val finalIndex = passes.size - 2
+            val readbackIndex = passes.lastIndex
+            fun liveAt(resource: PlanResource, index: Int): Boolean =
+                resource.lifetime == PlanResourceLifetime.FrameLocal &&
+                    resource.firstPassIndex <= index && index < resource.lastPassIndexExclusive
+            require(liveAt(multisample, finalIndex) && liveAt(scene, finalIndex) &&
+                liveAt(scene, readbackIndex) && liveAt(staging, readbackIndex))
+            require(refs.keys == resources.map { it.id.value }.toSet() && refs.values.toSet().size == refs.size)
+            val sceneRef = refs.getValue(scene.id.value) as? GPUFrameTargetRef
+                ?: throw IllegalArgumentException("W4e scene resolve requires a mapped target")
+            val multisampleRef = refs.getValue(multisample.id.value) as? GPUFrameTargetRef
+                ?: throw IllegalArgumentException("W4e scene resolve requires a mapped multisample target")
+            val stagingRef = refs.getValue(staging.id.value) as? GPUFrameBufferRef
+                ?: throw IllegalArgumentException("W4e scene resolve requires mapped readback staging")
+            require(renders.map { it.drawPackets.single().passId } == passes.dropLast(1).map { it.id.value })
+            require(renders.zip(passes.dropLast(1)).all { (render, pass) ->
+                val packet = render.drawPackets.single()
+                val targetId = when (pass) {
+                    is PlanPass.ClipMaskInitialize -> pass.output
+                    is PlanPass.ClipMaskProducer -> pass.target
+                    is PlanPass.ClipMaskFold -> pass.output
+                    is PlanPass.PathMaskClearPass -> pass.target
+                    is PlanPass.PathRenderPass -> pass.target
+                    else -> return@all false
+                }
+                render.target == refs.getValue(targetId.value) &&
+                    packet.w4ePreparedClipPass === authority.clipPassFor(pass.id.value) &&
+                    packet.w4ePreparedPath === authority.pathFor(pass.id.value)
+            })
+            val finalRender = renders.last()
+            val continuation = GPUW4eSceneContinuationRequest(
+                multisample.id.value, scene.id.value, GPUW4eSceneResolveAction.ResolveCanonical,
+            )
+            require(finalRender.target == multisampleRef && finalRender.w4eSceneContinuation == continuation &&
+                finalRender.drawPackets.single().w4ePreparedPath === authority.pathFor(finalScene.id.value))
+            fun writes(ref: GPUFrameTargetRef, role: GPUFrameResourceRole): Boolean =
+                finalRender.resourceUses.singleOrNull { it.resource == ref }?.let {
+                    it.role == role && it.usage == GPUFrameResourceUsage.RenderAttachment && it.write
+                } == true
+            require(writes(multisampleRef, GPUFrameResourceRole.LayerTarget) && writes(sceneRef, GPUFrameResourceRole.SceneTarget))
+            return issueSealed(graph.id.value, graph.capabilityId, frameId, capabilitySealHash, renders,
+                requireNotNull(graph.w4eNativePayloadOrNull()),
+                RootResolveWitness(sceneRef, stagingRef, multisampleRef, finalScene.id.value, continuation))
+        }
+
+        private fun issueSealed(
+            graphId: String,
+            graphCapabilityId: String,
+            frameId: Long,
+            capabilitySealHash: String,
+            renders: List<GPUTask.Render>,
+            nativePayload: W4eNativePayloadPlan,
+            rootResolve: RootResolveWitness?,
         ): GPUW4ePreparedFrameAuthority {
             require(graphId.isNotBlank() && graphCapabilityId.isNotBlank() && capabilitySealHash.isNotBlank())
             require(renders.isNotEmpty()) { "W4e prepared frame requires ordered render scopes" }
@@ -581,6 +729,7 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
                 frameId,
                 capabilitySealHash,
                 facts,
+                rootResolve,
                 nativePayload,
             )
         }
