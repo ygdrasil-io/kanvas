@@ -41,10 +41,19 @@ Lot précédent : port fidèle d'alphagradients et domaine explicite des GM,
 code `6259c38d8`, branche `codex/w7-alphagradients-port`, draft
 [#2424](https://github.com/ygdrasil-io/kanvas/pull/2424) empilée sur #2423 ;
 mesure et reviews terminées ci-dessous, sans merge.
-Lot courant : ports fidèles des deux hardstop, code `34e3d4e98`, branche
+Dernier lot publié : ports fidèles des deux hardstop, code `34e3d4e98`, branche
 `codex/w7-hardstop-ports`, draft [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425)
 empilée sur #2424 ; mesure et reviews terminées
 ci-dessous, publication draft uniquement.
+
+Série courante en implémentation : `codex/w7-aa-blend-sources`, future draft
+sur #2425, [design](aa-blend-sources-design.md) et
+[plan](aa-blend-sources-plan.md). Correction W5 PLUS couvert revue et validée
+ciblée ; consommateur AA partagé racine/layer en cours, puis famille
+Porter-Duff et Picture. Aucun nouveau gain GM mesuré à ce stade.
+L'[état courant](status.md#série-aa-et-composition-différée--en-cours-1er-octobre-2026)
+distingue les preuves natives réussies des limites historiques et de
+l'exit 133 W5g non qualifié. Le corpus mesuré ci-dessous reste la baseline.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,

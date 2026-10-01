@@ -3,6 +3,32 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Série AA et composition différée — en cours, 1er octobre 2026
+
+Branche `codex/w7-aa-blend-sources`, prévue en draft sur #2425.
+[Design](aa-blend-sources-design.md), [plan séquentiel](aa-blend-sources-plan.md).
+La correction W5 PLUS couvert est implémentée et approuvée par Sol après
+deux vagues de corrections : `sat(C*S+D)` remplace le post-lerp à saturation,
+avec loi sélectionnée et oracle V2 indépendant, sans tolérance élargie.
+Les témoins natifs W7 corrigés passent **4/4**, processus 0 ; le contrôle
+Point V2 couvre ses trois contextes et passe **1/1**, processus 0.
+
+Le lot suivant est en implémentation : couverture AA indépendante du matériau,
+consommateur typé et émetteur partagé racine/plain layer pour PLUS/SRC_OVER.
+Les onze autres modes Porter-Duff et Picture suivront séquentiellement.
+Un appui architectural ciblé Astra confirme le design et précise la
+construction privée en deux phases, émission puis bind/seal avant `Ready`.
+Le premier RED corrigé refuse avant composition ; la compilation des nouveaux
+types n'est pas un GREEN natif. **Aucun gain GM nouveau n'est encore mesuré.**
+
+Les limites de validation restent explicites : W5g compte 125 identités,
+69 assertions réussies, deux échecs reproduits sur la base antérieure et
+54 non atteintes. Son run ciblé de 29 assertions réussies quitte ensuite
+avec un executor 133 inexpliqué, donc n'est pas vert. La globale bornée
+compte 677 succès, 40 échecs déjà observés et un cas interrompu ; elle est
+incomplète. Les fonts, codecs/décodage externe et `jpg-color-cube` restent
+exclus. W7 et les gates antérieures restent ouverts, sans merge ni claim ISO.
+
 ## Lot ports hardstop fidèles — 30 septembre 2026
 
 Branche `codex/w7-hardstop-ports`, draft
