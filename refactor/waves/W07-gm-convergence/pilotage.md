@@ -4,7 +4,8 @@
 
 Source/test `6e0fca2df5aef733bb516ddd2b714dd342920ab4`,
 [snapshot](clip-gm-ports-6e0fca2df.json), [plan](clip-gm-ports-plan.md).
-Branche `codex/w7-clip-gm-ports`, draft prévue sur#2428 ; verdict final
+Branche `codex/w7-clip-gm-ports`, draft
+[#2429](https://github.com/ygdrasil-io/kanvas/pull/2429) publiée sur#2428 ; verdict final
 Astra favorable à la publication, sans Critical/Important/Minor restant.
 
 Les deux erreurs de port constatées dans le lot précédent sont corrigées :

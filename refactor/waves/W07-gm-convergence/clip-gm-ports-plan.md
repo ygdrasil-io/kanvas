@@ -57,7 +57,7 @@ The existing RGB overload is pixel-equivalent for this fixed scene: inverse R20*
 - [x] Per regenerate-renders, regenerate only complexclip4_aa, complexclip4_bw, manypathatlases_128 and manypathatlases_2048 by exact gm.name, then SkiaGmRunner filtered by exact kanvas.gm.name for four partial scores. The parity runner sorts by name, whereas generator/test use registry order: their index ranges are NOT interchangeable. Verify only those generated PNG/score entries changed. No full unbounded suite.
 - [x] Final committed-SHA full corpus631/443 sequential slices with strict aggregator vs clip-producer-scissor-be813afd7.json. Preserve18invariants, inspect every changed image/hash/metric and all old-render stability; no promise of score gain.
 - [x] Independent final review, consolidate fixes if any, qualification/doc updates in refactor. Astra final verdict0Critical/0Important/0Minor, draft-only; exact pixel and global limits retained.
-- [ ] Publish/attach draft stacked on codex/w7-clip-producer-scissor (#2428), no merge/W7 completion.
+- [x] Publish/attach draft [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429) stacked on codex/w7-clip-producer-scissor (#2428), no merge/W7 completion.
 
 ## Self-review and delegated decision
 

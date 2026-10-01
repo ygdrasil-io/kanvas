@@ -1,8 +1,8 @@
 # W07 — diagnostic GM provisoire
 
-Dernier lot publié : draft [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428),
-empilée sur [#2427](https://github.com/ygdrasil-io/kanvas/pull/2427), elle-même
-sur [#2426](https://github.com/ygdrasil-io/kanvas/pull/2426).
+Dernier lot publié : draft [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429),
+empilée sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428), elle-même
+sur [#2427](https://github.com/ygdrasil-io/kanvas/pull/2427).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
 
@@ -13,7 +13,8 @@ Branche `codex/w7-clip-gm-ports`, parent draft#2428,
 `6e0fca2df5aef733bb516ddd2b714dd342920ab4`,
 [snapshot complet](clip-gm-ports-6e0fca2df.json). Qualification terminée ;
 Astra approuve la publication draft, sans Critical/Important/Minor restant.
-Publication empilée sur#2428 en préparation, sans merge ni clôture W7.
+Draft [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429) publiée et
+rattachée, empilée sur#2428, sans merge ni clôture W7.
 
 Deux erreurs de port ont été vérifiées contre Skia
 `defc3a5a92966c32cb2a6a901e2fa3036a13bb8a` :
