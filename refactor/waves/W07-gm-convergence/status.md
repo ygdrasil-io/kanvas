@@ -5,35 +5,39 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 
-Renderer mesuré : `8829d18d9f3b93dc6dcae44ffa41de2a8b42ee9b`.
+Renderer mesuré : `3398dc3db8c8741d49234c74643f464baae645f6`.
+Le garde de plain layer conserve W4a pour les Rect `identity`/`scale-translate`
+non-`SRC_OVER`/`PLUS`, et n'admet W7 que lorsque le fait existant
+`GeneralAffine` le requiert. Le RED causal au même B analytique complet
+`26808` refuse sans ce garde (`requires 28736`); le GREEN passe avec le garde.
 Les témoins publics W7/Picture, quatre régressions historiques, la garde de
-graphe et 14 nouveaux cas Rect affine sont **185/185** (archive
-`final-fix-covering-185-2`, wrapper/enfant 0/0, zéro failure/error/skip/stderr).
-La relecture finale du correctif **n'est pas approuvée** : les nouveaux Rect
-affines passent, mais le sélecteur de plain layer détourne aussi des Rect
-identity/scale-translate non-SRC_OVER/PLUS de leur lane analytique W4a.
-Cette régression de routage/ressources/budget reste Important malgré les pixels
-ciblés verts. La draft qualifiée sur #2425 n'est pas publiée. Correction restante :
-conserver W4a pour ces Rect de layer et sélectionner W7 seulement pour
-`GeneralAffine`, sans changer le routage root existant. Le témoin Picture-layer `DST_OUT`
-observe C `64/255`, établi depuis le pattern MSAA4 avant Surface. Le contrôle
-PLUS translation racine demeure positif.
+graphe, 14 cas Rect affine et ce témoin sont **186/186** (archive
+`layer-preservation-covering-186-1`, wrapper/enfant 0/0, zéro
+failure/error/skip/stderr). Le témoin Picture-layer `DST_OUT` observe C
+`64/255`, établi depuis le pattern MSAA4 avant Surface. Le contrôle PLUS
+translation racine demeure positif. La relecture scoped reste en attente du
+contrôleur; aucune publication n'est autorisée par ce statut.
 
-La suite globale finale `final-fix-full-final-1` expire comme borné
-(wrapper 124, enfant 143) après 725 END : 684 SUCCESS, 40 FAILURE, 1 SKIPPED.
-Les 718 identités Task1 sont toutes présentes : les 40 FAILURE sont les mêmes,
-aucun SUCCESS ne devient FAILURE, `rowPadding...` devient SUCCESS, et sept
-W5e sont nouvellement atteintes (six SUCCESS, un SKIPPED).
+La suite globale `layer-preservation-full-final-1` expire comme bornée
+(wrapper 124, enfant 143) après 751 END : 710 SUCCESS, 40 FAILURE, 1 SKIPPED.
+Les 725 identités du run final précédent sont toutes présentes avec les mêmes
+40 échecs; 26 identités W5e supplémentaires sont atteintes (25 SUCCESS, un
+SKIPPED) et `cubicDrawImageMatchesMitchellNetravaliOracle` devient SUCCESS.
+Les 718 identités Task1 restent présentes, avec 33 ajouts (32 SUCCESS, un
+SKIPPED) et `rowPadding...` SKIPPED→SUCCESS. Ce n'est pas une suite globale
+verte ni une clôture W7.
 
 Le corpus figé au même SHA est 631 identités / 443 éligibles : 200 rendus,
-178 comparaisons, 39 à ≥99 % et 52 à ≥95 % des pixels à ±2/canal, sans perte ni
-changement de hash/métrique des 199 images déjà rendues. Le snapshot complet est
-[`picture-8829d18.json`](picture-8829d18.json). Le gain nouveau `sk3d_simple`
-est une admission native seulement (51.931111111111115 % à ±2, SSIM
-0.6385013748432061, max [136,255,119,0]) : son écart de silhouette/couleur est
-majeur, alpha opaque identique ne prouve aucune équivalence. `PlusMergesAA`
-reste le gain historique face au hardstop. Le timeout `vertices` index 607 reste
-30 s. Références, seuils, exclusions et oracle n'ont pas été modifiés.
+178 comparaisons, 39 à ≥99 % et 52 à ≥95 % des pixels à ±2/canal. Les 18
+invariants, tous les hashes et métriques sont identiques à
+`picture-8829d18`; le snapshot remplacé est
+[`picture-3398dc3.json`](picture-3398dc3.json). Face au hardstop,
+`sk3d_simple` reste une admission native seulement (51.931111111111115 % à ±2,
+SSIM 0.6385013748432061, max [136,255,119,0]) : son écart de
+silhouette/couleur est majeur, et l'alpha opaque identique ne prouve aucune
+équivalence. `PlusMergesAA` reste le gain historique. Le timeout `vertices`
+index 607 reste 30 s. Références, seuils, exclusions et oracle n'ont pas été
+modifiés.
 
 Le checkpoint intermédiaire `7488067` reste archivé honnêtement dans les journaux
 privés : son JSON n'est pas conservé dans le repo; il avait gagné

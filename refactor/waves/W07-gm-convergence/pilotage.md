@@ -2,30 +2,31 @@
 
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 
-Code produit mesuré `8829d18d9f3b93dc6dcae44ffa41de2a8b42ee9b`, snapshot
-[`picture-8829d18.json`](picture-8829d18.json). La relecture finale Sol
-**refuse la qualification de la draft** : l'admission affine est corrigée,
-mais certains Rect identity/scale-translate de plain layer perdent leur lane
-analytique W4a. Leurs ressources/budgets ne sont donc pas préservés. Il reste
-à appliquer à la layer le garde `GeneralAffine` déjà présent pour Picture,
-sans modifier le routage root. Aucune publication de cette série pour l'instant.
-Les témoins publics sont 185/185
-(171 identités antérieures + 14 affine, archive `final-fix-covering-185-2`,
-wrapper/enfant 0/0, zéro failure/error/skip/stderr). Le bord Picture-layer
-`DST_OUT` emploie C résolu `64/255`, dérivé du pattern MSAA4, sans ajustement aux
-pixels natifs.
+Code produit mesuré `3398dc3db8c8741d49234c74643f464baae645f6`, snapshot
+[`picture-3398dc3.json`](picture-3398dc3.json). Le correctif scoped conserve
+la lane analytique W4a des Rect `identity`/`scale-translate` de plain layer et
+réserve W7 au fait existant `GeneralAffine`, sans modifier les routes root ou
+Picture. Son témoin public a un RED causal au B complet `26808` (sans le garde :
+`requires 28736`) et un GREEN avec le garde. Les témoins publics sont **186/186**
+(185 identités antérieures + un budget, archive
+`layer-preservation-covering-186-1`, wrapper/enfant 0/0, zéro
+failure/error/skip/stderr). La relecture scoped reste en attente; ce résultat
+n'autorise pas de publication ou de clôture W7.
 
 Corpus : 631/443, 200 rendus, 178 comparés, 39 ≥99 %, 52 ≥95 %, médiane
-72.34801136363637 % à ±2. Les 18 invariants, les 199 hashes et les métriques des
-images déjà rendues sont inchangés face à `picture-8c8e7d8`; aucune perte. Le
-gain nouveau `sk3d_simple` rend nativement (51.931111111111115 % à ±2,
-SSIM 0.6385013748432061, max [136,255,119,0]) mais son actual est un large carré
+72.34801136363637 % à ±2. Les 18 invariants, hashes, métriques, outcomes,
+diagnostics, dispatches et refus sont inchangés face à `picture-8829d18`; aucune
+perte ou nouvelle image n'appelle une inspection visuelle. Face au hardstop,
+`sk3d_simple` rend nativement (51.931111111111115 % à ±2, SSIM
+0.6385013748432061, max [136,255,119,0]) mais son actual est un large carré
 magenta tourné contre un quadrilatère violet étroit de référence : gain de
 capacité, pas parité ni diagnostic d'attribution. `PlusMergesAA` reste le gain
-historique face au hardstop. `vertices` index 607 conserve son timeout 30 s.
-La globale finale bornée a 725 END (684 SUCCESS/40 FAILURE/1 SKIPPED), timeout
-wrapper/enfant 124/143; les 718 identités Task1 sont présentes, mêmes 40 failures,
-zéro SUCCESS→FAILURE, `rowPadding` SKIPPED→SUCCESS et sept identités W5e atteintes.
+historique. `vertices` index 607 conserve son timeout 30 s.
+La globale bornée a 751 END (710 SUCCESS/40 FAILURE/1 SKIPPED), timeout
+wrapper/enfant 124/143; les 725 identités précédentes sont présentes, mêmes 40
+failures, 26 W5e supplémentaires sont atteintes (25 SUCCESS, un SKIPPED),
+`cubicDrawImageMatchesMitchellNetravaliOracle` SKIPPED→SUCCESS. Toutes les 718
+identités Task1 restent présentes, `rowPadding` SKIPPED→SUCCESS.
 
 Le checkpoint antérieur `picture-7488067469.json` n'est pas conservé dans le
 repo : ses journaux privés restent disponibles sous
