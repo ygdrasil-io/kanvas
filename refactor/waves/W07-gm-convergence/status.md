@@ -3,6 +3,24 @@
 PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
 sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
+## Qualification Picture / Porter-Duff — 1er octobre 2026
+
+Renderer mesuré : `93ec53027403d23bf0acf761001e816c1a975e1c`.
+Les témoins publics W7/Picture et quatre régressions historiques sont **170/170**
+(archive `task4-covering-plus4-final-3`, wrapper/enfant 0/0). Le corpus figé est
+631 identités / 443 éligibles : 199 rendus, 177 comparaisons, 39 à ≥99 % et 52 à
+≥95 % des pixels à ±2/canal, sans perte ni changement de hash d'image déjà rendue.
+Le seul gain est `PlusMergesAA` (69.482421875 % à ±2); le snapshot complet est
+[`picture-93ec530274.json`](picture-93ec530274.json). Le timeout `vertices` à
+l'index 607 reste historique (30 s). Références, seuils, exclusions et oracle
+n'ont pas été modifiés.
+
+Le checkpoint intermédiaire `7488067` reste archivé honnêtement : il avait gagné
+`PlusMergesAA` mais perdu `lattice2`. Le diagnostic a montré qu'un Rect AA SRC
+forçait W6 avant le plan whole-frame W5e; `93ec530` rétablit la priorité W5e sur
+un vrai candidat root sans layer/W6b. `lattice2` retrouve exactement le hash
+`49d38b8f…02da0`; aucune admission image ou codec n'a été élargie.
+
 ## Série AA et composition différée — en cours, 1er octobre 2026
 
 Branche `codex/w7-aa-blend-sources`, prévue en draft sur #2425.

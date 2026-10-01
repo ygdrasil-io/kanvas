@@ -1,5 +1,21 @@
 # Pilotage de la convergence Skia
 
+## Qualification Picture / Porter-Duff — 1er octobre 2026
+
+Code mesuré `93ec53027403d23bf0acf761001e816c1a975e1c`, snapshot
+[`picture-93ec530274.json`](picture-93ec530274.json). Couverture publique :
+170/170 (Picture, historiques W7 et quatre régressions de préservation),
+archive `task4-covering-plus4-final-3`, wrapper/enfant 0/0. Corpus : 631/443,
+199 rendus, 177 comparés, 39 ≥99 %, 52 ≥95 %, aucune perte et aucun delta de hash
+des images rendues dans les deux mesures; gain `PlusMergesAA` à 69.482421875 %
+des pixels ±2. `vertices` index 607 conserve son timeout historique de 30 s.
+
+Le checkpoint antérieur `picture-7488067469.json` est conservé : son unique
+perte `lattice2` a été localisée à la priorité W6 d'un Rect AA SRC qui fragmentait
+un frame `ImageLattice`. Le correctif final privilégie W5e seulement lorsqu'il
+est candidat pour le frame root sans layer/W6b; le hash `lattice2` restauré est
+`49d38b8f277d292c029ab9a7c9e5f19c6300821d3c9b21af6af150384ff02da0`.
+
 Baseline : PR draft [#2411](https://github.com/ygdrasil-io/kanvas/pull/2411),
 empilée sur [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410).
 Lot standalone : PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
