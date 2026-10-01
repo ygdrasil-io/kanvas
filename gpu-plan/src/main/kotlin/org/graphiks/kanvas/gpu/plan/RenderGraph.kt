@@ -308,6 +308,21 @@ public class RenderGraph private constructor(
                             is PlanPass.AaCoverageSourcePass -> pass.binding?.let { binding ->
                                 binding.copyOriginDeviceI32() == requireNotNull(scope.mapping).copyLayerOriginDeviceI32()
                             } == true
+                            // W7's PLUS consumer snapshots its immediate layer target between
+                            // its opaque-white coverage producer and fullscreen consumer.  This
+                            // is ordered child work, but it is not a render pass; authenticate
+                            // the exact copy/consumer pair instead of treating arbitrary copies
+                            // as layer children.
+                            is PlanPass.TextureCopy -> pass.source == scope.targetResource &&
+                                construction.resources().singleOrNull { it.id == pass.destination }?.role ==
+                                    PlanResourceRole.DestinationSnapshot &&
+                                construction.passes().withIndex().singleOrNull { it.value === pass }?.let { (index, _) ->
+                                    (construction.passes().getOrNull(index + 1) as? PlanPass.AaDeferredComposite)?.let { consumer ->
+                                        consumer.destination == scope.targetResource &&
+                                            consumer.contract?.destinationSnapshot == pass.destination &&
+                                            consumer.contract.destinationVersionBefore == pass.destinationVersion
+                                    } == true
+                                } == true
                             is PlanPass.AaDeferredComposite -> pass.destination == scope.targetResource && pass.contract != null
                             is PlanPass.StencilGeometryProducerV3 -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
                             is PlanPass.StencilCover -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load

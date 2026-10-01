@@ -46,6 +46,33 @@ internal object W6AaDeferredOccurrenceEmitterV1 {
                 target.sourceBoundsTargetI32, target.originDeviceI32, target.mapping)
     }
 
+    /** Complete ordered occurrence; callers reserve IDs and only publish these sealed passes. */
+    internal class Emission internal constructor(
+        val phases: List<PlanPass.PathRenderPass>, val producer: PlanPass.AaCoverageSourcePass,
+        val snapshotCopy: PlanPass.TextureCopy?, val consumer: PlanPass.AaDeferredComposite, val draft: Draft,
+    )
+
+    fun emitOccurrence(selected: Selected, target: Target, destinationVersionBefore: DestinationVersionI64,
+        sourcePhases: List<PlanPass>, remapping: Map<PlanResourceId, PlanResourceId>,
+        sourceResources: List<PlanResource>, mapping: LayerMappingF64?, domainDeviceI32: RectI32,
+        firstOrdinalI32: Int, snapshot: PlanResourceId?): Emission {
+        val phases = sourcePhases.mapIndexed { index, original ->
+            val path = original as? PlanPass.PathRenderPass ?: error("W7 deferred AA source lost its path phase.")
+            val rebound = path.rebindW4eV6(firstOrdinalI32 + index, remapping::getValue, mapping, domainDeviceI32) as PlanPass.PathRenderPass
+            if (rebound.phase == PathRenderPhase.MultisampleDirectColor) PlanPass.PathRenderPass(rebound.ordinal, rebound.target,
+                rebound.draw, rebound.phase, rebound.drawDataResources, path.atomicGroup, path.depthStencil, path.load, path.store,
+                path.depthStencilAccess, path.depthStencilLoadStore, rebound.resolveTarget, rebound.scanSpansDeviceI32) else rebound
+        }
+        val coverage = remapping.getValue(sourceResources.single { it.role == PlanResourceRole.CoverageSource }.id)
+        val producer = PlanPass.AaCoverageSourcePass(firstOrdinalI32, coverage)
+        val draft = emit(selected, target, destinationVersionBefore, snapshot)
+        val copy = snapshot?.let { PlanPass.TextureCopy(firstOrdinalI32 + 1, target.resource, it, destinationVersionBefore,
+            RectI32(0, 0, target.extentI32.width, target.extentI32.height), Point2I32.Origin,
+            Math.multiplyExact(target.extentI32.width.toLong(), 4L)) }
+        val consumer = PlanPass.AaDeferredComposite(firstOrdinalI32 + if (copy == null) 1 else 2, target.resource)
+        return Emission(phases, producer, copy, consumer, draft)
+    }
+
     fun emit(selected: Selected, target: Target, destinationVersionBefore: DestinationVersionI64,
         snapshot: PlanResourceId?): Draft {
         val blend = if (selected.blend is BlendPlan.DestinationReadV1) {

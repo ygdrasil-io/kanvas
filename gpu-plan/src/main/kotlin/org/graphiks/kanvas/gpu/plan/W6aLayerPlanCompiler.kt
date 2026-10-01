@@ -252,7 +252,12 @@ public class W6aLayerPlanCompiler public constructor(
                     SamplePlan.SingleSample, logicalColorFormat(target).blendTargetClampV1(),
                     BlendCoverageApplicationV1.SourceMultiplication,
                     BlendCoverageEncodingV1.ScalarCoverageInShader))
-                W7AaDeferredOccurrenceFactsV1(drawIndexI32, blend)
+                // SRC_OVER retains the already proven resolved-colour lane.  Task 2's new
+                // canonical-white producer is needed only where PLUS needs a destination
+                // snapshot and fullscreen consumer; routing SRC_OVER through it changes its
+                // physical budget and invalidates the established W6 ownership contract.
+                blend.takeIf { it is BlendPlan.DestinationReadV1 }
+                    ?.let { W7AaDeferredOccurrenceFactsV1(drawIndexI32, it) }
             }
             val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&
                 originalDraw?.let(rootAaRectSource::acceptsW6RootAaRectStrokeScope) == true

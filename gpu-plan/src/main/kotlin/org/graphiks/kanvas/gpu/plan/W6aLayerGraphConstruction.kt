@@ -181,6 +181,8 @@ internal class W6aLayerGraphConstruction(
     private val aaDeferredDrafts = linkedMapOf<Int, W6AaDeferredOccurrenceEmitterV1.Draft>()
     private val aaDeferredConsumers = linkedMapOf<Int, PlanPass.AaDeferredComposite>()
     private val childSnapshots = mutableSetOf<PlanResourceId>()
+    /** W7 snapshots are emitted in immediate-target local coordinates, unlike legacy child copies. */
+    private val aaDeferredSnapshots = mutableSetOf<PlanResourceId>()
     val nonUniformBytesI64: Long
     val passCountI32: Int get() = rawPasses.size
 
@@ -2666,6 +2668,20 @@ internal class W6aLayerGraphConstruction(
                             val target = parentTarget
                             val targetExtent = targetExtent(target)
                             val geometry = binding.scopeI32?.let(activeByScope::getValue)
+                            val snapshot = if (deferredFacts.blend is BlendPlan.DestinationReadV1) {
+                                planResourceId(PlanResourceRole.DestinationSnapshot, occurrences.size + laneI32).also {
+                                    childSnapshots += it; aaDeferredSnapshots += it
+                                }
+                            } else null
+                            val before = DestinationVersionI64(versions.getValue(target))
+                            val emitted = W6AaDeferredOccurrenceEmitterV1.emitOccurrence(
+                                W6AaDeferredOccurrenceEmitterV1.Selected(deferredFacts.commandIndexI32,
+                                    selectedDraw.withFinalBlendV1(deferredFacts.blend), deferredFacts.blend),
+                                W6AaDeferredOccurrenceEmitterV1.Target(target, targetExtent, targetOriginDevice(target),
+                                    RectI32(0, 0, targetExtent.width, targetExtent.height), geometry?.mapping), before,
+                                binding.source.passes(), remapped, binding.source.resources(), geometry?.mapping,
+                                geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32, passes.size, snapshot)
+                            /*
                             val phases = binding.source.passes().mapIndexed { phaseIndex, original ->
                                 val path = original as? PlanPass.PathRenderPass
                                     ?: error("W7 deferred AA source lost its path phase.")
@@ -2691,6 +2707,7 @@ internal class W6aLayerGraphConstruction(
                             val snapshot = if (deferredFacts.blend is BlendPlan.DestinationReadV1) {
                                 val id = planResourceId(PlanResourceRole.DestinationSnapshot, occurrences.size + laneI32)
                                 childSnapshots += id
+                                aaDeferredSnapshots += id
                                 passes += PlanPass.TextureCopy(passes.size, target, id, before,
                                     RectI32(0, 0, targetExtent.width, targetExtent.height), Point2I32.Origin,
                                     Math.multiplyExact(targetExtent.width.toLong(), 4L))
@@ -2710,6 +2727,17 @@ internal class W6aLayerGraphConstruction(
                             passes += consumer
                             versions[target] = draft.destinationVersionAfter.valueI64
                             binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), consumer.id) }
+                            return@bindingLoop */
+                            aaDeferredPhases[laneI32] = emitted.phases
+                            aaDeferredOwners[laneI32] = emitted.producer
+                            passes += emitted.producer
+                            binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), emitted.producer.id) }
+                            emitted.snapshotCopy?.let { copy -> passes += copy; binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), copy.id) } }
+                            aaDeferredDrafts[laneI32] = emitted.draft
+                            aaDeferredConsumers[laneI32] = emitted.consumer
+                            passes += emitted.consumer
+                            versions[target] = emitted.draft.destinationVersionAfter.valueI64
+                            binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), emitted.consumer.id) }
                             return@bindingLoop
                         }
                         // The direct W4d MSAA resolve is the raw W6b coverage source.  It is
@@ -3530,8 +3558,15 @@ internal class W6aLayerGraphConstruction(
                         sourceSampling = pass.sourceSampling,
                     )
                 }
-                is PlanPass.TextureCopy -> if (pass.destination in childSnapshots && pass.source != root) {
-                    val mapping = filterSourceBindings[pass.source]?.mapping ?: requireNotNull(geometryByTarget.getValue(pass.source).mapping)
+                // The deferred consumer snapshots its immediate target.  Its copy domain is
+                // sealed in that target's local coordinates at emission time, so mapping it
+                // through a layer a second time shifts non-root snapshots and invalidates the
+                // destination-version contract.  Keep the historical child-copy mapping for
+                // every other producer.
+                is PlanPass.TextureCopy -> if (pass.destination in childSnapshots &&
+                    pass.destination !in aaDeferredSnapshots && pass.source != root) {
+                    val mapping = filterSourceBindings[pass.source]?.mapping
+                        ?: requireNotNull(geometryByTarget.getValue(pass.source).mapping)
                     PlanPass.TextureCopy(pass.ordinal, pass.source, pass.destination, pass.destinationVersion,
                         requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(requireNotNull(pass.copySourceBoundsI32()))),
                         pass.copyDestinationOriginI32(), pass.bytesPerRowI64)

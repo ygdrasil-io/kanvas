@@ -192,7 +192,6 @@ class W7RootAaSurfacePixelTest {
         val fixtures = listOf(
             Paint(blue, maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f), antiAlias = true) to "w6a.layer.unsupported_spatial_filter",
             Paint(blue, imageFilter = ImageFilter.Blur(1f, 1f), antiAlias = true) to "w6a.layer.unsupported_spatial_filter",
-            Paint(blue, blendMode = BlendMode.PLUS, antiAlias = true) to "w6a.layer.unsupported_child",
         )
         fixtures.forEach { (sibling, prefix) ->
             val surface = Surface(7, 7)
@@ -225,6 +224,27 @@ class W7RootAaSurfacePixelTest {
         assertPixel(hardControlResult.pixels, 7, 1, 1, 17, 61, 211, 255)
         assertPixel(hardControlResult.pixels, 7, 2, 2, 45, 179, 97, 255)
         assertNative(hardControlResult)
+    }
+
+    @Test
+    fun `plain layer AA PLUS composes its resolved source before restoring to root`() {
+        val blue = ColorARGB.of(255, 17, 61, 211)
+        val root = triangle(1f, 1f, 5f, 1f, 1f, 5f)
+        val surface = Surface(7, 7)
+        surface.canvas {
+            drawPath(root, Paint(blue, antiAlias = true))
+            saveLayer()
+            drawPath(root, Paint(blue, blendMode = BlendMode.PLUS, antiAlias = true))
+            restore()
+        }
+
+        val first = surface.render()
+        assertPixel(first.pixels, 7, 2, 2, 17, 61, 211, 255)
+        assertPixel(first.pixels, 7, 6, 6, 0, 0, 0, 0)
+        val second = surface.render()
+        assertContentEquals(first.pixels, second.pixels)
+        assertNative(first)
+        assertNative(second)
     }
 
     private fun assertTerminalAndRecovers(surface: Surface, bounds: RectF32, prefix: String) {
