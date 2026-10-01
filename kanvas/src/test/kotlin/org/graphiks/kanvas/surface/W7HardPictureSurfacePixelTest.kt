@@ -9,6 +9,7 @@ import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
@@ -144,6 +145,28 @@ class W7HardPictureSurfacePixelTest {
         assertBlueComposite(recovered.pixels, 16, 5, 5)
     }
 
+    @Test fun opacitySolidShaderPictureStaysOutsideHardSeed() {
+        // This Picture is intentionally outside the closed no-shader hard family. Before a
+        // Surface exists, its existing public path is the prepared compositor's typed paint
+        // refusal, not a W6 child-source refusal; the sentinel makes that boundary observable.
+        val shaderPicture = recorded {
+            concat(h)
+            drawRect(bounds, Paint(shader = Shader.Opacity(Shader.SolidColor(blue), .5f), antiAlias = false))
+        }
+        val rejected = Surface(16, 16).also { target -> target.canvas { drawPicture(shaderPicture) } }
+        val sentinel = UByteArray(16 * 16 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> {
+            rejected.readPixels(RectF32.ofLTRB(0f, 0f, 16f, 16f), sentinel)
+        }
+        assertTrue(failure.message.orEmpty().contains("unsupported.composite.paint"), failure.message)
+        assertContentEquals(before, sentinel)
+        rejected.discardRecordedOperations()
+        rejected.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint(ColorARGB.Green, antiAlias = false)) }
+        val recovered = rejected.renderAndRepeat()
+        assertPixel(recovered.pixels, 16, 8, 8, 0, 255, 0, 255)
+    }
+
     @Test fun hardSiblingDoesNotAdmitAaPerspective() {
         val hard = projectiveRectPicture()
         val aa = recorded { drawRect(bounds, Paint(blue, antiAlias = true)) }
@@ -151,7 +174,8 @@ class W7HardPictureSurfacePixelTest {
             drawPicture(hard); save(); concat(h); drawPicture(aa); restore()
         } }
         val sentinel = UByteArray(16 * 16 * 4) { 0x5au }; val before = sentinel.copyOf()
-        assertFailsWith<IllegalStateException> { surface.readPixels(RectF32.ofLTRB(0f, 0f, 16f, 16f), sentinel) }
+        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(RectF32.ofLTRB(0f, 0f, 16f, 16f), sentinel) }
+        assertTrue(failure.message.orEmpty().contains("w6a.layer.unsupported_child"), failure.message)
         assertContentEquals(before, sentinel)
         val recovered = hardPictureSurface().renderAndRepeat()
         assertBlueComposite(recovered.pixels, 16, 5, 5)

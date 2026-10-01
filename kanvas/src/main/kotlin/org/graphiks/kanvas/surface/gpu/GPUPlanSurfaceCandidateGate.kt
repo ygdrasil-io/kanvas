@@ -40,7 +40,7 @@ internal object GPUPlanSurfaceCandidateGate {
     private fun org.graphiks.kanvas.paint.Paint.isW7HardPicturePaint(): Boolean =
         !antiAlias && style == org.graphiks.kanvas.paint.PaintStyle.FILL && blender == null &&
             maskFilter == null && imageFilter == null && colorFilter == null && pathEffect == null &&
-            blendMode == BlendMode.SRC_OVER && shader.isSolidOrOpacitySolid()
+            blendMode == BlendMode.SRC_OVER && shader == null
 
     /**
      * A root Picture has no top-level layer marker, so it must nominate the W6 owner before the

@@ -673,7 +673,6 @@ public class W6aLayerPlanCompiler public constructor(
         /** Captured counterpart of the DisplayOp hard Picture seed; traversal stays bounded. */
         internal fun ownsHardPictureStream(
             scene: SceneSnapshot,
-            catalog: RuntimeEffectSemanticCatalogSnapshot,
         ): Boolean {
             val pending = java.util.ArrayDeque<SceneSnapshot>()
             scene.filterIsInstance<SceneCommand.Draw>().forEach { draw ->
@@ -688,8 +687,7 @@ public class W6aLayerPlanCompiler public constructor(
                     val draw = command as? SceneCommand.Draw ?: return@forEach
                     when (val geometry = draw.node.geometry) {
                         is GeometryNode.Picture -> pending.addLast(geometry.scene)
-                        is GeometryNode.Rect -> if (W4dGeneralPathPlanCompiler.w6HardRectFillSource(catalog)
-                                .acceptsW6HardPictureRectScope(draw.node)) return true
+                        is GeometryNode.Rect -> if (isHardPictureRectFill(draw.node)) return true
                         is GeometryNode.Path -> if (isHardPicturePathFill(draw.node)) return true
                         else -> Unit
                     }
@@ -708,9 +706,25 @@ public class W6aLayerPlanCompiler public constructor(
             }
             return node.origin == DrawOrigin.PATH && node.geometry is GeometryNode.Path &&
                 node.coverage == CoverageRequest.HARD_EDGE && node.material is MaterialNode.Solid &&
-                paint.style == PaintStyleNode.FILL && paint.blender == null && paint.colorFilter == null &&
+                paint.style == PaintStyleNode.FILL && paint.shader == null && paint.blender == null && paint.colorFilter == null &&
                 paint.maskFilter == null && paint.imageFilter == null && paint.pathEffect == null &&
                 node.effects == EffectStack.Empty && srcOver
+        }
+
+        /** Ownership is structural; W4d later owns finite/empty/transform source admission. */
+        private fun isHardPictureRectFill(node: DrawNode): Boolean {
+            val paint = node.paint ?: return false
+            val srcOver = when (val blend = node.blend) {
+                BlendNode.SrcOver -> true
+                is BlendNode.Mode -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER
+                is BlendNode.Paint -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER && blend.blender == null
+                is BlendNode.Custom -> false
+            }
+            return node.origin == DrawOrigin.RECT && node.geometry is GeometryNode.Rect &&
+                node.coverage == CoverageRequest.HARD_EDGE && node.material is MaterialNode.Solid &&
+                paint.style == PaintStyleNode.FILL && paint.shader == null && paint.blender == null &&
+                paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null &&
+                paint.pathEffect == null && node.effects == EffectStack.Empty && srcOver
         }
 
         internal fun ownsAaDeferred(

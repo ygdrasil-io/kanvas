@@ -26,7 +26,7 @@ public class CapabilityCompilerChain private constructor(
         }
         val ownsW6b = W6bFilterGraphConstruction.owns(scene)
         val ownsW7Deferred = W6aLayerPlanCompiler.ownsAaDeferred(scene, target, runtimeCatalog)
-        val ownsW7HardPicture = W6aLayerPlanCompiler.ownsHardPictureStream(scene, runtimeCatalog)
+        val ownsW7HardPicture = W6aLayerPlanCompiler.ownsHardPictureStream(scene)
         val ownsW7RootRect = W6aLayerPlanCompiler.ownsRootAaDeferredRect(scene, target)
         val w6Index = compilers.indexOfFirst { it is W6aLayerPlanCompiler }
         // A direct root image frame has an established whole-frame W5e authority.  A separate
