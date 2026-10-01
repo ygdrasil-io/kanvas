@@ -4,7 +4,8 @@
 
 Source/test `e9da0ebd6892419987356e5a8d4803cb1a7a0023`,
 [snapshot](inverseclip-port-e9da0ebd6.json), [plan](inverseclip-port-plan.md).
-Branche `codex/w7-inverseclip-port`, empilement prévu sur draft#2429 ;
+Branche `codex/w7-inverseclip-port`, draft
+[#2430](https://github.com/ygdrasil-io/kanvas/pull/2430) publiée/rattachée sur#2429 ;
 revues Sol/Astra favorables à la publication draft, sans Critical/Important
 ni nouveau Minor ; warnings hérités conservés, merge non qualifié.
 

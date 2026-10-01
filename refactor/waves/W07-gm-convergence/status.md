@@ -1,8 +1,8 @@
 # W07 — diagnostic GM provisoire
 
-Dernier lot publié : draft [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429),
-empilée sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428), elle-même
-sur [#2427](https://github.com/ygdrasil-io/kanvas/pull/2427).
+Dernier lot publié : draft [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430),
+empilée sur [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429), elle-même
+sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
 
@@ -13,7 +13,8 @@ Branche `codex/w7-inverseclip-port`, parent draft#2429,
 `e9da0ebd6892419987356e5a8d4803cb1a7a0023`.
 Qualification corpus terminée ; Sol et Astra approuvent la publication draft,
 sans Critical/Important ni nouveau Minor. Les warnings hérités sont conservés.
-La publication effective reste à effectuer ; merge non qualifié.
+Draft [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430) publiée et
+rattachée sur#2429 ; merge non qualifié.
 La revue finale vérifie indépendamment les snapshots et les archives natives ;
 elle s'appuie sur l'inspection visuelle du contrôleur, sans la reproduire.
 

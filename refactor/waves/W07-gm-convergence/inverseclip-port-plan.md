@@ -56,7 +56,7 @@ The current refusal is invalid.native-core-primitive.w4e-resource. Read-only sou
 - [x] Regenerate only inverseclip by exact gm.name; run SkiaGmRunner by exact kanvas.gm.name. Verify only one PNG/score entry plus generated timestamp change. Do not reuse sorted parity indices for registry selectors.
 - [x] Full final-source-SHA corpus631/443, serial slices0–607/607–608/608–631, strict existing aggregator versus clip-gm-ports-6e0fca2df.json. Preserve18invariants/presence; inspect every new/changed image/metric and all old-render stability.
 - [x] Independent final Astra review with one source package and final evidence delta; correct/consolidate findings.
-- [ ] Publish/attach draft stacked on codex/w7-clip-gm-ports (#2429).
+- [x] Publish/attach draft stacked on codex/w7-clip-gm-ports (#2429): [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430).
 - [x] Carry mixed-direct inverse inventory investigation into the next architectural lot with the exact unresolved predicate; do not claim it solved by faithful GM replacement. W7 remains active.
 
 ## Self-review and delegated decision
