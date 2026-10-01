@@ -93,15 +93,17 @@ public class W6aLayerPlanCompiler public constructor(
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
             return invalid(W6aPlanDiagnostics.UnsupportedChild, "Scene and target descriptors disagree.")
         }
-        // W4e validates the complete scene before it identifies and elides its complex-clip or
-        // inverse-path semantic NoOps.  Preserve those validation boundaries when such a NoOp
-        // is encountered under W6 ownership; it must not hide malformed public scene facts.
+        // Every W6 owner must validate the complete public scene before it can split root
+        // occurrences. Otherwise a valid W7 source family can exceed the graph cap only after
+        // fragmentation, reaching native submission without the configured pre-GPU refusal.
+        if (org.graphiks.kanvas.render.ir.SceneSemanticValidator.validate(scene) is
+            org.graphiks.kanvas.render.ir.SceneSemanticValidationResult.Invalid
+        ) return GpuPlanSelection.InvalidScene(listOf(W4dGeneralPlanDiagnostics.diagnostic(
+            W4dGeneralPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene validation failed",
+        )))
+        // W4e additionally validates finite public facts before it identifies and elides its
+        // complex-clip or inverse-path semantic NoOps; preserve that stricter boundary.
         if (scene.filterIsInstance<SceneCommand.Draw>().any { isW4eSemanticNoOp(it.node, target) }) {
-            if (org.graphiks.kanvas.render.ir.SceneSemanticValidator.validate(scene) is
-                org.graphiks.kanvas.render.ir.SceneSemanticValidationResult.Invalid
-            ) return GpuPlanSelection.InvalidScene(listOf(W4dGeneralPlanDiagnostics.diagnostic(
-                W4dGeneralPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene validation failed",
-            )))
             W4dGeneralPathPlanCompiler(
                 strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
                 acceptsNarrowTransforms = true,
