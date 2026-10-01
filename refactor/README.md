@@ -246,6 +246,11 @@ et gates finales obligatoires, aucun nativeGREEN, ISO, push/PR W5g ou clôture g
 | W7 | Convergence GM | [Pilotage mesuré](waves/W07-gm-convergence/pilotage.md), corpus `8829d18` : 200/443 rendus, 178 comparaisons, 39 à ≥99 % et 52 à ≥95 % de pixels ±2/canal; 199 hashes/métriques anciens inchangés, aucune perte. Nouveau rendu `sk3d_simple` (51.931111111111115 % ±2, faible SSIM) est un gain de capacité, non une parité; `PlusMergesAA` reste le gain hardstop historique. Qualification Picture/Porter-Duff, garde de graphe et Rect affine : 185/185 ciblés; globale bornée 684 SUCCESS/40 FAILURE/1 SKIPPED, timeout `vertices` 30 s historique. Références, seuils et exclusions inchangés. W7, gates W6 et quarantaine W0 non clos. |
 | W8 | Retrait legacy et runtime | Non démarrée |
 
+Réserve de relecture W7 au code `8829d18` : malgré les 185 témoins ciblés verts,
+la préservation des lanes analytiques Rect de plain layer reste défectueuse
+(identity/scale-translate non-SRC_OVER/PLUS détournés vers W7). La draft de
+cette série sur #2425 n'est pas encore qualifiée ni publiée ; voir le status W7.
+
 ## Organisation
 
 ```text

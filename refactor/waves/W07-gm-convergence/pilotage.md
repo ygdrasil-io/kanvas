@@ -3,10 +3,13 @@
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 
 Code produit mesuré `8829d18d9f3b93dc6dcae44ffa41de2a8b42ee9b`, snapshot
-[`picture-8829d18.json`](picture-8829d18.json). La correction finale route un
-Rect AA fini non singulier `GeneralAffine` vers le producteur/consommateur W7
-partagé seulement lorsque W4a ne peut pas le faire; les lanes analytiques
-identity/scale-translate restent prioritaires. Les témoins publics sont 185/185
+[`picture-8829d18.json`](picture-8829d18.json). La relecture finale Sol
+**refuse la qualification de la draft** : l'admission affine est corrigée,
+mais certains Rect identity/scale-translate de plain layer perdent leur lane
+analytique W4a. Leurs ressources/budgets ne sont donc pas préservés. Il reste
+à appliquer à la layer le garde `GeneralAffine` déjà présent pour Picture,
+sans modifier le routage root. Aucune publication de cette série pour l'instant.
+Les témoins publics sont 185/185
 (171 identités antérieures + 14 affine, archive `final-fix-covering-185-2`,
 wrapper/enfant 0/0, zéro failure/error/skip/stderr). Le bord Picture-layer
 `DST_OUT` emploie C résolu `64/255`, dérivé du pattern MSAA4, sans ajustement aux

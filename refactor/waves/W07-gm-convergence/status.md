@@ -9,9 +9,13 @@ Renderer mesuré : `8829d18d9f3b93dc6dcae44ffa41de2a8b42ee9b`.
 Les témoins publics W7/Picture, quatre régressions historiques, la garde de
 graphe et 14 nouveaux cas Rect affine sont **185/185** (archive
 `final-fix-covering-185-2`, wrapper/enfant 0/0, zéro failure/error/skip/stderr).
-Le routage final projette seulement les Rect AA `GeneralAffine` finis non
-singuliers auxquels W4a ne peut pas fournir de lane; les lanes analytiques
-identity/scale-translate restent préservées. Le témoin Picture-layer `DST_OUT`
+La relecture finale du correctif **n'est pas approuvée** : les nouveaux Rect
+affines passent, mais le sélecteur de plain layer détourne aussi des Rect
+identity/scale-translate non-SRC_OVER/PLUS de leur lane analytique W4a.
+Cette régression de routage/ressources/budget reste Important malgré les pixels
+ciblés verts. La draft qualifiée sur #2425 n'est pas publiée. Correction restante :
+conserver W4a pour ces Rect de layer et sélectionner W7 seulement pour
+`GeneralAffine`, sans changer le routage root existant. Le témoin Picture-layer `DST_OUT`
 observe C `64/255`, établi depuis le pattern MSAA4 avant Surface. Le contrôle
 PLUS translation racine demeure positif.
 
