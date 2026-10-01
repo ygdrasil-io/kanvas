@@ -16,10 +16,19 @@ Point V2 couvre ses trois contextes et passe **1/1**, processus 0.
 Le lot suivant est en implémentation : couverture AA indépendante du matériau,
 consommateur typé et émetteur partagé racine/plain layer pour PLUS/SRC_OVER.
 Les onze autres modes Porter-Duff et Picture suivront séquentiellement.
-Un appui architectural ciblé Astra confirme le design et précise la
-construction privée en deux phases, émission puis bind/seal avant `Ready`.
-Le premier RED corrigé refuse avant composition ; la compilation des nouveaux
-types n'est pas un GREEN natif. **Aucun gain GM nouveau n'est encore mesuré.**
+Après appui architectural et reprise native ciblés par Astra, le commit
+`6f07a6448` raccorde le consommateur GPU. Son témoin root Path PLUS passe
+**1/1**, processus 0, sans erreur/skip : pixels indépendants à C=0, C=1 et
+C=128/255, Render/Readback réels et second rendu byte-identique. L'archive
+finale `task2-rescue-final-green` ne contient plus de trace temporaire.
+
+Ce jalon ne valide pas le lot complet : l'émetteur partagé reste à extraire,
+la matrice racine/layer, les séquences et les budgets exacts à terminer. La
+reprise des témoins historiques a détecté un détournement de SRC_OVER vers
+la nouvelle source ; sa voie historique est rétablie dans le travail en cours.
+Le nouveau positif PLUS en layer reste en diagnostic, avant ses assertions
+de pixels. La revue Sol du lot et les mesures GM sont encore à faire.
+**Aucun gain GM nouveau n'est encore mesuré.**
 
 Les limites de validation restent explicites : W5g compte 125 identités,
 69 assertions réussies, deux échecs reproduits sur la base antérieure et

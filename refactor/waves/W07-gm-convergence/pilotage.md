@@ -49,8 +49,11 @@ ci-dessous, publication draft uniquement.
 Série courante en implémentation : `codex/w7-aa-blend-sources`, future draft
 sur #2425, [design](aa-blend-sources-design.md) et
 [plan](aa-blend-sources-plan.md). Correction W5 PLUS couvert revue et validée
-ciblée ; consommateur AA partagé racine/layer en cours, puis famille
-Porter-Duff et Picture. Aucun nouveau gain GM mesuré à ce stade.
+ciblée ; premier témoin root Path PLUS du consommateur GPU validé au code
+`6f07a6448` (couverture pleine, nulle et partielle, répétition native).
+Le lot racine/layer reste ouvert : émetteur partagé, matrice, budgets et revue
+à terminer, puis famille Porter-Duff et Picture. Aucun nouveau gain GM mesuré
+à ce stade ; le premier témoin ne remplace pas ces validations.
 L'[état courant](status.md#série-aa-et-composition-différée--en-cours-1er-octobre-2026)
 distingue les preuves natives réussies des limites historiques et de
 l'exit 133 W5g non qualifié. Le corpus mesuré ci-dessous reste la baseline.
