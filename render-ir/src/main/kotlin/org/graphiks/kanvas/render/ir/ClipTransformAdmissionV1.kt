@@ -24,14 +24,15 @@ public enum class ClipTransformAdmissionV1 {
 /**
  * Validates the captured transform provenance, then its actual forward F64 prefix, then the
  * resulting F32 geometry projection.  DeviceRect has no synthetic capture snapshot: it is
- * inspected only through its real effective prefix.
+ * inspected only through its real effective prefix. The checked prefix is evaluated only
+ * after each entry's provenance is admitted; null denotes a non-finite prefix composition.
  */
-public fun ClipStackNode.clipTransformAdmissionV1(enclosingF64: Matrix3x3F64): ClipTransformAdmissionV1 {
+public fun ClipStackNode.clipTransformAdmissionV1(enclosingF64: () -> Matrix3x3F64?): ClipTransformAdmissionV1 {
     return when (this) {
         ClipStackNode.Empty -> ClipTransformAdmissionV1.Ready
-        is ClipStackNode.DeviceRect -> geometryAdmissionV1(
-            ClipTransformGeometryF64.Rect(copyBounds().toRectF64()), enclosingF64,
-        )
+        is ClipStackNode.DeviceRect -> enclosingF64()?.let { prefixF64 ->
+            geometryAdmissionV1(ClipTransformGeometryF64.Rect(copyBounds().toRectF64()), prefixF64)
+        } ?: ClipTransformAdmissionV1.NonFinite
         is ClipStackNode.Operations -> {
             for (entry in this) {
                 val admission = entry.clipTransformAdmissionV1(enclosingF64)
@@ -42,7 +43,7 @@ public fun ClipStackNode.clipTransformAdmissionV1(enclosingF64: Matrix3x3F64): C
     }
 }
 
-private fun ClipEntry.clipTransformAdmissionV1(enclosingF64: Matrix3x3F64): ClipTransformAdmissionV1 {
+private fun ClipEntry.clipTransformAdmissionV1(enclosingF64: () -> Matrix3x3F64?): ClipTransformAdmissionV1 {
     return when (val snapshot = transform) {
         is ClipTransformSnapshot.LegacyUnavailable -> if (snapshot.perspectiveCaptureRefusal) {
             ClipTransformAdmissionV1.Perspective
@@ -55,7 +56,7 @@ private fun ClipEntry.clipTransformAdmissionV1(enclosingF64: Matrix3x3F64): Clip
             if (capturedAdmission != ClipTransformAdmissionV1.Ready) {
                 capturedAdmission
             } else {
-                val effectiveF64 = enclosingF64.timesCheckedOrNull(capturedF64)
+                val effectiveF64 = enclosingF64()?.timesCheckedOrNull(capturedF64)
                 val geometryF64 = geometry.toClipTransformGeometryF64OrNull()
                 when {
                     effectiveF64 == null -> ClipTransformAdmissionV1.NonFinite

@@ -277,6 +277,32 @@ class W7HardPictureSurfacePixelTest {
         } }
     }
 
+    @Test fun capturedPerspectiveClipPrecedesOverflowingPicturePrefix() {
+        // Each wrapper records a finite F32 scale; their F64 product overflows at depth nine.
+        // The inner Known Perspective capture is refused before that prefix is evaluated.
+        val inner = perspectiveClipPicture(path = false, serialized = true)
+        assertClipPriorityRefusal("unsupported_transform:Perspective") { target -> target.canvas {
+            drawPicture(nestedUnclippedHardPicture(depth = 9, inner = inner))
+        } }
+    }
+
+    @Test fun historicalLegacyPerspectiveClipPrecedesOverflowingPicturePrefix() {
+        // The fixed schema-v1 archive carries the original Perspective refusal without a matrix.
+        val inner = historicalLegacyPerspectiveClipPicture()
+        assertClipPriorityRefusal("unsupported_transform:Perspective") { target -> target.canvas {
+            drawPicture(nestedUnclippedHardPicture(depth = 9, inner = inner))
+        } }
+    }
+
+    @Test fun firstAffineClipKeepsOverflowingPrefixPriorityOverLaterPerspective() {
+        // Both clips belong to the same captured stack. The first is a real identity Known
+        // Path capture, so its overflowing prefix must win before the later Perspective entry.
+        val inner = perspectiveClipPicture(path = false, serialized = true, affineClipFirst = true)
+        assertClipPriorityRefusal("unsupported_clip_transform:NonFinite") { target -> target.canvas {
+            drawPicture(nestedUnclippedHardPicture(depth = 9, inner = inner))
+        } }
+    }
+
     @Test fun hardSiblingDoesNotAdmitAaPerspective() {
         val hard = projectiveRectPicture()
         val aa = recorded { drawRect(bounds, Paint(blue, antiAlias = true)) }
@@ -305,9 +331,11 @@ class W7HardPictureSurfacePixelTest {
         path: Boolean,
         serialized: Boolean,
         clipMatrix: Matrix3x3F32 = perspectiveClipMatrix,
+        affineClipFirst: Boolean = false,
     ): Picture {
         val recorder = PictureRecorder()
         recorder.beginRecording(bounds).apply {
+            if (affineClipFirst) clipPath(Path().addRect(bounds), antiAlias = false)
             setMatrix(clipMatrix)
             clipPath(Path().addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f)), antiAlias = false)
             resetMatrix()
@@ -325,8 +353,11 @@ class W7HardPictureSurfacePixelTest {
         }
         return requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
     }
-    private fun nestedUnclippedHardPicture(depth: Int): Picture {
-        var picture = recorded { drawRect(bounds, Paint(red, antiAlias = false)) }
+    private fun nestedUnclippedHardPicture(
+        depth: Int,
+        inner: Picture = recorded { drawRect(bounds, Paint(red, antiAlias = false)) },
+    ): Picture {
+        var picture = inner
         repeat(depth) {
             val child = picture
             picture = recorded {

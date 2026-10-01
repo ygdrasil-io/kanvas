@@ -652,9 +652,8 @@ internal class W6aLayerGraphConstruction(
                     // inner scope additionally carries the filter-owner context, matching the
                     // established materialCoordinateDraw carrier convention exactly.
                     val initialPrefixF64 = if (scope.outerPrefixSize == null) filterPrefixF64 else Matrix3x3F64()
-                    val prefixF64 = source.sourceClipPrefixF64V1(scope, initialPrefixF64)
-                        ?: clipAdmissionFailure(ClipTransformAdmissionV1.NonFinite)
-                    when (val admission = scope.clip.clipTransformAdmissionV1(prefixF64)) {
+                    val prefixF64 by lazy { source.sourceClipPrefixF64V1(scope, initialPrefixF64) }
+                    when (val admission = scope.clip.clipTransformAdmissionV1 { prefixF64 }) {
                         ClipTransformAdmissionV1.Ready -> Unit
                         else -> clipAdmissionFailure(admission)
                     }
