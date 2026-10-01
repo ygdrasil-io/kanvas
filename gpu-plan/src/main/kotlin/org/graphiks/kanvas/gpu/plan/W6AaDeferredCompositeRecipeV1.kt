@@ -54,8 +54,11 @@ public fun freezeW6AaDeferredCompositeRecipesV1(
         require(leaf.indexI32 > 0)
         leaf = MaterialPlanRef(leaf.indexI32 - 1)
     }
-    require(materialTable.entry(leaf).program == MaterialProgramPlan.SolidLinearPremulV1 &&
-        materialTable.entry(leaf).bindings is MaterialBindingPlan.SolidRgbaF32V1) { "W7 consumer lost its selected solid LINEAR material" }
+    val selected = materialTable.entry(leaf)
+    require(
+        (selected.program == MaterialProgramPlan.SolidLinearPremulV1 && selected.bindings is MaterialBindingPlan.SolidRgbaF32V1) ||
+            (selected.program == MaterialProgramPlan.TransparentV1 && selected.bindings is MaterialBindingPlan.EmptyV1),
+    ) { "W7 consumer lost its selected solid LINEAR or normalized transparent material" }
     val raw = RawMaterialRequirementsV2.of(materialTable, authority.ref)
     val uniform = resources.single { it.id == uniforms.getValue(raw.canonicalIdentity) }
     require(uniform.role == PlanResourceRole.SourceUniformData && uniform.kind == PlanResourceKind.Buffer &&

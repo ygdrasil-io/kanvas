@@ -8,11 +8,17 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanEntry
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
+import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Test
@@ -181,6 +187,184 @@ class W7AaDeferredBlendSurfacePixelTest {
         }
     }
 
+    @Test
+    fun `deferred PLUS saturates a fractional edge before storage`() {
+        val destinationColor = ColorARGB.of(192, 0, 0, 0)
+        val background = requireBounded("saturation background", W5aSolidOpacityCpuOracle.draw(destinationColor, 1f))
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+        val edge = requireBounded("saturation edge", WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            blackIntervals(.75f), destination, 128f / 255f,
+        ))
+        val full = requireBounded("saturation full", WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            blackIntervals(.75f), destination, 1f,
+        ))
+        val zero = requireBounded("saturation C=0", WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            blackIntervals(.75f), destination, 0f,
+        ))
+        val oldPostLerp = WgslFloatEnvelopeV1Oracle.destinationExclusion(
+            blackTable(.75f), MaterialPlanRef(1), destination, BlendMode.PLUS, 128f / 255f,
+        )
+        requireAlphaDisjoint("saturation edge/V1", edge, oldPostLerp.channels)
+        requireAlphaDisjoint("saturation edge/C=0", edge, zero.channels)
+        check(full.channels[3].intersect(edge.channels[3]).isNotEmpty()) {
+            "saturated full and fractional edges may share alpha code 255"
+        }
+
+        val triangle = triangle(1f, 1f, 5f, 1f, 1f, 5f)
+        val surface = Surface(7, 7)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(shader = Shader.SolidColor(destinationColor), antiAlias = false))
+            drawPath(triangle, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Black), .75f),
+                blendMode = BlendMode.PLUS, antiAlias = true))
+        }
+        renderTwice(surface).forEach { result ->
+            assertAdmits(full, result.pixels, 7, 2, 2)
+            assertAdmits(edge, result.pixels, 7, 3, 2)
+            assertAdmits(zero, result.pixels, 7, 6, 6)
+        }
+    }
+
+    @Test
+    fun `deferred PLUS source alpha zero preserves a genuinely rendered background`() {
+        val destinationColor = ColorARGB.of(64, 0, 0, 0)
+        val background = requireBounded("alpha zero background", W5aSolidOpacityCpuOracle.draw(destinationColor, 1f))
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+        val zeroSource = requireBounded("alpha zero PLUS", WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            blackIntervals(0f), destination, 128f / 255f,
+        ))
+        val nonzeroSource = requireBounded("alpha nonzero PLUS", WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            blackIntervals(.75f), destination, 128f / 255f,
+        ))
+        check(zeroSource.channels.zip(background.channels).all { (zero, stored) -> zero.intersect(stored).isNotEmpty() }) {
+            "zero source oracle must retain the stored-background codes"
+        }
+        requireAlphaDisjoint("alpha zero/nonzero source", nonzeroSource, background.channels)
+
+        val surface = Surface(7, 7)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(shader = Shader.SolidColor(destinationColor), antiAlias = false))
+            drawPath(triangle(1f, 1f, 5f, 1f, 1f, 5f),
+                Paint(shader = Shader.SolidColor(ColorARGB.of(0, 0, 0, 0)), blendMode = BlendMode.PLUS, antiAlias = true))
+        }
+        renderTwice(surface).forEach { result ->
+            assertAdmits(background, result.pixels, 7, 3, 2)
+            assertAdmits(background, result.pixels, 7, 6, 6)
+        }
+    }
+
+    @Test
+    fun `deferred PLUS transparent opacity source preserves a genuinely rendered background`() {
+        val destinationColor = ColorARGB.of(64, 0, 0, 0)
+        val background = requireBounded("transparent opacity background", W5aSolidOpacityCpuOracle.draw(destinationColor, 1f))
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+        val zeroSource = requireBounded("transparent opacity PLUS", WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+            blackIntervals(0f), destination, 128f / 255f,
+        ))
+        check(zeroSource.channels.zip(background.channels).all { (zero, stored) -> zero.intersect(stored).isNotEmpty() }) {
+            "transparent opacity source oracle must retain the stored-background codes"
+        }
+        // The shader is transparently normalized by material planning, but the already-recorded
+        // root background must still reach Render/Readback even if this identity draw is elided.
+        val surface = Surface(7, 7)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(shader = Shader.SolidColor(destinationColor), antiAlias = false))
+            drawPath(triangle(1f, 1f, 5f, 1f, 1f, 5f), Paint(
+                shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Black), 0f), blendMode = BlendMode.PLUS, antiAlias = true,
+            ))
+        }
+        renderTwice(surface).forEach { result ->
+            assertAdmits(background, result.pixels, 7, 3, 2)
+            assertAdmits(background, result.pixels, 7, 6, 6)
+        }
+    }
+
+    @Test
+    fun `two deferred PLUS consumers use the stored intervening destination in recorded order`() {
+        val destinationColor = ColorARGB.of(64, 0, 0, 0)
+        val forward = requireBounded("chronology forward overlap", chronologyExpected(2, 1, destinationColor, forward = true))
+        val reverse = requireBounded("chronology reverse overlap", chronologyExpected(2, 1, destinationColor, forward = false))
+        val stale = chronologyExpected(2, 1, destinationColor, forward = true, includeMiddle = false)
+        requireDisjoint("chronology forward/reverse overlap", forward, reverse)
+        requireDisjointFromConservativeExclusion("chronology stale destination", forward, stale)
+        val outside = requireBounded("chronology exterior", W5aSolidOpacityCpuOracle.draw(destinationColor, 1f))
+
+        fun record(forwardOrder: Boolean): Surface = Surface(7, 7).also { surface -> surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(shader = Shader.SolidColor(destinationColor), antiAlias = false))
+            val first = if (forwardOrder) firstTriangle() else secondTriangle()
+            val second = if (forwardOrder) secondTriangle() else firstTriangle()
+            drawPath(first, Paint(shader = Shader.SolidColor(if (forwardOrder) ColorARGB.Red else ColorARGB.Green),
+                blendMode = BlendMode.PLUS, antiAlias = true))
+            drawRect(RectF32.ofLTRB(2f, 1f, 5f, 4f), Paint(shader = Shader.SolidColor(ColorARGB.Black), antiAlias = false))
+            drawPath(second, Paint(shader = Shader.SolidColor(if (forwardOrder) ColorARGB.Green else ColorARGB.Red),
+                blendMode = BlendMode.PLUS, antiAlias = true))
+        } }
+        renderTwice(record(forwardOrder = true)).forEach { result ->
+            assertAdmits(forward, result.pixels, 7, 2, 1)
+            assertAdmits(outside, result.pixels, 7, 6, 6)
+        }
+        renderTwice(record(forwardOrder = false)).forEach { result ->
+            assertAdmits(reverse, result.pixels, 7, 2, 1)
+            assertAdmits(outside, result.pixels, 7, 6, 6)
+        }
+    }
+
+    @Test
+    fun `deferred PLUS preserves translated hard-scissor mapping`() {
+        val destination = W5bBlendCpuOracle.Draw(ColorARGB.of(64, 0, 0, 0), 1f, BlendMode.SRC_OVER)
+        val source = W5bBlendCpuOracle.coveredPlusPrescaleV2PointFixture().center
+        val full = requireBounded("mapping full", W5bBlendCpuOracle.point(source, destination, 1f))
+        val outside = requireBounded("mapping outside", W5bBlendCpuOracle.point(source, destination, 0f))
+        requireDisjoint("mapping full/outside", full, outside)
+
+        val surface = Surface(9, 8)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 9f, 8f), Paint(shader = Shader.SolidColor(destination.color), antiAlias = false))
+            save()
+            clipRect(RectF32.ofLTRB(3f, 2f, 5f, 4f), antiAlias = false)
+            translate(2f, 1f)
+            drawPath(triangle(0f, 0f, 4f, 0f, 0f, 4f), Paint(
+                shader = Shader.Opacity(Shader.SolidColor(source.color), source.opacityF32), blendMode = BlendMode.PLUS, antiAlias = true,
+            ))
+            restore()
+        }
+        renderTwice(surface).forEach { result ->
+            assertAdmits(full, result.pixels, 9, 3, 2)
+            assertAdmits(outside, result.pixels, 9, 2, 2)
+            assertAdmits(outside, result.pixels, 9, 5, 2)
+        }
+    }
+
+    @Test
+    fun `deferred PLUS preserves a nonzero plain-layer origin at its true AA edge`() {
+        val destination = W5bBlendCpuOracle.Draw(ColorARGB.of(64, 0, 0, 0), 1f, BlendMode.SRC_OVER)
+        val source = W5bBlendCpuOracle.coveredPlusPrescaleV2PointFixture().center
+        val full = requireBounded("layer mapping full", W5bBlendCpuOracle.point(source, destination, 1f))
+        val edge = requireBounded("layer mapping C128", W5bBlendCpuOracle.point(source, destination, 128f / 255f))
+        val doubleCovered = requireBounded("layer mapping C128 squared", W5bBlendCpuOracle.point(source, destination,
+            (128f / 255f) * (128f / 255f)))
+        val untouchedLayer = requireBounded("layer mapping C0", W5bBlendCpuOracle.point(source, destination, 0f))
+        val transparent = requireBounded("layer mapping root exterior", W5aSolidOpacityCpuOracle.draw(ColorARGB.of(0, 0, 0, 0), 1f))
+        requireDisjoint("layer mapping full/C0", full, untouchedLayer)
+        requireDisjoint("layer mapping C128/C128 squared", edge, doubleCovered)
+        requireDisjoint("layer mapping C0/root exterior", untouchedLayer, transparent)
+
+        val surface = Surface(9, 8)
+        surface.canvas {
+            saveLayer(RectF32.ofLTRB(5f, 4f, 9f, 8f))
+            drawRect(RectF32.ofLTRB(5f, 4f, 9f, 8f), Paint(shader = Shader.SolidColor(destination.color), antiAlias = false))
+            drawPath(triangle(5f, 4f, 9f, 4f, 5f, 8f), Paint(
+                shader = Shader.Opacity(Shader.SolidColor(source.color), source.opacityF32), blendMode = BlendMode.PLUS, antiAlias = true,
+            ))
+            restore()
+        }
+        renderTwice(surface).forEach { result ->
+            assertAdmits(full, result.pixels, 9, 6, 5)
+            assertAdmits(edge, result.pixels, 9, 7, 5)
+            assertAdmits(untouchedLayer, result.pixels, 9, 8, 7)
+            assertAdmits(transparent, result.pixels, 9, 4, 4)
+        }
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("basicCells")
     fun `AA deferred public matrix admits every pixel twice`(
@@ -342,6 +526,96 @@ class W7AaDeferredBlendSurfacePixelTest {
         StencilGeometry.EVEN_ODD_HOLE -> if (x in 1..5 && y in 1..5 && !(x in 2..4 && y in 2..4)) 1f else 0f
     }
 
+    private fun chronologyExpected(
+        x: Int,
+        y: Int,
+        destinationColor: ColorARGB,
+        forward: Boolean,
+        includeMiddle: Boolean = true,
+    ): WgslFloatEnvelopeV1Oracle.DrawResult {
+        var result = W5aSolidOpacityCpuOracle.draw(destinationColor, 1f)
+        fun plus(color: Array<WgslFloatEnvelopeV1Oracle.Interval>, coverage: Float) {
+            result = WgslFloatEnvelopeV1Oracle.coveredPlusPrescaleV2(
+                color, requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(result)), coverage,
+            )
+        }
+        fun middle() {
+            result = W5aSolidOpacityCpuOracle.draw(ColorARGB.Black, 1f,
+                destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(result)))
+        }
+        val firstCoverage = firstTriangleCoverage(x, y)
+        val secondCoverage = secondTriangleCoverage(x, y)
+        if (forward) {
+            plus(redIntervals(), firstCoverage)
+            if (includeMiddle && x in 2..4 && y in 1..3) middle()
+            plus(greenIntervals(), secondCoverage)
+        } else {
+            plus(greenIntervals(), secondCoverage)
+            if (includeMiddle && x in 2..4 && y in 1..3) middle()
+            plus(redIntervals(), firstCoverage)
+        }
+        return result
+    }
+
+    private fun firstTriangle(): Path = triangle(1f, 1f, 5f, 1f, 1f, 5f)
+
+    private fun secondTriangle(): Path = triangle(2f, 1f, 6f, 1f, 2f, 5f)
+
+    private fun triangle(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float): Path = Path().apply {
+        moveTo(ax, ay); lineTo(bx, by); lineTo(cx, cy); close()
+    }
+
+    private fun firstTriangleCoverage(x: Int, y: Int): Float = when {
+        x >= 1 && y >= 1 && x + y < 5 -> 1f
+        x >= 1 && y >= 1 && x + y == 5 -> 128f / 255f
+        else -> 0f
+    }
+
+    private fun secondTriangleCoverage(x: Int, y: Int): Float = when {
+        x >= 2 && y >= 1 && x + y < 6 -> 1f
+        x >= 2 && y >= 1 && x + y == 6 -> 128f / 255f
+        else -> 0f
+    }
+
+    private fun blackIntervals(opacityF32: Float) = arrayOf(
+        WgslFloatEnvelopeV1Oracle.Interval.input(0f),
+        WgslFloatEnvelopeV1Oracle.Interval.input(0f),
+        WgslFloatEnvelopeV1Oracle.Interval.input(0f),
+        WgslFloatEnvelopeV1Oracle.Interval.input(opacityF32),
+    )
+
+    private fun greenIntervals(opacityF32: Float = 1f) = arrayOf(
+        WgslFloatEnvelopeV1Oracle.Interval.input(0f),
+        WgslFloatEnvelopeV1Oracle.Interval.input(opacityF32),
+        WgslFloatEnvelopeV1Oracle.Interval.input(0f),
+        WgslFloatEnvelopeV1Oracle.Interval.input(opacityF32),
+    )
+
+    private fun redIntervals() = arrayOf(
+        WgslFloatEnvelopeV1Oracle.Interval.input(1f),
+        WgslFloatEnvelopeV1Oracle.Interval.input(0f),
+        WgslFloatEnvelopeV1Oracle.Interval.input(0f),
+        WgslFloatEnvelopeV1Oracle.Interval.input(1f),
+    )
+
+
+    private fun blackTable(opacityF32: Float) = MaterialPlanTable.of(listOf(
+        MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
+            MaterialBindingPlan.SolidRgbaF32V1.of(ColorF32.of(0f, 0f, 0f, 1f))),
+        MaterialPlanEntry(MaterialProgramPlan.OpacityV1(MaterialProgramPlan.SolidLinearPremulV1),
+            MaterialBindingPlan.OpacityF32V1.of(opacityF32)),
+    ))
+
+    private fun requireAlphaDisjoint(
+        label: String,
+        expected: WgslFloatEnvelopeV1Oracle.DrawResult.Bounded,
+        counterfactual: List<Set<Int>>,
+    ) {
+        check(expected.channels[3].intersect(counterfactual[3]).isEmpty()) {
+            "$label must have disjoint alpha-code envelopes: ${expected.channels[3]} versus ${counterfactual[3]}"
+        }
+    }
+
     private fun expectedPixel(
         source: W5bBlendCpuOracle.Draw,
         destination: W5bBlendCpuOracle.Draw,
@@ -376,6 +650,31 @@ class W7AaDeferredBlendSurfacePixelTest {
         val secondCodes = requireBounded(label, second).channels
         check(firstCodes.zip(secondCodes).any { (left, right) -> left.intersect(right).isEmpty() }) {
             "$label must have disjoint output-code envelopes"
+        }
+    }
+
+    /**
+     * A stale-destination calculation is intentionally a non-emitted counterfactual.  Its
+     * envelope can span more than two adjacent stored codes, but the oracle still supplies the
+     * conservative codes it excludes; do not pretend it is a bounded render expectation.
+     */
+    private fun requireDisjointFromConservativeExclusion(
+        label: String,
+        emitted: WgslFloatEnvelopeV1Oracle.DrawResult,
+        counterfactual: WgslFloatEnvelopeV1Oracle.DrawResult,
+    ) {
+        val emittedCodes = requireBounded(label, emitted).channels
+        val excludedCodes = when (counterfactual) {
+            is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded -> counterfactual.channels
+            is WgslFloatEnvelopeV1Oracle.DrawResult.Unbounded ->
+                requireNotNull(counterfactual.exclusionOnlyChannels) { "$label lacks conservative exclusions" }
+            is WgslFloatEnvelopeV1Oracle.DrawResult.DomainUnbounded ->
+                error("$label counterfactual has unbounded domain: ${counterfactual.reason}")
+            is WgslFloatEnvelopeV1Oracle.DrawResult.FixtureUnbounded ->
+                error("$label counterfactual is not a finite fixture: ${counterfactual.reason}")
+        }
+        check(emittedCodes.zip(excludedCodes).any { (actual, stale) -> actual.intersect(stale).isEmpty() }) {
+            "$label must exclude the stale-destination code envelope"
         }
     }
 

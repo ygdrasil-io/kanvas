@@ -230,6 +230,13 @@ class W7RootAaSurfacePixelTest {
     fun `plain layer AA PLUS composes its resolved source before restoring to root`() {
         val blue = ColorARGB.of(255, 17, 61, 211)
         val root = triangle(1f, 1f, 5f, 1f, 1f, 5f)
+        // The AA table resolves each opaque edge to code 128 before layer restore.  Source-over
+        // restore then stores (128 * 255 + 128 * (255 - 128)) / 255 = 48896 / 255, rounded to 192.
+        // A skipped layer leaves the root's independently resolved code 128, hence the two are disjoint.
+        val rootEdgeAlphaCode = 128
+        val restoredEdgeAlphaCode = (48_896 + 127) / 255
+        check(restoredEdgeAlphaCode == 192)
+        check(restoredEdgeAlphaCode != rootEdgeAlphaCode)
         val surface = Surface(7, 7)
         surface.canvas {
             drawPath(root, Paint(blue, antiAlias = true))
@@ -241,6 +248,7 @@ class W7RootAaSurfacePixelTest {
         val first = surface.render()
         assertPixel(first.pixels, 7, 2, 2, 17, 61, 211, 255)
         assertPixel(first.pixels, 7, 6, 6, 0, 0, 0, 0)
+        assertAlphaCode(first.pixels, 7, 3, 2, restoredEdgeAlphaCode)
         val second = surface.render()
         assertContentEquals(first.pixels, second.pixels)
         assertNative(first)
@@ -270,7 +278,14 @@ class W7RootAaSurfacePixelTest {
     }
 
     private fun assertNative(result: RenderResult) {
+        assertTrue(result.isClean, result.diagnostics.summary())
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), result.nativeEvidenceScopeKinds.toString())
+        assertTrue(result.stats.opsDispatched > 0, "native render must dispatch")
+    }
+
+    private fun assertAlphaCode(pixels: UByteArray, width: Int, x: Int, y: Int, expected: Int) {
+        val actual = pixels[(y * width + x) * 4 + 3].toInt() and 0xff
+        assertTrue(actual == expected, "pixel ($x,$y) alpha $actual != $expected")
     }
 
     private fun assertPixel(pixels: UByteArray, width: Int, x: Int, y: Int, red: Int, green: Int, blue: Int, alpha: Int) {
