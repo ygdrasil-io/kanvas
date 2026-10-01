@@ -48,8 +48,10 @@
 ## Validation execution
 
 Archive root `/private/tmp/kanvas-w7-sk3d.WUms9p` (fresh per invocation).
-Reuse existing read-only runner `/private/tmp/kanvas-w7-aa-blend.rFtTrn/bounded-run.rb`
-and `review-evidence.init.gradle`, reading them before use. Gradle flags:
+Use `/private/tmp/kanvas-w7-sk3d.WUms9p/bounded-run.rb` (same runner with its
+archive guard scoped to this lot and maximum240s) and read-only
+`/private/tmp/kanvas-w7-aa-blend.rFtTrn/review-evidence.init.gradle`, reading
+both before use. Gradle flags:
 `--offline --no-daemon --no-build-cache --no-parallel --console=plain`.
 Public test task `:integration-tests:skia:test --tests org.graphiks.kanvas.skia.Sk3dSimpleSurfacePixelTest`.
 Global baseline `/private/tmp/kanvas-w7-aa-blend.rFtTrn/layer-preservation-full-final-1`
