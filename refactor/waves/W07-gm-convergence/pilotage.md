@@ -2,16 +2,21 @@
 
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 
-Code mesuré `93ec53027403d23bf0acf761001e816c1a975e1c`, snapshot
-[`picture-93ec530274.json`](picture-93ec530274.json). Couverture publique :
-170/170 (Picture, historiques W7 et quatre régressions de préservation),
-archive `task4-covering-plus4-final-3`, wrapper/enfant 0/0. Corpus : 631/443,
+Code mesuré `8c8e7d8e0732f9922896f7e7d41a65b780a59fea`, snapshot
+[`picture-8c8e7d8.json`](picture-8c8e7d8.json). Couverture publique :
+171/171 (Picture, historiques W7, quatre régressions de préservation et garde
+de graphe), archive `task4-fix-r1-covering-171-2`, wrapper/enfant 0/0. Corpus : 631/443,
 199 rendus, 177 comparés, 39 ≥99 %, 52 ≥95 %, aucune perte et aucun delta de hash
 des images rendues dans les deux mesures; gain `PlusMergesAA` à 69.482421875 %
 des pixels ±2. `vertices` index 607 conserve son timeout historique de 30 s.
+La globale finale bornée a 725 END (684 SUCCESS/40 FAILURE/1 SKIPPED) et timeout
+wrapper/enfant 124/143; toutes les 718 identités Task1 sont présentes, avec zéro
+SUCCESS→FAILURE, `rowPadding` SKIPPED→SUCCESS et sept identités W5e atteintes.
 
-Le checkpoint antérieur `picture-7488067469.json` est conservé : son unique
-perte `lattice2` a été localisée à la priorité W6 d'un Rect AA SRC qui fragmentait
+Le checkpoint antérieur `picture-7488067469.json` n'est pas conservé dans le
+repo : ses journaux privés restent disponibles sous
+`/private/tmp/kanvas-w7-aa-blend.rFtTrn/task4-corpus-parity-7488067`. Sa perte
+unique `lattice2` a été localisée à la priorité W6 d'un Rect AA SRC qui fragmentait
 un frame `ImageLattice`. Le correctif final privilégie W5e seulement lorsqu'il
 est candidat pour le frame root sans layer/W6b; le hash `lattice2` restauré est
 `49d38b8f277d292c029ab9a7c9e5f19c6300821d3c9b21af6af150384ff02da0`.
@@ -62,7 +67,7 @@ Dernier lot publié : ports fidèles des deux hardstop, code `34e3d4e98`, branch
 empilée sur #2424 ; mesure et reviews terminées
 ci-dessous, publication draft uniquement.
 
-Série courante en implémentation : `codex/w7-aa-blend-sources`, future draft
+Série courante qualifiée (sans clôture W7) : `codex/w7-aa-blend-sources`, future draft
 sur #2425, [design](aa-blend-sources-design.md) et
 [plan](aa-blend-sources-plan.md). Correction W5 PLUS couvert revue et validée
 ciblée ; premier témoin root Path PLUS du consommateur GPU validé au code

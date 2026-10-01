@@ -5,17 +5,32 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 
-Renderer mesuré : `93ec53027403d23bf0acf761001e816c1a975e1c`.
-Les témoins publics W7/Picture et quatre régressions historiques sont **170/170**
-(archive `task4-covering-plus4-final-3`, wrapper/enfant 0/0). Le corpus figé est
+Renderer mesuré : `8c8e7d8e0732f9922896f7e7d41a65b780a59fea`.
+Les témoins publics W7/Picture, quatre régressions historiques et le nouveau
+refus de limite de graphe sont **171/171** (archive
+`task4-fix-r1-covering-171-2`, wrapper/enfant 0/0; les 170 identités antérieures
+sont inchangées). Ce témoin ferme un bypass : 1 024 Rect AA `Opacity(Solid)`
+en SRC constituent 4 097 nœuds sémantiques avec seulement 3 072 unités de
+capture et 1 024 commandes; avant le correctif il atteignait le backend et
+provoquait un abort 134, après le garde W6 il refuse avant GPU, laisse la
+sentinelle intacte et récupère nativement.
+
+La suite globale finale `task4-fix-r1-full-final-1` expire comme borné
+(wrapper 124, enfant 143) après 725 END : 684 SUCCESS, 40 FAILURE, 1 SKIPPED.
+Les 718 identités Task1 sont toutes présentes : les 40 FAILURE sont les mêmes,
+aucun SUCCESS ne devient FAILURE, `rowPadding...` devient SUCCESS, et sept
+W5e sont nouvellement atteintes (six SUCCESS, un SKIPPED).
+
+Le corpus figé au même SHA est
 631 identités / 443 éligibles : 199 rendus, 177 comparaisons, 39 à ≥99 % et 52 à
 ≥95 % des pixels à ±2/canal, sans perte ni changement de hash d'image déjà rendue.
 Le seul gain est `PlusMergesAA` (69.482421875 % à ±2); le snapshot complet est
-[`picture-93ec530274.json`](picture-93ec530274.json). Le timeout `vertices` à
+[`picture-8c8e7d8.json`](picture-8c8e7d8.json). Le timeout `vertices` à
 l'index 607 reste historique (30 s). Références, seuils, exclusions et oracle
 n'ont pas été modifiés.
 
-Le checkpoint intermédiaire `7488067` reste archivé honnêtement : il avait gagné
+Le checkpoint intermédiaire `7488067` reste archivé honnêtement dans les journaux
+privés : son JSON n'est pas conservé dans le repo; il avait gagné
 `PlusMergesAA` mais perdu `lattice2`. Le diagnostic a montré qu'un Rect AA SRC
 forçait W6 avant le plan whole-frame W5e; `93ec530` rétablit la priorité W5e sur
 un vrai candidat root sans layer/W6b. `lattice2` retrouve exactement le hash
@@ -48,8 +63,9 @@ sans inverse fini. Un témoin public distingue translation, bord AA et scissor,
 puis vérifie refus de perspective, sentinelle intacte et récupération ; les
 routes historiques de W4d/W4a restent inchangées.
 `aarectmodes` reste `render_failed` sur `w6a.layer.unsupported_child`, cause
-non isolée ; aucun gain GM revendiqué pour ce lot. Picture et la validation
-complète du corpus restent à réaliser.
+non isolée ; aucun gain GM revendiqué pour ce lot. Picture, la validation
+complète du corpus et le contrôle de limite de graphe sont terminés; W7, W6 et
+W0 ne sont pas clos et la suite globale reste incomplète par timeout.
 
 Les checkpoints ci-dessous retracent la mise en place du contrat partagé.
 Après appui architectural et reprise native ciblés par Astra, le commit
