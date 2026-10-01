@@ -1,5 +1,43 @@
 # Pilotage de la convergence Skia
 
+## Ports complexclip4 / manypathatlases fidèles — 1er octobre 2026
+
+Source/test `6e0fca2df5aef733bb516ddd2b714dd342920ab4`,
+[snapshot](clip-gm-ports-6e0fca2df.json), [plan](clip-gm-ports-plan.md).
+Branche `codex/w7-clip-gm-ports`, draft
+[#2429](https://github.com/ygdrasil-io/kanvas/pull/2429) publiée sur#2428 ; verdict final
+Astra favorable à la publication, sans Critical/Important/Minor restant.
+
+Les deux erreurs de port constatées dans le lot précédent sont corrigées :
+Difference+AA pour les feuilles ; restrictions device persistantes et fixées
+avant CTM pour complexclip4. Le renderer, GmCanvas, les références, domaines,
+seuils et exclusions ne changent pas. L'adaptation RGB du remplissage final
+est prouvée suffisante pour toute la restriction de cette scène ; elle ne
+résout pas DrawColor général sous clip analytique complexe.
+
+40/40 témoins natifs frais passent sans skip ; RED causal4/4, revue Sol et
+contre-relecture approuvées. Quatre PNG/entrées de score régénérés et inspectés.
+Corpus631/443 : **206 rendus,183 comparés,41≥99 % (+2),56≥95 % (+4)**.
+Aucune admission/perte ; seuls quatre hashes et leurs métriques évoluent,
+202autres rendus inchangés et18invariants préservés. complexclip4 passe de
+85.29/85.40 à99.926/99.999 % ; manypathatlases de33.325 à95.325 % (±2/canal).
+Les résultats exacts complexclip4 restent80.38/80.42 %, donc pas d'ISO exact.
+Le diff binaire exact et les profils PNG distincts ne doivent pas être lus
+comme une amplitude d'erreur. Aucun changement du comparateur ou du codec.
+
+La globale rouge/incomplète reste celle du renderer be813afd7, pas une
+nouvelle globale au SHA des ports. vertices reste timeout30s. L'erreur
+initiale de sélection par indices a écrit zéro PNG et fini Java133 ;
+les huit exécutions utiles par noms exacts terminent0/0. Détails dans le status.
+
+**Prochaine priorité architecturale : diagnostiquer l'inventaire inverse W4e
+et le contrat commun source clip-free / préfixe W4e figé / consumer différé
+W6 AA4**, en isolant un témoin public avant élargissement. Les gains de ce
+lot confirment aussi la nécessité de vérifier les ports avant d'attribuer
+un défaut au renderer. Les42premiers unsupported_child ne sont pas42gains
+promis. Résidus de contour/couleur, fidélité générale, globale, warnings,
+gates W6 et quarantaine W0 restent ouverts ; ni merge ni clôture W7.
+
 ## Scissor de clip / resolve root AA4 — 1er octobre 2026
 
 Produit `be813afd75da9e094a9368c65a0d9fc31b2598a9`,
