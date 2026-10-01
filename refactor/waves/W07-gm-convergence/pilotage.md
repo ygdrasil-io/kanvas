@@ -1,5 +1,43 @@
 # Pilotage de la convergence Skia
 
+## Port Sk3d fidèle / Picture hard — 1er octobre 2026
+
+Produit mesuré `813e61f098317750c3a8a1d98dea185629ead38e`,
+[snapshot](sk3d-port-813e61f09.json), [design](sk3d-port-design.md),
+[plan](sk3d-port-plan.md), branche `codex/w7-sk3d-port` sur #2426.
+Task2 approuvée par Sol ; review Task1 et revue globale en attente avant draft.
+
+Le port rétablit caméra perspective/rotation Y, alpha136/255 et hard edge,
+sans supprimer la vraie Picture Rect+CTM. L'owner hard Picture et sa source
+Rect W4d sont fermés, les lanes analytiques conservées. Les clips de source
+sont admis avant cull/carrier, avec priorité par entrée de leur provenance
+sur leur transformation ; les refus historiques et les empty/no-op sont
+préservés. Les helpers numériques sont dans math, sans nouveau cap/epsilon.
+
+`sk3d_simple` passe de51.931111111111115 % à77.62444444444445 % de pixels±2,
+SSIM0.6385013748432061→0.9828793554600629. L'inspection actual/référence/diff
+confirme le net rapprochement de silhouette, mais une couleur intérieure
+différente persiste. Aucun changement du domaine LINEAR ou des références
+pour augmenter le score ; aucune parité couleur/contour exacte revendiquée.
+
+Corpus631/443 inchangé :200rendus,178comparés,39≥99 %,52≥95 %,
+médiane73.26467803030303 % contre72.34801136363637 %. Les18invariants,
+outcomes, diagnostics, dispatches/refus sont conservés ; hors Sk3d, aucun
+hash ni métrique ne change et aucun ancien rendu n'est perdu. `vertices`
+garde son timeout30s. Mesure neuve strictement séquentielle ; l'essai
+ff3e3bb chevauché est conservé mais exclu de la qualification.
+
+263/263 témoins publics ciblés passent avec processus0/0 et XML propres.
+La globale240s reste incomplète :688SUCCESS/40FAILURE/1SKIPPED,124/143,
+mêmes40échecs atteints que la baseline,22 anciennes identités non atteintes.
+Pas de nouvelle assertion en échec atteinte, ni de claim globale verte.
+
+Priorités encore ouvertes : attribuer l'écart couleur sans modifier l'oracle,
+réparer séparément l'autorité de scissor cible-local W4e, puis poursuivre les
+causes transversales mesurées. Le groupe unsupported_child compte toujours
+42premiers diagnostics, ce n'est ni42causes indépendantes ni42gains promis.
+Ni merge, ni clôture W7/W6/W0.
+
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 
 Code produit mesuré `3398dc3db8c8741d49234c74643f464baae645f6`, snapshot
