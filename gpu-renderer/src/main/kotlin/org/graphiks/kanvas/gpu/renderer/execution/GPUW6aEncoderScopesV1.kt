@@ -21,7 +21,13 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         val geometryBinding = physical.geometryBinding(pass.id)
         val aa = physical.w4dAaSourceBindings().singleOrNull { pass in it.passes() }
         val aaCoverage = pass.aaCoverageBindingOrNullV1()
-        val indexedAa = aa != null || aaCoverage != null
+        val inverseAaCoverage = (pass as? PlanPass.AaCoverageSourcePass)?.binding as?
+            org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1
+        val inverseAaOperands = inverseAaCoverage?.let { binding ->
+            require(binding.recipe.binding === binding && binding.validatesNativeOperationFacts())
+            binding.nativeOperandSequenceV1()
+        }
+        val indexedAa = aa != null || aaCoverage != null || inverseAaCoverage != null
         val indexedGeometry = geometryBinding != null || indexedAa
         // A FilterCoverage source with a frozen stencil producer replays the producer and
         // cover in this one W6b scope.  It cannot use the single-packet W4e stream shell.
@@ -50,7 +56,13 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         }
         val kind = if (copy != null) GPUEncoderOperationKind.Copy else if (render == null) GPUEncoderOperationKind.Readback
             else if (composite) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
-        val stream = if (kind != GPUEncoderOperationKind.Render) null else if (w4e != null)
+        val stream = if (kind != GPUEncoderOperationKind.Render) null else if (inverseAaCoverage != null)
+            GPUPassCommandStream("w6a.stream.$index", "w6a.packets.$index", pass.id.value, buildList {
+                add(GPUPassCommand.BeginRenderPass("w7.inverse-aa.coverage", "${render!!.loadStore.loadOp}:${render.loadStore.storePlan.name}:none"))
+                render.drawPackets.forEach { packet -> add(GPUPassCommand.Draw(packet.vertexSourceLabel, packet.packetId)) }
+                add(GPUPassCommand.EndRenderPass(pass.id.value))
+            }, sourcePassIds = listOf(pass.id.value))
+            else if (w4e != null)
             GPUPassCommandStream("w6a.stream.$index", "w6a.packets.$index", pass.id.value, listOf(
                 GPUPassCommand.BeginRenderPass(w4e.targetStateHash, "${render!!.loadStore.loadOp}:${render.loadStore.storePlan.name}:none"),
                 GPUPassCommand.Draw(w4e.vertexSourceLabel, w4e.packetId), GPUPassCommand.EndRenderPass(pass.id.value)),
@@ -76,7 +88,24 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         // cover packets into the coverage target.  That is one sealed W6b pass with two
         // command groups, so its operand contract must describe both groups rather than the
         // ordinary single fullscreen FilterCoverage shell.
-        val keys = if (stencilCoverage) buildList {
+        val keys = if (inverseAaOperands != null) inverseAaOperands.map { operand -> when (operand) {
+            org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1.NativeOperandV1.MsaaColorTarget ->
+                key(GPUPreparedNativeOperandRole.RenderMsaaColorTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.w7.inverse-aa.target")
+            org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1.NativeOperandV1.ResolveTarget ->
+                key(GPUPreparedNativeOperandRole.RenderResolveTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.w7.inverse-aa.resolve")
+            org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1.NativeOperandV1.DepthStencilTarget ->
+                key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.w7.inverse-aa.depth-stencil")
+            org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1.NativeOperandV1.ProducerPipeline ->
+                key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w6a.$index.w7.inverse-aa.producer.pipeline")
+            org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1.NativeOperandV1.ProducerVertex ->
+                key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer, "w6a.$index.w7.inverse-aa.producer.vertex")
+            org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1.NativeOperandV1.ProducerIndex ->
+                key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer, "w6a.$index.w7.inverse-aa.producer.index")
+            org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1.NativeOperandV1.CoverPipeline ->
+                key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w6a.$index.w7.inverse-aa.cover.pipeline")
+            org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1.NativeOperandV1.CoverBindGroup ->
+                key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, "w6a.$index.w7.inverse-aa.cover.bind")
+        } } else if (stencilCoverage) buildList {
             add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView,
                 "w6a.$index.coverage.target"))
             if (aaCoverageStencil) add(key(GPUPreparedNativeOperandRole.RenderResolveTarget,

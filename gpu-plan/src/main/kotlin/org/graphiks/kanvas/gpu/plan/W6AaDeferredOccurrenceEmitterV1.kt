@@ -40,7 +40,7 @@ internal object W6AaDeferredOccurrenceEmitterV1 {
         val destinationVersionAfter: DestinationVersionI64,
         val snapshot: PlanResourceId?,
     ) {
-        fun bindAndSeal(coverage: PlanW4dAaCoverageSourceBindingV1): PlanAaDeferredCompositeV1 =
+        fun bindAndSeal(coverage: PlanAaCoverageSourceBindingV1): PlanAaDeferredCompositeV1 =
             PlanAaDeferredCompositeV1(selected.commandIndexI32, coverage, selected.sourceDraw, target.resource,
                 snapshot, selected.blend, destinationVersionBefore, destinationVersionAfter, target.extentI32,
                 target.sourceBoundsTargetI32, target.originDeviceI32, target.mapping)

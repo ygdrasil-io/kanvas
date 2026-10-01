@@ -136,6 +136,30 @@ public class PathFillGeometryF32 internal constructor(
 
 }
 
+/** Exact immutable-snapshot comparison; this deliberately does not rely on reference equality. */
+public fun PathFillGeometryF32.matchesCanonicalPathFillGeometryF32(other: PathFillGeometryF32): Boolean {
+    if (fillRule != other.fillRule || attemptedEdgeCountI32 != other.attemptedEdgeCountI32 ||
+        emittedNonZeroClosedEdgeCountI32 != other.emittedNonZeroClosedEdgeCountI32) return false
+    fun sameRect(first: RectI32, second: RectI32): Boolean =
+        first.left == second.left && first.top == second.top && first.right == second.right && first.bottom == second.bottom
+    if (!sameRect(copyConservativeScissorI32(), other.copyConservativeScissorI32())) return false
+    fun sameFloats(first: FloatArray, second: FloatArray): Boolean =
+        first.size == second.size && first.indices.all { index -> first[index].toRawBits() == second[index].toRawBits() }
+    fun sameDirect(first: PathFillDirectTriangleF32?, second: PathFillDirectTriangleF32?): Boolean = when {
+        first == null || second == null -> first == null && second == null
+        else -> sameFloats(first.copyVerticesF32(), second.copyVerticesF32()) &&
+            first.copyIndicesI32().contentEquals(second.copyIndicesI32())
+    }
+    fun sameFan(first: PathStencilEdgeFanF32?, second: PathStencilEdgeFanF32?): Boolean = when {
+        first == null || second == null -> first == null && second == null
+        else -> sameFloats(first.copyVerticesF32(), second.copyVerticesF32()) &&
+            first.copyIndicesI32().contentEquals(second.copyIndicesI32()) &&
+            first.copyContourStartsI32().contentEquals(second.copyContourStartsI32())
+    }
+    return sameDirect(copyDirectTriangleF32OrNull(), other.copyDirectTriangleF32OrNull()) &&
+        sameFan(copyStencilEdgeFanF32OrNull(), other.copyStencilEdgeFanF32OrNull())
+}
+
 private fun PathFillDirectTriangleF32.copySnapshotF32(): PathFillDirectTriangleF32 = PathFillDirectTriangleF32(
     copyVerticesF32(),
     copyIndicesI32(),

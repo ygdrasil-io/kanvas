@@ -328,6 +328,9 @@ internal fun PlanDraw.withFinalBlendV1(sealed: BlendPlan): PlanDraw {
                 styleF64, sealed, materialCoordinates, materialCoordinatesV2, composed)
         is W5bW4ePathDraw -> withBlend(sealed)
         is GeneralPathDraw -> withBlend(sealed)
+        // The deferred W7 consumer owns the original symbolic material and final blend;
+        // the paired W4e coverage source separately retains its canonical-white payload.
+        is ClippedGeneralPathDraw -> ClippedGeneralPathDraw.of(source.withBlend(sealed), clip)
         else -> error("unsupported.w5b.destination-geometry")
     }
 }

@@ -46,6 +46,14 @@ public fun freezeW6AaDeferredCompositeRecipesV1(
     uniforms: Map<String, PlanResourceId>,
 ): List<W6AaDeferredCompositeRecipeV1> = passes.filterIsInstance<PlanPass.AaDeferredComposite>().map { pass ->
     val composite = requireNotNull(pass.contract)
+    require(composite.coverage is PlanW4dAaCoverageSourceBindingV1 ||
+        composite.coverage is PlanW4eInverseAaCoverageSourceBindingV1)
+    require(when (val coverageBinding = composite.coverage) {
+        is PlanW4dAaCoverageSourceBindingV1 -> coverageBinding.recipe.family == NativeSiteRecipeFamilyV1.W4dAaCoverageSource
+        is PlanW4eInverseAaCoverageSourceBindingV1 -> coverageBinding.sourceCapabilityId ==
+            W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID &&
+            coverageBinding.recipe.family == NativeSiteRecipeFamilyV1.W4eInverseAaCoverageSource
+    }) { "W7 deferred composite lost its variant-specific coverage authority" }
     val materialTable = requireNotNull(table)
     val authority = composite.sourceDraw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1
         ?: error("W7 deferred consumer requires the selected solid MaterialV1 authority")

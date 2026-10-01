@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.*
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.toFiniteNonEmptyRectF32OrNull
 import org.graphiks.math.matrix.*
 
 /** PictureRecorder's initial clipRect is its cull carrier, not an explicit inner clip. */
@@ -61,11 +62,22 @@ internal class OccurrenceSourceInputV1(
     val renderTarget: RenderTargetDescriptor,
     val commandIndexI32: Int,
     val sourceOnly: Boolean,
+    /**
+     * Closed W7-only carrier form.  It may canonicalize one authenticated hard rectangular
+     * Picture clip after the capture cull has been removed; generic W4d/W5 paths retain the
+     * original operation stream.
+     */
+    val w7InverseAaCoverageCarrier: Boolean = false,
 ) {
     private val domain = targetDomainDeviceI32.copy()
     private val demand = demandDeviceI32.copy()
     fun copyDomainDeviceI32(): RectI32 = domain.copy()
     fun copyDemandDeviceI32(): RectI32 = demand.copy()
+
+    /** Only the real-Picture W7 admission site may request this carrier representation. */
+    fun withW7InverseAaCoverageCarrier(): OccurrenceSourceInputV1 = if (w7InverseAaCoverageCarrier) this else
+        OccurrenceSourceInputV1(plannedCommandId, locator, captured, mapping, enclosingMappingF64, domain, demand,
+            recordedInnerClip, deferredCompositeClip, target, renderTarget, commandIndexI32, sourceOnly, true)
 
     /** F64 composition and rebasing precede the checked projection to the existing W4 ABI. */
     fun materialCoordinateDraw(): DrawNode {
@@ -112,9 +124,10 @@ internal class OccurrenceSourceInputV1(
                     ClipOperation.INTERSECT, clip.antiAlias))
                 is ClipStackNode.Operations -> clip.toList()
             } })
+        val carrierClip = if (w7InverseAaCoverageCarrier) inner.w7InverseAaCoverageDeviceRectOrNull() ?: inner else inner
         return draw.copy(
             transform = requireNotNull(mapping.copyLocalToLayerF64().toFiniteMatrix3x3F32OrNull()),
-            clip = inner,
+            clip = carrierClip,
             paint = draw.paint?.copy(imageFilter = null, maskFilter = null),
             effects = (draw.effects as? EffectStack.Entries)?.let { entries ->
                 EffectStack.of(entries.filterNot { it is CapturedFilterRootV1 || it is MaskFilterNode })
@@ -122,4 +135,28 @@ internal class OccurrenceSourceInputV1(
             blend = if (sourceOnly) BlendNode.SrcOver else draw.blend,
         )
     }
+}
+
+/**
+ * The W7 source owns one finite hard `clipRect` from the captured real Picture.  This is not a
+ * general clip simplifier: only one exact INTERSECT Rect with a finite axis-aligned transform is
+ * converted, and only on the W7-only occurrence carrier above.  Multiple operations, AA clips,
+ * perspective, rotation/skew, legacy transforms and every non-rect geometry stay opaque.
+ */
+private fun ClipStackNode.w7InverseAaCoverageDeviceRectOrNull(): ClipStackNode.DeviceRect? = when (this) {
+    is ClipStackNode.DeviceRect -> takeIf { !antiAlias && !copyBounds().isEmpty }
+    is ClipStackNode.Operations -> toList().singleOrNull()?.let { entry ->
+        val rect = entry.geometry as? GeometryNode.Rect ?: return@let null
+        val matrix = (entry.transform as? ClipTransformSnapshot.Known)?.copyMatrixF32()?.toMatrix3x3F64()
+            ?: return@let null
+        if (entry.operation != ClipOperation.INTERSECT || entry.antiAlias ||
+            !matrix.isFinite() || matrix.kxF64 != 0.0 || matrix.kyF64 != 0.0 ||
+            matrix.persp0F64 != 0.0 || matrix.persp1F64 != 0.0) return@let null
+        val bounds = rect.copyBounds()
+        val mapped = matrix.mapRectBoundsF64OrNull(org.graphiks.math.geometry.RectF64(
+            bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
+        )) ?: return@let null
+        mapped.toFiniteNonEmptyRectF32OrNull()?.let { mappedF32 -> ClipStackNode.DeviceRect.of(mappedF32, false) }
+    }
+    ClipStackNode.Empty -> null
 }

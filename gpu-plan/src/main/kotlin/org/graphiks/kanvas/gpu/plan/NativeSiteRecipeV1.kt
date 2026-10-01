@@ -38,6 +38,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6PathRenderDirectColor,
     W4dAaSource,
     W4dAaCoverageSource,
+    W4eInverseAaCoverageSource,
     W6AaDeferredComposite,
     W6InverseMaskGeometryProducer,
     W6InverseMaskGeometryCover,
@@ -1275,11 +1276,13 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         w5aOrdinarySolidSources: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = emptyMap(),
         w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
         w4dAaCoverageSources: List<PlanW4dAaCoverageSourceBindingV1> = emptyList(),
+        w4eInverseAaCoverageSources: List<PlanW4eInverseAaCoverageSourceBindingV1> = emptyList(),
         aaDeferredComposites: List<W6AaDeferredCompositeRecipeV1> = emptyList(),
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W4dAaSourceNativeSiteRecipeV1 -> w4dAaSources.any { it === recipe.binding && it.recipe === recipe }
             is W4dAaCoverageSourceNativeSiteRecipeV1 -> w4dAaCoverageSources.any { it === recipe.binding && it.recipe === recipe }
+            is W4eInverseAaCoverageSourceNativeSiteRecipeV1 -> w4eInverseAaCoverageSources.any { it === recipe.binding && it.recipe === recipe }
             is W6AaDeferredCompositeRecipeV1 -> aaDeferredComposites.any { it === recipe }
             is W5aSourceNativeSiteNativeRecipeV1 -> w5aOrdinarySolidSources[recipe.owner] === recipe.host
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -1406,6 +1409,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     w5aOrdinarySolidSources: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = emptyMap(),
     w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
     w4dAaCoverageSources: List<PlanW4dAaCoverageSourceBindingV1> = emptyList(),
+    w4eInverseAaCoverageSources: List<PlanW4eInverseAaCoverageSourceBindingV1> = emptyList(),
     aaDeferredComposites: List<W6AaDeferredCompositeRecipeV1> = emptyList(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     aaDeferredComposites.forEach { recipe ->
@@ -1418,6 +1422,10 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     w4dAaCoverageSources.forEach { binding ->
         require(passes.single { it.id == binding.ownerPassId }.aaCoverageBindingOrNullV1() === binding)
+        add(binding.recipe)
+    }
+    w4eInverseAaCoverageSources.forEach { binding ->
+        require((passes.single { it.id == binding.ownerPassId } as? PlanPass.AaCoverageSourcePass)?.binding === binding)
         add(binding.recipe)
     }
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }

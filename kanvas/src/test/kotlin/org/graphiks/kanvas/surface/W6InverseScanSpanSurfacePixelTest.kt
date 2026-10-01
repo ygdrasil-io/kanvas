@@ -269,11 +269,9 @@ class W6InverseScanSpanSurfacePixelTest {
 
     @Test
     fun `AA inverse direct over scan span limit keeps its multisample route`() {
-        // Replacing the W4e producer-admission predicate with "inverse direct triangle" would
-        // wrongly count these 4,097 AA rows.  W4d emits MultisampleDirectColor for this draw,
-        // not the SingleSampleDirectColor that W4e can replace with a scan-span producer.  This
-        // witness intentionally permits either the current terminal outcome or a successful
-        // readback; the public contract here is solely that the scan-span limit is not applied.
+        // This remains MultisampleDirectColor rather than the single-sample scan-span producer.
+        // Its hard inverse mask currently lacks W4e's graph-issued AA complement recipe, so it
+        // must refuse before native submission without misapplying the 4,097 scan-span limit.
         val heightI32 = 4_097
         val sentinel = UByteArray(heightI32 * 4) { 0x5au }
         val before = sentinel.copyOf()
@@ -286,13 +284,39 @@ class W6InverseScanSpanSurfacePixelTest {
             )
         }
 
-        val outcome = runCatching {
+        val failure = assertFailsWith<IllegalStateException> {
             surface.readPixels(RectF32.ofLTRB(0f, 0f, 1f, heightI32.toFloat()), sentinel)
         }
-        val failure = outcome.exceptionOrNull()
-        assertTrue(failure?.message?.startsWith("w4e.clip.scan-span-draw-limit:") != true,
-            failure?.message ?: "AA inverse direct reached readback")
-        if (failure != null) assertContentEquals(before, sentinel)
+        val message = requireNotNull(failure.message) { "missing masked inverse AA refusal" }
+        assertTrue(message.startsWith(
+            "w3.execution.submit_failure: GPU submission was refused. " +
+                "unsupported.native-core-primitive.w4e-inverse-mask-aa:",
+        ), message)
+        assertTrue("w4e.clip.scan-span-draw-limit:" !in message,
+            "AA inverse direct reused the scan-span limit: $message")
+        assertContentEquals(before, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 1f, heightI32.toFloat()),
+                Paint(ColorARGB.Blue, antiAlias = false),
+            )
+        }
+        val blue = rgba(0, 0, 255)
+        val expected = UByteArray(heightI32 * 4) { component -> blue[component % 4] }
+        val first = surface.render()
+        assertContentEquals(expected, first.pixels)
+        assertTrue(first.diagnostics.isEmpty, first.diagnostics.toString())
+        assertTrue(first.stats.opsRefused == 0, first.stats.toString())
+        assertRenderReadback(first.nativeEvidenceScopeKinds)
+
+        val second = surface.render()
+        assertContentEquals(expected, second.pixels)
+        assertTrue(second.diagnostics.isEmpty, second.diagnostics.toString())
+        assertTrue(second.stats.opsRefused == 0, second.stats.toString())
+        assertRenderReadback(second.nativeEvidenceScopeKinds)
+        assertContentEquals(first.pixels, second.pixels, "second recovered Surface frame must be byte-identical")
     }
 
     @Test

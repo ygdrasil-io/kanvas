@@ -798,6 +798,27 @@ public class W6aLayerPlanCompiler public constructor(
                 ((!historicalAaSource || requiresW7AffineRectProjection(draw)) && it.isW7AaDeferredBlendV1()) }
         }
 
+        /** Picture-only W7 inverse source selection; root and ordinary W4d routes stay closed. */
+        internal fun selectedW7InverseAaDeferredBlend(
+            draw: DrawNode,
+            target: RenderTargetDescriptor,
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): BlendPlan? {
+            if (!W4eClipPlanCompiler.inverseAaCoverageSource(catalog).acceptsInverseAaCoverageSourceScope(draw)) return null
+            return FinalBlendPlanner.plan(
+                draw.blend,
+                CoveragePlan.StencilAA4,
+                SamplePlan.SingleSample,
+                logicalColorFormat(target).blendTargetClampV1(),
+                BlendCoverageApplicationV1.SourceMultiplication,
+                BlendCoverageEncodingV1.ScalarCoverageInShader,
+            )?.takeIf { blend ->
+                blend is BlendPlan.FixedFunctionV1 &&
+                    blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER &&
+                    blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader
+            }
+        }
+
         /** W4a cannot lower a sheared/rotated Rect; W7 may project only that missing lane. */
         internal fun requiresW7AffineRectProjection(draw: DrawNode): Boolean =
             draw.origin == DrawOrigin.RECT && draw.geometry is GeometryNode.Rect &&

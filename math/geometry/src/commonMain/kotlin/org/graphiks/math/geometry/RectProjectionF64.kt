@@ -4,6 +4,17 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.math.vector.Vector2I32
 
+/** Narrows only a finite, non-empty F64 rectangle that is representable as an F32 rectangle. */
+public fun RectF64.toFiniteNonEmptyRectF32OrNull(): RectF32? {
+    fun componentF32OrNull(valueF64: Double): Float? =
+        valueF64.takeIf { it.isFinite() && kotlin.math.abs(it) <= Float.MAX_VALUE.toDouble() }?.toFloat()
+    val leftF32 = componentF32OrNull(left) ?: return null
+    val topF32 = componentF32OrNull(top) ?: return null
+    val rightF32 = componentF32OrNull(right) ?: return null
+    val bottomF32 = componentF32OrNull(bottom) ?: return null
+    return RectF32(leftF32, topF32, rightF32, bottomF32).takeUnless { it.isEmpty }
+}
+
 /** Projects a finite, sorted F64 rectangle outwards into the checked I32 texel domain. */
 public fun RectF64.roundOutToRectI32OrNull(): RectI32? {
     if (!isFinite() || isEmpty) return null

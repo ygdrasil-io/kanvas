@@ -58,9 +58,13 @@ public enum class ClipCombineOperation { Intersect, Difference }
 /** Closed owner union for the reused W4d opaque-white coverage binding. */
 public fun PlanPass.aaCoverageBindingOrNullV1(): PlanW4dAaCoverageSourceBindingV1? = when (this) {
     is PlanPass.FilterCoverageSourcePass -> aaCoverageBinding
-    is PlanPass.AaCoverageSourcePass -> binding
+    is PlanPass.AaCoverageSourcePass -> binding as? PlanW4dAaCoverageSourceBindingV1
     else -> null
 }
+
+/** Deferred AA has its own closed source union; filter coverage deliberately remains W4d-only. */
+public fun PlanPass.aaDeferredCoverageBindingOrNullV1(): PlanAaCoverageSourceBindingV1? =
+    (this as? PlanPass.AaCoverageSourcePass)?.binding
 
 public fun PlanPass.aaCoverageOutputOrNullV1(): PlanResourceId? = when (this) {
     is PlanPass.FilterCoverageSourcePass -> output
@@ -1190,13 +1194,13 @@ public sealed interface PlanPass {
     public class AaCoverageSourcePass(
         override val ordinal: Int,
         public val output: PlanResourceId,
-        public val binding: PlanW4dAaCoverageSourceBindingV1? = null,
+        public val binding: PlanAaCoverageSourceBindingV1? = null,
     ) : PlanPass {
         init { binding?.let { require(it.resources().single { row -> row.role == PlanResourceRole.CoverageSource }.id == output) } }
         override val role: PlanPassRole = PlanPassRole.AaCoverageSource
         override val id: PlanPassId = checkedPassId(role, ordinal)
 
-        public fun withBinding(value: PlanW4dAaCoverageSourceBindingV1): AaCoverageSourcePass {
+        public fun withBinding(value: PlanAaCoverageSourceBindingV1): AaCoverageSourcePass {
             require(binding == null && value.resources().single { it.role == PlanResourceRole.CoverageSource }.id == output)
             return AaCoverageSourcePass(ordinal, output, value)
         }

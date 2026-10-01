@@ -83,11 +83,33 @@ private sealed interface W4eScanSpanAdmissionResult {
 public class W4eClipPlanCompiler internal constructor(
     private val clipPolicyF64: ClipPreparationPolicyF64,
     private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+    private val inverseAaCoverageSourceMode: Boolean = false,
 ) : GpuPlanCompiler {
     public constructor(clipPolicyF64: ClipPreparationPolicyF64) : this(clipPolicyF64,RuntimeEffectSemanticCatalogSnapshot.Unbound)
     public constructor() : this(ClipPreparationPolicyF64())
     internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4eClipPlanCompiler =
-        W4eClipPlanCompiler(clipPolicyF64,catalog)
+        W4eClipPlanCompiler(clipPolicyF64,catalog,inverseAaCoverageSourceMode)
+
+    /**
+     * Closed W7 Picture-only source issuer.  Unlike the historical W4e construction seam it
+     * owns an AA4 geometric-coverage candidate, never a material-bearing W5b successor.
+     */
+    internal fun acceptsInverseAaCoverageSourceScope(draw: DrawNode): Boolean {
+        val path = (draw.geometry as? GeometryNode.Path)?.path ?: return false
+        val clip = draw.clip as? ClipStackNode.DeviceRect ?: return false
+        val paint = draw.paint ?: return false
+        val srcOver = when (val blend = draw.blend) {
+            org.graphiks.kanvas.render.ir.BlendNode.SrcOver -> true
+            is org.graphiks.kanvas.render.ir.BlendNode.Mode -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER
+            is org.graphiks.kanvas.render.ir.BlendNode.Paint -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER && blend.blender == null
+            is org.graphiks.kanvas.render.ir.BlendNode.Custom -> false
+        }
+        return inverseAaCoverageSourceMode && draw.coverage == CoverageRequest.ANTIALIASED &&
+            path.fillRule in setOf(FillRule.INVERSE_WINDING, FillRule.INVERSE_EVEN_ODD) &&
+            !clip.antiAlias && !clip.copyBounds().isEmpty && draw.material is org.graphiks.kanvas.render.ir.MaterialNode.Solid &&
+            paint.shader == null && paint.colorFilter == null && paint.style == PaintStyleNode.FILL &&
+            paint.pathEffect == null && draw.effects == org.graphiks.kanvas.render.ir.EffectStack.Empty && srcOver
+    }
 
     /**
      * Producer-only W4e seam for an already admitted non-Path color consumer. All clip math,
@@ -188,6 +210,17 @@ public class W4eClipPlanCompiler internal constructor(
         retainGeometryConstructionGraph = true,
         runtimeCatalog = runtimeCatalog,
     )
+    // This seam is issued only by the closed W7 inverse-AA factory.  It keeps the
+    // W4d general compiler's historical source admission intact while asking it to
+    // publish the deferred opaque-white geometry source that W4e then owns.
+    private val w4dInverseAaSourceSeam = W4dGeneralPathPlanCompiler(
+        strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
+        acceptsNarrowTransforms = true,
+        forceAaFrame = true,
+        retainGeometryConstructionGraph = true,
+        runtimeCatalog = runtimeCatalog,
+        w7AaDeferredSource = true,
+    )
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
@@ -198,6 +231,10 @@ public class W4eClipPlanCompiler internal constructor(
             it !is SceneCommand.SetClip && it !is SceneCommand.Annotation })
             return gap("W4e scene commands are outside the construction seam")
         val drawCommands = scene.filterIsInstance<SceneCommand.Draw>()
+        if (inverseAaCoverageSourceMode && (drawCommands.size != 1 ||
+                !acceptsInverseAaCoverageSourceScope(drawCommands.single().node))) {
+            return gap("W7 inverse AA coverage source requires one admitted finite Picture path draw")
+        }
         val operationDraws = drawCommands
             .filter { it.node.clip is ClipStackNode.Operations }
         val inverseDraws = drawCommands.filter { it.node.hasInversePathFillRule() }
@@ -302,8 +339,12 @@ public class W4eClipPlanCompiler internal constructor(
         if (!ownsW4eFeature) return gap("W4e requires an explicitly captured complex clip or inverse path draw")
 
         val normalizedScene = SceneSnapshot.of(scene.extent, scene.colorSpace, normalized)
-        val forceAaFrame = preparedByKey.values.any { it.requiresAaFrame }
-        val constructionSeam = if (forceAaFrame) w4dAaSeam else w4dHardSeam
+        val forceAaFrame = inverseAaCoverageSourceMode || preparedByKey.values.any { it.requiresAaFrame }
+        val constructionSeam = when {
+            inverseAaCoverageSourceMode -> w4dInverseAaSourceSeam
+            forceAaFrame -> w4dAaSeam
+            else -> w4dHardSeam
+        }
         val base = when (val selected = constructionSeam.select(normalizedScene, target)) {
             is GpuPlanSelection.MaterialOnlyRefusal -> return GpuPlanSelection.MaterialOnlyRefusal(
                 if (selected.capabilityId == W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
@@ -451,7 +492,7 @@ public class W4eClipPlanCompiler internal constructor(
         budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> {
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.matches()) return invalidCandidate()
-        if (selected.capabilityId == W5A_AA_CAPABILITY_ID)
+        if (!inverseAaCoverageSourceMode && selected.capabilityId == W5A_AA_CAPABILITY_ID)
             return promoted("W5b final blending requires the admitted single-sample W4e topology")
         capabilityRefusal(capabilities,selected.stacks.filter { it.realization == Realization.Mask },
             selected.inverseMaskGeometryCommands().isNotEmpty())?.let { return it }
@@ -477,14 +518,16 @@ public class W4eClipPlanCompiler internal constructor(
                 return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded,
                     "W4e pooled clip resources require ${clipped.peakI64} bytes; budget is ${budget.maxFrameLocalBytes}")
             val geometry = when (val result = SourceDeferredRenderConstructionV4.of(
-                PlanId(identity(selected,capabilities,budget,false)),W5A_HARD_CAPABILITY_ID,base.targetExtent,
+                PlanId(identity(selected,capabilities,budget,inverseAaCoverageSourceMode)),
+                if (inverseAaCoverageSourceMode) W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,base.targetExtent,
                 base.colorFormat,capabilities,budget,base.visualCommandCount,clipped.resources,clipped.passes,
-                clipped.dependencies,base.sourceTable(),DeferredLaneTopologyV4.Ordinary,null,
+                clipped.dependencies,base.sourceTable(),if (inverseAaCoverageSourceMode) DeferredLaneTopologyV4.AaResolvedCoverage else DeferredLaneTopologyV4.Ordinary,null,
                 emptyList(),emptyMap(),emptyMap(),clipped.payload,
-                preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, false, scene)) })) {
+                preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, inverseAaCoverageSourceMode, scene)) })) {
                 is SourceConstructionResultV4.Built -> result.value
                 is SourceConstructionResultV4.Refused -> return result.failure
             }
+            if (inverseAaCoverageSourceMode) return RenderPlanResult.Ready(geometry)
             when (val result = describeW5bW4ePathSourcesV6(geometry,selected.finalBlendsByCommandI32)) {
                 is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
                 is SourceConstructionResultV4.Refused -> result.failure
@@ -662,6 +705,8 @@ public class W4eClipPlanCompiler internal constructor(
             ).withClipStrategies(strategyByCommand, clippedGeneralBySource)
         }
         val inverseMaskCommands = selected.inverseMaskDirectGeometryCommands()
+        val inverseAaDirectCommands = selected.inverseAaDirectGeometryCommands()
+        val directExpansionCommands = inverseMaskCommands + inverseAaDirectCommands
         fun inverseMaskPath(pass: PlanPass): Boolean = (pass as? PlanPass.PathRenderPass)?.let { path ->
             path.phase == PathRenderPhase.SingleSampleDirectColor && path.draw.commandIndex in inverseMaskCommands
         } == true
@@ -672,15 +717,29 @@ public class W4eClipPlanCompiler internal constructor(
         }
         var pathOrdinalI32 = 0
         fun pathCopy(source: PlanPass.PathRenderPass, phase: PathRenderPhase, depth: PlanResourceId?, load: AttachmentLoadPlan,
-            access: PlanDepthStencilAccess?, loadStore: PlanDepthStencilLoadStore?): PlanPass.PathRenderPass =
+            access: PlanDepthStencilAccess?, loadStore: PlanDepthStencilLoadStore?, group: PlanAtomicGroupId? = source.atomicGroup,
+            resolve: PlanResourceId? = source.resolveTarget): PlanPass.PathRenderPass =
             PlanPass.PathRenderPass(pathOrdinalI32++, source.target, source.draw, phase, source.drawDataResources,
-                source.atomicGroup, depth, load, AttachmentStorePlan.Store, access, loadStore, source.resolveTarget,
+                group, depth, load, AttachmentStorePlan.Store, access, loadStore, resolve,
                 selected.scanSpanAdmission.byCommandI32[source.draw.commandIndex].takeIf {
                     phase == PathRenderPhase.SingleSampleStencilProducer
                 })
         val phasedPasses = clippedPasses.flatMap { pass ->
             val path = pass as? PlanPass.PathRenderPass
-            if (path == null) listOf(pass) else if (inverseMaskPath(path)) listOf(
+            if (path == null) listOf(pass) else if (path.draw.commandIndex in inverseAaDirectCommands) {
+                require(path.phase == PathRenderPhase.MultisampleDirectColor &&
+                    (path.draw.clipStrategyOrNullForW4e() as? ClipPlanStrategy.InverseDomain)
+                        ?.geometryF32?.interiorCoverageF32 is InverseInteriorCoverageF32.Geometry)
+                val group = canonicalGeneralPathAtomicGroup(
+                    requireNotNull((path.draw as? ClippedGeneralPathDraw)?.source),
+                )
+                listOf(
+                    pathCopy(path, PathRenderPhase.MultisampleStencilProducer, null, AttachmentLoadPlan.ClearTransparent,
+                        PlanDepthStencilAccess.Write, PlanDepthStencilLoadStore.ClearZeroStore, group, null),
+                    pathCopy(path, PathRenderPhase.MultisampleStencilColorCover, null, AttachmentLoadPlan.Load,
+                        PlanDepthStencilAccess.ReadWrite, PlanDepthStencilLoadStore.LoadStoreTestReset, group, path.resolveTarget),
+                )
+            } else if (inverseMaskPath(path)) listOf(
                 pathCopy(path, PathRenderPhase.SingleSampleStencilProducer, requireNotNull(inverseMaskDepth), path.load,
                     PlanDepthStencilAccess.Write, PlanDepthStencilLoadStore.ClearZeroStore),
                 pathCopy(path, PathRenderPhase.SingleSampleStencilColorCover, requireNotNull(inverseMaskDepth), AttachmentLoadPlan.Load,
@@ -747,7 +806,7 @@ public class W4eClipPlanCompiler internal constructor(
             .filterIsInstance<PlanPass.PathRenderPass>()
             .mapNotNull(PlanPass.PathRenderPass::depthStencil)
             .toSet()
-        fun remap(indexI32: Int): Int = Math.addExact(indexI32, inverseMaskCommands.count { command ->
+        fun remap(indexI32: Int): Int = Math.addExact(indexI32, directExpansionCommands.count { command ->
             requireNotNull(basePasses.indexOfFirst { pass ->
                 (pass as? PlanPass.PathRenderPass)?.draw?.commandIndex == command
             }.takeIf { it >= 0 }) < indexI32
@@ -759,7 +818,9 @@ public class W4eClipPlanCompiler internal constructor(
             .map { resource -> resource.remapped(prefixCount, ::remap) }
         val unsealedResources = resources + shiftedResources
         val nativePayload = if (deferredSources != null) W4eNativePayloadPlan.fromDeferred(
-            allPasses,unsealedResources,extent,capabilities,deferredSources)
+            allPasses,unsealedResources,extent,capabilities,deferredSources,
+            canonicalWhiteInverseCoverage = inverseAaCoverageSourceMode,
+        )
         else W4eNativePayloadPlan.from(
             passes = allPasses,
             resources = unsealedResources,
@@ -868,8 +929,9 @@ public class W4eClipPlanCompiler internal constructor(
             firstPassIndex = Math.addExact(firstPassIndex, 1 + stack.emittedEntries.size * 2)
         }
         require(firstPassIndex == prefixPassCount) { "W4e clip prefix accounting drifted" }
-        val inverseCountI32 = selected.inverseMaskDirectGeometryCommands().size
-        val totalPassCount = Math.addExact(Math.addExact(prefixPassCount, base.passCount), inverseCountI32)
+        val directExpansions = selected.inverseMaskDirectGeometryCommands() +
+            selected.inverseAaDirectGeometryCommands()
+        val totalPassCount = Math.addExact(Math.addExact(prefixPassCount, base.passCount), directExpansions.size)
         return W4eClipTopologyPreview(
             prefixPassCount = prefixPassCount,
             totalPassCount = totalPassCount,
@@ -917,7 +979,8 @@ public class W4eClipPlanCompiler internal constructor(
             val baseConsumerPass = requireNotNull(base.colorConsumerPassByCommand[commandIndex]) {
                 "W4d.2 preflight omitted a clipped consumer"
             }
-            val extra = selected.inverseMaskDirectGeometryCommands().count { command ->
+            val extra = (selected.inverseMaskDirectGeometryCommands() +
+                selected.inverseAaDirectGeometryCommands()).count { command ->
                 requireNotNull(base.colorConsumerPassByCommand[command]) <= baseConsumerPass
             }
             use(accumulator, Math.addExact(Math.addExact(prefixPassCount, baseConsumerPass), extra))
@@ -1558,10 +1621,25 @@ public class W4eClipPlanCompiler internal constructor(
         interior.copyGeometryF32().copyDirectTriangleF32OrNull() != null
     }.toSet()
 
+    /** W7 promotes only its source's one direct AA path into the required ordered stencil pair. */
+    private fun Candidate.inverseAaDirectGeometryCommands(): Set<Int> = if (!inverseAaCoverageSourceMode) {
+        emptySet()
+    } else inverseByCommand.filter { (_, inverse) ->
+        (inverse.interiorCoverageF32 as? InverseInteriorCoverageF32.Geometry)
+            ?.copyGeometryF32()?.copyDirectTriangleF32OrNull() != null
+    }.keys
+
     private fun Boolean.thenId(role: PlanResourceRole, ordinal: Int): PlanResourceId? =
         if (this) planResourceId(role, ordinal) else null
 
     public companion object {
+        internal const val W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID: String = "inverse-path-aa4-coverage-src-over-w7-v1"
+
+        internal fun inverseAaCoverageSource(
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): W4eClipPlanCompiler = W4eClipPlanCompiler(
+            ClipPreparationPolicyF64(), catalog, inverseAaCoverageSourceMode = true,
+        )
         public const val W5B_HARD_CAPABILITY_ID: String = "w5b-w4e-path-hard-final-blend-v3"
         public const val HARD_CAPABILITY_ID: String = "solid-path-complex-clip-hard-1x-src-over-srgb-v1"
         public const val AA_CAPABILITY_ID: String = "solid-path-complex-clip-mixed-aa4-src-over-srgb-v1"

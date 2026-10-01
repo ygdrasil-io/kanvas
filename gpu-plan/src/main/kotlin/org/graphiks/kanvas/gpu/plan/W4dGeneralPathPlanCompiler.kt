@@ -864,7 +864,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val provisionalMemory = when (val value = PathAaPlanBudget.calculate(
             targetExtent = SizeI32(selected.target.extent.width, selected.target.extent.height),
             geometriesF32 = geometries,
-            requiresAa4DepthStencil = true,
+            requiresAa4DepthStencil = !w7AaDeferredSource ||
+                selected.draws.any { it.strategy == PathFillStrategy.StencilCover },
             requiresHardMask = anyHard,
             requiresHardEdgeDepthStencil = hardStencil,
             capabilities = capabilities,
@@ -904,7 +905,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
         }
         if (!buffersFit(memory.base, capabilities)) return promoted("W4d.2 buffer capability is unavailable")
-        return RenderPlanResult.Ready(aaFramePreview(selected, memory))
+        return RenderPlanResult.Ready(
+            if (w7AaDeferredSource) aaDeferredSourceFramePreview(selected, memory)
+            else aaFramePreview(selected, memory),
+        )
     }
 
     private fun planHard(
@@ -1031,6 +1035,34 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 add(FrameResourceSpan(memory.base.vertexCapacityBytes, 0, topology.passCount, PlanResourceRole.VertexData))
                 add(FrameResourceSpan(memory.base.indexCapacityBytes, 0, topology.passCount, PlanResourceRole.IndexData))
                 add(FrameResourceSpan(memory.base.uniformCapacityBytes, 0, topology.passCount))
+            },
+            colorConsumerPassByCommand = topology.colorConsumerPassByCommand,
+        )
+    }
+
+    /**
+     * The closed W7 source has no W4d readback pass: it terminates at the coverage resolve
+     * consumed by W4e/W6.  Keep its preview to that same source topology so W4e can account
+     * for its own direct-triangle expansion before publishing physical resources.
+     */
+    private fun aaDeferredSourceFramePreview(
+        selected: Candidate,
+        memory: PathAaMemoryFootprint,
+    ): W4dGeneralFramePreview {
+        require(selected.draws.all { it.requestsAntiAlias })
+        val topology = aaTopology(selected)
+        val sourcePassCount = topology.readbackIndex
+        val usesStencil = selected.draws.any { it.strategy == PathFillStrategy.StencilCover }
+        return W4dGeneralFramePreview(
+            extent = SizeI32(selected.target.extent.width, selected.target.extent.height),
+            passCount = sourcePassCount,
+            resources = buildList {
+                add(FrameResourceSpan(memory.multisampleColorBytes, 0, sourcePassCount))
+                add(FrameResourceSpan(memory.base.targetBytes, 0, sourcePassCount))
+                if (usesStencil) add(FrameResourceSpan(memory.multisampleDepthStencilBytes, 0, sourcePassCount))
+                add(FrameResourceSpan(memory.base.vertexCapacityBytes, 0, sourcePassCount, PlanResourceRole.VertexData))
+                add(FrameResourceSpan(memory.base.indexCapacityBytes, 0, sourcePassCount, PlanResourceRole.IndexData))
+                add(FrameResourceSpan(memory.base.uniformCapacityBytes, 0, sourcePassCount))
             },
             colorConsumerPassByCommand = topology.colorConsumerPassByCommand,
         )

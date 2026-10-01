@@ -112,6 +112,7 @@ internal fun w4eNativeOperandKeysV6(w4ePacket: GPUDrawPacket,
             }
             val inverseDomainConsumer = w4ePacket.w4ePreparedClipConsumer as?
                 org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+            val inversePairOperation = w4ePacket.w4ePreparedFrameAuthority?.requiredRootInversePairOperationFor(w4ePacket)
             val stencilProducer = preparedPath.phase in setOf(
                 org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilProducer,
                 org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleStencilProducer,
@@ -126,7 +127,28 @@ internal fun w4eNativeOperandKeysV6(w4ePacket: GPUDrawPacket,
                 org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleStencilColorCover,
                 org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilCover,
             )
-            if (hardMaskProducer) {
+            if (inversePairOperation != null) {
+                inversePairOperation.commandOperandRecipe.forEach { operand ->
+                    when (operand) {
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInversePairOperation.CommandOperand.Pipeline ->
+                            add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                GPUPreparedNativeOperandKind.RenderPipeline,
+                                "w4e:${w4ePacket.passId}:${inversePairOperation.bindingSuffix(operand)}"))
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInversePairOperation.CommandOperand.Vertex ->
+                            add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                                GPUPreparedNativeOperandKind.Buffer,
+                                "w4e:${w4ePacket.passId}:${inversePairOperation.bindingSuffix(operand)}"))
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInversePairOperation.CommandOperand.Index ->
+                            add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                                GPUPreparedNativeOperandKind.Buffer,
+                                "w4e:${w4ePacket.passId}:${inversePairOperation.bindingSuffix(operand)}"))
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInversePairOperation.CommandOperand.BindGroup ->
+                            add(key(GPUPreparedNativeOperandRole.RenderBindGroup,
+                                GPUPreparedNativeOperandKind.BindGroup,
+                                "w4e:${w4ePacket.passId}:${inversePairOperation.bindingSuffix(operand)}"))
+                    }
+                }
+            } else if (hardMaskProducer) {
                 add(key(GPUPreparedNativeOperandRole.RenderPipeline,
                     GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:hard-mask-producer"))
                 add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,

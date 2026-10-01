@@ -576,6 +576,7 @@ public class RenderGraph private constructor(
             resources: List<PlanResource>, passes: List<PlanPass>, dependencies: List<PlanPassDependency>,
             peakFrameLocalBytes: Long, w5bW4eSource: RenderGraph? = null,
             w5bW4eFacts: W4eGeometryFactsV6? = null,
+            w7InverseAaCoveragePayload: W4eNativePayloadPlan? = null,
         ) {
             require(w5bW4eSource == null || w5bW4eFacts == null)
             val clipFacts = w5bW4eFacts ?: w5bW4eSource?.let(W4eGeometryFactsV6::from)
@@ -642,6 +643,18 @@ public class RenderGraph private constructor(
             }
             require(dependencies.distinct().size == dependencies.size) { "Dependencies must be unique" }
             validatePassCapabilities(passes, capabilities)
+            val isW7InverseAaCoverageSource = capabilityId == W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID
+            require(isW7InverseAaCoverageSource == (w7InverseAaCoveragePayload != null)) {
+                "W7 inverse AA source capability and payload must agree"
+            }
+            if (w7InverseAaCoveragePayload != null) {
+                validateW7InverseAaCoverageSourceTopologyV1(
+                    resources, passes, dependencies, capabilities, targetExtent, colorFormat,
+                    visualCommandCount, peakFrameLocalBytes, budget, w7InverseAaCoveragePayload,
+                )
+                validateVisualCommandOrder(passes)
+                return
+            }
             if (capabilityId in setOf(W4dGeneralPathPlanCompiler.W6_AA_COLOR_SOURCE_CAPABILITY_ID,
                     W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID,
                     W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID)) {
@@ -1827,6 +1840,130 @@ public class RenderGraph private constructor(
                 "Single-sample logical target must remain alive through readback"
             }
             require(readback.source == target.id) { "Single-sample readback must consume the logical target" }
+        }
+
+        /** Closed W7 source contract; it is intentionally not a standalone AA4 graph. */
+        private fun validateW7InverseAaCoverageSourceTopologyV1(
+            resources: List<PlanResource>,
+            passes: List<PlanPass>,
+            dependencies: List<PlanPassDependency>,
+            capabilities: PlanCapabilitySnapshot,
+            targetExtent: SizeI32,
+            colorFormat: PlanLogicalColorFormat,
+            visualCommandCount: Int,
+            peakFrameLocalBytes: Long,
+            budget: PlanBudget,
+            payload: W4eNativePayloadPlan,
+        ) {
+            require(visualCommandCount == 1 && passes.size == 2 &&
+                passes.all { it is PlanPass.PathRenderPass } &&
+                dependencies == listOf(PlanPassDependency(passes[0].id, passes[1].id))) {
+                "W7 inverse AA source requires one ordered path pair"
+            }
+            require(resources.size == 6 && resources.map { it.role }.toSet() == setOf(
+                PlanResourceRole.MultisampleColorTarget, PlanResourceRole.CoverageSource,
+                PlanResourceRole.DepthStencil, PlanResourceRole.VertexData,
+                PlanResourceRole.IndexData, PlanResourceRole.UniformData,
+            ) && resources.all {
+                it.lifetime == PlanResourceLifetime.FrameLocal && it.firstPassIndex == 0 &&
+                    it.lastPassIndexExclusive == passes.size
+            }) {
+                "W7 inverse AA source requires the exact six resource rows"
+            }
+            val producer = passes[0] as PlanPass.PathRenderPass
+            val cover = passes[1] as PlanPass.PathRenderPass
+            val producerDraw = producer.draw as? ClippedGeneralPathDraw
+                ?: throw IllegalArgumentException("W7 inverse AA producer requires clipped general geometry")
+            val coverDraw = cover.draw as? ClippedGeneralPathDraw
+                ?: throw IllegalArgumentException("W7 inverse AA cover requires clipped general geometry")
+            val inverse = producerDraw.clip as? ClipPlanStrategy.InverseDomain
+                ?: throw IllegalArgumentException("W7 inverse AA producer requires an inverse domain")
+            val coverInverse = coverDraw.clip as? ClipPlanStrategy.InverseDomain
+                ?: throw IllegalArgumentException("W7 inverse AA cover requires an inverse domain")
+            val interior = inverse.geometryF32.interiorCoverageF32 as? org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry
+                ?: throw IllegalArgumentException("W7 inverse AA source requires Geometry interior")
+            val domain = inverse.geometryF32.copyDomainI32()
+            require(domain == coverInverse.geometryF32.copyDomainI32() && !domain.isEmpty64() &&
+                domain.left >= 0 && domain.top >= 0 && domain.right <= targetExtent.width && domain.bottom <= targetExtent.height &&
+                producerDraw.source.materialAuthority.materialPlanRef() == coverDraw.source.materialAuthority.materialPlanRef() &&
+                producerDraw.source.copyPathGeometry() == coverDraw.source.copyPathGeometry() &&
+                producerDraw.source.blend == BlendPlan.SrcOver && coverDraw.source.blend == BlendPlan.SrcOver &&
+                producerDraw.source.commandIndex == coverDraw.source.commandIndex) {
+                "W7 inverse AA pair must retain one finite source draw"
+            }
+            val interiorGeometry = interior.copyGeometryF32()
+            val direct = interiorGeometry.copyDirectTriangleF32OrNull() != null
+            val fan = interiorGeometry.copyStencilEdgeFanF32OrNull() != null
+            val expectedStrategy = if (direct) PathFillStrategy.DirectTriangle else PathFillStrategy.StencilCover
+            require(direct.xor(fan) && producer.draw.strategy == expectedStrategy &&
+                cover.draw.strategy == producer.draw.strategy) { "W7 inverse AA interior strategy is not authentic" }
+            require(producer.phase == PathRenderPhase.MultisampleStencilProducer &&
+                cover.phase == PathRenderPhase.MultisampleStencilColorCover &&
+                producer.draw.coverage == CoveragePlan.StencilAA4 && cover.draw.coverage == CoveragePlan.StencilAA4 &&
+                producer.draw.sample == SamplePlan.Multisample4 && cover.draw.sample == SamplePlan.Multisample4 &&
+                producer.target == cover.target && producer.depthStencil != null && producer.depthStencil == cover.depthStencil &&
+                producer.atomicGroup == canonicalGeneralPathAtomicGroup(producerDraw.source) && cover.atomicGroup == producer.atomicGroup &&
+                producer.drawDataResources == cover.drawDataResources &&
+                producer.load == AttachmentLoadPlan.ClearTransparent && producer.store == AttachmentStorePlan.Store &&
+                producer.depthStencilAccess == PlanDepthStencilAccess.Write &&
+                producer.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore && producer.resolveTarget == null &&
+                cover.load == AttachmentLoadPlan.Load && cover.store == AttachmentStorePlan.Store &&
+                cover.depthStencilAccess == PlanDepthStencilAccess.ReadWrite &&
+                cover.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset && cover.resolveTarget != null) {
+                "W7 inverse AA source pair has invalid phase authority"
+            }
+            val target = resources.single { it.role == PlanResourceRole.MultisampleColorTarget }
+            val resolve = resources.single { it.role == PlanResourceRole.CoverageSource }
+            val depth = resources.single { it.role == PlanResourceRole.DepthStencil }
+            require(target.id == producer.target && resolve.id == cover.resolveTarget && depth.id == producer.depthStencil &&
+                target.kind == PlanResourceKind.Texture2D && resolve.kind == PlanResourceKind.Texture2D && depth.kind == PlanResourceKind.Texture2D &&
+                target.format == PlanTextureFormat.Color(colorFormat) && resolve.format == target.format &&
+                depth.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                target.copyExtent() == targetExtent && resolve.copyExtent() == targetExtent && depth.copyExtent() == targetExtent &&
+                target.sampleCountI32 == 4 && resolve.sampleCountI32 == 1 && depth.sampleCountI32 == 4 &&
+                target.usages() == setOf(PlanResourceUsage.RenderAttachment) &&
+                resolve.usages() == setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled) &&
+                depth.usages() == setOf(PlanResourceUsage.DepthStencilAttachment) &&
+                capabilities.supportsResolve(PlanTextureFormat.Color(colorFormat), 4, 1)) {
+                "W7 inverse AA source attachment rows are invalid"
+            }
+            fun data(role: PlanResourceRole, usage: PlanResourceUsage): PlanResource = resources.single { it.role == role }.also { row ->
+                require(row.kind == PlanResourceKind.Buffer && row.format == null && row.copyExtent() == null &&
+                    row.lifetime == PlanResourceLifetime.FrameLocal &&
+                    row.usages() == setOf(PlanResourceUsage.CopyDestination, usage))
+            }
+            val vertex = data(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
+            val index = data(PlanResourceRole.IndexData, PlanResourceUsage.Index)
+            val uniform = data(PlanResourceRole.UniformData, PlanResourceUsage.Uniform)
+            require(producer.drawDataResources == PlanDrawDataResources(vertex.id, index.id, uniform.id)) {
+                "W7 inverse AA source producer V/I/U IDs do not match the declared rows"
+            }
+            require(payload.matchesDeclaredResources(resources)) {
+                "W7 inverse AA source payload V/I/U capacities do not match the declared rows"
+            }
+            val requiredOperations = setOf(
+                PlanOperationCapability.RenderPass,
+                PlanOperationCapability.CopyUpload,
+                PlanOperationCapability.UniformBuffer,
+                PlanOperationCapability.DepthStencilAttachment,
+                PlanOperationCapability.StencilCover,
+            )
+            val missingOperations = requiredOperations - capabilities.supportedOperations()
+            require(missingOperations.isEmpty()) {
+                "W7 inverse AA source lacks required operation(s): ${missingOperations.sortedBy { it.name }.joinToString()}"
+            }
+            val interiorSlice = requireNotNull(payload.geometrySlice(producer.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_INTERIOR))
+            val whiteSlice = requireNotNull(payload.uniformSlice(cover.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_UNIFORM))
+            require(interiorSlice.indexCount > 0 && whiteSlice.byteSize >= 4L * Float.SIZE_BYTES &&
+                payload.hasCanonicalWhiteUniform(whiteSlice) &&
+                payload.geometrySlices.all { it.passId in setOf(producer.id.value, cover.id.value) } &&
+                payload.uniformSlices.all { it.passId in setOf(producer.id.value, cover.id.value) }) {
+                "W7 inverse AA source cover must carry canonical white"
+            }
+            val calculatedPeak = peak(resources, passes.size)
+            require(calculatedPeak == peakFrameLocalBytes && calculatedPeak <= budget.maxFrameLocalBytes) {
+                "W7 inverse AA source peak memory does not match its declared budget"
+            }
         }
 
         private fun validateFourSampleExplicitPathContracts(

@@ -36,6 +36,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.geometry.PathFillGeometryF32
@@ -252,11 +253,12 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
     fun issueRootFrameAuthority(
         graph: RenderGraph,
         refs: Map<String, GPUFrameResourceRef>,
+        preparations: List<GPUResourcePreparationRequest>,
         frameId: Long,
         capabilitySealHash: String,
         renders: List<GPUTask.Render>,
     ): GPUW4ePreparedFrameAuthority = GPUW4ePreparedFrameAuthority.issueRoot(
-        this, graph, refs, frameId, capabilitySealHash, renders,
+        this, graph, refs, preparations, frameId, capabilitySealHash, renders,
     )
 
     fun revalidatesRoot(graph: RenderGraph): Boolean = rootGraph === graph && revalidates(graph)
@@ -337,6 +339,26 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                 passes.filterIsInstance<PlanPass.PathRenderPass>().associate {
                     it.id.value to pathFact(it, binding.copyMaterialDeviceOriginI32(), extent)
                 }, binding.payload)
+        }
+
+        /**
+         * W7 retains a W4e payload in a coverage-source binding rather than publishing a root
+         * W4e graph.  Keep that provenance separate from the historical geometry binding.
+         */
+        fun issueLayered(graph: RenderGraph,
+            binding: org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1): GPUPlanW4ePreparedAuthority {
+            require(graph.verifyW6aLayerCompilerWitness() &&
+                graph.physicalLayoutOrNull()?.w4eInverseAaCoverageSourceBindings()?.any { it === binding } == true &&
+                binding.payload().matchesDeclaredResources(binding.resources()))
+            val passes = binding.passes()
+            val extent = binding.copyExtentI32()
+            val domain = GPUPixelBounds(0, 0, extent.width, extent.height)
+            return GPUPlanW4ePreparedAuthority("w6a-w4e-inverse-aa-coverage-v1", graph.id.value, graph.capabilityId,
+                binding.resources().map(::resourceFact), passes.map { it.id.value },
+                passes.mapNotNull { pass -> consumerFact(pass, domain) }.associateBy { it.consumerPassId },
+                emptyMap(), passes.associate { pass ->
+                    pass.id.value to pathFact(pass, binding.copyOriginDeviceI32(), extent)
+                }, binding.payload())
         }
 
         private fun pathFact(
@@ -487,9 +509,65 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
     private val capabilitySealHash: String,
     private val facts: List<Fact>,
     private val rootResolve: RootResolveWitness?,
+    private val rootIssued: Boolean,
+    private val inversePairOperationsByPassId: Map<String, GPUW4ePreparedInversePairOperation>,
+    private val unsupportedMaskedInverseAaDirectOperationsByPassId: Map<String, UnsupportedMaskedInverseAaDirectOperation>,
+    private val resourceInventory: GPUW4ePreparedResourceInventory?,
     /** Shared V/I/U byte authority issued from the compiler-authenticated W4e graph. */
     internal val nativePayload: W4eNativePayloadPlan,
 ) {
+    /** Immutable root witness for the one AA inverse-mask direct operation W4e cannot encode. */
+    private class UnsupportedMaskedInverseAaDirectOperation private constructor(
+        val passId: String,
+        private val packet: GPUDrawPacket,
+        private val path: GPUW4ePreparedClipPassAuthority.Path,
+        private val consumer: GPUW4ePreparedClipConsumerAuthority.InverseMask,
+        private val targetResourceId: String,
+        private val depthStencilResourceId: String,
+    ) {
+        fun owns(candidate: GPUDrawPacket, authority: GPUW4ePreparedFrameAuthority): Boolean =
+            candidate === packet &&
+                candidate.w4ePreparedFrameAuthority === authority &&
+                candidate.passId == passId &&
+                candidate.w4ePreparedPath === path &&
+                candidate.w4ePreparedClipConsumer === consumer &&
+                path.passId == passId &&
+                consumer.consumerPassId == passId &&
+                path.phase == PathRenderPhase.MultisampleDirectColor &&
+                path.sample == SamplePlan.Multisample4 &&
+                consumer.interiorCoverage is GPUW4ePreparedInverseInteriorCoverage.Geometry &&
+                path.targetResourceId == targetResourceId &&
+                path.depthStencilResourceId == depthStencilResourceId
+
+        companion object {
+            fun issue(
+                packet: GPUDrawPacket,
+                path: GPUW4ePreparedClipPassAuthority.Path,
+                consumer: GPUW4ePreparedClipConsumerAuthority.InverseMask,
+            ): UnsupportedMaskedInverseAaDirectOperation {
+                require(packet.passId == path.passId && path.passId == consumer.consumerPassId &&
+                    path.phase == PathRenderPhase.MultisampleDirectColor &&
+                    path.sample == SamplePlan.Multisample4 &&
+                    consumer.interiorCoverage is GPUW4ePreparedInverseInteriorCoverage.Geometry
+                ) { "W4e unsupported masked inverse AA witness is not its exact prepared direct operation" }
+                val depthStencilResourceId = requireNotNull(path.depthStencilResourceId) {
+                    "W4e unsupported masked inverse AA operation lacks its sealed D24S8 attachment"
+                }
+                require(path.targetResourceId.isNotBlank()) {
+                    "W4e unsupported masked inverse AA operation lacks its sealed target attachment"
+                }
+                return UnsupportedMaskedInverseAaDirectOperation(
+                    path.passId,
+                    packet,
+                    path,
+                    consumer,
+                    path.targetResourceId,
+                    depthStencilResourceId,
+                )
+            }
+        }
+    }
+
     private data class RootResolveWitness(
         val sceneTarget: GPUFrameTargetRef,
         val readbackStaging: GPUFrameBufferRef,
@@ -525,6 +603,54 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
         val maskContinuation: GPUW4eMaskContinuationRequest?,
         val sceneContinuation: GPUW4eSceneContinuationRequest?,
     )
+
+    /** Returns only the root-issued standalone inverse operation owned by this exact packet. */
+    internal fun inversePairOperationFor(packet: GPUDrawPacket): GPUW4ePreparedInversePairOperation? =
+        inversePairOperationsByPassId[packet.passId]?.takeIf { operation -> operation.owns(packet, this) }
+
+    /**
+     * Root standalone inverse Geometry producer/cover packets have no legacy fallback.
+     * Non-root W5b/W6 and clip-prefix frame authorities deliberately keep their existing routes.
+     */
+    internal fun requiredRootInversePairOperationFor(packet: GPUDrawPacket): GPUW4ePreparedInversePairOperation? {
+        val operation = inversePairOperationFor(packet)
+        if (operation != null) return operation
+        val path = packet.w4ePreparedPath
+        val consumer = packet.w4ePreparedClipConsumer as? GPUW4ePreparedClipConsumerAuthority.InverseDomain
+        val isStandaloneGeometryPhase = path?.phase in setOf(
+            PathRenderPhase.SingleSampleStencilProducer,
+            PathRenderPhase.MultisampleStencilProducer,
+            PathRenderPhase.SingleSampleStencilColorCover,
+            PathRenderPhase.MultisampleStencilColorCover,
+        )
+        require(!(rootIssued && packet.w4ePreparedFrameAuthority === this && isStandaloneGeometryPhase &&
+            consumer?.interiorCoverage is GPUW4ePreparedInverseInteriorCoverage.Geometry)) {
+            "W4e root inverse Geometry packet lacks its exact root-issued pair operation."
+        }
+        return null
+    }
+
+    /**
+     * Returns true only for the exact root-issued AA inverse-mask operation for which W4e has no
+     * native complement recipe. The packet's enum or consumer alone never selects this refusal.
+     */
+    internal fun hasUnsupportedMaskedInverseAaDirectOperation(packet: GPUDrawPacket): Boolean {
+        val operation = unsupportedMaskedInverseAaDirectOperationsByPassId[packet.passId] ?: return false
+        require(operation.owns(packet, this)) {
+            "W4e unsupported masked inverse AA operation lost its root-issued path, consumer, or attachment authority."
+        }
+        return true
+    }
+
+    /** Root inventories fail closed; non-root authorities retain their existing W5b/W6 admission. */
+    internal fun validatesResourceInventory(
+        preparations: List<GPUResourcePreparationRequest>,
+        renders: List<GPUFrameStep.RenderPassStep>,
+        readback: GPUFrameStep.ReadbackCopyStep?,
+    ): Boolean = resourceInventory?.validates(preparations, renders, readback) ?: !rootIssued
+
+    /** This distinction is issued with the frame authority, never reconstructed from consumers. */
+    internal fun requiresRootResourceInventory(): Boolean = rootIssued
 
     fun validatesRenders(
         candidateFrameId: Long,
@@ -610,22 +736,40 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
             nativePayload: W4eNativePayloadPlan,
         ): GPUW4ePreparedFrameAuthority = issueSealed(
             graphId, graphCapabilityId, frameId, capabilitySealHash, renders, nativePayload, null,
+            rootIssued = false,
         )
 
         internal fun issueRoot(
             authority: GPUPlanW4ePreparedAuthority,
             graph: RenderGraph,
             refs: Map<String, GPUFrameResourceRef>,
+            preparations: List<GPUResourcePreparationRequest>,
             frameId: Long,
             capabilitySealHash: String,
             renders: List<GPUTask.Render>,
         ): GPUW4ePreparedFrameAuthority {
             require(authority.revalidatesRoot(graph)) { "W4e root resolve requires the validated root graph" }
             val passes = graph.passes()
+            val inversePairOperations = issueRootInversePairOperations(authority, graph, renders)
+            val unsupportedMaskedInverseAaDirectOperations =
+                issueRootUnsupportedMaskedInverseAaDirectOperations(authority, graph, renders)
+            val resourceInventory = GPUW4ePreparedResourceInventory.issue(graph, refs, preparations, renders)
             val finalScene = passes.dropLast(1).lastOrNull() as? PlanPass.PathRenderPass
             // Direct 1x frames retain their existing admission, including mixed frames ending at 1x.
             if (finalScene == null || finalScene.draw.sample != SamplePlan.Multisample4 || finalScene.resolveTarget == null) {
-                return authority.issueFrameAuthority(frameId, capabilitySealHash, renders)
+                return issueSealed(
+                    graph.id.value,
+                    graph.capabilityId,
+                    frameId,
+                    capabilitySealHash,
+                    renders,
+                    requireNotNull(graph.w4eNativePayloadOrNull()),
+                    null,
+                    inversePairOperations,
+                    unsupportedMaskedInverseAaDirectOperations,
+                    resourceInventory,
+                    rootIssued = true,
+                )
             }
             val readback = passes.last() as? PlanPass.ReadbackPass
                 ?: throw IllegalArgumentException("W4e root resolve requires terminal readback")
@@ -692,7 +836,127 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
             require(writes(multisampleRef, GPUFrameResourceRole.LayerTarget) && writes(sceneRef, GPUFrameResourceRole.SceneTarget))
             return issueSealed(graph.id.value, graph.capabilityId, frameId, capabilitySealHash, renders,
                 requireNotNull(graph.w4eNativePayloadOrNull()),
-                RootResolveWitness(sceneRef, stagingRef, multisampleRef, finalScene.id.value, continuation))
+                RootResolveWitness(sceneRef, stagingRef, multisampleRef, finalScene.id.value, continuation),
+                inversePairOperations,
+                unsupportedMaskedInverseAaDirectOperations,
+                resourceInventory,
+                rootIssued = true)
+        }
+
+        /**
+         * W4e's root graph alone authenticates this unsupported direct AA mask route. Retain the
+         * precise prepared objects, rather than allowing materialization to infer ownership from
+         * a packet phase or consumer enum.
+         */
+        private fun issueRootUnsupportedMaskedInverseAaDirectOperations(
+            authority: GPUPlanW4ePreparedAuthority,
+            graph: RenderGraph,
+            renders: List<GPUTask.Render>,
+        ): Map<String, UnsupportedMaskedInverseAaDirectOperation> {
+            val packetsByPassId = renders.associate { render ->
+                val packet = requireNotNull(render.drawPackets.singleOrNull()) {
+                    "W4e root masked inverse AA authority requires one packet per render pass"
+                }
+                packet.passId to packet
+            }
+            require(packetsByPassId.size == renders.size)
+            return graph.passes().filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { pass ->
+                val path = requireNotNull(authority.pathFor(pass.id.value)) {
+                    "W4e root path pass lacks its prepared attachment authority"
+                }
+                val packet = requireNotNull(packetsByPassId[pass.id.value]) {
+                    "W4e root path pass is absent from the authenticated render order"
+                }
+                require(packet.w4ePreparedPath === path && packet.passId == path.passId) {
+                    "W4e root masked inverse AA packet differs from its prepared path authority"
+                }
+                val attachedInverseMask = packet.w4ePreparedClipConsumer as?
+                    GPUW4ePreparedClipConsumerAuthority.InverseMask
+                val attachedTargetsUnsupportedMaskedInverseAa =
+                    path.phase == PathRenderPhase.MultisampleDirectColor &&
+                        path.sample == SamplePlan.Multisample4 &&
+                        attachedInverseMask?.interiorCoverage is GPUW4ePreparedInverseInteriorCoverage.Geometry
+                val consumer = authority.consumerFor(pass.id.value)
+                if (consumer == null) {
+                    require(!attachedTargetsUnsupportedMaskedInverseAa) {
+                        "W4e root masked inverse AA packet lacks its authenticated prepared consumer authority"
+                    }
+                    return@mapNotNull null
+                }
+                require(packet.w4ePreparedClipConsumer === consumer && path.passId == consumer.consumerPassId) {
+                    "W4e root masked inverse AA packet differs from its prepared path or consumer authority"
+                }
+                val inverseMask = consumer as? GPUW4ePreparedClipConsumerAuthority.InverseMask
+                    ?: return@mapNotNull null
+                if (path.phase != PathRenderPhase.MultisampleDirectColor ||
+                    path.sample != SamplePlan.Multisample4 ||
+                    inverseMask.interiorCoverage !is GPUW4ePreparedInverseInteriorCoverage.Geometry
+                ) return@mapNotNull null
+                UnsupportedMaskedInverseAaDirectOperation.issue(packet, path, inverseMask)
+            }.associateBy(UnsupportedMaskedInverseAaDirectOperation::passId)
+        }
+
+        private fun issueRootInversePairOperations(
+            authority: GPUPlanW4ePreparedAuthority,
+            graph: RenderGraph,
+            renders: List<GPUTask.Render>,
+        ): Map<String, GPUW4ePreparedInversePairOperation> {
+            val packetsByPassId = renders.associate { render ->
+                val packet = requireNotNull(render.drawPackets.singleOrNull()) {
+                    "W4e inverse pair requires one packet per root render pass"
+                }
+                packet.passId to packet
+            }
+            require(packetsByPassId.size == renders.size)
+            return graph.passes().zipWithNext().flatMap { (first, second) ->
+                val producer = first as? PlanPass.PathRenderPass ?: return@flatMap emptyList()
+                val cover = second as? PlanPass.PathRenderPass ?: return@flatMap emptyList()
+                if (producer.phase !in setOf(
+                        PathRenderPhase.SingleSampleStencilProducer,
+                        PathRenderPhase.MultisampleStencilProducer,
+                    )
+                ) return@flatMap emptyList()
+                val producerConsumer = authority.consumerFor(producer.id.value) as?
+                    GPUW4ePreparedClipConsumerAuthority.InverseDomain
+                    ?: return@flatMap emptyList()
+                val coverConsumer = authority.consumerFor(cover.id.value) as?
+                    GPUW4ePreparedClipConsumerAuthority.InverseDomain
+                    ?: return@flatMap emptyList()
+                if (producerConsumer.interiorCoverage !is GPUW4ePreparedInverseInteriorCoverage.Geometry ||
+                    coverConsumer.interiorCoverage !is GPUW4ePreparedInverseInteriorCoverage.Geometry
+                ) return@flatMap emptyList()
+                val producerPacket = requireNotNull(packetsByPassId[producer.id.value]) {
+                    "W4e inverse producer is absent from root render order"
+                }
+                val coverPacket = requireNotNull(packetsByPassId[cover.id.value]) {
+                    "W4e inverse cover is absent from root render order"
+                }
+                GPUW4ePreparedInversePairOperation.issue(
+                    producerPacket,
+                    requireNotNull(authority.pathFor(producer.id.value)),
+                    producerConsumer,
+                    coverPacket,
+                    requireNotNull(authority.pathFor(cover.id.value)),
+                    coverConsumer,
+                    requireNotNull(graph.w4eNativePayloadOrNull()),
+                )
+            }.associateBy(GPUW4ePreparedInversePairOperation::passId).also { operations ->
+                val requiredPairPassIds = graph.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                    .filter { path ->
+                        (authority.consumerFor(path.id.value) as?
+                            GPUW4ePreparedClipConsumerAuthority.InverseDomain)
+                            ?.interiorCoverage is GPUW4ePreparedInverseInteriorCoverage.Geometry &&
+                            path.phase in setOf(
+                            PathRenderPhase.SingleSampleStencilProducer,
+                            PathRenderPhase.MultisampleStencilProducer,
+                            PathRenderPhase.SingleSampleStencilColorCover,
+                            PathRenderPhase.MultisampleStencilColorCover,
+                        )
+                    }.map { path -> path.id.value }.toSet()
+                require(operations.keys == requiredPairPassIds &&
+                    operations.values.all { operation -> operation.commandOperandRecipe.isNotEmpty() }
+                ) { "W4e paired inverse Geometry pass lacks a root-issued operation witness" }
+            }
         }
 
         private fun issueSealed(
@@ -703,6 +967,10 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
             renders: List<GPUTask.Render>,
             nativePayload: W4eNativePayloadPlan,
             rootResolve: RootResolveWitness?,
+            inversePairOperations: Map<String, GPUW4ePreparedInversePairOperation> = emptyMap(),
+            unsupportedMaskedInverseAaDirectOperations: Map<String, UnsupportedMaskedInverseAaDirectOperation> = emptyMap(),
+            resourceInventory: GPUW4ePreparedResourceInventory? = null,
+            rootIssued: Boolean,
         ): GPUW4ePreparedFrameAuthority {
             require(graphId.isNotBlank() && graphCapabilityId.isNotBlank() && capabilitySealHash.isNotBlank())
             require(renders.isNotEmpty()) { "W4e prepared frame requires ordered render scopes" }
@@ -730,6 +998,10 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
                 capabilitySealHash,
                 facts,
                 rootResolve,
+                rootIssued,
+                inversePairOperations,
+                unsupportedMaskedInverseAaDirectOperations,
+                resourceInventory,
                 nativePayload,
             )
         }

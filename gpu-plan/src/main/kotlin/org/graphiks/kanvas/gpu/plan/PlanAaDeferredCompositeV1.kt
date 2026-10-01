@@ -11,7 +11,7 @@ import org.graphiks.math.matrix.LayerMappingF64
  */
 public class PlanAaDeferredCompositeV1 internal constructor(
     public val commandIndexI32: Int,
-    public val coverage: PlanW4dAaCoverageSourceBindingV1,
+    public val coverage: PlanAaCoverageSourceBindingV1,
     public val sourceDraw: PlanDraw,
     public val target: PlanResourceId,
     public val destinationSnapshot: PlanResourceId?,
