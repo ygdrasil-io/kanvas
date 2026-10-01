@@ -9,7 +9,6 @@ import org.graphiks.kanvas.skia.gm.clip.ManyPathAtlases128Gm
 import org.graphiks.kanvas.skia.gm.clip.ManyPathAtlases2048Gm
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.kanvas.test.GpuAvailability
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -78,7 +77,6 @@ private fun assertComplexClip4Pixels(gm: SkiaGm) {
 }
 
 private fun renderClipGm(gm: SkiaGm): RenderResult {
-    GpuAvailability.requireWebGpu()
     val surface = Surface(gm.width, gm.height, config = gm.compositionConfig())
     val gmCanvas = GmCanvas(surface.canvas(), gm.width, gm.height)
     gm.onOnceBeforeDraw(gmCanvas)
