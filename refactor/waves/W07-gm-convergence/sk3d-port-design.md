@@ -113,17 +113,38 @@ La Picture sans paint reste inline sur la destination courante ; le SRC_OVER
 bleu voit le rouge précédent, sans isolation ajoutée. Tous les caps, budgets,
 proofs, scissor, stencil/reset et FinalBlendPlanner restent effectifs.
 
-Cette promotion hard Picture conserve le refus public des clips capturés
-sous perspective : `unsupported_transform:Perspective`. La famille plain
-hard est reconnue sur le draw capturé, avant normalisation sourceOnly ou
-suppression des effets. À l'admission de l'occurrence, contrôler les clips
-de source effectivement consommés (parents pertinents inclus, seul cull
-authentifié retiré), puis leur carrier composé : une perspective enregistrée
-ne disparaît pas du contrat parce qu'une transformation externe l'annule.
+Cette promotion hard Picture conserve l'admission publique des clips typés
+avant toute construction de cull, mapping inverse ou carrier. Le guard
+tardif de la première correction rétablit le cas perspective Known, mais
+laisse deux régressions de priorité : cull singular et snapshot legacy.
+Le remplacer par un passage ordonné sur les drafts Picture déjà découverts,
+à l'entrée de `preparePictureFacts`, sans second replay ni nouveau cap.
+Pruner seulement les sous-arbres au clip terminal vide déjà reconnus tels
+quels par l'assemblage ; ne pas inventer de nouveau culling.
+
+La famille plain hard est reconnue sur le draw capturé, avant normalisation
+sourceOnly ou suppression des effets. Une seule énumération partagée avec
+le carrier fournit les clips de source effectivement consommés (parents
+pertinents après last-isolated, seul cull authentifié retiré). Pour chaque
+entrée dans l'ordre, contrôler sa provenance puis sa transformation forward
+F64 effective et sa vraie projection F32. Une perspective enregistrée ne
+disparaît pas du contrat parce qu'une transformation externe l'annule.
 Ne pas confondre les clips différés de composition avec les clips de source,
-ni le CTM projectif du draw avec celui du clip. Propager ce terminal avant
-la chaîne W4/W5, sans enveloppe `w6a.layer.unsupported_child`, et conserver
-les autres familles sous leurs propres contrats.
+ni le CTM projectif du draw avec celui du clip. Le premier diagnostic typé
+est terminal, sans enveloppe `w6a.layer.unsupported_child` :
+`unsupported_transform:Perspective`, `unsupported.transform.affine_singular`,
+`unsupported_clip_transform:NonFiniteProjection`, `unsupported_clip_transform:NonFinite`
+ou `unsupported_clip_transform:LegacyUnavailable`, selon le fait existant.
+LegacyUnavailable ne fournit jamais de matrice identity inventée.
+
+La classification purement numérique appartient à math/matrix avec noms
+F32/F64 ; réutiliser le déterminant exact et les mappings existants, sans
+epsilon, inversion near-singular, triangles ou double préparation de rendu.
+Un adaptateur typé render-ir peut porter Known/LegacyUnavailable ; gpu-plan
+traduit les refus en codes publics. Partager la classification plutôt que
+copier un second mapper legacy. L'overflow se déduit de la vraie projection
+F32 (par exemple Float.MAX_VALUE×7), pas d'un seuil sur le coefficient ni
+d'un dépassement I32. Les autres familles restent sous leurs propres contrats.
 
 Le global au produit `ff3e3bb4a` a révélé cette admission manquante : W4e
 acceptait le clip et le natif abortait sur un scissor hors cible. Le math

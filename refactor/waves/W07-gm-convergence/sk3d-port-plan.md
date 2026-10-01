@@ -100,6 +100,29 @@ Les deux slices `task1-resume-corpus-ff3e3bb` se chevauchent réellement ;
 leurs journaux sont préservés, mais aucune qualification/agrégation ne les
 utilise. La future mesure est neuve, séquentielle, au SHA produit corrigé.
 
+### Task2 fix round3 — early typed clip priority
+
+Le global fix2 confirme deux SurfaceTest anciennement verts : priorité des
+clips singular/overflow et provenance perspective schema1. La review Sol
+les garde ouverts. Appliquer la correction de design ci-dessus avec le même
+implementer, en remplaçant (pas en doublant) l'admission tardive fix2.
+
+- [ ] Extraire l'énumération des clips consommés sans nécessiter un carrier.
+  Parcourir une fois les drafts actifs avant leur premier cull. Préserver
+  ordre, scopes source/composition, empty/no-op et diagnostics typés.
+- [ ] Ajouter seulement l'extraction numérique math/matrix et l'adaptateur
+  render-ir nécessaires ; réutiliser les primitives existantes et partager
+  le classifier utilisé par GPUClipMapper si extrait. Aucun backend/scissor,
+  proof, cap, seed, mode W4d, oracle historique ou nouveau test d'infrastructure.
+- [ ] Companions publics : singular/overflow et legacy sentinelle+recovery,
+  grande matrice dont la projection est encore F32 finie, ordre des refus,
+  préservation des sous-arbres au clip terminal vide existant. Ne jamais
+  augmenter les tolérances après observation. Conserver les tests fix2.
+- [ ] Contrôleur seul : SurfaceTest et PictureTest inchangés avec hardPicture,
+  puis GM9 et covering160 ; relecture Sol fix3 ; ensuite un global240 final.
+  Réutiliser le globalfix2 comme RED causal des deux identités, sans répétition
+  avant modification. Aucun corpus tant que ces régressions restent ouvertes.
+
 Archive root `/private/tmp/kanvas-w7-sk3d.WUms9p` (fresh per invocation).
 Use `/private/tmp/kanvas-w7-sk3d.WUms9p/bounded-run.rb` (same runner with its
 archive guard scoped to this lot and maximum240s) and read-only
