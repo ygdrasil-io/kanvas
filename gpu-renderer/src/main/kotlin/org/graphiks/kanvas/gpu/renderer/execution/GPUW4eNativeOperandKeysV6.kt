@@ -21,6 +21,23 @@ internal fun w4eNativeOperandKeysV6(w4ePacket: GPUDrawPacket,
                     GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:clear"),
             )
         preparedPass is org.graphiks.kanvas.gpu.renderer.passes
+            .GPUW4ePreparedClipPassAuthority.Producer &&
+            preparedPass.realization == org.graphiks.kanvas.gpu.plan.PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero -> buildList {
+            if (preparedPass.sampleCount == 4) {
+                add(key(GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:target"))
+                add(key(GPUPreparedNativeOperandRole.RenderResolveTarget,
+                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:resolve"))
+            } else add(key(GPUPreparedNativeOperandRole.RenderColorTarget,
+                GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:target"))
+            preparedPass.depthStencilResourceId?.let {
+                add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:depth"))
+            }
+            add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:constant-zero"))
+        }
+        preparedPass is org.graphiks.kanvas.gpu.renderer.passes
             .GPUW4ePreparedClipPassAuthority.Producer -> buildList {
             if (preparedPass.sampleCount == 4) {
                 add(key(GPUPreparedNativeOperandRole.RenderMsaaColorTarget,

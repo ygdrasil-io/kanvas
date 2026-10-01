@@ -23,6 +23,7 @@ public class W4eClipMaskProducerDirectTriangleRecipeV1 internal constructor(
     public val index: W4eClipMaskProducerPhysicalOperandV1,
     public val depthStencilState: W4eClipMaskProducerDepthStencilStateV1,
     geometry: ClipGeometryF32.Path,
+    scissorI32: RectI32,
     public val vertexFirstI32: Int,
     public val vertexCountI32: Int,
     public val indexFirstI32: Int,
@@ -43,8 +44,9 @@ public class W4eClipMaskProducerDirectTriangleRecipeV1 internal constructor(
     public val clearCoverageF32: Float = if (inverseCoverage) 1f else 0f
     public val fragmentCoverageF32: Float = if (inverseCoverage) 0f else 1f
     private val path = geometry.copyPathGeometryF32()
+    private val scissor = scissorI32.copy()
     public fun copyGeometryF32(): ClipGeometryF32.Path = ClipGeometryF32.Path(path)
-    public fun copyScissorI32(): RectI32 = path.copyConservativeScissorI32()
+    public fun copyScissorI32(): RectI32 = scissor.copy()
     init {
         require(packetOrdinalI32 >= 0 && vertexFirstI32 >= 0 && indexFirstI32 >= 0 && baseVertexI32 >= 0)
         require(vertexCountI32 == 3 && indexCountI32 == 3 && maxLocalIndexI32 in 0 until vertexCountI32 && path.copyDirectTriangleF32OrNull() != null)
@@ -81,6 +83,7 @@ public fun freezeW4eClipMaskProducerDirectTriangleRecipesV1(bindings: List<PlanW
     val rows = resources.associateBy { it.id }; val result = linkedMapOf<PlanPassId, W4eClipMaskProducerDirectTriangleRecipeV1>()
     bindings.forEach { binding -> binding.nativePasses().forEach { pass ->
         val producer = pass as? PlanPass.ClipMaskProducer ?: return@forEach
+        if (producer.realization != PlanPass.W4eClipMaskProducerRealizationV1.Raster) return@forEach
         val path = producer.copyGeometryF32() as? ClipGeometryF32.Path ?: return@forEach
         if (path.copyPathGeometryF32().copyDirectTriangleF32OrNull() == null) return@forEach
         val slice = requireNotNull(binding.payload.geometrySlice(producer.id.value, W4eNativePayloadPlan.PRODUCER_PATH))
@@ -88,7 +91,7 @@ public fun freezeW4eClipMaskProducerDirectTriangleRecipesV1(bindings: List<PlanW
         val target = rows.getValue(producer.target); val resolve = producer.resolveTarget?.let(rows::getValue); val depth = rows.getValue(requireNotNull(producer.depthStencil))
         val vertex = rows.getValue(binding.payload.vertexResourceId); val index = rows.getValue(binding.payload.indexResourceId)
         val depthState = W4eClipMaskProducerDepthStencilStateV1(1f, W4eClipMaskProducerDepthStencilLoadV1.Clear, W4eClipMaskProducerDepthStencilStoreV1.Store, false, 0u, W4eClipMaskProducerDepthStencilLoadV1.Clear, W4eClipMaskProducerDepthStencilStoreV1.Store, false)
-        require(result.put(producer.id, W4eClipMaskProducerDirectTriangleRecipeV1(producer.id, producer.ordinal, operand(target), resolve?.let(::operand), operand(depth), operand(vertex), operand(index), depthState, path, slice.baseVertex, slice.vertexCount, slice.firstIndex, slice.indexCount, slice.baseVertex, slice.maxLocalIndex, producer.inverseCoverage, producer.antiAlias, producer.sampleCountI32)) == null)
+        require(result.put(producer.id, W4eClipMaskProducerDirectTriangleRecipeV1(producer.id, producer.ordinal, operand(target), resolve?.let(::operand), operand(depth), operand(vertex), operand(index), depthState, path, producer.copyScissorI32(), slice.baseVertex, slice.vertexCount, slice.firstIndex, slice.indexCount, slice.baseVertex, slice.maxLocalIndex, producer.inverseCoverage, producer.antiAlias, producer.sampleCountI32)) == null)
     } }
     return java.util.Collections.unmodifiableMap(LinkedHashMap(result))
 }

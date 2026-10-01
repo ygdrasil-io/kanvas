@@ -207,7 +207,7 @@ internal class W4eClipGraphLowerer {
                     },
             )
         }
-        val frameAuthority = authority.issueFrameAuthority(request.frameId.value, seal.sealHash, renders)
+        val frameAuthority = authority.issueRootFrameAuthority(graph, refs, request.frameId.value, seal.sealHash, renders)
         renders.forEach { render ->
             render.drawPackets.single().attachW4ePreparedFrameAuthority(frameAuthority)
         }
@@ -364,6 +364,7 @@ internal class W4eClipGraphLowerer {
                 add(use(pass.target.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true))
                 pass.resolveTarget?.let { add(use(it.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true)) }
                 pass.depthStencil?.let { add(use(it.value, GPUFrameResourceRole.ClipDepthStencil, GPUFrameResourceUsage.RenderAttachment, true)) }
+                if (pass.realization == PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero) return@buildList
                 // The W4e native payload is graph-sealed rather than materializer-local.  Make
                 // the producer's exact V/I or U binding visible to preflight and the frame seal.
                 when (pass.copyGeometryF32()) {

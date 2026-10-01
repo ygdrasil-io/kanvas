@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import org.graphiks.kanvas.gpu.plan.PathFillStrategy
+import org.graphiks.kanvas.gpu.plan.PlanPass
 
 import io.ygdrasil.webgpu.ArrayBuffer
 import io.ygdrasil.webgpu.BlendComponent
@@ -68,6 +69,7 @@ import org.graphiks.kanvas.gpu.plan.W4eDirectTriangleStoreV1
 import org.graphiks.kanvas.gpu.plan.W4eDirectTriangleTopologyV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskInitializeRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerRecipeV1
+import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerConstantRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDirectTriangleRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerStencilEdgeRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerStencilCoverRecipeV1
@@ -319,7 +321,8 @@ internal fun requireW4eClipMaskProducerRecipes(
     if (recipesByPassId.isEmpty()) return
     val producers = entries.mapNotNull { entry ->
         (entry.packet.w4ePreparedClipPass as? GPUW4ePreparedClipPassAuthority.Producer)
-            ?.takeIf { producer -> producer.geometry is GPUW4ePreparedClipGeometry.Rect || producer.geometry is GPUW4ePreparedClipGeometry.RRect }
+            ?.takeIf { producer -> producer.realization == PlanPass.W4eClipMaskProducerRealizationV1.Raster &&
+                (producer.geometry is GPUW4ePreparedClipGeometry.Rect || producer.geometry is GPUW4ePreparedClipGeometry.RRect) }
             ?.let { entry to it }
     }
     require(recipesByPassId.keys == producers.map { (_, pass) -> pass.passId }.toSet()) {
@@ -353,6 +356,11 @@ internal fun requireW4eClipMaskProducerRecipes(
             producer.depthStencilResourceId == recipe.depthStencil?.id?.value && producer.sampleCount == recipe.sampleCountI32 &&
             producer.inverseCoverage == recipe.inverseCoverage && producer.antiAlias == recipe.antiAlias) {
             "W4e ClipMaskProducer owner, ordinal, attachments, sample or coverage facts differ from the frozen planner recipe."
+        }
+        val scissor = recipe.copyScissorI32()
+        require(producer.scissor.left == scissor.left && producer.scissor.top == scissor.top &&
+            producer.scissor.right == scissor.right && producer.scissor.bottom == scissor.bottom) {
+            "W4e ClipMaskProducer scissor differs from its frozen analytic recipe."
         }
         recipe.depthStencilState?.let { state ->
             require(recipe.depthStencil != null && state.depthClearValueF32 == 1f &&
@@ -415,6 +423,7 @@ internal fun encodeW4eNativePasses(
     refusal: (String, String) -> RuntimeException,
     clipMaskInitializeRecipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1> = emptyMap(),
     clipMaskProducerRecipesByPassId: Map<String, W4eClipMaskProducerRecipeV1> = emptyMap(),
+    clipMaskProducerConstantRecipesByPassId: Map<String, W4eClipMaskProducerConstantRecipeV1> = emptyMap(),
     clipMaskProducerDirectTriangleRecipesByPassId: Map<String, W4eClipMaskProducerDirectTriangleRecipeV1> = emptyMap(),
     clipMaskProducerStencilEdgeRecipesByPassId: Map<String, W4eClipMaskProducerStencilEdgeRecipeV1> = emptyMap(),
     clipMaskProducerStencilCoverRecipesByPassId: Map<String, W4eClipMaskProducerStencilCoverRecipeV1> = emptyMap(),
@@ -427,7 +436,8 @@ internal fun encodeW4eNativePasses(
 ): List<GPUPreparedNativeScopeOperand.Render> {
     requireW4eClipMaskInitializeRecipes(entries, clipMaskInitializeRecipesByPassId)
     val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
-    val producerPipelines = mutableMapOf<Int, GPUW4eNativePipeline>()
+    val constantPipelines = mutableMapOf<Pair<Int, Boolean>, GPURenderPipeline>()
+    val producerPipelines = mutableMapOf<Pair<Int, Boolean>, GPUW4eNativePipeline>()
     val foldPipelines = mutableMapOf<org.graphiks.kanvas.gpu.plan.ClipCombineOperation, GPUW4eNativePipeline>()
     val consumerPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val stencilConsumerPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
@@ -442,12 +452,19 @@ internal fun encodeW4eNativePasses(
             createW4eUnmaskedCoverPipeline(device, format, sampleCount, stencil = w4eStencilZeroReadState(),
                 owned = owned, finalBlend = finalBlend)
         }
-    fun producerPipeline(sampleCount: Int) = producerPipelines.getOrPut(sampleCount) {
-        createW4eProducerPipeline(device, GPUTextureFormat.RGBA8Unorm, sampleCount, owned)
-    }
+    fun producerPipeline(sampleCount: Int, hasDepthStencil: Boolean) =
+        producerPipelines.getOrPut(sampleCount to hasDepthStencil) {
+            createW4eProducerPipeline(device, GPUTextureFormat.RGBA8Unorm, sampleCount, owned,
+                depthStencil = w4eStencilNoopState().takeIf { hasDepthStencil })
+        }
     fun clearPipeline(coverage: Float) = clearPipelines.getOrPut(coverage) {
-        createW4eClearPipeline(device, coverage, owned)
+        createW4eClearPipeline(device, coverage, 1, owned)
     }
+    fun constantPipeline(sampleCount: Int, hasDepthStencil: Boolean) =
+        constantPipelines.getOrPut(sampleCount to hasDepthStencil) {
+            createW4eClearPipeline(device, 0f, sampleCount, owned,
+                depthStencil = w4eStencilNoopState().takeIf { hasDepthStencil })
+        }
     fun scanSpanStencilPipelineWitness(format: GPUTextureFormat) = scanSpanStencilPipelineWitnesses.getOrPut(format) {
         GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty.create(device, generation, format, owned)
     }
@@ -927,6 +944,43 @@ internal fun encodeW4eNativePasses(
                     GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
             ))
             is GPUW4ePreparedClipPassAuthority.Producer -> {
+                if (pass.realization == PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero) {
+                    require(!pass.inverseCoverage && pass.scissor.isEmpty) {
+                        "W4e ConstantZero requires an ordinary empty prepared coverage scissor."
+                    }
+                    if (entry.render.w6aPassV1 != null) {
+                        val frozen = requireNotNull(clipMaskProducerConstantRecipesByPassId[pass.passId]) {
+                            "W6 ConstantZero producer has no frozen native-site recipe."
+                        }
+                        require(frozen.passId.value == pass.passId && frozen.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
+                            frozen.target.id.value == pass.targetResourceId && frozen.resolveTarget?.id?.value == pass.resolveTargetResourceId &&
+                            frozen.depthStencil?.id?.value == pass.depthStencilResourceId && frozen.sampleCountI32 == pass.sampleCount &&
+                            frozen.coverageF32 == 0f && frozen.fullscreenVertexCountI32 == 3) {
+                            "W6 ConstantZero prepared authority differs from its frozen recipe."
+                        }
+                    }
+                    val depth = pass.depthStencilResourceId?.let(attachment)
+                    val pipeline = constantPipeline(pass.sampleCount, pass.depthStencilResourceId != null)
+                    return@map GPUPreparedNativeScopeOperand.Render(entry.index,
+                        GPUPreparedNativeRenderPassConfig(
+                            attachment(pass.targetResourceId), pass.resolveTargetResourceId?.let(attachment), depth,
+                            GPUPreparedNativeLoadOperation.Clear, GPUPreparedNativeStoreOperation.Store,
+                            GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0),
+                            depthClearValue = 1f.takeIf { depth != null },
+                            depthLoadOperation = GPUPreparedNativeLoadOperation.Clear.takeIf { depth != null },
+                            depthStoreOperation = GPUPreparedNativeStoreOperation.Store.takeIf { depth != null },
+                            depthReadOnly = false,
+                            stencilClearValue = 0u.takeIf { depth != null },
+                            stencilLoadOperation = GPUPreparedNativeLoadOperation.Clear.takeIf { depth != null },
+                            stencilStoreOperation = GPUPreparedNativeStoreOperation.Store.takeIf { depth != null },
+                            stencilReadOnly = false,
+                        ),
+                        listOf(
+                            GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generation)),
+                            GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
+                        ),
+                    )
+                }
                 val frozenRecipe = clipMaskProducerRecipesByPassId[pass.passId]
                 val frozenDirectTriangleRecipe = clipMaskProducerDirectTriangleRecipesByPassId[pass.passId]
                 val frozenStencilEdgeRecipe = clipMaskProducerStencilEdgeRecipesByPassId[pass.passId]
@@ -946,7 +1000,7 @@ internal fun encodeW4eNativePasses(
                             frozenRecipe.load == org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerLoadV1.Clear && frozenRecipe.store == org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerStoreV1.Store) {
                             "W4e analytic producer must select only its frozen I1 recipe axes."
                         }
-                        val pipeline = producerPipeline(frozenRecipe.sampleCountI32)
+                        val pipeline = producerPipeline(frozenRecipe.sampleCountI32, frozenRecipe.depthStencil != null)
                         val producerBindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
                             label = "Kanvas.frame.w4e.producerBindGroup", layout = pipeline.layout,
                             entries = listOf(BindGroupEntry(0u, uniformBinding(frozenRecipe.passId.value, frozenRecipe.uniformPurpose))),
@@ -954,13 +1008,24 @@ internal fun encodeW4eNativePasses(
                         listOf(
                             GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generation)),
                             GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(producerBindGroup, generation)),
+                            GPUPreparedNativeRenderCommand.SetScissor(
+                                pass.scissor.left,
+                                pass.scissor.top,
+                                pass.scissor.width,
+                                pass.scissor.height,
+                            ),
                             GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(frozenRecipe.fullscreenVertexCountI32)),
                         )
                     }
                     frozenDirectTriangleRecipe != null || pass.geometry is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path -> {
                         val pathGeometry = frozenDirectTriangleRecipe?.copyGeometryF32()?.copyPathGeometryF32()
                             ?: (pass.geometry as org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path).copyPathGeometryF32()
-                        val scissor = frozenDirectTriangleRecipe?.copyScissorI32() ?: pathGeometry.copyConservativeScissorI32()
+                        val scissor = frozenDirectTriangleRecipe?.copyScissorI32()?.also { frozen ->
+                            require(frozen.left == pass.scissor.left && frozen.top == pass.scissor.top &&
+                                frozen.right == pass.scissor.right && frozen.bottom == pass.scissor.bottom) {
+                                "W4e direct-triangle scissor differs from prepared authority."
+                            }
+                        } ?: org.graphiks.math.geometry.RectI32(pass.scissor.left, pass.scissor.top, pass.scissor.right, pass.scissor.bottom)
                         val direct = pathGeometry.copyDirectTriangleF32OrNull()
                         if (direct != null) {
                             if (frozenDirectTriangleRecipe != null) {
@@ -1094,7 +1159,7 @@ internal fun encodeW4eNativePasses(
                         }
                     }
                     else -> {
-                        val pipeline = producerPipeline(sampleCount)
+                        val pipeline = producerPipeline(sampleCount, depthStencilResourceId != null)
                         val producerBindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
                             label = "Kanvas.frame.w4e.producerBindGroup", layout = pipeline.layout,
                             entries = listOf(BindGroupEntry(0u, uniformBinding(entry.packet.passId, W4eNativePayloadPlan.PRODUCER_UNIFORM))),
@@ -1102,6 +1167,12 @@ internal fun encodeW4eNativePasses(
                         listOf(
                             GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generation)),
                             GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(producerBindGroup, generation)),
+                            GPUPreparedNativeRenderCommand.SetScissor(
+                                pass.scissor.left,
+                                pass.scissor.top,
+                                pass.scissor.width,
+                                pass.scissor.height,
+                            ),
                             GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
                         )
                     }
@@ -1836,24 +1907,28 @@ internal fun w4eFullscreenVertexShader(): String = """
 private fun createW4eClearPipeline(
     device: GPUDevice,
     coverage: Float,
+    sampleCount: Int,
     owned: GPUW4eNativeOwnedHandles,
+    depthStencil: DepthStencilState? = null,
 ): GPURenderPipeline {
+    val variant = "s${sampleCount}.d${if (depthStencil == null) 0 else 1}"
     val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
-        label = "Kanvas.frame.w4e.clearShader.$coverage",
+        label = "Kanvas.frame.w4e.clearShader.$coverage.$variant",
         code = w4eFullscreenVertexShader() + """
             @fragment fn fs_main() -> @location(0) vec4f { return vec4f($coverage); }
         """.trimIndent(),
     ))
     val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
-        label = "Kanvas.frame.w4e.clearPipelineLayout.$coverage", bindGroupLayouts = emptyList(),
+        label = "Kanvas.frame.w4e.clearPipelineLayout.$coverage.$variant", bindGroupLayouts = emptyList(),
     ))
     return owned.createRenderPipeline(device, RenderPipelineDescriptor(
-        label = "Kanvas.frame.w4e.clearPipeline.$coverage",
+        label = "Kanvas.frame.w4e.clearPipeline.$coverage.$variant",
         layout = pipelineLayout,
         vertex = VertexState(module = shader, entryPoint = "vs_main"),
         primitive = PrimitiveState(),
-        multisample = MultisampleState(count = 1u),
+        multisample = MultisampleState(count = sampleCount.toUInt()),
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(GPUTextureFormat.RGBA8Unorm))),
+        depthStencil = depthStencil,
     ))
 }
 
@@ -1862,6 +1937,7 @@ private fun createW4eProducerPipeline(
     format: GPUTextureFormat,
     sampleCount: Int,
     owned: GPUW4eNativeOwnedHandles,
+    depthStencil: DepthStencilState? = null,
 ): GPUW4eNativePipeline {
     val bindGroupLayout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
         label = "Kanvas.frame.w4e.producerLayout",
@@ -1936,6 +2012,7 @@ private fun createW4eProducerPipeline(
         primitive = PrimitiveState(),
         multisample = MultisampleState(count = sampleCount.toUInt()),
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(format))),
+        depthStencil = depthStencil,
     ))
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }

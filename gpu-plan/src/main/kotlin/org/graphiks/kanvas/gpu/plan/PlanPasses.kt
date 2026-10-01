@@ -989,6 +989,8 @@ public sealed interface PlanPass {
     }
 
     /** Rasterizes one finite clip element into its own scratch attachment. */
+    public enum class W4eClipMaskProducerRealizationV1 { Raster, ConstantZero }
+
     public class ClipMaskProducer(
         override public val ordinal: Int,
         public val target: PlanResourceId,
@@ -996,16 +998,20 @@ public sealed interface PlanPass {
         public val depthStencil: PlanResourceId?,
         public val sampleCountI32: Int,
         geometryF32: ClipGeometryF32,
+        scissorI32: RectI32,
         public val atomicGroup: PlanAtomicGroupId,
         /** Applies finite producer coverage as the complement inside the initialized clip domain. */
         public val inverseCoverage: Boolean = false,
         /** Preserves analytic AA for rect producers even when their attachment is single-sample. */
         public val antiAlias: Boolean = sampleCountI32 == 4,
+        public val realization: W4eClipMaskProducerRealizationV1 = W4eClipMaskProducerRealizationV1.Raster,
     ) : PlanPass {
         override public val role: PlanPassRole = PlanPassRole.ClipMaskProducer
         override public val id: PlanPassId = checkedPassId(role, ordinal)
         private val geometrySnapshotF32: ClipGeometryF32 = geometryF32.copyClipMaskGeometryF32()
+        private val scissorSnapshotI32: RectI32 = scissorI32.copy()
         public fun copyGeometryF32(): ClipGeometryF32 = geometrySnapshotF32.copyClipMaskGeometryF32()
+        public fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
     }
 
     /** Combines the previous accumulator and one scratch producer in insertion order. */

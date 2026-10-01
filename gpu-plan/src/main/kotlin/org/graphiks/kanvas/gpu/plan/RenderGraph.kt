@@ -1366,6 +1366,16 @@ public class RenderGraph private constructor(
             require(pass.copyGeometryF32() != ClipGeometryF32.Empty) {
                 "Zero inverse interiors must not allocate a clip-mask producer"
             }
+            val scissor = pass.copyScissorI32()
+            when (pass.realization) {
+                PlanPass.W4eClipMaskProducerRealizationV1.Raster -> require(!scissor.isEmpty &&
+                    scissor.left >= 0 && scissor.top >= 0 && scissor.right <= targetExtent.width && scissor.bottom <= targetExtent.height) {
+                    "Raster clip producers require a positive attachment-local scissor"
+                }
+                PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero -> require(!pass.inverseCoverage && scissor.isEmpty) {
+                    "ConstantZero is reserved for ordinary empty coverage"
+                }
+            }
             if (pass.antiAlias && pass.copyGeometryF32() !is ClipGeometryF32.Rect) {
                 require(pass.sampleCountI32 == 4) {
                     "Antialiased Path/RRect clip producers require AA4 scratch, resolve, and D24S8"

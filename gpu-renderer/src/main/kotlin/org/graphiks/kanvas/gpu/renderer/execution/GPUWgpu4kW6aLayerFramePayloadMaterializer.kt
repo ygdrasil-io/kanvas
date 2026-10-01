@@ -56,6 +56,7 @@ private data class W4eClipMaskInitializeNativePreflight(
     val entries: List<GPUW4eNativePassEntry>,
     val recipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1>,
     val producerRecipesByPassId: Map<String, W4eClipMaskProducerRecipeV1>,
+    val producerConstantRecipesByPassId: Map<String, W4eClipMaskProducerConstantRecipeV1>,
     val producerDirectTriangleRecipesByPassId: Map<String, W4eClipMaskProducerDirectTriangleRecipeV1>,
     val producerStencilEdgeRecipesByPassId: Map<String, W4eClipMaskProducerStencilEdgeRecipeV1>,
     val producerStencilCoverRecipesByPassId: Map<String, W4eClipMaskProducerStencilCoverRecipeV1>,
@@ -729,8 +730,32 @@ private fun preflightW4eClipMaskInitializes(
                 recipe.passId.value to recipe
             }
         }.toMap()
+        val producerConstantRecipes = entries.mapNotNull { entry ->
+            frame.w4eClipMaskProducerConstantRecipeOrNull(entry.packet)?.let { recipe ->
+                require(recipe.passId.value == entry.packet.passId)
+                recipe.passId.value to recipe
+            }
+        }.toMap()
+        val constantProducers = binding.nativePasses().filterIsInstance<PlanPass.ClipMaskProducer>().filter {
+            it.realization == PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero
+        }
+        require(producerConstantRecipes.keys == constantProducers.map { it.id.value }.toSet()) {
+            "W4e ConstantZero recording recipes must cover exactly one final binding."
+        }
+        constantProducers.forEach { producer ->
+            val recipe = producerConstantRecipes.getValue(producer.id.value)
+            val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(producer.id, producer.ordinal, 0))
+                as? W4eClipMaskProducerConstantNativeSiteRecipeV1
+            require(!producer.inverseCoverage && producer.copyScissorI32().isEmpty && recipe.passId == producer.id &&
+                recipe.packetOrdinalI32 == producer.ordinal && recipe.target.id == producer.target &&
+                recipe.resolveTarget?.id == producer.resolveTarget && recipe.depthStencil?.id == producer.depthStencil &&
+                recipe.sampleCountI32 == producer.sampleCountI32 && recipe.coverageF32 == 0f &&
+                recipe.fullscreenVertexCountI32 == 3 && catalog?.host === recipe) {
+                "W4e ConstantZero recording differs from its frozen recipe."
+            }
+        }
         val analyticProducers = binding.nativePasses().filterIsInstance<PlanPass.ClipMaskProducer>().filter { producer ->
-            when (producer.copyGeometryF32()) {
+            producer.realization == PlanPass.W4eClipMaskProducerRealizationV1.Raster && when (producer.copyGeometryF32()) {
                 is org.graphiks.math.geometry.ClipGeometryF32.Rect,
                 is org.graphiks.math.geometry.ClipGeometryF32.RRect,
                 -> true
@@ -792,10 +817,12 @@ private fun preflightW4eClipMaskInitializes(
             val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(recipe.passId, recipe.packetOrdinalI32, 0)) as? W4eClipMaskProducerStencilEdgeNativeSiteRecipeV1
             require(recipe.target.format == PlanTextureFormat.CoverageMask && recipe.depthStencil.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
                 recipe.vertexCountI32 == recipe.copyVerticesF32().size / 2 && recipe.indexCountI32 == recipe.copyIndicesI32().size &&
-                preparedFan != null && preparedPath.fillRule == recipe.fillRule && preparedPath.copyConservativeScissorI32() == recipe.copyScissorI32() &&
+                preparedFan != null && preparedPath.fillRule == recipe.fillRule && producer != null &&
+                producer.scissor.left == recipe.copyScissorI32().left && producer.scissor.top == recipe.copyScissorI32().top &&
+                producer.scissor.right == recipe.copyScissorI32().right && producer.scissor.bottom == recipe.copyScissorI32().bottom &&
                 preparedFan.copyVerticesF32().contentEquals(recipe.copyVerticesF32()) && preparedFan.copyIndicesI32().contentEquals(recipe.copyIndicesI32()) && preparedFan.copyContourStartsI32().contentEquals(recipe.copyContourStartsI32()) &&
                 slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 && slice.baseVertex == recipe.baseVertexI32 &&
-                slice.vertexCount == recipe.vertexCountI32 && slice.maxLocalIndex == recipe.maxLocalIndexI32 && producer != null &&
+                slice.vertexCount == recipe.vertexCountI32 && slice.maxLocalIndex == recipe.maxLocalIndexI32 &&
                 entry.render.w6aPassV1?.id == recipe.passId && entry.render.w6aPassV1?.ordinal == recipe.packetOrdinalI32 &&
                 producer.targetResourceId == recipe.target.id.value && producer.resolveTargetResourceId == recipe.resolveTarget?.id?.value &&
                 producer.depthStencilResourceId == recipe.depthStencil.id.value && producer.sampleCount == recipe.sampleCountI32 && producer.inverseCoverage == recipe.inverseCoverage && producer.antiAlias == recipe.antiAlias &&
@@ -807,7 +834,8 @@ private fun preflightW4eClipMaskInitializes(
             }
         } }
         val directTriangles = binding.nativePasses().filterIsInstance<PlanPass.ClipMaskProducer>().filter {
-            (it.copyGeometryF32() as? org.graphiks.math.geometry.ClipGeometryF32.Path)?.copyPathGeometryF32()?.copyDirectTriangleF32OrNull() != null
+            it.realization == PlanPass.W4eClipMaskProducerRealizationV1.Raster &&
+                (it.copyGeometryF32() as? org.graphiks.math.geometry.ClipGeometryF32.Path)?.copyPathGeometryF32()?.copyDirectTriangleF32OrNull() != null
         }
         require(directTriangleRecipes.keys == directTriangles.map { it.id.value }.toSet())
         entries.forEach { entry -> frame.w4eClipMaskProducerDirectTriangleRecipeOrNull(entry.packet)?.let { recipe ->
@@ -844,7 +872,7 @@ private fun preflightW4eClipMaskInitializes(
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.vertex.id), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.VertexData, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Vertex, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(recipe.index.id), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.IndexData, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Index, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
             )
-            require(producer != null && entry.render.w6aPassV1?.id == recipe.passId && entry.render.w6aPassV1?.ordinal == recipe.packetOrdinalI32 && producer.targetResourceId == recipe.target.id.value && producer.resolveTargetResourceId == recipe.resolveTarget?.id?.value && producer.depthStencilResourceId == recipe.depthStencil.id.value && producer.sampleCount == recipe.sampleCountI32 && producer.inverseCoverage == recipe.inverseCoverage && producer.antiAlias == recipe.antiAlias) { "W4e direct-triangle owner or packet differs from its frozen recipe." }
+            require(producer != null && entry.render.w6aPassV1?.id == recipe.passId && entry.render.w6aPassV1?.ordinal == recipe.packetOrdinalI32 && producer.targetResourceId == recipe.target.id.value && producer.resolveTargetResourceId == recipe.resolveTarget?.id?.value && producer.depthStencilResourceId == recipe.depthStencil.id.value && producer.sampleCount == recipe.sampleCountI32 && producer.inverseCoverage == recipe.inverseCoverage && producer.antiAlias == recipe.antiAlias && producer.scissor.left == recipe.copyScissorI32().left && producer.scissor.top == recipe.copyScissorI32().top && producer.scissor.right == recipe.copyScissorI32().right && producer.scissor.bottom == recipe.copyScissorI32().bottom) { "W4e direct-triangle owner, packet or scissor differs from its frozen recipe." }
             require(slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 && slice.baseVertex == recipe.baseVertexI32 && slice.vertexCount == recipe.vertexCountI32 && slice.maxLocalIndex == recipe.maxLocalIndexI32) { "W4e direct-triangle V/I slice differs from its frozen recipe." }
             require(exact(frame.physical.resource(recipe.target.id), recipe.target) && recipe.resolveTarget?.let { exact(frame.physical.resource(it.id), it) } != false && exact(frame.physical.resource(recipe.depthStencil.id), recipe.depthStencil) && exact(frame.physical.resource(recipe.vertex.id), recipe.vertex) && exact(frame.physical.resource(recipe.index.id), recipe.index)) { "W4e direct-triangle physical rows differ from its frozen recipe." }
             require(payload.vertexResourceId == recipe.vertex.id && payload.indexResourceId == recipe.index.id &&
@@ -864,7 +892,7 @@ private fun preflightW4eClipMaskInitializes(
                 recipe.source.id == fold.source && recipe.output.id == fold.output && recipe.operation == fold.operation &&
                 recipe.copyDomainI32() == fold.copyDomainI32())
         }
-        binding to W4eClipMaskInitializeNativePreflight(entries, recipes, producerRecipes, directTriangleRecipes, stencilEdgeRecipes, stencilCoverRecipes, foldRecipes)
+        binding to W4eClipMaskInitializeNativePreflight(entries, recipes, producerRecipes, producerConstantRecipes, directTriangleRecipes, stencilEdgeRecipes, stencilCoverRecipes, foldRecipes)
     }.toMap()
 
 /** Exhaustively authenticates W6b recipes, packet order, meshes and V/I/U windows before any device.create*. */
@@ -2555,6 +2583,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val entries = preflight.entries
                 val clipMaskInitializeRecipes = preflight.recipesByPassId
                 val clipMaskProducerRecipes = preflight.producerRecipesByPassId
+                val clipMaskProducerConstantRecipes = preflight.producerConstantRecipesByPassId
                 val clipMaskProducerDirectTriangleRecipes = preflight.producerDirectTriangleRecipesByPassId
                 val clipMaskProducerStencilEdgeRecipes = preflight.producerStencilEdgeRecipesByPassId
                 val clipMaskProducerStencilCoverRecipes = preflight.producerStencilCoverRecipesByPassId
@@ -2603,6 +2632,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     commonSource = true, authority::consumerFor, { code, message -> IllegalArgumentException("$code: $message") },
                     clipMaskInitializeRecipesByPassId = clipMaskInitializeRecipes,
                     clipMaskProducerRecipesByPassId = clipMaskProducerRecipes,
+                    clipMaskProducerConstantRecipesByPassId = clipMaskProducerConstantRecipes,
                     clipMaskProducerDirectTriangleRecipesByPassId = clipMaskProducerDirectTriangleRecipes,
                     clipMaskProducerStencilEdgeRecipesByPassId = clipMaskProducerStencilEdgeRecipes,
                     clipMaskProducerStencilCoverRecipesByPassId = clipMaskProducerStencilCoverRecipes,

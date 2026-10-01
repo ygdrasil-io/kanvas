@@ -2019,7 +2019,7 @@ class RenderGraphContractTest {
         val resources = clipMaskResources()
         val initialize = PlanPass.ClipMaskInitialize(0, resources.accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP)
         val producer = PlanPass.ClipMaskProducer(
-            0, resources.scratch.id, null, null, 1, clipRectGeometry(), CLIP_GROUP,
+            0, resources.scratch.id, null, null, 1, clipRectGeometry(), RectI32(0, 0, 4, 4), CLIP_GROUP,
         )
         val aliased = PlanPass.ClipMaskFold(
             0, resources.accumulatorA.id, resources.scratch.id, resources.accumulatorA.id,
@@ -2064,7 +2064,7 @@ class RenderGraphContractTest {
         val resources = clipMaskResources()
         val initialize = PlanPass.ClipMaskInitialize(0, resources.accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP)
         val downgraded = PlanPass.ClipMaskProducer(
-            0, resources.scratch.id, null, null, 1, clipRRectGeometry(), CLIP_GROUP, antiAlias = true,
+            0, resources.scratch.id, null, null, 1, clipRRectGeometry(), RectI32(0, 0, 4, 4), CLIP_GROUP, antiAlias = true,
         )
         val fold = PlanPass.ClipMaskFold(
             0, resources.accumulatorA.id, resources.scratch.id, resources.accumulatorB.id,
@@ -2344,7 +2344,7 @@ class RenderGraphContractTest {
 
     private fun clipMaskPasses(resources: ClipMaskResources): List<PlanPass> = listOf(
         PlanPass.ClipMaskInitialize(0, resources.accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP),
-        PlanPass.ClipMaskProducer(0, resources.scratch.id, null, null, 1, clipRectGeometry(), CLIP_GROUP),
+        PlanPass.ClipMaskProducer(0, resources.scratch.id, null, null, 1, clipRectGeometry(), RectI32(0, 0, 4, 4), CLIP_GROUP),
         PlanPass.ClipMaskFold(
             0, resources.accumulatorA.id, resources.scratch.id, resources.accumulatorB.id,
             ClipCombineOperation.Intersect, RectI32(0, 0, 4, 4), CLIP_GROUP,
@@ -2427,7 +2427,7 @@ class RenderGraphContractTest {
             PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 256,
             setOf(PlanResourceUsage.DepthStencilAttachment), 1, 2, 4)
         val initialize = PlanPass.ClipMaskInitialize(0, accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP)
-        val producer = PlanPass.ClipMaskProducer(0, multisample.id, scratch.id, depth.id, 4, clipRectGeometry(), CLIP_GROUP)
+        val producer = PlanPass.ClipMaskProducer(0, multisample.id, scratch.id, depth.id, 4, clipRectGeometry(), RectI32(0, 0, 4, 4), CLIP_GROUP)
         val fold = PlanPass.ClipMaskFold(0, accumulatorA.id, scratch.id, accumulatorB.id,
             ClipCombineOperation.Difference, RectI32(0, 0, 4, 4), CLIP_GROUP)
         val target = texture(PlanResourceRole.LogicalTarget, 0,
@@ -2746,7 +2746,7 @@ class RenderGraphContractTest {
         val clipPrefix = if (withClip) listOf(
             PlanPass.ClipMaskInitialize(0, clipAccumulatorA.id, RectI32(0, 0, 1, 1), 1f, CLIP_GROUP),
             PlanPass.ClipMaskProducer(0, clipScratch.id, null, null, 1,
-                ClipGeometryF32.Rect(RectF32(0f, 0f, 1f, 1f)), CLIP_GROUP),
+                ClipGeometryF32.Rect(RectF32(0f, 0f, 1f, 1f)), RectI32(0, 0, 1, 1), CLIP_GROUP),
             PlanPass.ClipMaskFold(0, clipAccumulatorA.id, clipScratch.id, clipAccumulatorB.id,
                 ClipCombineOperation.Intersect, RectI32(0, 0, 1, 1), CLIP_GROUP),
         ) else emptyList()
