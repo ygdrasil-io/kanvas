@@ -1,7 +1,9 @@
 # W07 — diagnostic GM provisoire
 
-PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
-sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
+PR courante : draft [#2426](https://github.com/ygdrasil-io/kanvas/pull/2426),
+empilée sur [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425).
+La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
+reste la base historique sur la PR W6 #2409.
 
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 
@@ -15,8 +17,10 @@ graphe, 14 cas Rect affine et ce témoin sont **186/186** (archive
 `layer-preservation-covering-186-1`, wrapper/enfant 0/0, zéro
 failure/error/skip/stderr). Le témoin Picture-layer `DST_OUT` observe C
 `64/255`, établi depuis le pattern MSAA4 avant Surface. Le contrôle PLUS
-translation racine demeure positif. La relecture scoped reste en attente du
-contrôleur; aucune publication n'est autorisée par ce statut.
+translation racine demeure positif. Après la revue globale Astra et les
+corrections, la relecture ciblée Sol approuve le correctif : I-new et I1
+résiduel corrigés, aucun nouveau Critical/Important/Minor. La draft #2426 est
+publiée sur #2425 ; cette qualification ne vaut ni merge ni clôture W7.
 
 La suite globale `layer-preservation-full-final-1` expire comme bornée
 (wrapper 124, enfant 143) après 751 END : 710 SUCCESS, 40 FAILURE, 1 SKIPPED.
@@ -46,9 +50,9 @@ forçait W6 avant le plan whole-frame W5e; `93ec530` rétablit la priorité W5e 
 un vrai candidat root sans layer/W6b. `lattice2` retrouve exactement le hash
 `49d38b8f…02da0`; aucune admission image ou codec n'a été élargie.
 
-## Série AA et composition différée — en cours, 1er octobre 2026
+## Série AA et composition différée — livrée en draft, 1er octobre 2026
 
-Branche `codex/w7-aa-blend-sources`, prévue en draft sur #2425.
+Branche `codex/w7-aa-blend-sources`, draft #2426 sur #2425.
 [Design](aa-blend-sources-design.md), [plan séquentiel](aa-blend-sources-plan.md).
 La correction W5 PLUS couvert est implémentée et approuvée par Sol après
 deux vagues de corrections : `sat(C*S+D)` remplace le post-lerp à saturation,

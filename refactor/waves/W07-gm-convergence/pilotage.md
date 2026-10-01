@@ -10,8 +10,10 @@ Picture. Son témoin public a un RED causal au B complet `26808` (sans le garde 
 `requires 28736`) et un GREEN avec le garde. Les témoins publics sont **186/186**
 (185 identités antérieures + un budget, archive
 `layer-preservation-covering-186-1`, wrapper/enfant 0/0, zéro
-failure/error/skip/stderr). La relecture scoped reste en attente; ce résultat
-n'autorise pas de publication ou de clôture W7.
+failure/error/skip/stderr). La relecture ciblée Sol est approuvée : I-new et
+I1 résiduel corrigés, aucun nouveau Critical/Important/Minor. La draft
+[#2426](https://github.com/ygdrasil-io/kanvas/pull/2426) est publiée sur #2425,
+après revue globale Astra et corrections. Ni merge ni clôture W7.
 
 Corpus : 631/443, 200 rendus, 178 comparés, 39 ≥99 %, 52 ≥95 %, médiane
 72.34801136363637 % à ±2. Les 18 invariants, hashes, métriques, outcomes,
@@ -77,13 +79,14 @@ Lot précédent : port fidèle d'alphagradients et domaine explicite des GM,
 code `6259c38d8`, branche `codex/w7-alphagradients-port`, draft
 [#2424](https://github.com/ygdrasil-io/kanvas/pull/2424) empilée sur #2423 ;
 mesure et reviews terminées ci-dessous, sans merge.
-Dernier lot publié : ports fidèles des deux hardstop, code `34e3d4e98`, branche
+Lot précédent : ports fidèles des deux hardstop, code `34e3d4e98`, branche
 `codex/w7-hardstop-ports`, draft [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425)
 empilée sur #2424 ; mesure et reviews terminées
 ci-dessous, publication draft uniquement.
 
-Série courante qualifiée (sans clôture W7) : `codex/w7-aa-blend-sources`, future draft
-sur #2425, [design](aa-blend-sources-design.md) et
+Série courante qualifiée (sans clôture W7) : `codex/w7-aa-blend-sources`, draft
+[#2426](https://github.com/ygdrasil-io/kanvas/pull/2426) sur #2425,
+[design](aa-blend-sources-design.md) et
 [plan](aa-blend-sources-plan.md). Correction W5 PLUS couvert revue et validée
 ciblée ; premier témoin root Path PLUS du consommateur GPU validé au code
 `6f07a6448` (couverture pleine, nulle et partielle, répétition native).
@@ -110,7 +113,7 @@ nouveaux Rect root sont projetés via W4d. SRC_ATOP reste qualifié sur une
 forme alignée. `aarectmodes` refuse encore (unsupported_child non isolé).
 À ce checkpoint historique, Picture et le corpus complet restaient à venir ;
 aucune parité globale n'était revendiquée.
-L'[état courant](status.md#série-aa-et-composition-différée--en-cours-1er-octobre-2026)
+L'[état courant](status.md#série-aa-et-composition-différée--livrée-en-draft-1er-octobre-2026)
 distingue les preuves natives réussies des limites historiques et de
 l'exit 133 W5g non qualifié. À ce checkpoint historique, le corpus mesuré
 ci-dessous était la baseline.

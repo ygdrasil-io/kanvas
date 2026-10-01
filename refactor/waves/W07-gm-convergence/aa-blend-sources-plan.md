@@ -103,11 +103,21 @@ W7MixedRootAaRectSurfacePixelTest. Current checkpoint `gm-baseline` indices
 
 **Interfaces:** Consume Task 2 sealed occurrence/emitter and Task 3 closed family. Picture paint/restore stays separate from child final blend.
 
-- [ ] RED all13 modes × path/rect × Picture-root/Picture-layer using independent expected pixels, not direct/Picture equality alone. Include same serialized Picture at two translations, different destination contents, nonzero layer origin and integral scissor, both fill rules across fixtures.
-- [ ] Add real coverage compiler selection and assembly through shared emitter. Preserve nested occurrence IDs, child order, target-local mapping/culls and fresh destination snapshots. Replace historical in-scope permanent Picture refusal tests with their positive contract; retain out-of-scope refusal/recovery witnesses.
-- [ ] GREEN complete advertised104 cells and prior suites; identity accounting, no skip/refusal/capability shortcuts. Run one bounded full suite after final product edits and compare all observed identities to Task 1 run.
-- [ ] Measure unchanged631/443 corpus with30s/GM using existing aggregator; inspect target actual/diff, every old image delta and invariant. No reference/threshold/exclusion/domain changes. Preserve failures, timeouts and incomplete evidence.
-- [ ] Update refactor durable result/remaining limitations, self-review/commit. Controller final Astra review over complete branch then one fix-wave/scoped re-review, publish draft stacked on #2425 and attach it. W7 remains active.
+- [x] RED all13 modes × path/rect × Picture-root/Picture-layer using independent expected pixels, not direct/Picture equality alone. Include same serialized Picture at two translations, different destination contents, nonzero layer origin and integral scissor, both fill rules across fixtures.
+- [x] Add real coverage compiler selection and assembly through shared emitter. Preserve nested occurrence IDs, child order, target-local mapping/culls and fresh destination snapshots. Replace historical in-scope permanent Picture refusal tests with their positive contract; retain out-of-scope refusal/recovery witnesses.
+- [x] GREEN complete advertised104 cells and prior suites; identity accounting, no skip/refusal/capability shortcuts. Run one bounded full suite after final product edits and compare all observed identities to Task 1 run.
+- [x] Measure unchanged631/443 corpus with30s/GM using existing aggregator; inspect target actual/diff, every old image delta and invariant. No reference/threshold/exclusion/domain changes. Preserve failures, timeouts and incomplete evidence.
+- [x] Update refactor durable result/remaining limitations, self-review/commit. Controller final Astra review over complete branch then one fix-wave/scoped re-review, publish draft stacked on #2425 and attach it. W7 remains active.
+
+Publication: [draft #2426](https://github.com/ygdrasil-io/kanvas/pull/2426) on #2425.
+The final affine correction's review revealed a residual analytic-layer routing
+regression. Under renewed user continuation/carte blanche, one explicit narrow
+extension restored the existing selection guard and added a public budget
+witness. Scoped Sol re-review approves I-new and residual I1, with no new
+Critical/Important/Minor. Final product `3398dc3db8c8741d49234c74643f464baae645f6`:
+186/186 targeted tests; global bounded run remains 710 SUCCESS/40 FAILURE/
+1 SKIPPED with timeout; frozen corpus 631/443, 200 rendered/178 compared.
+Completing these four tasks does not close W7 or the global validation gates.
 
 ## Plan self-review
 
