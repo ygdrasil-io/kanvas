@@ -51,9 +51,15 @@ sur #2425, [design](aa-blend-sources-design.md) et
 [plan](aa-blend-sources-plan.md). Correction W5 PLUS couvert revue et validée
 ciblée ; premier témoin root Path PLUS du consommateur GPU validé au code
 `6f07a6448` (couverture pleine, nulle et partielle, répétition native).
-Le lot racine/layer reste ouvert : émetteur partagé, matrice, budgets et revue
-à terminer, puis famille Porter-Duff et Picture. Aucun nouveau gain GM mesuré
-à ce stade ; le premier témoin ne remplace pas ces validations.
+L'émetteur partagé est extrait (`fa84fa81d`). Le checkpoint natif suivant
+compte 20 succès/21 (processus 1, sans timeout) : sept cellules root/layer sur
+huit, quatre formes concave/even-odd, le premier témoin PLUS et les huit
+contrôles root historiques. PLUS Rect racine demeure le seul refus de ce
+lot ciblé. SRC_OVER utilise des contrôles alignés après rejet indépendant
+de sa fixture de bord ; aucun oracle n'est élargi. Le lot reste ouvert :
+séquences/transforms, propriété des buffers/budgets exacts, régressions,
+revue et mesure à terminer, puis Porter-Duff et Picture. Aucun gain GM
+nouveau mesuré ; ce checkpoint partiel ne remplace pas ces validations.
 L'[état courant](status.md#série-aa-et-composition-différée--en-cours-1er-octobre-2026)
 distingue les preuves natives réussies des limites historiques et de
 l'exit 133 W5g non qualifié. Le corpus mesuré ci-dessous reste la baseline.

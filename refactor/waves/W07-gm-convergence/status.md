@@ -22,12 +22,25 @@ Après appui architectural et reprise native ciblés par Astra, le commit
 C=128/255, Render/Readback réels et second rendu byte-identique. L'archive
 finale `task2-rescue-final-green` ne contient plus de trace temporaire.
 
-Ce jalon ne valide pas le lot complet : l'émetteur partagé reste à extraire,
-la matrice racine/layer, les séquences et les budgets exacts à terminer. La
-reprise des témoins historiques a détecté un détournement de SRC_OVER vers
-la nouvelle source ; sa voie historique est rétablie dans le travail en cours.
-Le nouveau positif PLUS en layer reste en diagnostic, avant ses assertions
-de pixels. La revue Sol du lot et les mesures GM sont encore à faire.
+L'émetteur commun est extrait depuis `fa84fa81d`. La reprise native corrige
+l'initialisation de la première passe stencil, la double déclaration d'un
+snapshot enfant et la sélection SRC_OVER : conserver l'ancienne source quand
+elle admet le draw, sinon employer la source typée pour Solid/Opacity.
+Le dernier contrôle `task2-stencil-native-2-owner-clean` compte **20 succès
+sur 21**, zéro erreur/skip et sorties enfant/wrapper **1/1**, sans timeout.
+Les huit témoins root historiques passent ; sept des huit cellules
+PLUS/SRC_OVER × Path/Rect × root/layer et les quatre cas concave/even-odd
+passent tous leurs pixels sur deux rendus natifs. Le premier témoin PLUS
+complète ce total. **PLUS Rect racine reste refusé** au préflight de géométrie.
+
+La fixture SRC_OVER initialement proposée était non bornée avant Surface aux
+bords partiels : elle ne constituait pas un échec moteur. Ses quatre contrôles
+emploient maintenant des formes alignées avec intérieur/extérieur disjoints,
+sans élargir l'oracle. Les témoins PLUS conservent leurs bords partiels ; cette
+matrice n'apporte pas de nouvelle preuve SRC_OVER aux bords partiels.
+Ce checkpoint n'est ni un run global vert ni la validation du lot : restent
+le refus Rect racine, les séquences/transforms, l'ownership uniforme et les
+budgets exacts, le rejeu complet des anciens témoins, la revue et les mesures.
 **Aucun gain GM nouveau n'est encore mesuré.**
 
 Les limites de validation restent explicites : W5g compte 125 identités,
