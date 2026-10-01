@@ -60,3 +60,85 @@ capacité de rendu et fidélité. Fonts, codecs/décodage externe et jpg-color-c
 restent exclus. Aucune relaxation de proof, epsilon, cap ou oracle existant.
 Toute nouvelle géométrie appartiendrait à math avec nomenclature I/F32/64 ;
 aucune n'est prévue. Pas de fallback CPU, de routage par nom de GM ni de merge.
+
+## Prérequis renderer révélé par le port fidèle
+
+Les trois tests échouent avec la scène corrigée sur
+`unsupported.surface.prepared.mixed-composite-topology` (archive
+`/private/tmp/kanvas-w7-sk3d.WUms9p/green-1`, trois échecs, sorties 1/1).
+Le gate Surface ne nomme W6 pour une Picture racine que via une famille AA.
+Une fois cet owner atteint, le Rect projectif hard n'a pas de source : W4a
+ne possède que les transformations axis-aligned et W4d n'autorise pas la
+projection Rect dans son contrat source par défaut. Ce second manque est
+un diagnostic statique, pas un nouveau refus natif déjà mesuré.
+
+La correction retenue est un prérequis renderer distinct (Task 2), puis la
+reprise de Task 1. Deux alternatives sont écartées : élargir indistinctement
+le contrat AA/root-only ouvrirait des combinaisons non prouvées ; préprojeter
+le Rect enregistré changerait la scène et masquerait la capacité manquante.
+L'avis Astra ciblé recommande de réutiliser les sources hard W4d et
+l'assemblage d'occurrences W6, sans nouveau compositor ni backend.
+
+### Contrat fermé de Picture hard
+
+Nommer W6 pour un vrai DrawPicture contenant un Rect/Path FILL hard,
+SRC_OVER, paint solid sans shader, effet, filtre, pathEffect ou blender,
+y compris dans une Picture imbriquée. Cette reconnaissance ne promet pas
+que tous les siblings sont supportés : le planner valide le frame entier.
+Ne pas filtrer CTM/cible invalides avant ownership pour poursuivre legacy.
+Garder la traversal bornée et les identités Picture ; dépasser son budget
+d'inspection doit conduire à l'owner terminal, pas à un résultat flat réussi.
+Conserver intacte la reconnaissance AA et la préférence des frames W5e
+directs sans Picture. Aligner la nomination hard dans la priorité capturée
+de CapabilityCompilerChain ; pas de promotion générale de tous les Pictures.
+
+Ajouter une factory interne `w6HardRectFillSource(catalog)` avec un mode de
+projection fermé `PictureHardFill`, distinct des flags root-only, hairline
+encoded et AA. Cette autorité nouvelle est limitée à RECT + GeometryNode.Rect,
+FILL HARD_EDGE, solid SRC_OVER sans effets, Rect fini non vide, transformation
+GeneralAffine ou Perspective admissible et clip hard déjà représentable.
+Propager le mode dans les copies immutable du compiler. Ne pas réorganiser
+tous ses modes existants. La projection locale PathBuilder du Rect sert
+uniquement à la préparation math : DrawOrigin.RECT, sourceDraw, locator,
+identités de scène et de commande restent originaux.
+
+Dans preparePictureDrawLane, sélectionner cette factory sur le carrier
+rebasé, uniquement lorsque ce nouveau contrat s'applique ; préserver W3/W4a
+pour identity/scale-translate, ainsi que les sources Path existantes.
+Pas d'extension du selector direct de W6, ni des sources AA projectives.
+OccurrenceSourceInputV1 reste l'autorité du mapping F64 cible-local ; aucun
+second CTM dans l'assemblage. Réutiliser constructSources, les ressources
+hard et appendPlannedDraw : ni opaque-white ni consumer AA différé.
+La Picture sans paint reste inline sur la destination courante ; le SRC_OVER
+bleu voit le rouge précédent, sans isolation ajoutée. Tous les caps, budgets,
+proofs, scissor, stencil/reset et FinalBlendPlanner restent effectifs.
+
+### Validation du prérequis
+
+Les oracles sont fixés avant GPU. Homographie indépendante sur Surface16×16 :
+`H(x,y)=((x+4)/(1+x/16),(y+3)/(1+x/16))`, Rect `[0,8]²`, fond rouge opaque,
+bleu alpha136 et LINEAR : intérieur `(5,5)` et `(4,5)` dans la bande
+`(182±1,0,193±1,255)` ; extérieurs `(3,5)` et `(9,5)` rouge exact.
+Triangle `(0,0),(8,0),(0,8)` : `(5,4)` dedans, `(7,5)` dehors.
+Even-odd outer `[0,8]²`, hole `[2,6]²` : `(5,3)` couvert, `(6,5)` trou.
+L'inverse analytique aux centres pixel est
+`x=(X−4)/(1−X/16), y=Y*(1+x/16)−3` ; ne pas appeler le math produit pour
+construire les attentes. Un draw distinct après le trou contrôle le stencil.
+
+Contrôler aussi l'affine `A(x,y)=(x+y/2+4,y+3)` sur `[0,4]²` (dedans5,4,
+dehors4,6), deux replays H translatés de0 et8 sur fonds rouge/vert, une
+Picture imbriquée avec translation externe(8,4), et un layer à origine non
+nulle avec scissor hard et siblings avant/après. Leurs témoins positifs et
+contre-exemples de transform omis/doublé sont dérivés avant Surface.
+
+Horizon `w=1−x/4`, CTM NaN, RGBA16_FLOAT, budget frame1 byte et sibling AA
+projectif restent des refus publics, sans modification de sentinelle,
+suivis d'un rendu valide sur le même backend. Les codes sont prédits depuis
+les contrats existants, non inventés à partir du premier échec observé.
+Tous les positifs exigent Render/Readback, zéro refus/diagnostic, dispatch
+positif et deuxième rendu byte-identique. Contrôler les Picture Rect
+identity/scale-translate sous budget analytique calculé statiquement avant
+GPU et conserver sans relever le témoin historique B=26808 des layers AA.
+Relancer les témoins AA/Picture/affine/encoded hairline existants ; aucun
+test d'infrastructure nouveau. La mesure du corpus reste dans Task 1,
+après revue du prérequis, au SHA produit final.
