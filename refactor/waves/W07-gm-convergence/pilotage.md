@@ -1,5 +1,35 @@
 # Pilotage de la convergence Skia
 
+## Port inverseclip fidèle — 1er octobre 2026
+
+Source/test `e9da0ebd6892419987356e5a8d4803cb1a7a0023`,
+[snapshot](inverseclip-port-e9da0ebd6.json), [plan](inverseclip-port-plan.md).
+Branche `codex/w7-inverseclip-port`, draft
+[#2430](https://github.com/ygdrasil-io/kanvas/pull/2430) publiée/rattachée sur#2429 ;
+revues Sol/Astra favorables à la publication draft, sans Critical/Important
+ni nouveau Minor ; warnings hérités conservés, merge non qualifié.
+
+Le port applique maintenant l'inverse clipPath AA puis le rectangle bleu
+non-AA, comme Skia ; il ne dessine plus un path inverse blanc sur fond bleu.
+Pas de changement du renderer, de GmCanvas, des références ou des seuils.
+RED causal sur le port initial, puis **41/41 témoins natifs frais sans skip**.
+Un PNG et sa seule entrée de score sont régénérés et inspectés.
+
+Corpus631/443 : **207 rendus (+1),184 comparés (+1),42≥99 % (+1),57≥95 % (+1)**.
+Seul `inverseclip` gagne un rendu : exact99.32875 %, ±2/canal99.340625 %,
+SSIM0.9960695474233923. Aucun ancien rendu ne change :206hashes/métriques
+identiques,630autres identités inchangées hors temps,18invariants préservés.
+Le résidu de contour n'est pas clos ; le profil Rec.2020 de la référence
+est normalisé par le comparateur existant, sans modification de codec.
+
+**Suite : isoler par Surface le mélange ordinary+inverse direct**, comparé
+au dessin inverse seul et au clip inverse fidèle, pour identifier la
+conjonction fautive de l'inventaire W4e avant tout changement d'autorité.
+Ce gain de port ne résout pas ce gap architectural ni le contrat W6 AA4.
+Globale renderer be813afd7 rouge/incomplète, vertices timeout30s,
+warnings, fidélité générale, gates W6 et quarantaine W0 restent ouverts.
+W7 n'est pas clos ; aucune décision de merge.
+
 ## Ports complexclip4 / manypathatlases fidèles — 1er octobre 2026
 
 Source/test `6e0fca2df5aef733bb516ddd2b714dd342920ab4`,

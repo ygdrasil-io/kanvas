@@ -1,10 +1,86 @@
 # W07 — diagnostic GM provisoire
 
-Dernier lot publié : draft [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429),
-empilée sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428), elle-même
-sur [#2427](https://github.com/ygdrasil-io/kanvas/pull/2427).
+Dernier lot publié : draft [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430),
+empilée sur [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429), elle-même
+sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
+
+## Port inverseclip fidèle — 1er octobre 2026
+
+Branche `codex/w7-inverseclip-port`, parent draft#2429,
+[plan](inverseclip-port-plan.md). Source/test figé
+`e9da0ebd6892419987356e5a8d4803cb1a7a0023`.
+Qualification corpus terminée ; Sol et Astra approuvent la publication draft,
+sans Critical/Important ni nouveau Minor. Les warnings hérités sont conservés.
+Draft [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430) publiée et
+rattachée sur#2429 ; merge non qualifié.
+La revue finale vérifie indépendamment les snapshots et les archives natives ;
+elle s'appuie sur l'inspection visuelle du contrôleur, sans la reproduire.
+
+Le GM reproduit maintenant les opérations de Skia `defc3a5a92966c32cb2a6a901e2fa3036a13bb8a` :
+clipPath inverse-winding INTERSECT avec AA, puis rectangle bleu non-AA.
+L'ancienne approximation peignait le cadre bleu et le path inverse blanc :
+elle échangeait les régions et provoquait un refus d'inventaire W4e.
+Les courbes, coordonnées, dimensions, domaines, références et seuils restent
+inchangés. Le renderer et GmCanvas ne changent pas.
+
+### Preuves ciblées et image
+
+Un test rend le vrai GM sur le fond blanc explicite du runner. Il vérifie
+onze pixels littéraux intérieur/extrérieur, l'existence d'une couverture
+partielle blanche/bleue, Render/Readback, zéro refus/diagnostic et les octets
+d'une seconde Surface identique. Le port inchangé refuse d'abord avec
+`invalid.native-core-primitive.w4e-resource` (RED causal), puis passe
+sans changement d'oracle. La première tentative ne compilait pas à cause
+d'un import RectF32 erroné : elle est conservée, mais ne vaut pas RED.
+
+**41/41 tests publics natifs frais** passent : nouveau1 + GM13 + scissor27,
+wrapper/enfant0/0, aucun timeout/failure/error/skip/stderr JUnit.
+Warnings JDK/LWJGL/Gradle hérités conservés et signalés par Sol.
+Une seule image et une seule entrée de score sont régénérées, par nom exact :
+**99.340625 % à ±2/canal**, score identique à la ligne du corpus final.
+L'ancien properties27.54875 % est historique ; la baseline courante
+6e0fca2df était un refus, pas une image comparée.
+
+Actual, référence et diff ont été inspectés : le bleu extérieur et l'ovale
+blanc attendu sont rétablis ; les écarts exacts résiduels se situent sur le
+contour. Le diff rouge est binaire, pas une amplitude. La référence brute
+contient un ICC Rec.2020, normalisé en sRGB par les comparateurs existants :
+aucune couleur n'est ajustée pour correspondre à l'aperçu brut.
+
+### Corpus final
+
+Le [snapshot complet](inverseclip-port-e9da0ebd6.json) porte sur le source/test
+figé ci-dessus : **631 entrées,443 éligibles,207 rendus (+1),184 comparés (+1),
+42 à ≥99 % (+1),57 à ≥95 % (+1)** à ±2/canal. Médiane74.06067251461988 %.
+`inverseclip` est le seul gain, sans perte : les206anciens hashes RGBA et
+leurs métriques sont identiques ; les630autres identités gardent tous leurs
+champs hors temps et leur présence. Les18invariants, références, domaines,
+seuils et exclusions sont inchangés.
+
+Inverseclip : exact99.32875 %, ±2/canal99.340625 %, SSIM0.9960695474233923,
+MAE normalisée0.0006686029411764705, maxRGBA[159,159,0,0], dispatch2/refus0.
+Le seuil déclaré52.1 reste inchangé ; ce n'est pas une affirmation d'ISO exact.
+
+Les trois slices finales sont terminales :0–607 exit0/0 en128s ;
+607–608 exit1/1 en38s, `vertices` conservant son watchdog30s/Java124 ;
+608–631 exit0/0 en12s. Aucun timeout de wrapper240s.
+Restent185render_failed,50setup_failed,15rendered_uncompared,
+8reference_dimension_mismatch et1timeout parmi les443éligibles.
+Les42premiers `unsupported_child` ne sont ni42causes ni42gains promis.
+
+### Limites et suite
+
+Aucune globale kanvas fraîche n'est attribuée à ce changement d'intégration :
+celle du renderer be813afd7 reste rouge/incomplète,686SUCCESS/37FAILURE/1SKIPPED
+à240s et27identités non atteintes. W7, gates W6 et quarantaine W0 restent ouverts.
+La correction du GM ne prouve pas le support général du mélange entre dessin
+ordinaire et inverse direct. Le garde natif a plusieurs conjonctions possibles ;
+la valeur fautive n'a pas été capturée. Le prochain diagnostic doit comparer
+single inverse / ordinary+inverse / clip inverse via Surface avant de modifier
+une autorité d'inventaire. Aucun garde n'est supprimé ni remplacé par une
+admission plus large dans ce lot.
 
 ## Ports fidèles complexclip4 / manypathatlases — 1er octobre 2026
 
