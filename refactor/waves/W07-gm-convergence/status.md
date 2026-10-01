@@ -13,9 +13,27 @@ avec loi sélectionnée et oracle V2 indépendant, sans tolérance élargie.
 Les témoins natifs W7 corrigés passent **4/4**, processus 0 ; le contrôle
 Point V2 couvre ses trois contextes et passe **1/1**, processus 0.
 
-Le lot suivant est en implémentation : couverture AA indépendante du matériau,
-consommateur typé et émetteur partagé racine/plain layer pour PLUS/SRC_OVER.
-Les onze autres modes Porter-Duff et Picture suivront séquentiellement.
+La couverture AA indépendante du matériau, le consommateur typé et l'émetteur
+partagé racine/plain layer sont implémentés et relus pour PLUS/SRC_OVER.
+Le lot Porter-Duff `dd498a4bc`, corrigé par `7953b2116`, apporte les **52 cellules**
+des 13 modes × Path/Rect × root/layer. Son covering passe **110/110**, sorties enfant/wrapper
+0/0, sans timeout, erreur, skip ni stderr XML ; les 31 identités originales
+et les 59 du checkpoint Task2 sont conservées. La relecture Sol accepte le lot
+après correction de l'observabilité de DST_OUT dans l'ordre inverse.
+DST est sélectionné puis éliminé sans écriture ni version supplémentaire ;
+CLEAR/SRC restent actifs avec une source transparente. Les Rect de layers
+conservent leurs lanes analytiques. Les nouveaux modes Rect root emploient la
+projection W4d existante (coût MSAA/resolve, C=128/255 et non C=.5 analytique).
+SRC_ATOP possède un témoin coloré aligné, pas de nouveau témoin de bord partiel.
+Le scope W7 exclut maintenant explicitement la perspective et les transformations
+sans inverse fini. Un témoin public distingue translation, bord AA et scissor,
+puis vérifie refus de perspective, sentinelle intacte et récupération ; les
+routes historiques de W4d/W4a restent inchangées.
+`aarectmodes` reste `render_failed` sur `w6a.layer.unsupported_child`, cause
+non isolée ; aucun gain GM revendiqué pour ce lot. Picture et la validation
+complète du corpus restent à réaliser.
+
+Les checkpoints ci-dessous retracent la mise en place du contrat partagé.
 Après appui architectural et reprise native ciblés par Astra, le commit
 `6f07a6448` raccorde le consommateur GPU. Son témoin root Path PLUS passe
 **1/1**, processus 0, sans erreur/skip : pixels indépendants à C=0, C=1 et
@@ -109,7 +127,7 @@ complément9 passent **59/59**, sorties0/0, sans timeout ni stderr XML ; les31
 identités originales sont toutes présentes. La re-mesure du GM conserve
 exactement le hash RGBA et les métriques du checkpoint précédent.
 
-**Task2 validée**, sans qualifier la suite globale ni clôturer W7. Porter-Duff,
+**Tasks2–3 validées**, sans qualifier la suite globale ni clôturer W7.
 Picture et corpus complet suivent. La revue finale Astra de toute la série
 reste requise avant sa draft stackée.
 

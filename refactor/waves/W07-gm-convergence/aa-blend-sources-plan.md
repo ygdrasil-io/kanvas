@@ -92,10 +92,10 @@ W7MixedRootAaRectSurfacePixelTest. Current checkpoint `gm-baseline` indices
 
 **Interfaces:** Reuse the Task 2 emitter/consumer and Task 1 law. No per-mode pass family. Full kernels stay shared; source scaling only for proved equivalent lowering, destination-read for the others.
 
-- [ ] RED missing 11 Porter-Duff cells (CLEAR,SRC,DST,DST_OVER,SRC_IN,DST_IN,SRC_OUT,DST_OUT,SRC_ATOP,DST_ATOP,XOR), path/rect root/layer. Each mode needs a positive nontrivial independent witness; DST specifically preserves nontransparent destination without a write.
-- [ ] Add closed mode selection and safe composition preserving C. CLEAR/SRC with alpha0 must not cull; fractional destination alpha distinguishes SRC_IN/DST_IN. Retain unsupported advanced/filter/domain guards.
-- [ ] GREEN small full-buffer fixtures across all13 modes, partial/interior/exterior coverage; test fixed→destination-read→AA sequence and reverse with independent sequential expectations. Re-run Task 1/2 suites and targeted aarectmodes measurement; record distinct remaining blockers without extending geometry arbitrarily.
-- [ ] Self-review/commit, task review gate. Update matrix status, not global W7 completion.
+- [x] RED missing 11 Porter-Duff cells (CLEAR,SRC,DST,DST_OVER,SRC_IN,DST_IN,SRC_OUT,DST_OUT,SRC_ATOP,DST_ATOP,XOR), path/rect root/layer. Each mode needs a positive nontrivial independent witness; DST specifically preserves nontransparent destination without a write.
+- [x] Add closed mode selection and safe composition preserving C. CLEAR/SRC with alpha0 must not cull; fractional destination alpha distinguishes SRC_IN/DST_IN. Retain unsupported advanced/filter/domain guards.
+- [x] GREEN small full-buffer fixtures across all13 modes, partial/interior/exterior coverage; test fixed→destination-read→AA sequence and reverse with independent sequential expectations. Re-run Task 1/2 suites and targeted aarectmodes measurement; record distinct remaining blockers without extending geometry arbitrarily.
+- [x] Self-review/commit, task review gate. Update matrix status, not global W7 completion.
 
 ### Task 4: Picture integration and series convergence evidence
 

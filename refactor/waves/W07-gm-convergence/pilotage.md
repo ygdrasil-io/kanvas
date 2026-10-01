@@ -65,7 +65,14 @@ sont qualifiés ; 58 tests uniques passent au code final. `PlusMergesAA` rend
 désormais sans refus, mais reste à 69,4824 % de pixels identiques (SSIM 0,985107,
 écarts couleur R/G, alpha identique). Après deux corrections de revue
 (`a851621fc`), Sol accepte Task2 : **59/59** tests ciblés et image GM inchangée.
-Porter-Duff, Picture et corpus complet suivent ; aucune parité globale revendiquée.
+Porter-Duff implémenté au code `dd498a4bc`, corrigé par `7953b2116` : 52 cellules
+root/layer positives, covering110/110, sorties0/0, tous les témoins précédents
+conservés ; relecture Sol approuvée. L'ordre inverse observe désormais DST_OUT,
+et le nouveau scope W7 reste affine non singulier avec refus/récupération testés.
+Les lanes analytiques Rect des layers sont préservées ; les
+nouveaux Rect root sont projetés via W4d. SRC_ATOP reste qualifié sur une
+forme alignée. `aarectmodes` refuse encore (unsupported_child non isolé).
+Picture et corpus complet suivent ; aucune parité globale revendiquée.
 L'[état courant](status.md#série-aa-et-composition-différée--en-cours-1er-octobre-2026)
 distingue les preuves natives réussies des limites historiques et de
 l'exit 133 W5g non qualifié. Le corpus mesuré ci-dessous reste la baseline.
