@@ -108,10 +108,14 @@ class W7RootAaSurfacePixelTest {
     }
 
     @Test
-    fun `Picture playback inside layer remains unsupported transactionally`() {
+    fun `Picture playback inside layer is native and repeatable`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
         val halfWhite = ColorARGB.of(128, 255, 255, 255)
         val path = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 6f, 6f)) }
+        // Independent fixed pixels for the original black root + half-white AA Picture
+        // child under a plain layer: a full-covered interior and an untouched exterior.
+        val covered = ubyteArrayOf(188u, 188u, 188u, 255u)
+        val outside = ubyteArrayOf(0u, 0u, 0u, 255u)
         val picture = PictureRecorder().also { recorder ->
             // No explicit clip is recorded through the public API.
             recorder.beginRecording(bounds).drawPath(path, Paint(halfWhite, antiAlias = true))
@@ -124,7 +128,13 @@ class W7RootAaSurfacePixelTest {
                 restore()
             }
         }
-        assertTerminalAndRecovers(surface, bounds, "w6a.layer.unsupported_child")
+        val first = surface.render()
+        assertNative(first)
+        assertContentEquals(covered, first.pixels.copyOfRange((3 * 7 + 3) * 4, (3 * 7 + 3) * 4 + 4))
+        assertContentEquals(outside, first.pixels.copyOfRange(0, 4))
+        val second = surface.render()
+        assertNative(second)
+        assertContentEquals(first.pixels, second.pixels)
     }
 
     @Test

@@ -55,10 +55,10 @@ internal object W6AaDeferredOccurrenceEmitterV1 {
     fun emitOccurrence(selected: Selected, target: Target, destinationVersionBefore: DestinationVersionI64,
         sourcePhases: List<PlanPass>, remapping: Map<PlanResourceId, PlanResourceId>,
         sourceResources: List<PlanResource>, domainDeviceI32: RectI32,
-        firstOrdinalI32: Int, snapshot: PlanResourceId?): Emission {
+        firstOrdinalI32: Int, snapshot: PlanResourceId?, sourcePhaseMapping: LayerMappingF64? = target.mapping): Emission {
         val phases = sourcePhases.mapIndexed { index, original ->
             val path = original as? PlanPass.PathRenderPass ?: error("W7 deferred AA source lost its path phase.")
-            val rebound = path.rebindW4eV6(firstOrdinalI32 + index, remapping::getValue, target.mapping, domainDeviceI32) as PlanPass.PathRenderPass
+            val rebound = path.rebindW4eV6(firstOrdinalI32 + index, remapping::getValue, sourcePhaseMapping, domainDeviceI32) as PlanPass.PathRenderPass
             PlanPass.PathRenderPass(rebound.ordinal, rebound.target, rebound.draw, rebound.phase, rebound.drawDataResources,
                 rebound.atomicGroup, rebound.depthStencil, path.load, path.store, rebound.depthStencilAccess,
                 rebound.depthStencilLoadStore, rebound.resolveTarget, rebound.scanSpansDeviceI32)

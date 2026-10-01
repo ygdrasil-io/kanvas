@@ -256,7 +256,7 @@ internal class W6aLayerGraphConstruction(
             ownerContext: W6bSourceGeometryV1?,
             target: PlanResourceId,
             sourceOnly: Boolean,
-        ): Pair<OccurrenceSourceInputV1, SourceDeferredRenderConstructionV4> {
+        ): Pair<OccurrenceSourceInputV1, SourceDeferredRenderConstructionV4>? {
             val captured = requireNotNull(entry.source.sourceDraw)
             val domain = sourceGeometry.copyDeviceBoundsI32()
             // A filter-owned Picture aggregate is already rooted in its exact source
@@ -274,10 +274,42 @@ internal class W6aLayerGraphConstruction(
                 enclosing, domain, domain, entry.source.recordedInnerClipWithoutCull(), ClipStackNode.Empty, target,
                 occurrenceRenderTarget(domain, entry.source.scene.colorSpace),
                 entry.plannedCommandId.valueI32, sourceOnly)
-            val compiler = CapabilityCompilerChain.ofProjected(listOf(W5bVerticesPlanCompiler(runtimeCatalog),
-                W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
-                W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(), W4cPathFillPlanCompiler(),
-                W4dPathStrokePlanCompiler()), runtimeCatalog)
+            // The occurrence compiler receives the rebased carrier, so selection must inspect
+            // those exact target-local facts rather than the Picture-recorded coordinates.
+            val carrier = input.materialCoordinateDraw()
+            val historicalAa = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
+                .acceptsW6AaColorSourceScope(carrier)
+            // Picture Rects retain their proven analytic source chain.  The W7 source is the
+            // new Path occurrence seam; root Rect projection needs an explicit owner rather
+            // than redirecting this already-admitted Picture lane.
+            // The verified historical preservation contract is the analytic Rect lane.
+            // A Picture Path still uses W7 for SrcOver: its legacy AA source has no Picture
+            // stream terminal identity, whereas the W7 producer/consumer pair does.
+            val deferredBlend = if (carrier.geometry is GeometryNode.Rect) null else
+                W6aLayerPlanCompiler.selectedW7AaDeferredBlend(
+                    carrier, input.renderTarget, runtimeCatalog, historicalAaSource = false,
+                )
+            // DST is a semantic no-op.  It deliberately has no geometry producer or
+            // destination-version edge, so do not ask a source compiler to lower a
+            // draw which the resolved-colour stream must elide.
+            if (deferredBlend == BlendPlan.NoOpV1) return null
+            val generalPath = when {
+                deferredBlend != null -> W4dGeneralPathPlanCompiler.w7AaDeferredSource(runtimeCatalog)
+                historicalAa -> W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
+                else -> W4dGeneralPathPlanCompiler()
+            }
+            val compiler = CapabilityCompilerChain.ofProjected(
+                if (deferredBlend != null) listOf(
+                    W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog),
+                    W5eImagePlanCompiler(), W4dPathStrokePlanCompiler(),
+                    generalPath,
+                ) else listOf(
+                    W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(),
+                    W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
+                    W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), generalPath,
+                ),
+                runtimeCatalog,
+            )
             val lane = when (val result = compiler.constructSourceLanes(input, caps, budget)) {
                 is org.graphiks.kanvas.render.ir.RenderPlanResult.Ready -> result.plan.single()
                 else -> {
@@ -496,7 +528,8 @@ internal class W6aLayerGraphConstruction(
         class PreparedPictureFacts {
             var terminalOutputDeviceI32: RectI32? = null
             val domains = java.util.IdentityHashMap<FilterOccurrenceSourceV1, PictureAggregateDomain>()
-            val lanes = java.util.IdentityHashMap<FilterOccurrenceSourceV1, Pair<OccurrenceSourceInputV1, SourceDeferredRenderConstructionV4>>()
+            // A DST child is present in record order but intentionally owns no source lane.
+            val lanes = java.util.IdentityHashMap<FilterOccurrenceSourceV1, Pair<OccurrenceSourceInputV1, SourceDeferredRenderConstructionV4>?>()
             val coverages = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bRecipeSourceV1>()
             val layerSources = java.util.IdentityHashMap<FilterOccurrenceSourceV1, W6bRecipeSourceV1>()
             val restores = java.util.IdentityHashMap<FilterOccurrenceSourceV1, PreparedPictureRestore>()
@@ -626,7 +659,9 @@ internal class W6aLayerGraphConstruction(
                         is PictureStreamEntryDraftV1.Draw -> {
                             val provisional = pictureGeometry(domain, source.mapping.copyLocalToDeviceF64())
                             val rasterLane = preparePictureDrawLane(entry, provisional, filterOwner, root, entry.filterOccurrence != null)
-                            val raster = RenderGraph.visualDraws(rasterLane.second.passes()).singleOrNull()?.let { draw ->
+                            val raster = rasterLane?.second?.let { lane ->
+                                RenderGraph.visualDraws(lane.passes()).singleOrNull()
+                            }?.let { draw ->
                                 intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))
                             }?.translateCheckedOrNull(Vector2I32(domain.left, domain.top))?.let { intersect(it, domain) }
                             val recipe = entry.filterOccurrence?.let {
@@ -1613,6 +1648,9 @@ internal class W6aLayerGraphConstruction(
                     is PlanPass.StencilCover -> pass.target == target
                     is PlanPass.PictureSourcePass -> pass.parentTarget == target
                     is PlanPass.PictureComposite -> pass.destination == target
+                    is PlanPass.AaCoverageSourcePass -> true
+                    is PlanPass.AaDeferredComposite -> pass.destination == target
+                    is PlanPass.TextureCopy -> pass.source == target && pass.destination in aaDeferredSnapshots
                     is PlanPass.FilterComposite -> pass.destination == target && pass.operation is FilterCompositeOperationV1.Picture
                     is PlanPass.LayerComposite -> pass.destination == target
                     else -> false
@@ -1626,13 +1664,13 @@ internal class W6aLayerGraphConstruction(
                 coverageProducer: PlanResourceId? = coverage,
                 workScope: PictureLayerExecutionScope? = owningLayerScope,
             ): PlanPassId? {
-                val originalLane = frozenFacts.lanes.getValue(entry.source)
+                val originalLane = frozenFacts.lanes.getValue(entry.source) ?: return null
                 // Inline unfiltered draws acquire the already-reserved parent coordinates
                 // here. Only the existing W4/W5 lane is rebound; no filter DAG is revisited.
-                val (preparedInput, preparedLane) = if (entry.filterOccurrence == null &&
+                val (preparedInput, preparedLane) = (if (entry.filterOccurrence == null &&
                     originalLane.first.copyDomainDeviceI32() != filterSource(target).copyDeviceBoundsI32())
                     preparePictureDrawLane(entry, filterSource(target), filterOwnerSource, target, false)
-                else originalLane
+                else originalLane) ?: return null
                 require(preparedInput.copyDomainDeviceI32() == filterSource(target).copyDeviceBoundsI32()) {
                     "Prepared Picture lane disagrees with its physical source domain."
                 }
@@ -1664,7 +1702,9 @@ internal class W6aLayerGraphConstruction(
                 val laneData = lane.resources().filter { it.role in setOf(PlanResourceRole.VertexData,
                     PlanResourceRole.IndexData, PlanResourceRole.UniformData) }
                 if (laneData.isNotEmpty()) {
-                    require(laneData.map { it.role }.toSet().size == 3 && laneData.size == 3)
+                    require(laneData.map { it.role }.toSet().size == 3 && laneData.size == 3) {
+                        "Picture lane data must retain one vertex, index, and uniform resource."
+                    }
                     val data = PlanDrawDataResources(
                         planResourceId(PlanResourceRole.VertexData, laneI32 + 1),
                         planResourceId(PlanResourceRole.IndexData, laneI32 + 1),
@@ -1675,6 +1715,53 @@ internal class W6aLayerGraphConstruction(
                     dataByCommand[selected.commandIndex] = data
                 }
                 if (target !in versions) appendRender(target, emptyList(), true)
+                if (lane.capabilityId == W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID) {
+                    require(coverage == null && coverageProducer == null) {
+                        "W7 deferred Picture source cannot be routed through a filter coverage owner."
+                    }
+                    val carrier = input.materialCoordinateDraw()
+                    val blend = requireNotNull(W6aLayerPlanCompiler.selectedW7AaDeferredBlend(
+                        carrier, input.renderTarget, runtimeCatalog,
+                        // A W7 Picture lane is never the preserved analytic Rect lane.
+                        // Recompute with the same Path admission fact used before construction.
+                        historicalAaSource = false,
+                    )) { "W7 deferred Picture lane lost its selected blend." }
+                    // DST has W6 ownership but intentionally has no geometric source, snapshot,
+                    // consumer, or destination-version advance.
+                    if (blend == BlendPlan.NoOpV1) return null
+                    val targetExtent = targetExtent(target)
+                    val snapshot = if (blend is BlendPlan.DestinationReadV1) {
+                        planResourceId(PlanResourceRole.DestinationSnapshot, occurrences.size + laneI32).also {
+                            childSnapshots += it
+                            aaDeferredSnapshots += it
+                        }
+                    } else null
+                    val emitted = W6AaDeferredOccurrenceEmitterV1.emitOccurrence(
+                        W6AaDeferredOccurrenceEmitterV1.Selected(selected.commandIndex,
+                            selected.withFinalBlendV1(blend), blend),
+                        W6AaDeferredOccurrenceEmitterV1.Target(target, targetExtent, targetOriginDevice(target),
+                            RectI32(0, 0, targetExtent.width, targetExtent.height), input.mapping),
+                        DestinationVersionI64(versions.getValue(target)), lane.passes(), ids, lane.resources(),
+                        input.copyDomainDeviceI32(), passes.size, snapshot, sourcePhaseMapping = null,
+                    )
+                    aaDeferredPhases[laneI32] = emitted.phases
+                    aaDeferredOwners[laneI32] = emitted.producer
+                    passes += emitted.producer
+                    recordPictureWork(emitted.producer, workScope)
+                    emitted.snapshotCopy?.let { copy ->
+                        passes += copy
+                        recordPictureWork(copy, workScope)
+                    }
+                    aaDeferredDrafts[laneI32] = emitted.draft
+                    aaDeferredConsumers[laneI32] = emitted.consumer
+                    passes += emitted.consumer
+                    versions[target] = emitted.draft.destinationVersionAfter.valueI64
+                    recordPictureWork(emitted.consumer, workScope)
+                    plannedDrawSources[entry.plannedCommandId] = emitted.producer.id to selected.commandIndex
+                    plannedDrawCoordinates[entry.plannedCommandId] = PictureDrawCoordinatesV1(target, input.mapping,
+                        input.recordedInnerClip, input.deferredCompositeClip, enclosing, input.copyDemandDeviceI32())
+                    return emitted.consumer.id
+                }
                 val geometry = lane.geometrySource ?: lane.takeIf {
                     W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(it.capabilityId)
                 }
@@ -3209,7 +3296,7 @@ internal class W6aLayerGraphConstruction(
         aaDeferredPhases.forEach { (laneI32, phases) ->
             val owner = aaDeferredOwners.getValue(laneI32)
             val remapping = laneResourceIds[laneI32]
-            val target = targetFor(bindings[laneI32].scopeI32)
+            val target = physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)
             val binding = PlanW4dAaCoverageSourceBindingV1(owner.id,
                 lanes[laneI32].capabilityId, phases.first().draw.commandIndex,
                 lanes[laneI32].passes().map { it.id }, phases, remapping,
