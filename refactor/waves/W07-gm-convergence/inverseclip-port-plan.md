@@ -40,23 +40,24 @@ The current refusal is invalid.native-core-primitive.w4e-resource. Read-only sou
 
 **Interfaces:** Surface(gm.width,gm.height,config=gm.compositionConfig()), Surface.canvas/render, GmCanvas, gm.onOnceBeforeDraw/draw, nativeEvidenceScopeKinds/stats/diagnostics. Follow the existing ClipGmPortSurfacePixelTest evidence/repeat/dispose pattern, adding the runner's white rectangle setup explicitly. No shared helper refactor.
 
-- [ ] Write `inverseClipPreservesWhiteInteriorAndBlueExterior` before port edits. Record white viewport Paint(ColorARGB.White,antiAlias=false), call actual InverseClipGm through GmCanvas and render Surface. @AfterEach GPUBackendRuntimeFactory.dispose; no GpuAvailability or conditional skip.
-- [ ] Assert literal RGBA white[255,255,255,255] at(195,197),(195,100),(195,300),(100,197),(300,197), and blue[0,0,255,255] at(0,0),(399,399),(0,197),(399,197),(195,0),(195,399). These are far from the pinned cubic boundary; no product helper or reference PNG computes expectations.
-- [ ] Assert a partial-coverage pixel exists: some pixel has red=green in1..254, blue=255, alpha=255. This is a semantic AA witness, not an exact edge/color-space oracle. Assert Render+Readback evidence, positive dispatched count, zero refused and empty diagnostics.
-- [ ] Render the same actual GM on a fresh second Surface with the same explicit background, assert native evidence/clean stats and full byte equality.
-- [ ] Freeze tests only; report READY_FOR_RED. Controller runs `:integration-tests:skia:test --tests '*InverseClipGmSurfacePixelTest'` in the standard private wrapper/init. Expected causal native W4e inventory refusal or wrong inside/outside pixels; compilation failure is not RED. Await authorization before port edits.
-- [ ] After verified RED, replace full-frame clipRect with explicit `canvas.clipPath(clip, ClipOp.INTERSECT, antiAlias=true)`; retain blue full400x400 rectangle with antiAlias=false; remove inverse white draw. Keep path/constants/metadata/domain/tolerance/minSimilarity unchanged. Adjust KDoc only if needed.
-- [ ] Freeze/self-review, wait controller GREEN and covering controls. If any assertion fails, report evidence before changing anything; no expected-pixel or AA relaxation.
-- [ ] After controller validation, commit only the two product/test files. Write report with causal RED/GREEN, exact commands/results supplied by controller, self-review/concerns. No builds/reviewer delegation.
-- [ ] Sol task review; same implementer handles any fix and scoped re-review follows.
+- [x] Write `inverseClipPreservesWhiteInteriorAndBlueExterior` before port edits. Record white viewport Paint(ColorARGB.White,antiAlias=false), call actual InverseClipGm through GmCanvas and render Surface. @AfterEach GPUBackendRuntimeFactory.dispose; no GpuAvailability or conditional skip.
+- [x] Assert literal RGBA white[255,255,255,255] at(195,197),(195,100),(195,300),(100,197),(300,197), and blue[0,0,255,255] at(0,0),(399,399),(0,197),(399,197),(195,0),(195,399). These are far from the pinned cubic boundary; no product helper or reference PNG computes expectations.
+- [x] Assert a partial-coverage pixel exists: some pixel has red=green in1..254, blue=255, alpha=255. This is a semantic AA witness, not an exact edge/color-space oracle. Assert Render+Readback evidence, positive dispatched count, zero refused and empty diagnostics.
+- [x] Render the same actual GM on a fresh second Surface with the same explicit background, assert native evidence/clean stats and full byte equality.
+- [x] Freeze tests only; report READY_FOR_RED. Controller runs `:integration-tests:skia:test --tests '*InverseClipGmSurfacePixelTest'` in the standard private wrapper/init. Expected causal native W4e inventory refusal or wrong inside/outside pixels; compilation failure is not RED. Await authorization before port edits.
+- [x] After verified RED, replace full-frame clipRect with explicit `canvas.clipPath(clip, ClipOp.INTERSECT, antiAlias=true)`; retain blue full400x400 rectangle with antiAlias=false; remove inverse white draw. Keep path/constants/metadata/domain/tolerance/minSimilarity unchanged. Adjust KDoc only if needed.
+- [x] Freeze/self-review, wait controller GREEN and covering controls. If any assertion fails, report evidence before changing anything; no expected-pixel or AA relaxation.
+- [x] After controller validation, commit only the two product/test files. Write report with causal RED/GREEN, exact commands/results supplied by controller, self-review/concerns. No builds/reviewer delegation.
+- [x] Sol task review; same implementer handles any fix and scoped re-review follows.
 
 ## Controller qualification and publication
 
-- [ ] Run new1 + prior GM13 + W7ClipProducerScissor27 =41unique targeted tests, no skip/abort; keep renderer-global evidence at be813afd7, not relabelled as fresh port-SHA global.
-- [ ] Regenerate only inverseclip by exact gm.name; run SkiaGmRunner by exact kanvas.gm.name. Verify only one PNG/score entry plus generated timestamp change. Do not reuse sorted parity indices for registry selectors.
-- [ ] Full final-source-SHA corpus631/443, serial slices0–607/607–608/608–631, strict existing aggregator versus clip-gm-ports-6e0fca2df.json. Preserve18invariants/presence; inspect every new/changed image/metric and all old-render stability.
-- [ ] Independent final Astra review with one source package and final evidence delta; correct/consolidate findings. Publish/attach draft stacked on codex/w7-clip-gm-ports (#2429).
-- [ ] Carry mixed-direct inverse inventory investigation into the next architectural lot with the exact unresolved predicate; do not claim it solved by faithful GM replacement. W7 remains active.
+- [x] Run new1 + prior GM13 + W7ClipProducerScissor27 =41unique targeted tests, no skip/abort; keep renderer-global evidence at be813afd7, not relabelled as fresh port-SHA global.
+- [x] Regenerate only inverseclip by exact gm.name; run SkiaGmRunner by exact kanvas.gm.name. Verify only one PNG/score entry plus generated timestamp change. Do not reuse sorted parity indices for registry selectors.
+- [x] Full final-source-SHA corpus631/443, serial slices0–607/607–608/608–631, strict existing aggregator versus clip-gm-ports-6e0fca2df.json. Preserve18invariants/presence; inspect every new/changed image/metric and all old-render stability.
+- [x] Independent final Astra review with one source package and final evidence delta; correct/consolidate findings.
+- [ ] Publish/attach draft stacked on codex/w7-clip-gm-ports (#2429).
+- [x] Carry mixed-direct inverse inventory investigation into the next architectural lot with the exact unresolved predicate; do not claim it solved by faithful GM replacement. W7 remains active.
 
 ## Self-review and delegated decision
 
