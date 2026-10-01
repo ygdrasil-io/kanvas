@@ -87,6 +87,44 @@ class W7AaDeferredBlendSurfacePixelTest {
         assertAdmits(partial, result.pixels, 7, 3, 2)
     }
 
+    @Test
+    fun `ordinary Rect and deferred Path share one Solid Opacity source identity`() {
+        val destination = W5bBlendCpuOracle.Draw(ColorARGB.of(64, 0, 0, 0), 1f, BlendMode.SRC_OVER)
+        val source = W5bBlendCpuOracle.coveredPlusPrescaleV2PointFixture().center
+        val expectedOrdinary = W5bBlendCpuOracle.point(source, destination, 1f)
+        val expected = List(7 * 7) { index ->
+            val x = index % 7
+            val y = index / 7
+            if (x == 5 && y == 5) expectedOrdinary
+            else W5bBlendCpuOracle.point(source, destination, coverage(BlendMode.PLUS, Geometry.PATH, x, y))
+        }
+        expected.forEachIndexed { index, pixel -> requireBounded("shared source pixel ${index % 7},${index / 7}", pixel) }
+        requireDisjoint("shared source ordinary/path exterior", expected[5 + 5 * 7], expected[6 + 6 * 7])
+
+        val sourceShader = Shader.Opacity(Shader.SolidColor(source.color), source.opacityF32)
+        val path = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
+        }
+        val surface = Surface(7, 7)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f),
+                Paint(shader = Shader.SolidColor(destination.color), antiAlias = false))
+            drawRect(RectF32.ofLTRB(5f, 5f, 6f, 6f),
+                Paint(shader = sourceShader, blendMode = BlendMode.PLUS, antiAlias = false))
+            drawPath(path, Paint(shader = sourceShader, blendMode = BlendMode.PLUS, antiAlias = true))
+        }
+
+        renderTwice(surface).forEachIndexed { renderIndex, result ->
+            expected.forEachIndexed { index, pixel ->
+                try {
+                    assertAdmits(pixel, result.pixels, 7, index % 7, index / 7)
+                } catch (failure: Throwable) {
+                    throw AssertionError("shared source render $renderIndex pixel ${index % 7},${index / 7}", failure)
+                }
+            }
+        }
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("basicCells")
     fun `AA deferred public matrix admits every pixel twice`(

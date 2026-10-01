@@ -76,6 +76,9 @@ internal class GPUAaDeferredCompositeNativeV1 private constructor(
         }
     }
 
+    /** Immutable bytes authenticated by deferred preflight and uploaded by this native site. */
+    fun copySourceUniformBytes(): ByteArray = stage.uniformBytes.copyOf()
+
     fun materialize(device: GPUDevice, queue: GPUQueue, views: Map<PlanResourceId, GPUTextureView>,
         uniform: GPUBuffer, generation: GPUDeviceGenerationID, stepIndex: Int, owned: W6aOwnedHandles): GPUPreparedNativeScopeOperand.Render {
         val composite = recipe.composite
