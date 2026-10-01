@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.geometry.FillType
@@ -122,6 +123,61 @@ class W7AaDeferredBlendSurfacePixelTest {
                     throw AssertionError("shared source render $renderIndex pixel ${index % 7},${index / 7}", failure)
                 }
             }
+        }
+    }
+
+    @Test
+    fun `shared source exact budget admits then B minus one recovers`() {
+        // B is derived before native qualification: root/coverage/snapshot 3*196, AA4 784,
+        // aligned readback 7*256, W6 uniform cursor 16, W4d V/I/U floors, D=16 and S=32.
+        val budgetB = listOf(196L, 196L, 196L, 784L, 1_792L, 16L,
+            16_384L, 4_096L, 4_096L, 16L, 32L).fold(0L, Math::addExact)
+        val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
+        val destination = W5bBlendCpuOracle.Draw(ColorARGB.of(64, 0, 0, 0), 1f, BlendMode.SRC_OVER)
+        val source = W5bBlendCpuOracle.coveredPlusPrescaleV2PointFixture().center
+        val expectedOrdinary = W5bBlendCpuOracle.point(source, destination, 1f)
+        val expected = List(7 * 7) { index ->
+            val x = index % 7
+            val y = index / 7
+            if (x == 5 && y == 5) expectedOrdinary
+            else W5bBlendCpuOracle.point(source, destination, coverage(BlendMode.PLUS, Geometry.PATH, x, y))
+        }
+        expected.forEachIndexed { index, pixel -> requireBounded("budget B pixel ${index % 7},${index / 7}", pixel) }
+        val sourceShader = Shader.Opacity(Shader.SolidColor(source.color), source.opacityF32)
+        val recovery = ColorARGB.of(255, 0, 0, 0)
+        val recoveryExpected = W5aSolidOpacityCpuOracle.draw(recovery, 1f)
+        requireBounded("budget recovery", recoveryExpected)
+        val path = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
+        }
+
+        val admitted = Surface(7, 7, config = RenderConfig(frameLocalBudgetBytes = budgetB))
+        admitted.canvas {
+            drawRect(bounds, Paint(shader = Shader.SolidColor(destination.color), antiAlias = false))
+            drawRect(RectF32.ofLTRB(5f, 5f, 6f, 6f), Paint(shader = sourceShader, blendMode = BlendMode.PLUS, antiAlias = false))
+            drawPath(path, Paint(shader = sourceShader, blendMode = BlendMode.PLUS, antiAlias = true))
+        }
+        renderTwice(admitted).forEach { result ->
+            expected.forEachIndexed { index, pixel ->
+                assertAdmits(pixel, result.pixels, 7, index % 7, index / 7)
+            }
+        }
+
+        val refused = Surface(7, 7, config = RenderConfig(frameLocalBudgetBytes = budgetB - 1L))
+        refused.canvas {
+            drawRect(bounds, Paint(shader = Shader.SolidColor(destination.color), antiAlias = false))
+            drawRect(RectF32.ofLTRB(5f, 5f, 6f, 6f), Paint(shader = sourceShader, blendMode = BlendMode.PLUS, antiAlias = false))
+            drawPath(path, Paint(shader = sourceShader, blendMode = BlendMode.PLUS, antiAlias = true))
+        }
+        val sentinel = UByteArray(7 * 7 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> { refused.readPixels(bounds, sentinel) }
+        assertTrue(failure.message?.startsWith("w6a.layer.frame_budget_exceeded:") == true, failure.message)
+        assertContentEquals(before, sentinel)
+        refused.discardRecordedOperations()
+        refused.canvas { drawRect(bounds, Paint(recovery, antiAlias = false)) }
+        renderTwice(refused).forEach { recovered ->
+            assertAdmits(recoveryExpected, recovered.pixels, 7, 3, 3)
         }
     }
 
