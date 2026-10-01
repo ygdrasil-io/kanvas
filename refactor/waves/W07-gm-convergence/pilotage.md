@@ -57,10 +57,14 @@ timeout) : huit cellules root/layer, quatre formes concave/even-odd, le premier
 témoin PLUS, huit contrôles root historiques et quatre témoins PLUS couvert.
 SRC_OVER utilise des contrôles alignés après rejet indépendant de sa fixture
 de bord ; aucun oracle n'est élargi. Le partage physique des uniformes W5/W7
-est corrigé (`0980fab24`, contrôle natif 22/22). Le lot reste ouvert :
-séquences/transforms, budgets exacts et revue de propriété, régressions,
-revue et mesure à terminer, puis Porter-Duff et Picture. Aucun gain GM
-nouveau mesuré ; ce checkpoint partiel ne remplace pas ces validations.
+est corrigé (`0980fab24`, contrôle natif 22/22). B=27 804 et B−1 avec sentinelle
+et récupération passent (`9b822cee1`, contrôle couvrant 23/23). Les témoins
+numériques et mapping passent (`b4d48388a`, 33/33), avec une correction du
+matériau normalisé transparent. Les 31 identités AA historiques et PointV2
+sont qualifiés ; 58 tests uniques passent au code final. `PlusMergesAA` rend
+désormais sans refus, mais reste à 69,4824 % de pixels identiques (SSIM 0,985107,
+écarts couleur R/G, alpha identique). La revue indépendante du lot reste ouverte,
+puis Porter-Duff, Picture et corpus complet ; aucune parité globale revendiquée.
 L'[état courant](status.md#série-aa-et-composition-différée--en-cours-1er-octobre-2026)
 distingue les preuves natives réussies des limites historiques et de
 l'exit 133 W5g non qualifié. Le corpus mesuré ci-dessous reste la baseline.

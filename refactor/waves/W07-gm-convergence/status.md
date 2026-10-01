@@ -50,10 +50,46 @@ bytes immuables ; W6 reste seul responsable de sa libération. Le contrôle
 ni stderr XML. Ces pixels vérifient la conservation du rendu, pas le nombre
 d'allocations : ce dernier repose sur l'audit de propriété et reste à relire.
 
-Ce checkpoint n'est ni un run global vert ni la validation du lot : restent
-les séquences/transforms et les budgets exacts, le rejeu complet des anciens
-témoins, la revue et les mesures.
-**Aucun gain GM nouveau n'est encore mesuré.**
+Le témoin de budget `9b822cee1` dérive **B = 27 804 octets** : root, resolve
+et snapshot 3×196, AA4 784, readback 1 792, uniforme W6 16, buffers W4d
+16 384+4 096+4 096 et matériaux D/S 16+32. Le Rect hard PLUS utilise le blend
+fixe One/One ; seul le Path AA exige une snapshot. B passe sur deux rendus ;
+B−1 refuse sans modifier la sentinelle, puis la même Surface récupère sur deux
+rendus. `task2-shared-uniform-budget-3` passe 1/1 et le contrôle couvrant passe
+**23/23**, sorties **0/0**, sans timeout ni stderr XML. Une trace a corroboré
+l'inventaire avant qualification ; le budget n'a pas été ajusté par recherche.
+
+Le checkpoint numérique `b4d48388a` passe **33/33** (`task2-numeric-covering-3`,
+sorties 0/0, sans timeout ni stderr XML) : saturation PLUS, ordre forward/reverse
+avec write intermédiaire, destination périmée, alpha nul, translation/scissor,
+origine de layer et double couverture. L'opacité nulle a révélé un refus de
+`TransparentV1/EmptyV1` ; la recette accepte désormais cette paire normalisée
+déjà prise en charge par l'évaluateur. Le témoin historique bleu sur bleu
+observe aussi le bord restauré (alpha 192 contre 128 si la layer est omise).
+Le premier témoin de mapping combiné avait une attente géométrique erronée et
+est explicitement invalidé ; les deux scènes corrigées passent séparément.
+Les bords chronologiques colorés restent non bornés avant GPU : l'ordre et
+la destination périmée sont observés dans leur overlap, la double couverture
+sur le vrai bord d'une autre scène. Aucun oracle n'a été élargi.
+
+Le rejeu `task2-final-aa-baseline-point` passe **25/25** : PathLayer9,
+MaskBlur8, MixedRootAaRect7 et PointV2. Avec Root8 du covering final, les
+**31 identités AA historiques sont toutes présentes et vertes**, sans doublon,
+plus le positif layer ajouté. Les deux runs comptent **58 tests uniques**,
+sorties 0/0, sans timeout ni stderr XML. Les avertissements Gradle historiques
+restent distincts de ce résultat ciblé.
+
+`PlusMergesAA` est désormais rendu : **7 dispatches, 0 refus**, contre
+`w6a.layer.unsupported_child` auparavant. La mesure ciblée au même commit
+(`task2-plusmergesaa-final`, sorties 0/0) conserve référence, port, domaine et
+seuils. Pixels exacts/tolérance2 : **69,4824 %**, SSIM **0,985107**, delta
+max RGBA **[73,37,0,0]**. Les images actual/reference/diff ont été inspectées :
+écarts R/G sur les deux carrés, alpha identique. Le rendu est débloqué, mais
+sa fidélité couleur n'est pas résolue ni sa cause établie par ce seul run.
+Le seuil contractuel historique nul n'est pas une preuve de parité.
+
+Ce checkpoint n'est ni un run global vert ni la validation du lot : la revue
+indépendante Task2 reste à faire. Porter-Duff, Picture et corpus complet suivent.
 
 Les limites de validation restent explicites : W5g compte 125 identités,
 69 assertions réussies, deux échecs reproduits sur la base antérieure et
