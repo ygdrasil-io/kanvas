@@ -63,8 +63,9 @@ numériques et mapping passent (`b4d48388a`, 33/33), avec une correction du
 matériau normalisé transparent. Les 31 identités AA historiques et PointV2
 sont qualifiés ; 58 tests uniques passent au code final. `PlusMergesAA` rend
 désormais sans refus, mais reste à 69,4824 % de pixels identiques (SSIM 0,985107,
-écarts couleur R/G, alpha identique). La revue indépendante du lot reste ouverte,
-puis Porter-Duff, Picture et corpus complet ; aucune parité globale revendiquée.
+écarts couleur R/G, alpha identique). Après deux corrections de revue
+(`a851621fc`), Sol accepte Task2 : **59/59** tests ciblés et image GM inchangée.
+Porter-Duff, Picture et corpus complet suivent ; aucune parité globale revendiquée.
 L'[état courant](status.md#série-aa-et-composition-différée--en-cours-1er-octobre-2026)
 distingue les preuves natives réussies des limites historiques et de
 l'exit 133 W5g non qualifié. Le corpus mesuré ci-dessous reste la baseline.

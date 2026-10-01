@@ -85,11 +85,33 @@ restent distincts de ce résultat ciblé.
 seuils. Pixels exacts/tolérance2 : **69,4824 %**, SSIM **0,985107**, delta
 max RGBA **[73,37,0,0]**. Les images actual/reference/diff ont été inspectées :
 écarts R/G sur les deux carrés, alpha identique. Le rendu est débloqué, mais
-sa fidélité couleur n'est pas résolue ni sa cause établie par ce seul run.
+sa fidélité couleur n'est pas résolue par ce seul run.
 Le seuil contractuel historique nul n'est pas une preuve de parité.
 
-Ce checkpoint n'est ni un run global vert ni la validation du lot : la revue
-indépendante Task2 reste à faire. Porter-Duff, Picture et corpus complet suivent.
+Le diagnostic couleur en lecture seule trouve le même intérieur à gauche et
+à droite : référence décodée `(14,240,0,255)`, actual `(69,248,0,255)`.
+Le calcul avec alpha240/255 en LINEAR suivi de l'encodage sRGB prédit exactement
+l'actual ; le calcul en valeurs encodées prédit `(15,240,0,255)`. Les 20 000
+pixels des deux carrés expliquent tout le mismatch au seuil2. Le port est fidèle
+au `plus.cpp` Skia épinglé ; la configuration de surface ayant généré la PNG
+n'est pas documentée. **Gap de contrat de domaine/référence à résoudre** :
+pas de changement de domaine, de référence ni de seuil dans cette série.
+Ce diagnostic distingue le décalage intérieur du travail restant sur la parité
+à domaine comparable ; il ne valide pas globalement le renderer.
+
+La revue indépendante Task2 a demandé deux corrections (ownership root
+SRC_OVER trop large et premier consumer non observé par le test d'ordre).
+Le correctif `a851621fc` partage le même fait de sélection entre ownership et
+occurrence, rétablit le budget root historique de 27 576 octets, et observe
+chaque premier consumer sur un pixel exclusif. La relecture Sol ciblée accepte
+les deux corrections, sans nouvelle anomalie importante. Le covering50 et le
+complément9 passent **59/59**, sorties0/0, sans timeout ni stderr XML ; les31
+identités originales sont toutes présentes. La re-mesure du GM conserve
+exactement le hash RGBA et les métriques du checkpoint précédent.
+
+**Task2 validée**, sans qualifier la suite globale ni clôturer W7. Porter-Duff,
+Picture et corpus complet suivent. La revue finale Astra de toute la série
+reste requise avant sa draft stackée.
 
 Les limites de validation restent explicites : W5g compte 125 identités,
 69 assertions réussies, deux échecs reproduits sur la base antérieure et
