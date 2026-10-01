@@ -279,13 +279,11 @@ internal class W6aLayerGraphConstruction(
             val carrier = input.materialCoordinateDraw()
             val historicalAa = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
                 .acceptsW6AaColorSourceScope(carrier)
-            // Picture Rects retain their proven analytic source chain.  The W7 source is the
-            // new Path occurrence seam; root Rect projection needs an explicit owner rather
-            // than redirecting this already-admitted Picture lane.
-            // The verified historical preservation contract is the analytic Rect lane.
-            // A Picture Path still uses W7 for SrcOver: its legacy AA source has no Picture
-            // stream terminal identity, whereas the W7 producer/consumer pair does.
-            val deferredBlend = if (carrier.geometry is GeometryNode.Rect) null else
+            // Keep Picture's historical analytic Rect lane when it can own the transform.
+            // The rebased carrier exposes a finite general affine Rect only when W4a cannot;
+            // then use the same selected W7 producer/consumer occurrence as a Path.
+            val deferredBlend = if (carrier.geometry is GeometryNode.Rect &&
+                !W6aLayerPlanCompiler.requiresW7AffineRectProjection(carrier)) null else
                 W6aLayerPlanCompiler.selectedW7AaDeferredBlend(
                     carrier, input.renderTarget, runtimeCatalog, historicalAaSource = false,
                 )

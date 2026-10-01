@@ -1495,12 +1495,21 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         is BlendNode.Custom -> false
     }
 
-    /** Existing SRC_OVER/PLUS Rect lanes keep their analytic/W5 ownership; Task3 adds only the new PD projections. */
-    private fun w7DeferredRectProjection(node: DrawNode): Boolean = w7AaDeferredSource && when (val blend = node.blend) {
-        BlendNode.SrcOver -> false
-        is BlendNode.Mode -> blend.mode !in setOf(BlendMode.SRC_OVER, BlendMode.PLUS)
-        is BlendNode.Paint -> blend.blender == null && blend.mode !in setOf(BlendMode.SRC_OVER, BlendMode.PLUS)
-        is BlendNode.Custom -> false
+    /**
+     * Rect keeps its original provenance when W7 projects it to a path.  The old W7 projection
+     * already owns the non-SRC_OVER/PLUS blends; retain that axis-aligned route.  SRC_OVER and
+     * PLUS join it only for GeneralAffine, where W4a has no analytic source lane.
+     */
+    private fun w7DeferredRectProjection(node: DrawNode): Boolean {
+        if (!w7AaDeferredSource || !w7PorterDuff(node.blend)) return false
+        val historicallyAnalyticBlend = when (val blend = node.blend) {
+            BlendNode.SrcOver -> true
+            is BlendNode.Mode -> blend.mode in setOf(BlendMode.SRC_OVER, BlendMode.PLUS)
+            is BlendNode.Paint -> blend.blender == null && blend.mode in setOf(BlendMode.SRC_OVER, BlendMode.PLUS)
+            is BlendNode.Custom -> false
+        }
+        return !historicallyAnalyticBlend ||
+            node.transform.toMatrix3x3F64().classifyPathTransform() == PathTransformClass.GeneralAffine
     }
 
     /** Strict W7 root extension; broader historical W4d path admission remains unchanged. */

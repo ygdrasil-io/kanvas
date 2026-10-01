@@ -279,10 +279,9 @@ public class W6aLayerPlanCompiler public constructor(
             if (semanticNoOp) return@forEach
             val rootAaSource = scopeI32 == null && !ownsW6b &&
                 originalDraw?.coverage == CoverageRequest.ANTIALIASED && historicalAaSource
-            // The existing W4a Rect layer producer already composes these blends correctly.
-            // Keep its lane, allocation, and refusal identity; W7 fills the root Rect gap and
-            // the Path cases that W4a cannot select.
-            val deferredAa = if (scopeI32 != null && originalDraw?.geometry is GeometryNode.Rect) null else originalCommand?.takeIf { draw ->
+            // Preserve W4a for its identity/axis-aligned Rect domain.  A finite general-affine
+            // Rect has no analytic source lane, so it may select the shared W7 occurrence path.
+            val deferredAa = originalCommand?.takeIf { draw ->
                 retainsW7AaDeferredSourceAuthority(segment, draw, target, runtimeCatalog)
             }?.node?.let { draw ->
                 selectedW7AaDeferredBlend(draw, target, runtimeCatalog, historicalAaSource)
@@ -730,8 +729,13 @@ public class W6aLayerPlanCompiler public constructor(
                     BlendCoverageApplicationV1.DestinationInterpolation, BlendCoverageEncodingV1.ScalarCoverageInShader))
             } else initial
             return blend.takeIf { (it is BlendPlan.DestinationReadV1) ||
-                (!historicalAaSource && it.isW7AaDeferredBlendV1()) }
+                ((!historicalAaSource || requiresW7AffineRectProjection(draw)) && it.isW7AaDeferredBlendV1()) }
         }
+
+        /** W4a cannot lower a sheared/rotated Rect; W7 may project only that missing lane. */
+        internal fun requiresW7AffineRectProjection(draw: DrawNode): Boolean =
+            draw.origin == DrawOrigin.RECT && draw.geometry is GeometryNode.Rect &&
+                draw.transform.toMatrix3x3F64().classifyPathTransform() == PathTransformClass.GeneralAffine
 
         /** Closed root-only W7 ownership for the existing W4a analytic Rect lane. */
         internal fun ownsRootAaDeferredRect(
