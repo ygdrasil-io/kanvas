@@ -2,16 +2,27 @@
 
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 
-Code mesuré `8c8e7d8e0732f9922896f7e7d41a65b780a59fea`, snapshot
-[`picture-8c8e7d8.json`](picture-8c8e7d8.json). Couverture publique :
-171/171 (Picture, historiques W7, quatre régressions de préservation et garde
-de graphe), archive `task4-fix-r1-covering-171-2`, wrapper/enfant 0/0. Corpus : 631/443,
-199 rendus, 177 comparés, 39 ≥99 %, 52 ≥95 %, aucune perte et aucun delta de hash
-des images rendues dans les deux mesures; gain `PlusMergesAA` à 69.482421875 %
-des pixels ±2. `vertices` index 607 conserve son timeout historique de 30 s.
-La globale finale bornée a 725 END (684 SUCCESS/40 FAILURE/1 SKIPPED) et timeout
-wrapper/enfant 124/143; toutes les 718 identités Task1 sont présentes, avec zéro
-SUCCESS→FAILURE, `rowPadding` SKIPPED→SUCCESS et sept identités W5e atteintes.
+Code produit mesuré `8829d18d9f3b93dc6dcae44ffa41de2a8b42ee9b`, snapshot
+[`picture-8829d18.json`](picture-8829d18.json). La correction finale route un
+Rect AA fini non singulier `GeneralAffine` vers le producteur/consommateur W7
+partagé seulement lorsque W4a ne peut pas le faire; les lanes analytiques
+identity/scale-translate restent prioritaires. Les témoins publics sont 185/185
+(171 identités antérieures + 14 affine, archive `final-fix-covering-185-2`,
+wrapper/enfant 0/0, zéro failure/error/skip/stderr). Le bord Picture-layer
+`DST_OUT` emploie C résolu `64/255`, dérivé du pattern MSAA4, sans ajustement aux
+pixels natifs.
+
+Corpus : 631/443, 200 rendus, 178 comparés, 39 ≥99 %, 52 ≥95 %, médiane
+72.34801136363637 % à ±2. Les 18 invariants, les 199 hashes et les métriques des
+images déjà rendues sont inchangés face à `picture-8c8e7d8`; aucune perte. Le
+gain nouveau `sk3d_simple` rend nativement (51.931111111111115 % à ±2,
+SSIM 0.6385013748432061, max [136,255,119,0]) mais son actual est un large carré
+magenta tourné contre un quadrilatère violet étroit de référence : gain de
+capacité, pas parité ni diagnostic d'attribution. `PlusMergesAA` reste le gain
+historique face au hardstop. `vertices` index 607 conserve son timeout 30 s.
+La globale finale bornée a 725 END (684 SUCCESS/40 FAILURE/1 SKIPPED), timeout
+wrapper/enfant 124/143; les 718 identités Task1 sont présentes, mêmes 40 failures,
+zéro SUCCESS→FAILURE, `rowPadding` SKIPPED→SUCCESS et sept identités W5e atteintes.
 
 Le checkpoint antérieur `picture-7488067469.json` n'est pas conservé dans le
 repo : ses journaux privés restent disponibles sous
@@ -93,10 +104,12 @@ et le nouveau scope W7 reste affine non singulier avec refus/récupération test
 Les lanes analytiques Rect des layers sont préservées ; les
 nouveaux Rect root sont projetés via W4d. SRC_ATOP reste qualifié sur une
 forme alignée. `aarectmodes` refuse encore (unsupported_child non isolé).
-Picture et corpus complet suivent ; aucune parité globale revendiquée.
+À ce checkpoint historique, Picture et le corpus complet restaient à venir ;
+aucune parité globale n'était revendiquée.
 L'[état courant](status.md#série-aa-et-composition-différée--en-cours-1er-octobre-2026)
 distingue les preuves natives réussies des limites historiques et de
-l'exit 133 W5g non qualifié. Le corpus mesuré ci-dessous reste la baseline.
+l'exit 133 W5g non qualifié. À ce checkpoint historique, le corpus mesuré
+ci-dessous était la baseline.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,

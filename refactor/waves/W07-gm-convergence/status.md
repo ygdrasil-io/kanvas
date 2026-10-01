@@ -5,29 +5,31 @@ sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
 
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 
-Renderer mesuré : `8c8e7d8e0732f9922896f7e7d41a65b780a59fea`.
-Les témoins publics W7/Picture, quatre régressions historiques et le nouveau
-refus de limite de graphe sont **171/171** (archive
-`task4-fix-r1-covering-171-2`, wrapper/enfant 0/0; les 170 identités antérieures
-sont inchangées). Ce témoin ferme un bypass : 1 024 Rect AA `Opacity(Solid)`
-en SRC constituent 4 097 nœuds sémantiques avec seulement 3 072 unités de
-capture et 1 024 commandes; avant le correctif il atteignait le backend et
-provoquait un abort 134, après le garde W6 il refuse avant GPU, laisse la
-sentinelle intacte et récupère nativement.
+Renderer mesuré : `8829d18d9f3b93dc6dcae44ffa41de2a8b42ee9b`.
+Les témoins publics W7/Picture, quatre régressions historiques, la garde de
+graphe et 14 nouveaux cas Rect affine sont **185/185** (archive
+`final-fix-covering-185-2`, wrapper/enfant 0/0, zéro failure/error/skip/stderr).
+Le routage final projette seulement les Rect AA `GeneralAffine` finis non
+singuliers auxquels W4a ne peut pas fournir de lane; les lanes analytiques
+identity/scale-translate restent préservées. Le témoin Picture-layer `DST_OUT`
+observe C `64/255`, établi depuis le pattern MSAA4 avant Surface. Le contrôle
+PLUS translation racine demeure positif.
 
-La suite globale finale `task4-fix-r1-full-final-1` expire comme borné
+La suite globale finale `final-fix-full-final-1` expire comme borné
 (wrapper 124, enfant 143) après 725 END : 684 SUCCESS, 40 FAILURE, 1 SKIPPED.
 Les 718 identités Task1 sont toutes présentes : les 40 FAILURE sont les mêmes,
 aucun SUCCESS ne devient FAILURE, `rowPadding...` devient SUCCESS, et sept
 W5e sont nouvellement atteintes (six SUCCESS, un SKIPPED).
 
-Le corpus figé au même SHA est
-631 identités / 443 éligibles : 199 rendus, 177 comparaisons, 39 à ≥99 % et 52 à
-≥95 % des pixels à ±2/canal, sans perte ni changement de hash d'image déjà rendue.
-Le seul gain est `PlusMergesAA` (69.482421875 % à ±2); le snapshot complet est
-[`picture-8c8e7d8.json`](picture-8c8e7d8.json). Le timeout `vertices` à
-l'index 607 reste historique (30 s). Références, seuils, exclusions et oracle
-n'ont pas été modifiés.
+Le corpus figé au même SHA est 631 identités / 443 éligibles : 200 rendus,
+178 comparaisons, 39 à ≥99 % et 52 à ≥95 % des pixels à ±2/canal, sans perte ni
+changement de hash/métrique des 199 images déjà rendues. Le snapshot complet est
+[`picture-8829d18.json`](picture-8829d18.json). Le gain nouveau `sk3d_simple`
+est une admission native seulement (51.931111111111115 % à ±2, SSIM
+0.6385013748432061, max [136,255,119,0]) : son écart de silhouette/couleur est
+majeur, alpha opaque identique ne prouve aucune équivalence. `PlusMergesAA`
+reste le gain historique face au hardstop. Le timeout `vertices` index 607 reste
+30 s. Références, seuils, exclusions et oracle n'ont pas été modifiés.
 
 Le checkpoint intermédiaire `7488067` reste archivé honnêtement dans les journaux
 privés : son JSON n'est pas conservé dans le repo; il avait gagné
