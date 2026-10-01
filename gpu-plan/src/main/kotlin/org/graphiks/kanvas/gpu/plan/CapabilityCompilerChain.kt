@@ -23,7 +23,8 @@ public class CapabilityCompilerChain private constructor(
         }
         // Layer ownership precedes all geometry/source admission, including composed-source gaps.
         if (scene.any { it is org.graphiks.kanvas.render.ir.SceneCommand.BeginLayer || it is org.graphiks.kanvas.render.ir.SceneCommand.EndLayer } ||
-            W6bFilterGraphConstruction.owns(scene) || W6aLayerPlanCompiler.ownsAaDeferred(scene, target, runtimeCatalog)) {
+            W6bFilterGraphConstruction.owns(scene) || W6aLayerPlanCompiler.ownsAaDeferred(scene, target, runtimeCatalog) ||
+            W6aLayerPlanCompiler.ownsRootAaDeferredRect(scene, target)) {
             val index = compilers.indexOfFirst { it is W6aLayerPlanCompiler }
             if (index >= 0) {
                 val compiler = compilers[index]

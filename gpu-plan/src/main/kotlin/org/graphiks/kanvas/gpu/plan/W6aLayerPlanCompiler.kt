@@ -76,6 +76,7 @@ public class W6aLayerPlanCompiler public constructor(
         val ownsW6b = W6bFilterGraphConstruction.owns(scene)
         val hasLayerBoundary = commands.any { it is SceneCommand.BeginLayer || it is SceneCommand.EndLayer }
         val ownsAaDeferred = ownsAaDeferred(scene, target, runtimeCatalog)
+        val ownsRootAaDeferredRect = !hasLayerBoundary && !ownsW6b && ownsRootAaDeferredRect(scene, target)
         val ownsMixedRootAaRect = !hasLayerBoundary && !ownsW6b && ownsMixedRootAaRectFrame(commands)
         val ownsEncodedHairlineFrame = !ownsW6b && target.compositionDomain ==
             org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
@@ -83,7 +84,7 @@ public class W6aLayerPlanCompiler public constructor(
             commands.filterIsInstance<SceneCommand.Draw>().any(CompositionAdmissionV1::isAdmittedEncodedRectHairline)
         val ownsEncodedRootSegments = !hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect &&
             (ownsEncodedRootSegmentFrame(scene, target, commands) || ownsEncodedHairlineFrame)
-        if (!hasLayerBoundary && !ownsW6b && !ownsAaDeferred && !ownsMixedRootAaRect && !ownsEncodedRootSegments) {
+        if (!hasLayerBoundary && !ownsW6b && !ownsAaDeferred && !ownsRootAaDeferredRect && !ownsMixedRootAaRect && !ownsEncodedRootSegments) {
             return GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Scene has no layer boundary.")))
         }
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
@@ -190,7 +191,7 @@ public class W6aLayerPlanCompiler public constructor(
             }
         }
         if (stack.isNotEmpty()) return invalid(W6aPlanDiagnostics.MalformedStack, "BeginLayer has no matching EndLayer.")
-        if (scopes.isEmpty() && !ownsW6b && !ownsAaDeferred && !ownsMixedRootAaRect && !ownsEncodedRootSegments)
+        if (scopes.isEmpty() && !ownsW6b && !ownsAaDeferred && !ownsRootAaDeferredRect && !ownsMixedRootAaRect && !ownsEncodedRootSegments)
             return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
 
         val segments = mutableListOf<Segment>()
@@ -635,5 +636,52 @@ public class W6aLayerPlanCompiler public constructor(
             scene.filterIsInstance<SceneCommand.Draw>().any { draw ->
                 W4dGeneralPathPlanCompiler.w7AaDeferredSource(catalog).acceptsW7AaDeferredSourceScope(draw.node)
             }
+
+        /** Closed root-only W7 ownership for the existing W4a analytic Rect lane. */
+        internal fun ownsRootAaDeferredRect(
+            scene: SceneSnapshot,
+            target: RenderTargetDescriptor,
+        ): Boolean {
+            if (target.compositionDomain != org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR) return false
+            val draws = scene.filterIsInstance<SceneCommand.Draw>()
+            return draws.isNotEmpty() && scene.all { it is SceneCommand.Draw } &&
+                draws.all { acceptsRootAaDeferredRect(it.node) } &&
+                draws.any { it.node.coverage == CoverageRequest.ANTIALIASED &&
+                    rootAaDeferredRectBlendMode(it.node.blend) == org.graphiks.kanvas.render.ir.BlendMode.PLUS } &&
+                draws.any { it.node.coverage == CoverageRequest.HARD_EDGE &&
+                    rootAaDeferredRectBlendMode(it.node.blend) == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER }
+        }
+
+        private fun acceptsRootAaDeferredRect(draw: DrawNode): Boolean {
+            val paint = draw.paint ?: return false
+            val bounds = (draw.geometry as? GeometryNode.Rect)?.copyBounds() ?: return false
+            var material = draw.material
+            while (material is MaterialNode.Opacity) material = material.material
+            val matrix = draw.transform.toMatrix3x3F64()
+            return draw.origin == DrawOrigin.RECT && !bounds.isEmpty &&
+                listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite) &&
+                material is MaterialNode.Solid && paint.style == PaintStyleNode.FILL &&
+                draw.coverage in setOf(CoverageRequest.HARD_EDGE, CoverageRequest.ANTIALIASED) &&
+                draw.resource == null && draw.operationBlendMode == null && paint.blender == null &&
+                paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null &&
+                paint.pathEffect == null && draw.effects == EffectStack.Empty &&
+                rootAaDeferredRectBlendMode(draw.blend) != null && matrix.isFinite() &&
+                matrix.classifyPathTransform() in setOf(PathTransformClass.Identity, PathTransformClass.AxisAlignedAffine) &&
+                matrix.sxF64 != 0.0 && matrix.syF64 != 0.0
+        }
+
+        private fun rootAaDeferredRectBlendMode(blend: BlendNode): org.graphiks.kanvas.render.ir.BlendMode? = when (blend) {
+            BlendNode.SrcOver -> org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER
+            is BlendNode.Mode -> blend.mode.takeIf {
+                it in setOf(org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER, org.graphiks.kanvas.render.ir.BlendMode.PLUS)
+            }
+            is BlendNode.Paint -> blend.mode.takeIf {
+                blend.blender == null && it in setOf(
+                    org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER,
+                    org.graphiks.kanvas.render.ir.BlendMode.PLUS,
+                )
+            }
+            is BlendNode.Custom -> null
+        }
     }
 }
