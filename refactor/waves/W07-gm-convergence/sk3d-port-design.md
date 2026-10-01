@@ -133,12 +133,29 @@ contre-exemples de transform omis/doublé sont dérivés avant Surface.
 
 Horizon `w=1−x/4`, CTM NaN, RGBA16_FLOAT, budget frame1 byte et sibling AA
 projectif restent des refus publics, sans modification de sentinelle,
-suivis d'un rendu valide sur le même backend. Les codes sont prédits depuis
-les contrats existants, non inventés à partir du premier échec observé.
+suivis d'un rendu valide sur le même backend. Les assertions de diagnostic
+doivent correspondre au premier contrat terminal réellement applicable.
+Les premières prédictions W4d/W6 étaient trop tardives pour ces fixtures :
+le CTM externe horizon refuse déjà le cull Picture (`w6b.filter.invalid_bounds`),
+NaN refuse en capture (`non-finite-value`), et budget1 refuse dès la source
+rouge W3 (`w3.budget.frame_local_exceeded`). Ces corrections sont fondées sur
+les checks préexistants, sans déplacer le CTM ni changer le renderer pour
+obtenir un autre code. Le témoin horizon qualifie donc le cull d'aggregate,
+et budget1 le frame global ; ils ne prouvent pas un seuil spécifique W4d.
+La configuration invalide reste immuable : recovery sur une nouvelle Surface
+valide, dans le même backend sans dispose entre échec et récupération.
 Tous les positifs exigent Render/Readback, zéro refus/diagnostic, dispatch
 positif et deuxième rendu byte-identique. Contrôler les Picture Rect
 identity/scale-translate sous budget analytique calculé statiquement avant
 GPU et conserver sans relever le témoin historique B=26808 des layers AA.
+Pour ce nouveau contrôle hard, garder la géométrie pixel-aligned de W3 :
+Rect `[1,4]²`, identity puis translation(1,0)×scale(2,1), sur Surface16×16.
+W4a exige AA et n'est pas le propriétaire du hard fractionnaire. La Picture
+sans paint est inline, sans cible enfant : B=1024 (cible) +4096 (16 lignes
+readback alignées256) +16 (cursor W6) +16+16 (deux sources Solid) =5168 bytes.
+W3 n'émet pas de pools V/I/U ; une diversion vers W4d en ajouterait.
+Fixer intérieur et extérieur des deux transformations avant RED ; cette
+borne est dérivée des ressources, pas transposée de B26808 ni mesurée au GPU.
 Relancer les témoins AA/Picture/affine/encoded hairline existants ; aucun
 test d'infrastructure nouveau. La mesure du corpus reste dans Task 1,
 après revue du prérequis, au SHA produit final.
