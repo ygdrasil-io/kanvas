@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.*
+import org.graphiks.kanvas.gpu.plan.BlendCoverageLawV1
 import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.PlanResource
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.isW5aGradientSourceVariantV1
@@ -67,6 +69,24 @@ internal interface GPUW5aGeometryPipelineTemplateProvider {
     fun sourceTemplate(pipeline: GPURenderPipeline): GPUW5aGeometryPipelineTemplate?
 }
 
+/** A W6 frame-local loan is valid only for its exact physical row and immutable upload bytes. */
+internal interface GPUW5aFrameSourceUniformProviderV1 {
+    fun borrowW5aSourceUniform(
+        frame: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan,
+        row: PlanResource,
+        source: W5aPacketMaterialSourceV2,
+        generation: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID,
+    ): GPUBuffer?
+
+    fun validatesW5aSourceUniformBorrow(
+        frame: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan,
+        row: PlanResource,
+        source: W5aPacketMaterialSourceV2,
+        generation: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID,
+        buffer: GPUBuffer,
+    ): Boolean
+}
+
 /** Exact V2 source partition; historical geometry operands/commands keep their original ABI. */
 internal class GPUW5gImageLeaseV5(val image: org.graphiks.kanvas.gpu.plan.ComposedImageResourceV5,
     val lease: GPUW5eDecodedImageSessionCache.Lease)
@@ -90,6 +110,7 @@ internal class GPUW5aNativeSourceBindingV2(
     val bindGroup: GPUPreparedNativeBindGroupOperand,
     val buffer: GPUBuffer,
     val byteCapacityI64: Long,
+    val borrowedSourceUniformProviderV1: GPUW5aFrameSourceUniformProviderV1? = null,
     val destinationGroupV3: GPUPreparedNativeBindGroupOperand? = null,
     val coverageGroupV4: GPUPreparedNativeBindGroupOperand? = null,
     val imageLeaseV3: GPUW5eDecodedImageSessionCache.Lease? = null,
@@ -125,6 +146,8 @@ internal class GPUW5aSourceOwnedHandlesV2 : AutoCloseable {
 
 internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPUPreparedNativeFramePayload): Boolean {
     val owners = payload.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5aSourceOwnedHandlesV2 }
+    val sourceUniformProviders = payload.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5aFrameSourceUniformProviderV1 }
+    val w6Frame = framePlan.w6aLayerFrameV1
     return payload.scopeOperands.all { operand ->
         if (operand !is GPUPreparedNativeScopeOperand.Render) return@all true
         val materializesW6bMaskSource = operand.w6aPassV1.materializesW6bMaskSourceV1()
@@ -158,9 +181,18 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
                     binding.runtimeResourcesV1.all { it.matches(payload.identity.deviceGeneration.value) && owners.any { owner -> owner.owns(it.owner) } } &&
                     binding.pipeline.deviceGeneration == payload.identity.deviceGeneration &&
                     binding.bindGroup.deviceGeneration == payload.identity.deviceGeneration &&
-                    owners.any { it.owns(binding.buffer) && it.owns(binding.pipeline.pipeline) && it.owns(binding.bindGroup.bindGroup) &&
-                        (binding.destinationGroupV3 == null || it.owns(binding.destinationGroupV3.bindGroup)) &&
-                        (binding.coverageGroupV4 == null || it.owns(binding.coverageGroupV4.bindGroup)) } &&
+                    owners.any { owner ->
+                        owner.owns(binding.pipeline.pipeline) && owner.owns(binding.bindGroup.bindGroup) &&
+                            (binding.destinationGroupV3 == null || owner.owns(binding.destinationGroupV3.bindGroup)) &&
+                            (binding.coverageGroupV4 == null || owner.owns(binding.coverageGroupV4.bindGroup)) &&
+                            (owner.owns(binding.buffer) || binding.borrowedSourceUniformProviderV1?.let { provider ->
+                                w6Frame != null && sourceUniformProviders.any { it === provider } &&
+                                    w6Frame.physical.sourceUniform(source.second.commandIdI32)?.let { row ->
+                                        provider.validatesW5aSourceUniformBorrow(w6Frame, row, source.second,
+                                            payload.identity.deviceGeneration, binding.buffer)
+                                    } == true
+                            } == true)
+                    } &&
                     (binding.imageLeaseV3 == null || owners.any { it.owns(binding.imageLeaseV3) }) &&
                     (binding.coverageGroupV4 == null || binding.coverageGroupV4.deviceGeneration == payload.identity.deviceGeneration) &&
                     (binding.destinationGroupV3 == null || binding.destinationGroupV3.deviceGeneration == payload.identity.deviceGeneration)
@@ -263,10 +295,14 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
         destination.sourceCoverageEncoding == org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
     val tail = if (destination == null) "" else {
         val scalar = destination.sealedW5b?.compositionAbiI32 == 4
+        val sourcePreScale = destination.sealedW5b?.coverageLaw == BlendCoverageLawV1.SourcePreScale
         require(destination.sourceCoverageEncoding == if (scalar || analyticCoverage)
             org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
             else org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.None) {
             "W5b W3 destination tail requires sealed full/scissor coverage"
+        }
+        require(!sourcePreScale || destination.mode.gpuLabel == "plus" && (scalar || analyticCoverage)) {
+            "W5b SourcePreScale requires scalar covered PLUS before native allocation"
         }
         require(!geometry.contains("@group(2)"))
         if (analyticCoverage) {
@@ -311,8 +347,8 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
                 let dst = textureSampleLevel(kanvas_w5b_destination, kanvas_w5b_sampler,
                     (pixel - vec2<f32>(${requireNotNull(destinationBounds).left}.0, ${destinationBounds.top}.0)) /
                         vec2<f32>(textureDimensions(kanvas_w5b_destination)), 0.0);
-                let blended = kanvas_w5b_blend(src, dst);
-                ${if (scalar) "let mask_sample: vec4<f32> = textureLoad(kanvas_w5b_coverage, vec2<i32>(pixel), 0); let coverage = clamp(mask_sample.r, 0.0, 1.0); return dst + coverage * (blended - dst);" else if (analyticCoverage) "return dst + coverage * (blended - dst);" else "return blended;"}
+                ${if (scalar) "let mask_sample: vec4<f32> = textureLoad(kanvas_w5b_coverage, vec2<i32>(pixel), 0); let coverage = clamp(mask_sample.r, 0.0, 1.0);" else ""}
+                ${if (sourcePreScale) "return kanvas_w5b_blend(coverage * src, dst);" else "let blended = kanvas_w5b_blend(src, dst); " + if (scalar) "return dst + coverage * (blended - dst);" else if (analyticCoverage) "return dst + coverage * (blended - dst);" else "return blended;"}
             }
         """.trimIndent().replace(Regex("\\bvec([234])([fiu])\\b")) { "vec${it.groupValues[1]}<${it.groupValues[2]}32>" }
     }
@@ -481,6 +517,9 @@ internal fun materializeW5aSourcePartitionV2(
     var replacement: GPUPreparedNativeFrameDraft? = null
     try {
         val physical = framePlan.w6aLayerFrameV1?.also { require(it.validates(framePlan)) }?.physical
+        val sourceUniformProviders = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5aFrameSourceUniformProviderV1 }
+        require(sourceUniformProviders.size <= 1) { "W5a source received multiple frame-local uniform owners" }
+        val sourceUniformProvider = sourceUniformProviders.singleOrNull()
         fun plannedResource(role: PlanResourceRole) = physical?.let { layout ->
             val row = framePlan.w6aLayerFrameV1.graph.resources().single { it.role == role }
             layout.resource(row.id)
@@ -507,6 +546,7 @@ internal fun materializeW5aSourcePartitionV2(
             val programIdentity: String,
             val geometryPipeline: GPURenderPipeline,
             val compositionAbiI32: Int,
+            val coverageLaw: BlendCoverageLawV1?,
             val destinationKey: org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey?,
             val destinationBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds?,
             val materializesW6bMaskSource: Boolean,
@@ -596,6 +636,7 @@ internal fun materializeW5aSourcePartitionV2(
                 val base = requireNotNull(currentPipeline)
                 val programIdentity = validated.nativeRecipe?.canonicalLogicalEncodingV1() ?: validated.structuralId
                 val key = SourcePipelineKey(generation.value, programIdentity, base.pipeline, destination?.sealedW5b?.compositionAbiI32 ?: 2,
+                    destination?.sealedW5b?.coverageLaw,
                     destinationCopy?.sourceKey, destinationCopy?.logicalBounds, materializesW6bMaskSource)
                 val (pipeline, materialLayout) = pipelines.getOrPut(key) {
                     val template = verifiedOrdinaryTemplates[base.pipeline] ?: templates.sourceTemplate(base.pipeline)
@@ -647,11 +688,17 @@ internal fun materializeW5aSourcePartitionV2(
                 require(uniform == null || uniform.byteSize == bytes.size.toLong() &&
                     uniform.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination))
                 val bufferKey = uniform?.let { "w6a.slot.${physical.slot(it.id).slotI32}" } ?: source.stage.canonicalIdentity
+                val borrowedSourceUniform = uniform?.let { row -> sourceUniformProvider?.borrowW5aSourceUniform(
+                    requireNotNull(framePlan.w6aLayerFrameV1), row, source, generation)
+                }
                 val buffer = buffers.getOrPut(bufferKey) {
-                    owned.own(device.createBuffer(BufferDescriptor(size = (uniform?.byteSize ?: bytes.size.toLong()).toULong(),
+                    borrowedSourceUniform ?: owned.own(device.createBuffer(BufferDescriptor(size = (uniform?.byteSize ?: bytes.size.toLong()).toULong(),
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst, label = "Kanvas.w5a.raw-source-v2"))).also {
                         queue.writeBuffer(it, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong())
                     }
+                }
+                require(borrowedSourceUniform == null || buffer === borrowedSourceUniform) {
+                    "W5a source attempted to replace an authenticated W6 uniform row"
                 }
                 val imageLease = source.stage.imageV3?.let { execution ->
                     owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache), execution.cacheRequest, generation.value, physical))
@@ -702,6 +749,7 @@ internal fun materializeW5aSourcePartitionV2(
                         label = "Kanvas.w5a.source-group1-v2", layout = materialLayout, entries = entries))), generation)
                 }
                 bindings += GPUW5aNativeSourceBindingV2(ordinalI32, source, pipeline, group, buffer, bytes.size.toLong(),
+                    borrowedSourceUniform?.let { sourceUniformProvider },
                     exactDestinationGroup, coverageGroup.takeIf { scalar }, imageLease,composedImages,
                     noiseBuffer.takeIf { source.stage.noiseTableSlab != null },runtimeLeases)
             }

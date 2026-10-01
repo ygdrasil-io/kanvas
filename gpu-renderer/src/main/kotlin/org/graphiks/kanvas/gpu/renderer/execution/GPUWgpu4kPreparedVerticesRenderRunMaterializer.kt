@@ -48,6 +48,7 @@ import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import org.graphiks.kanvas.gpu.plan.BlendCoverageLawV1
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesCanonicalizationIdentity
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesShaderProgram
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact
@@ -706,6 +707,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 PreparedVerticesDestinationPipelineKey(
                     formulaIdentity = blend.formulaId,
                     compositionAbiI32 = requireNotNull(blend.sealedW5b).compositionAbiI32,
+                    coverageLaw = requireNotNull(blend.sealedW5b).coverageLaw,
                     sourceCoverageEncoding = blend.sourceCoverageEncoding,
                     bindingLayoutHash = entry.program.bindingLayoutHash,
                 )
@@ -876,6 +878,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
     private data class PreparedVerticesDestinationPipelineKey(
         val formulaIdentity: String,
         val compositionAbiI32: Int,
+        val coverageLaw: BlendCoverageLawV1,
         val sourceCoverageEncoding: GPUSourceCoverageEncoding,
         val bindingLayoutHash: String,
     )

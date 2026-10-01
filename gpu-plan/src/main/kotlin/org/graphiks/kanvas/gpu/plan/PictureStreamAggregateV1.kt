@@ -1168,6 +1168,9 @@ internal fun validatePictureStreamAggregates(
                     val sourcePlannedId = when (sourcePass) {
                         is PlanPass.RenderPass -> sourcePass.plannedCommandId
                         is PlanPass.StencilCover -> sourcePass.plannedCommandId
+                        is PlanPass.AaCoverageSourcePass -> sourcePass.binding?.let { binding ->
+                            FramePlannedCommandIdI32(binding.commandIndexI32)
+                        }
                         else -> null
                     }
                     if (sourcePlannedId != entry.plannedCommandId || !ownedDrawSources.add(sourceId))
@@ -1175,6 +1178,7 @@ internal fun validatePictureStreamAggregates(
                     val draw = when (sourcePass) {
                         is PlanPass.RenderPass -> sourcePass.draws().singleOrNull()
                         is PlanPass.StencilCover -> sourcePass.draw
+                        is PlanPass.AaCoverageSourcePass -> sourcePass.binding?.passes()?.lastOrNull()?.draw
                         else -> null
                     } ?: fail(aggregate, entry, "Draw source has no W4/W5 geometry and material.", sourceId)
                     if (draw.commandIndex != entry.geometryCommandIndexI32)
@@ -1182,6 +1186,8 @@ internal fun validatePictureStreamAggregates(
                     val sourceTarget = when (sourcePass) {
                         is PlanPass.RenderPass -> sourcePass.target
                         is PlanPass.StencilCover -> sourcePass.target
+                        is PlanPass.AaCoverageSourcePass -> (passById.getValue(terminal) as? PlanPass.AaDeferredComposite)
+                            ?.contract?.target ?: fail(aggregate, entry, "W7 Picture source has no matching consumer target.", sourceId)
                         else -> error("Unreachable W4/W5 source")
                     }
                     if (entry.coordinates?.target != sourceTarget)
@@ -1194,6 +1200,11 @@ internal fun validatePictureStreamAggregates(
                                 operation.terminal?.plannedCommandId == entry.plannedCommandId &&
                                 pass.evaluationKey.boundSourceId == sourceTarget && passIndex.getValue(sourceId) < indexI32
                         } == true
+                        is PlanPass.AaDeferredComposite -> sourcePass is PlanPass.AaCoverageSourcePass &&
+                            pass.contract?.let { contract ->
+                                contract.target == target && contract.commandIndexI32 == entry.geometryCommandIndexI32 &&
+                                    passIndex.getValue(sourceId) < indexI32
+                            } == true
                         else -> false
                     }
                     if (!exact) fail(aggregate, entry, "Draw terminal does not write its immediate Picture target.", terminal, target)

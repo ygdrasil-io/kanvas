@@ -106,6 +106,9 @@ private fun generalFinalBlendPlanId(sourceId: PlanId, colors: List<GeneralPathDr
                 field(blend.mode.name)
                 field(blend.formulaIdentity)
                 field(blend.coverage.name)
+                if (blend.coverageLaw == BlendCoverageLawV1.SourcePreScale) {
+                    field(blend.coverageLaw.name)
+                }
                 field(blend.compositionAbiI32.toString())
                 // The sealer overwrites destination version and snapshot from this ordered timeline.
             }

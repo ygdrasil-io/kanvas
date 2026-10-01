@@ -21,14 +21,33 @@ public class CapabilityCompilerChain private constructor(
                 return GpuPlanSelection.InvalidScene(listOf(diagnostic))
             }
         }
-        // Layer ownership precedes all geometry/source admission, including composed-source gaps.
-        if (scene.any { it is org.graphiks.kanvas.render.ir.SceneCommand.BeginLayer || it is org.graphiks.kanvas.render.ir.SceneCommand.EndLayer } ||
-            W6bFilterGraphConstruction.owns(scene)) {
-            val index = compilers.indexOfFirst { it is W6aLayerPlanCompiler }
-            if (index >= 0) {
-                val compiler = compilers[index]
+        val hasLayerBoundary = scene.any {
+            it is org.graphiks.kanvas.render.ir.SceneCommand.BeginLayer || it is org.graphiks.kanvas.render.ir.SceneCommand.EndLayer
+        }
+        val ownsW6b = W6bFilterGraphConstruction.owns(scene)
+        val ownsW7Deferred = W6aLayerPlanCompiler.ownsAaDeferred(scene, target, runtimeCatalog)
+        val ownsW7RootRect = W6aLayerPlanCompiler.ownsRootAaDeferredRect(scene, target)
+        val w6Index = compilers.indexOfFirst { it is W6aLayerPlanCompiler }
+        // A direct root image frame has an established whole-frame W5e authority.  A separate
+        // AA Porter-Duff Rect must not split that frame into W6 source lanes: ImageLattice is a
+        // valid W5e root operation but deliberately not a W6 occurrence source.  Prefer W5e only
+        // when it actually selects; regular W7 ownership and every layer/filter path stay below.
+        if (w6Index >= 0 && !hasLayerBoundary && !ownsW6b && ownsW7Deferred) {
+            val imageIndex = compilers.indexOfFirst { it is W5eImagePlanCompiler }
+            if (imageIndex >= 0) {
+                val imageCompiler = compilers[imageIndex]
+                val selection = imageCompiler.select(scene, target)
+                if (selection is GpuPlanSelection.Candidate) {
+                    return GpuPlanSelection.Candidate(ChainCandidate(this, imageIndex, imageCompiler, selection.candidate))
+                }
+            }
+        }
+        // Layer ownership precedes all remaining geometry/source admission, including composed-source gaps.
+        if (hasLayerBoundary || ownsW6b || ownsW7Deferred || ownsW7RootRect) {
+            if (w6Index >= 0) {
+                val compiler = compilers[w6Index]
                 return when (val selection = compiler.select(scene, target)) {
-                    is GpuPlanSelection.Candidate -> GpuPlanSelection.Candidate(ChainCandidate(this, index, compiler, selection.candidate))
+                    is GpuPlanSelection.Candidate -> GpuPlanSelection.Candidate(ChainCandidate(this, w6Index, compiler, selection.candidate))
                     else -> selection
                 }
             }

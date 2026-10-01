@@ -2121,6 +2121,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         try {
             val graph = frame.graph
             preflightW6FullscreenEmpties(frame, framePlan)
+            val aaDeferredNative = GPUAaDeferredCompositeNativeV1.preflight(frame, framePlan)
             preflightW6FullscreenCoverageAlphas(frame, framePlan)
             preflightW6FullscreenCoverageSolidRects(frame, framePlan)
             preflightW6FullscreenCoverageRetains(frame, framePlan)
@@ -2274,17 +2275,19 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     recipe.host.uniformResource to recipe.host
                 }
             }.groupBy({ it.first }, { it.second })
-            val sourceUniformBuffers = (graphTextureUniformIds + maskMaterialsByUniform.keys + colorFiltersByUniform.keys).distinct().associateWith { id ->
+            val aaDeferredByUniform = aaDeferredNative.values.groupBy { it.recipe.uniformResource }
+            val sourceUniformBuffers = (graphTextureUniformIds + maskMaterialsByUniform.keys + colorFiltersByUniform.keys + aaDeferredNative.values.map { it.recipe.uniformResource }).distinct().associateWith { id ->
                 val resource = frame.physical.resource(id)
                 require(resource.role == PlanResourceRole.SourceUniformData && resource.kind == PlanResourceKind.Buffer &&
                     resource.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination))
                 val materials = maskMaterialsByUniform[id].orEmpty()
+                val deferred = aaDeferredByUniform[id].orEmpty()
                 val canonicalBytes = materials.firstOrNull()?.stage?.uniformBytes ?: colorFiltersByUniform[id]?.firstOrNull()?.let { operation ->
                     val offset = requireNotNull(operation.uniformOffsetBytesI64)
                     ByteArray(Math.toIntExact(resource.byteSize)).also { bytes ->
                         operation.execution.copyDynamicBytes().copyInto(bytes, Math.toIntExact(offset))
                     }
-                }
+                } ?: deferred.firstOrNull()?.copySourceUniformBytes()
                 materials.forEach { material ->
                     require(material.binding.uniformOffsetBytesI64 == 0L &&
                         material.binding.uniformCapacityBytesI64 == resource.byteSize &&
@@ -2299,11 +2302,23 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         canonicalBytes!!.copyOfRange(Math.toIntExact(offset), Math.toIntExact(Math.addExact(offset,
                             operation.execution.dynamicByteCountI64))).contentEquals(operation.execution.copyDynamicBytes()))
                 }
-                owned.own(device.createBuffer(BufferDescriptor(size = resource.byteSize.toULong(),
+                deferred.forEach { native ->
+                    val bytes = native.copySourceUniformBytes()
+                    require(bytes.size.toLong() == resource.byteSize && canonicalBytes != null && canonicalBytes.contentEquals(bytes)) {
+                        "W6 deferred source uniform row differs from its authenticated native upload"
+                    }
+                }
+                val buffer = owned.own(device.createBuffer(BufferDescriptor(size = resource.byteSize.toULong(),
                     usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
                     label = "w6b.source.uniform.${frame.physical.slot(id).slotI32}"))).also { buffer ->
                     canonicalBytes?.let { bytes -> queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong()) }
                 }
+                // Mutable graph-texture rows are intentionally not lendable.  Deferred rows have
+                // exact preflight-authenticated bytes and remain owned solely by this W6 payload.
+                if (deferred.isNotEmpty() && id !in graphTextureUniformIds) {
+                    owned.registerW5aDeferredSourceUniform(frame, resource, requireNotNull(canonicalBytes), generation, buffer)
+                }
+                buffer
             }
             val graphTextureUniformBuffers = graphTextureUniformIds.associateWith(sourceUniformBuffers::getValue)
             val colorFilterUniformBuffers = colorFiltersByUniform.keys.associateWith(sourceUniformBuffers::getValue)
@@ -2449,7 +2464,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 }
                 val config = GPUPreparedNativeRenderPassConfig(
                     colorTarget = GPUPreparedNativeTextureViewOperand(views.getValue(phases.first().target), generation),
-                    resolveTarget = GPUPreparedNativeTextureViewOperand(views.getValue(authority.owner.output), generation),
+                    resolveTarget = GPUPreparedNativeTextureViewOperand(views.getValue(requireNotNull(authority.owner.aaCoverageOutputOrNullV1())), generation),
                     depthStencilTarget = phases.first().depthStencil?.let { GPUPreparedNativeTextureViewOperand(views.getValue(it), generation) },
                     loadOperation = GPUPreparedNativeLoadOperation.Clear, storeOperation = GPUPreparedNativeStoreOperation.Store,
                     clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0), depthReadOnly = true,
@@ -2887,6 +2902,11 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load },
                                 stencilStoreOperation = depthId?.let { GPUPreparedNativeStoreOperation.Store }),
                             commands, render.drawPackets.map { requireNotNull(it.semanticPayload) }, w6aPassV1 = pass)
+                    }
+                    is PlanPass.AaDeferredComposite -> {
+                        val native = aaDeferredNative.getValue(pass.id)
+                        renderOperands += native.materialize(device, queue, views,
+                            sourceUniformBuffers.getValue(native.recipe.uniformResource), generation, stepIndex, owned)
                     }
                     is PlanPass.PathAaColorComposite -> {
                         val site = W6LayerCompositeSiteKeyV1(pass.id, 0)
@@ -5490,10 +5510,47 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
 }
 
 
-private class W6aOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
+internal class W6aOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider, GPUW5aFrameSourceUniformProviderV1 {
     private val handles = mutableListOf<AutoCloseable>()
     val templates = java.util.IdentityHashMap<GPURenderPipeline, GPUW5aGeometryPipelineTemplate>()
+    private data class W5aDeferredSourceUniform(
+        val frame: GPUW6aLayerFramePlan,
+        val row: PlanResource,
+        val bytes: ByteArray,
+        val generation: GPUDeviceGenerationID,
+        val buffer: GPUBuffer,
+    )
+    private val w5aDeferredSourceUniforms = linkedMapOf<PlanResourceId, W5aDeferredSourceUniform>()
     fun <T : AutoCloseable> own(value: T): T = value.also { handles += it }
+    fun registerW5aDeferredSourceUniform(frame: GPUW6aLayerFramePlan, row: PlanResource, bytes: ByteArray,
+        generation: GPUDeviceGenerationID, buffer: GPUBuffer) {
+        require(row.role == PlanResourceRole.SourceUniformData && row.kind == PlanResourceKind.Buffer &&
+            row.byteSize == bytes.size.toLong() && row.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination) &&
+            handles.any { it === buffer })
+        require(w5aDeferredSourceUniforms.put(row.id, W5aDeferredSourceUniform(frame, row, bytes.copyOf(), generation, buffer)) == null) {
+            "W6 deferred source uniform row registered twice"
+        }
+    }
+    override fun borrowW5aSourceUniform(frame: GPUW6aLayerFramePlan, row: PlanResource,
+        source: org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2,
+        generation: GPUDeviceGenerationID): GPUBuffer? {
+        val entry = w5aDeferredSourceUniforms[row.id] ?: return null
+        require(validates(entry, frame, row, source, generation, entry.buffer)) {
+            "W5a source attempted an unauthenticated W6 deferred uniform borrow"
+        }
+        return entry.buffer
+    }
+    override fun validatesW5aSourceUniformBorrow(frame: GPUW6aLayerFramePlan, row: PlanResource,
+        source: org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2,
+        generation: GPUDeviceGenerationID, buffer: GPUBuffer): Boolean =
+        w5aDeferredSourceUniforms[row.id]?.let { validates(it, frame, row, source, generation, buffer) } == true
+    private fun validates(entry: W5aDeferredSourceUniform, frame: GPUW6aLayerFramePlan, row: PlanResource,
+        source: org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2,
+        generation: GPUDeviceGenerationID, buffer: GPUBuffer): Boolean =
+        entry.frame === frame && entry.row.id == row.id && entry.row.role == row.role && entry.row.kind == row.kind &&
+            entry.row.byteSize == row.byteSize && entry.row.usages() == row.usages() && entry.generation == generation &&
+            entry.buffer === buffer && entry.bytes.contentEquals(source.stage.uniformBytes) &&
+            source.stage.uniformByteCountI64 == row.byteSize && handles.any { it === buffer }
     override fun sourceTemplate(pipeline: GPURenderPipeline): GPUW5aGeometryPipelineTemplate? = templates[pipeline]
         ?: handles.filterIsInstance<GPUW5aGeometryPipelineTemplateProvider>().firstNotNullOfOrNull { it.sourceTemplate(pipeline) }
     override fun close() {

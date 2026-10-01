@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import org.graphiks.kanvas.gpu.plan.FilterImplementationKindV1
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.aaCoverageBindingOrNullV1
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.passes.*
 import org.graphiks.kanvas.gpu.renderer.recording.*
@@ -19,7 +20,7 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         val pass = graph.passes()[index - 1]
         val geometryBinding = physical.geometryBinding(pass.id)
         val aa = physical.w4dAaSourceBindings().singleOrNull { pass in it.passes() }
-        val aaCoverage = (pass as? PlanPass.FilterCoverageSourcePass)?.aaCoverageBinding
+        val aaCoverage = pass.aaCoverageBindingOrNullV1()
         val indexedAa = aa != null || aaCoverage != null
         val indexedGeometry = geometryBinding != null || indexedAa
         // A FilterCoverage source with a frozen stencil producer replays the producer and
@@ -34,12 +35,12 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             else copy?.let { listOf(it.source, it.destination) }
                 ?: (step as GPUFrameStep.ReadbackCopyStep).let { listOf(it.source, it.staging) }
         val labels = referenced.map { "${it::class.simpleName}:${it.value}@${requireNotNull(generations[it])}" }
-        val composite = pass is PlanPass.LayerComposite || pass is PlanPass.PathAaColorComposite
+        val composite = pass is PlanPass.LayerComposite || pass is PlanPass.PathAaColorComposite || pass is PlanPass.AaDeferredComposite
         val fullscreen = pass is PlanPass.PictureSourcePass || pass is PlanPass.PictureComposite ||
             pass is PlanPass.FilterPass || pass is PlanPass.FilterComposite ||
             pass is PlanPass.PictureAggregateBeginPass || pass is PlanPass.PictureAggregateSealPass ||
             pass is PlanPass.FilterSourceClear || pass is PlanPass.FilterCoverageSourcePass ||
-            pass is PlanPass.FilterCoverageRetainPass
+            pass is PlanPass.FilterCoverageRetainPass || pass is PlanPass.AaDeferredComposite
         val frozenShadow = (pass as? PlanPass.FilterPass)?.operation?.kind in setOf(
             FilterImplementationKindV1.DROP_SHADOW_COLORIZE,
             FilterImplementationKindV1.DROP_SHADOW_COMPOSITE,
@@ -113,7 +114,8 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
                     GPUPreparedNativeOperandKind.TextureView, "w6a.$index.depth-stencil"))
             }
             repeat(if (composite || fullscreen) 1 else render.drawPackets.size) { draw ->
-                add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w6a.$index.pipeline.$draw"))
+                val deferredIdentity = (pass as? PlanPass.AaDeferredComposite)?.let { aaDeferredRecipe(it).canonicalLogicalEncodingV1 }.orEmpty()
+                add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w6a.$index.pipeline.$draw$deferredIdentity"))
                 add(key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, "w6a.$index.bind.$draw"))
                 if (indexedGeometry) {
                     add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer, "w6a.$index.vertex.$draw"))

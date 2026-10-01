@@ -37,6 +37,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6PathRenderDirectColor,
     W4dAaSource,
     W4dAaCoverageSource,
+    W6AaDeferredComposite,
     W6InverseMaskGeometryProducer,
     W6InverseMaskGeometryCover,
     W6InverseMaskZeroCover,
@@ -1272,10 +1273,12 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         w5aOrdinarySolidSources: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = emptyMap(),
         w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
         w4dAaCoverageSources: List<PlanW4dAaCoverageSourceBindingV1> = emptyList(),
+        aaDeferredComposites: List<W6AaDeferredCompositeRecipeV1> = emptyList(),
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W4dAaSourceNativeSiteRecipeV1 -> w4dAaSources.any { it === recipe.binding && it.recipe === recipe }
             is W4dAaCoverageSourceNativeSiteRecipeV1 -> w4dAaCoverageSources.any { it === recipe.binding && it.recipe === recipe }
+            is W6AaDeferredCompositeRecipeV1 -> aaDeferredComposites.any { it === recipe }
             is W5aSourceNativeSiteNativeRecipeV1 -> w5aOrdinarySolidSources[recipe.owner] === recipe.host
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
             is W6CorePrimitiveNativeSiteRecipeV1 -> corePrimitives[recipe.host.site] === recipe.host
@@ -1399,13 +1402,18 @@ public fun freezeNativeSiteRecipeCatalogV1(
     w5aOrdinarySolidSources: Map<NativeSiteOwnerV1, W5aSourceNativeSiteRecipeV1> = emptyMap(),
     w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
     w4dAaCoverageSources: List<PlanW4dAaCoverageSourceBindingV1> = emptyList(),
+    aaDeferredComposites: List<W6AaDeferredCompositeRecipeV1> = emptyList(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
+    aaDeferredComposites.forEach { recipe ->
+        require(passes.any { it === recipe.pass })
+        add(recipe)
+    }
     w4dAaSources.forEach { binding ->
         require(binding.passes().all { pass -> passes.any { it === pass } })
         add(binding.recipe)
     }
     w4dAaCoverageSources.forEach { binding ->
-        require(passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().single { it.id == binding.ownerPassId }.aaCoverageBinding === binding)
+        require(passes.single { it.id == binding.ownerPassId }.aaCoverageBindingOrNullV1() === binding)
         add(binding.recipe)
     }
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -2157,6 +2165,9 @@ internal class NativeSiteEncodingWriterV1(family: NativeSiteRecipeFamilyV1) {
                 enum("$name.mode", value.mode)
                 text("$name.formulaIdentity", value.formulaIdentity)
                 enum("$name.coverage", value.coverage)
+                if (value.coverageLaw == BlendCoverageLawV1.SourcePreScale) {
+                    enum("$name.coverageLaw", value.coverageLaw)
+                }
                 long("$name.requiredDestinationVersion", value.requiredDestinationVersion.valueI64)
                 value.snapshotResource?.let {
                     text("$name.snapshotResource.present", "true")

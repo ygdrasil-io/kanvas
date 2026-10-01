@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.planning
 import org.graphiks.kanvas.gpu.plan.BlendFactorV1
 import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.BlendCoverageEncodingV1
+import org.graphiks.kanvas.gpu.plan.selectedCoverageLawV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
@@ -48,6 +49,7 @@ public object W5bBlendPlanLowerer {
             require(plan.compositionAbiI32 in 3..4 &&
                 (!requireDestinationSeal || plan.snapshotResource != null) &&
                 plan.requiredDestinationVersion.valueI64 >= 0L &&
+                plan.coverageLaw == selectedCoverageLawV1(plan.mode, plan.coverage) &&
                 org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
                     .selectedFullCoverageFunctionWgsl(plan.mode.name.lowercase(), plan.formulaIdentity) != null) {
                 "Invalid sealed W5b destination formula/version/ABI"

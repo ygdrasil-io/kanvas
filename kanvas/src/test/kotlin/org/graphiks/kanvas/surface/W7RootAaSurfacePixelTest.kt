@@ -10,6 +10,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
@@ -87,10 +88,35 @@ class W7RootAaSurfacePixelTest {
     }
 
     @Test
-    fun `Picture playback inside layer remains unsupported transactionally`() {
+    fun `root AA SRC_OVER preserves its direct historical capacity without a layer`() {
+        // Direct W4d AA uses root RGBA8 (196), AA4 (784), resolved root (196), aligned
+        // readback (1792), W4d V/I/U floors (16384+4096+4096), and W4d/Solid uniforms (16+16).
+        val budgetB = listOf(196L, 784L, 196L, 1_792L, 16_384L, 4_096L, 4_096L, 16L, 16L)
+            .fold(0L, Math::addExact)
+        val blue = ColorARGB.of(255, 17, 61, 211)
+        val surface = Surface(7, 7, config = RenderConfig(frameLocalBudgetBytes = budgetB))
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(ColorARGB.Black, antiAlias = false))
+            drawPath(triangle(1f, 1f, 5f, 1f, 1f, 5f), Paint(blue, antiAlias = true))
+        }
+        val first = surface.render()
+        assertPixel(first.pixels, 7, 1, 1, 17, 61, 211, 255)
+        assertPixel(first.pixels, 7, 6, 6, 0, 0, 0, 255)
+        val second = surface.render()
+        assertContentEquals(first.pixels, second.pixels)
+        assertNative(first)
+        assertNative(second)
+    }
+
+    @Test
+    fun `Picture playback inside layer is native and repeatable`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
         val halfWhite = ColorARGB.of(128, 255, 255, 255)
         val path = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 6f, 6f)) }
+        // Independent fixed pixels for the original black root + half-white AA Picture
+        // child under a plain layer: a full-covered interior and an untouched exterior.
+        val covered = ubyteArrayOf(188u, 188u, 188u, 255u)
+        val outside = ubyteArrayOf(0u, 0u, 0u, 255u)
         val picture = PictureRecorder().also { recorder ->
             // No explicit clip is recorded through the public API.
             recorder.beginRecording(bounds).drawPath(path, Paint(halfWhite, antiAlias = true))
@@ -103,7 +129,13 @@ class W7RootAaSurfacePixelTest {
                 restore()
             }
         }
-        assertTerminalAndRecovers(surface, bounds, "w6a.layer.unsupported_child")
+        val first = surface.render()
+        assertNative(first)
+        assertContentEquals(covered, first.pixels.copyOfRange((3 * 7 + 3) * 4, (3 * 7 + 3) * 4 + 4))
+        assertContentEquals(outside, first.pixels.copyOfRange(0, 4))
+        val second = surface.render()
+        assertNative(second)
+        assertContentEquals(first.pixels, second.pixels)
     }
 
     @Test
@@ -185,6 +217,26 @@ class W7RootAaSurfacePixelTest {
     }
 
     @Test
+    fun `root W7 opacity-solid graph limit refuses transactionally and recovers`() {
+        // An AA opacity-solid Rect contributes its material and retained paint shader, each
+        // with its Solid leaf: 1 + 1_024 * 4 = 4_097 semantic nodes.  Capture sees only its
+        // operation plus shader graph (3_072), and the frame has 1_024 commands: both below
+        // 4_096.  This catches W6 root fragmentation bypassing the semantic graph cap.
+        val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
+        val admittedW7Paint = Paint(
+            shader = Shader.Opacity(Shader.SolidColor(ColorARGB.of(255, 17, 61, 211)), .5f),
+            blendMode = BlendMode.SRC,
+            antiAlias = true,
+        )
+        val surface = Surface(7, 7)
+        surface.canvas {
+            repeat(1_024) { drawRect(bounds, admittedW7Paint) }
+        }
+
+        assertTerminalAndRecovers(surface, bounds, "w4d.general.scene-invalid")
+    }
+
+    @Test
     fun `unsupported root aa siblings refuse transactionally`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
         val blue = ColorARGB.of(255, 17, 61, 211)
@@ -192,7 +244,6 @@ class W7RootAaSurfacePixelTest {
         val fixtures = listOf(
             Paint(blue, maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f), antiAlias = true) to "w6a.layer.unsupported_spatial_filter",
             Paint(blue, imageFilter = ImageFilter.Blur(1f, 1f), antiAlias = true) to "w6a.layer.unsupported_spatial_filter",
-            Paint(blue, blendMode = BlendMode.PLUS, antiAlias = true) to "w6a.layer.unsupported_child",
         )
         fixtures.forEach { (sibling, prefix) ->
             val surface = Surface(7, 7)
@@ -227,6 +278,35 @@ class W7RootAaSurfacePixelTest {
         assertNative(hardControlResult)
     }
 
+    @Test
+    fun `plain layer AA PLUS composes its resolved source before restoring to root`() {
+        val blue = ColorARGB.of(255, 17, 61, 211)
+        val root = triangle(1f, 1f, 5f, 1f, 1f, 5f)
+        // The AA table resolves each opaque edge to code 128 before layer restore.  Source-over
+        // restore then stores (128 * 255 + 128 * (255 - 128)) / 255 = 48896 / 255, rounded to 192.
+        // A skipped layer leaves the root's independently resolved code 128, hence the two are disjoint.
+        val rootEdgeAlphaCode = 128
+        val restoredEdgeAlphaCode = (48_896 + 127) / 255
+        check(restoredEdgeAlphaCode == 192)
+        check(restoredEdgeAlphaCode != rootEdgeAlphaCode)
+        val surface = Surface(7, 7)
+        surface.canvas {
+            drawPath(root, Paint(blue, antiAlias = true))
+            saveLayer()
+            drawPath(root, Paint(blue, blendMode = BlendMode.PLUS, antiAlias = true))
+            restore()
+        }
+
+        val first = surface.render()
+        assertPixel(first.pixels, 7, 2, 2, 17, 61, 211, 255)
+        assertPixel(first.pixels, 7, 6, 6, 0, 0, 0, 0)
+        assertAlphaCode(first.pixels, 7, 3, 2, restoredEdgeAlphaCode)
+        val second = surface.render()
+        assertContentEquals(first.pixels, second.pixels)
+        assertNative(first)
+        assertNative(second)
+    }
+
     private fun assertTerminalAndRecovers(surface: Surface, bounds: RectF32, prefix: String) {
         val sentinel = UByteArray(7 * 7 * 4) { 0x5au }
         val before = sentinel.copyOf()
@@ -250,7 +330,14 @@ class W7RootAaSurfacePixelTest {
     }
 
     private fun assertNative(result: RenderResult) {
+        assertTrue(result.isClean, result.diagnostics.summary())
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), result.nativeEvidenceScopeKinds.toString())
+        assertTrue(result.stats.opsDispatched > 0, "native render must dispatch")
+    }
+
+    private fun assertAlphaCode(pixels: UByteArray, width: Int, x: Int, y: Int, expected: Int) {
+        val actual = pixels[(y * width + x) * 4 + 3].toInt() and 0xff
+        assertTrue(actual == expected, "pixel ($x,$y) alpha $actual != $expected")
     }
 
     private fun assertPixel(pixels: UByteArray, width: Int, x: Int, y: Int, red: Int, green: Int, blue: Int, alpha: Int) {

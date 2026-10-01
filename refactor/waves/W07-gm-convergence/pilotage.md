@@ -1,5 +1,43 @@
 # Pilotage de la convergence Skia
 
+## Qualification Picture / Porter-Duff — 1er octobre 2026
+
+Code produit mesuré `3398dc3db8c8741d49234c74643f464baae645f6`, snapshot
+[`picture-3398dc3.json`](picture-3398dc3.json). Le correctif scoped conserve
+la lane analytique W4a des Rect `identity`/`scale-translate` de plain layer et
+réserve W7 au fait existant `GeneralAffine`, sans modifier les routes root ou
+Picture. Son témoin public a un RED causal au B complet `26808` (sans le garde :
+`requires 28736`) et un GREEN avec le garde. Les témoins publics sont **186/186**
+(185 identités antérieures + un budget, archive
+`layer-preservation-covering-186-1`, wrapper/enfant 0/0, zéro
+failure/error/skip/stderr). La relecture ciblée Sol est approuvée : I-new et
+I1 résiduel corrigés, aucun nouveau Critical/Important/Minor. La draft
+[#2426](https://github.com/ygdrasil-io/kanvas/pull/2426) est publiée sur #2425,
+après revue globale Astra et corrections. Ni merge ni clôture W7.
+
+Corpus : 631/443, 200 rendus, 178 comparés, 39 ≥99 %, 52 ≥95 %, médiane
+72.34801136363637 % à ±2. Les 18 invariants, hashes, métriques, outcomes,
+diagnostics, dispatches et refus sont inchangés face à `picture-8829d18`; aucune
+perte ou nouvelle image n'appelle une inspection visuelle. Face au hardstop,
+`sk3d_simple` rend nativement (51.931111111111115 % à ±2, SSIM
+0.6385013748432061, max [136,255,119,0]) mais son actual est un large carré
+magenta tourné contre un quadrilatère violet étroit de référence : gain de
+capacité, pas parité ni diagnostic d'attribution. `PlusMergesAA` reste le gain
+historique. `vertices` index 607 conserve son timeout 30 s.
+La globale bornée a 751 END (710 SUCCESS/40 FAILURE/1 SKIPPED), timeout
+wrapper/enfant 124/143; les 725 identités précédentes sont présentes, mêmes 40
+failures, 26 W5e supplémentaires sont atteintes (25 SUCCESS, un SKIPPED),
+`cubicDrawImageMatchesMitchellNetravaliOracle` SKIPPED→SUCCESS. Toutes les 718
+identités Task1 restent présentes, `rowPadding` SKIPPED→SUCCESS.
+
+Le checkpoint antérieur `picture-7488067469.json` n'est pas conservé dans le
+repo : ses journaux privés restent disponibles sous
+`/private/tmp/kanvas-w7-aa-blend.rFtTrn/task4-corpus-parity-7488067`. Sa perte
+unique `lattice2` a été localisée à la priorité W6 d'un Rect AA SRC qui fragmentait
+un frame `ImageLattice`. Le correctif final privilégie W5e seulement lorsqu'il
+est candidat pour le frame root sans layer/W6b; le hash `lattice2` restauré est
+`49d38b8f277d292c029ab9a7c9e5f19c6300821d3c9b21af6af150384ff02da0`.
+
 Baseline : PR draft [#2411](https://github.com/ygdrasil-io/kanvas/pull/2411),
 empilée sur [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410).
 Lot standalone : PR draft [#2412](https://github.com/ygdrasil-io/kanvas/pull/2412),
@@ -41,10 +79,44 @@ Lot précédent : port fidèle d'alphagradients et domaine explicite des GM,
 code `6259c38d8`, branche `codex/w7-alphagradients-port`, draft
 [#2424](https://github.com/ygdrasil-io/kanvas/pull/2424) empilée sur #2423 ;
 mesure et reviews terminées ci-dessous, sans merge.
-Lot courant : ports fidèles des deux hardstop, code `34e3d4e98`, branche
+Lot précédent : ports fidèles des deux hardstop, code `34e3d4e98`, branche
 `codex/w7-hardstop-ports`, draft [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425)
 empilée sur #2424 ; mesure et reviews terminées
 ci-dessous, publication draft uniquement.
+
+Série courante qualifiée (sans clôture W7) : `codex/w7-aa-blend-sources`, draft
+[#2426](https://github.com/ygdrasil-io/kanvas/pull/2426) sur #2425,
+[design](aa-blend-sources-design.md) et
+[plan](aa-blend-sources-plan.md). Correction W5 PLUS couvert revue et validée
+ciblée ; premier témoin root Path PLUS du consommateur GPU validé au code
+`6f07a6448` (couverture pleine, nulle et partielle, répétition native).
+L'émetteur partagé est extrait (`fa84fa81d`) et l'ownership Rect racine corrigé
+(`2dbefcdb9`). Le checkpoint natif compte 25 succès/25 (processus 0, sans
+timeout) : huit cellules root/layer, quatre formes concave/even-odd, le premier
+témoin PLUS, huit contrôles root historiques et quatre témoins PLUS couvert.
+SRC_OVER utilise des contrôles alignés après rejet indépendant de sa fixture
+de bord ; aucun oracle n'est élargi. Le partage physique des uniformes W5/W7
+est corrigé (`0980fab24`, contrôle natif 22/22). B=27 804 et B−1 avec sentinelle
+et récupération passent (`9b822cee1`, contrôle couvrant 23/23). Les témoins
+numériques et mapping passent (`b4d48388a`, 33/33), avec une correction du
+matériau normalisé transparent. Les 31 identités AA historiques et PointV2
+sont qualifiés ; 58 tests uniques passent au code final. `PlusMergesAA` rend
+désormais sans refus, mais reste à 69,4824 % de pixels identiques (SSIM 0,985107,
+écarts couleur R/G, alpha identique). Après deux corrections de revue
+(`a851621fc`), Sol accepte Task2 : **59/59** tests ciblés et image GM inchangée.
+Porter-Duff implémenté au code `dd498a4bc`, corrigé par `7953b2116` : 52 cellules
+root/layer positives, covering110/110, sorties0/0, tous les témoins précédents
+conservés ; relecture Sol approuvée. L'ordre inverse observe désormais DST_OUT,
+et le nouveau scope W7 reste affine non singulier avec refus/récupération testés.
+Les lanes analytiques Rect des layers sont préservées ; les
+nouveaux Rect root sont projetés via W4d. SRC_ATOP reste qualifié sur une
+forme alignée. `aarectmodes` refuse encore (unsupported_child non isolé).
+À ce checkpoint historique, Picture et le corpus complet restaient à venir ;
+aucune parité globale n'était revendiquée.
+L'[état courant](status.md#série-aa-et-composition-différée--livrée-en-draft-1er-octobre-2026)
+distingue les preuves natives réussies des limites historiques et de
+l'exit 133 W5g non qualifié. À ce checkpoint historique, le corpus mesuré
+ci-dessous était la baseline.
 
 Objectif : rapprocher les pixels du corpus Skia éligible, avec une mesure par
 identité de GM, une durée bornée et des régressions explicites. Les fonts,

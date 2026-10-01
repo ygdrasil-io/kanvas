@@ -4,7 +4,9 @@ import java.util.ArrayDeque
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.DrawPathSourceOperation
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.render.ir.CompositionDomain
@@ -14,6 +16,51 @@ internal object GPUPlanSurfaceCandidateGate {
     /** Layers have their own terminal planner ownership before any format or effect filtering. */
     fun ownsW6aLayers(operations: List<DisplayOp>): Boolean = operations.any {
         it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer
+    } || ownsW7AaDeferredPicture(operations)
+
+    /**
+     * A root Picture has no top-level layer marker, so it must nominate the W6 owner before the
+     * prepared flat compositor can reject the captured child.  This is intentionally narrower
+     * than general Picture routing: only the closed W7 solid AA fill vocabulary reaches W6.
+     */
+    private fun ownsW7AaDeferredPicture(operations: List<DisplayOp>): Boolean {
+        val pending = ArrayDeque<List<DisplayOp>>()
+        // This is a Picture owner seed, not a direct-draw admission predicate.  Direct W7
+        // candidates retain their established owners/refusals; only a real root DrawPicture
+        // can introduce an occurrence aggregate for the W6 Picture path.
+        operations.filterIsInstance<DisplayOp.DrawPicture>().forEach { pending.addLast(it.picture.ops) }
+        val seenPictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Boolean>()
+        var inspectedI32 = 0
+        while (pending.isNotEmpty()) {
+            pending.removeLast().forEach { operation ->
+                inspectedI32 = try { Math.addExact(inspectedI32, 1) } catch (_: ArithmeticException) { return false }
+                if (inspectedI32 > W6B_PICTURE_VISIT_LIMIT_I32) return false
+                when (operation) {
+                    is DisplayOp.DrawPath -> if (operation.paint.isW7AaDeferredPicturePaint()) return true
+                    is DisplayOp.DrawRect -> if (operation.paint.isW7AaDeferredPicturePaint()) return true
+                    is DisplayOp.DrawPicture -> if (seenPictures.put(operation.picture, true) == null) pending.addLast(operation.picture.ops)
+                    else -> Unit
+                }
+            }
+        }
+        return false
+    }
+
+    private fun org.graphiks.kanvas.paint.Paint.isW7AaDeferredPicturePaint(): Boolean =
+        antiAlias && style == org.graphiks.kanvas.paint.PaintStyle.FILL && blender == null &&
+            maskFilter == null && imageFilter == null && colorFilter == null && pathEffect == null &&
+            blendMode in W7_AA_DEFERRED_PICTURE_BLEND_MODES && shader.isSolidOrOpacitySolid()
+
+    private fun Shader?.isSolidOrOpacitySolid(): Boolean {
+        var source = this ?: return true
+        repeat(65) {
+            source = when (source) {
+                is Shader.SolidColor -> return true
+                is Shader.Opacity -> source.shader
+                else -> return false
+            }
+        }
+        return false
     }
 
     /**
@@ -254,4 +301,10 @@ internal object GPUPlanSurfaceCandidateGate {
             })
 
     private const val W6B_PICTURE_VISIT_LIMIT_I32: Int = 4_096
+
+    private val W7_AA_DEFERRED_PICTURE_BLEND_MODES = setOf(
+        BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST, BlendMode.SRC_OVER, BlendMode.DST_OVER,
+        BlendMode.SRC_IN, BlendMode.DST_IN, BlendMode.SRC_OUT, BlendMode.DST_OUT, BlendMode.SRC_ATOP,
+        BlendMode.DST_ATOP, BlendMode.XOR, BlendMode.PLUS,
+    )
 }

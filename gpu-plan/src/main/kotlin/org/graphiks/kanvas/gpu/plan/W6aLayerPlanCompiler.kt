@@ -68,12 +68,18 @@ public class W6aLayerPlanCompiler public constructor(
         val firstCommandIndexI32: Int,
         val compiler: CapabilityCompilerChain,
         val candidate: GpuPlanCandidate,
+        val deferredAa: W7AaDeferredOccurrenceFactsV1? = null,
     )
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         val commands = scene.toList()
         val ownsW6b = W6bFilterGraphConstruction.owns(scene)
         val hasLayerBoundary = commands.any { it is SceneCommand.BeginLayer || it is SceneCommand.EndLayer }
+        val ownsPictureStream = scene.filterIsInstance<SceneCommand.Draw>().any { draw ->
+            draw.node.geometry is GeometryNode.Picture
+        }
+        val ownsAaDeferred = ownsAaDeferred(scene, target, runtimeCatalog)
+        val ownsRootAaDeferredRect = !hasLayerBoundary && !ownsW6b && ownsRootAaDeferredRect(scene, target)
         val ownsMixedRootAaRect = !hasLayerBoundary && !ownsW6b && ownsMixedRootAaRectFrame(commands)
         val ownsEncodedHairlineFrame = !ownsW6b && target.compositionDomain ==
             org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
@@ -81,11 +87,33 @@ public class W6aLayerPlanCompiler public constructor(
             commands.filterIsInstance<SceneCommand.Draw>().any(CompositionAdmissionV1::isAdmittedEncodedRectHairline)
         val ownsEncodedRootSegments = !hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect &&
             (ownsEncodedRootSegmentFrame(scene, target, commands) || ownsEncodedHairlineFrame)
-        if (!hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect && !ownsEncodedRootSegments) {
+        if (!hasLayerBoundary && !ownsW6b && !ownsPictureStream && !ownsAaDeferred && !ownsRootAaDeferredRect && !ownsMixedRootAaRect && !ownsEncodedRootSegments) {
             return GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Scene has no layer boundary.")))
         }
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
             return invalid(W6aPlanDiagnostics.UnsupportedChild, "Scene and target descriptors disagree.")
+        }
+        // Every W6 owner must validate the complete public scene before it can split root
+        // occurrences. Otherwise a valid W7 source family can exceed the graph cap only after
+        // fragmentation, reaching native submission without the configured pre-GPU refusal.
+        if (org.graphiks.kanvas.render.ir.SceneSemanticValidator.validate(scene) is
+            org.graphiks.kanvas.render.ir.SceneSemanticValidationResult.Invalid
+        ) return GpuPlanSelection.InvalidScene(listOf(W4dGeneralPlanDiagnostics.diagnostic(
+            W4dGeneralPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene validation failed",
+        )))
+        // W4e additionally validates finite public facts before it identifies and elides its
+        // complex-clip or inverse-path semantic NoOps; preserve that stricter boundary.
+        if (scene.filterIsInstance<SceneCommand.Draw>().any { isW4eSemanticNoOp(it.node, target) }) {
+            W4dGeneralPathPlanCompiler(
+                strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
+                acceptsNarrowTransforms = true,
+                retainGeometryConstructionGraph = true,
+                runtimeCatalog = runtimeCatalog,
+            ).finiteSceneError(scene)?.let { message ->
+                return GpuPlanSelection.InvalidScene(listOf(W4dGeneralPlanDiagnostics.diagnostic(
+                    W4dGeneralPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, message,
+                )))
+            }
         }
         // W6b ownership is terminal before child-lane planning or any physical construction.
         // Positive arms remain frozen-but-unmaterialized until Task 3 provides native execution.
@@ -188,7 +216,7 @@ public class W6aLayerPlanCompiler public constructor(
             }
         }
         if (stack.isNotEmpty()) return invalid(W6aPlanDiagnostics.MalformedStack, "BeginLayer has no matching EndLayer.")
-        if (scopes.isEmpty() && !ownsW6b && !ownsMixedRootAaRect && !ownsEncodedRootSegments)
+        if (scopes.isEmpty() && !ownsW6b && !ownsPictureStream && !ownsAaDeferred && !ownsRootAaDeferredRect && !ownsMixedRootAaRect && !ownsEncodedRootSegments)
             return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
 
         val segments = mutableListOf<Segment>()
@@ -234,16 +262,39 @@ public class W6aLayerPlanCompiler public constructor(
             val aaSource = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
             val rootAaRectSource = W4dGeneralPathPlanCompiler.w6RootAaRectStrokeSource(runtimeCatalog)
             val aaCoverageSource = W4dGeneralPathPlanCompiler.w6AaCoverageSource(runtimeCatalog)
+            val deferredAaSource = W4dGeneralPathPlanCompiler.w7AaDeferredSource(runtimeCatalog)
             val encodedHairlineSource = W4dGeneralPathPlanCompiler.w6EncodedRectHairlineSource(runtimeCatalog)
-            val originalDraw = (recordedCommand as? SceneCommand.Draw)?.node
+            val originalCommand = recordedCommand as? SceneCommand.Draw
+            val originalDraw = originalCommand?.node
             val unfilteredDraw = (recordedCommand as? SceneCommand.Draw)?.let {
                 stripW6bPayload(it, drawIndexI32 in directInputDemandCommands).node
             }
             // Keep the historical ordinary general-path compiler for every other segment.
             // The AA variant proves DirectTriangle during select, before capability planning.
+            val historicalAaSource = originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true
+            // DST is a semantic no-op independently of geometry, source material, or an
+            // inverse/AA clip.  W4e authenticates the same selected fact before preparing its
+            // clip mask; preserve that ordering when a later W7 sibling makes W6 the owner.
+            val semanticNoOp = originalDraw?.let { draw -> isW4eSemanticNoOp(draw, target) } == true
+            if (semanticNoOp) return@forEach
             val rootAaSource = scopeI32 == null && !ownsW6b &&
-                originalDraw?.coverage == CoverageRequest.ANTIALIASED &&
-                aaSource.acceptsW6AaColorSourceScope(requireNotNull(originalDraw))
+                originalDraw?.coverage == CoverageRequest.ANTIALIASED && historicalAaSource
+            // Preserve W4a for its identity/axis-aligned Rect domain.  A finite general-affine
+            // Rect has no analytic source lane, so it may select the shared W7 occurrence path.
+            val deferredAa = originalCommand?.takeIf { draw ->
+                // A direct layer Rect keeps W4a unless the existing affine fact proves its
+                // analytic lane is unavailable. Root keeps its historical destination-read
+                // route; Picture occurrence selection applies its corresponding guard later.
+                (scopeI32 == null || draw.node.geometry !is GeometryNode.Rect ||
+                    requiresW7AffineRectProjection(draw.node)) &&
+                    retainsW7AaDeferredSourceAuthority(segment, draw, target, runtimeCatalog)
+            }?.node?.let { draw ->
+                selectedW7AaDeferredBlend(draw, target, runtimeCatalog, historicalAaSource)
+                    ?.let { W7AaDeferredOccurrenceFactsV1(drawIndexI32, it) }
+            }
+            // DST is a selected W7 semantic NoOp.  Keep W6 ownership so sibling rendering
+            // remains native, but publish no source lane, resource, pass, or destination write.
+            if (deferredAa?.blend == BlendPlan.NoOpV1) return@forEach
             val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&
                 originalDraw?.let(rootAaRectSource::acceptsW6RootAaRectStrokeScope) == true
             val encodedHairline = ownsEncodedHairlineFrame &&
@@ -256,17 +307,26 @@ public class W6aLayerPlanCompiler public constructor(
                 } == true &&
                 unfilteredDraw?.let(aaCoverageSource::acceptsW6AaColorSourceScope) == true
             val generalPath = when {
+                deferredAa != null -> deferredAaSource
                 rootAaCoverage -> aaCoverageSource
                 rootAaRectStroke -> rootAaRectSource
                 encodedHairline -> encodedHairlineSource
                 (scopeI32 != null && originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true) || rootAaSource -> aaSource
                 else -> W4dGeneralPathPlanCompiler()
             }
-            val child = CapabilityCompilerChain.ofProjected(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
-                W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
-                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), generalPath), runtimeCatalog)
+            val child = CapabilityCompilerChain.ofProjected(
+                if (deferredAa != null) listOf(
+                    W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(),
+                    W4dPathStrokePlanCompiler(), generalPath,
+                ) else listOf(
+                    W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(),
+                    W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
+                    W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), generalPath,
+                ),
+                runtimeCatalog,
+            )
             when (val selection = child.select(segment, target)) {
-                is GpuPlanSelection.Candidate -> segments += Segment(scopeI32, drawIndexI32, child, selection.candidate)
+                is GpuPlanSelection.Candidate -> segments += Segment(scopeI32, drawIndexI32, child, selection.candidate, deferredAa)
                 // A source lane that is admissible except for its W5 material must retain that
                 // material authority.  The outer router will terminalize it because W6 owns the
                 // layer boundary; collapsing it to UnsupportedChild would both lose the public
@@ -356,7 +416,7 @@ public class W6aLayerPlanCompiler public constructor(
             val bindings = mutableListOf<W6aLayerSourceBinding>()
             for (segment in selected.segments) when (val result = segment.compiler.constructSourceLanes(segment.candidate, capabilities, budget)) {
                 is RenderPlanResult.Ready -> result.plan.forEach { bindings += W6aLayerSourceBinding(
-                    segment.scopeI32, segment.firstCommandIndexI32, it,
+                    segment.scopeI32, segment.firstCommandIndexI32, it, deferredAa = segment.deferredAa,
                 ) }
                 // The child has already named its owner/capture limit. W6 only owns the
                 // aggregate peak after every child source is sealed.
@@ -531,11 +591,6 @@ public class W6aLayerPlanCompiler public constructor(
         return null
     }
 
-    private fun logicalColorFormat(target: RenderTargetDescriptor): PlanLogicalColorFormat = when (target.compositionDomain) {
-        org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
-        org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
-    }
-
     /**
      * W6b binds only the captured IR payload to its frozen graph.  The W5 lane may still prove
      * the unfiltered source draw, but never sees a public spatial-filter object or chooses a
@@ -609,5 +664,129 @@ public class W6aLayerPlanCompiler public constructor(
 
     public companion object {
         public const val CAPABILITY_ID: String = "w6a.layer.v1"
+
+        private fun logicalColorFormat(target: RenderTargetDescriptor): PlanLogicalColorFormat = when (target.compositionDomain) {
+            org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+            org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
+        }
+
+        internal fun ownsAaDeferred(
+            scene: SceneSnapshot,
+            target: RenderTargetDescriptor,
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): Boolean = target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR &&
+            scene.filterIsInstance<SceneCommand.Draw>().any { draw ->
+                val historical = W4dGeneralPathPlanCompiler.w6AaColorSource(catalog).acceptsW6AaColorSourceScope(draw.node)
+                selectedW7AaDeferredBlend(draw.node, target, catalog, historical) != null &&
+                    retainsW7AaDeferredSourceAuthority(scene, draw, target, catalog)
+            }
+
+        /**
+         * Scope admission deliberately includes an off-target RECT.  The sole selection result
+         * that relinquishes W7 ownership is W4d's exact empty-geometry limit; all invalid,
+         * material, capability, and real resource refusals remain terminal on their native lane.
+         */
+        private fun retainsW7AaDeferredSourceAuthority(
+            scene: SceneSnapshot,
+            draw: SceneCommand.Draw,
+            target: RenderTargetDescriptor,
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): Boolean {
+            val selected = W4dGeneralPathPlanCompiler.w7AaDeferredSource(catalog).select(
+                SceneSnapshot.of(scene.extent, scene.colorSpace, listOf(draw), scene.graphLimits), target,
+            )
+            return selected !is GpuPlanSelection.ResourceLimitExceeded || selected.diagnostics().none { diagnostic ->
+                diagnostic.code == W4dGeneralPlanDiagnostics.PathResourceLimit &&
+                    diagnostic.message == "W4d.2 retained no visible prepared geometry"
+            }
+        }
+
+        /** Mirrors W4e's blend elision domain without extending it to ordinary W7 DST draws. */
+        private fun isW4eSemanticNoOp(draw: DrawNode, target: RenderTargetDescriptor): Boolean {
+            val complexClipOrInversePath = draw.clip is ClipStackNode.Operations ||
+                ((draw.geometry as? GeometryNode.Path)?.path?.fillRule in setOf(
+                    org.graphiks.math.geometry.FillRule.INVERSE_WINDING,
+                    org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD,
+                ))
+            return complexClipOrInversePath && FinalBlendPlanner.plan(
+                draw.blend,
+                CoveragePlan.FullOrScissor,
+                SamplePlan.SingleSample,
+                logicalColorFormat(target).blendTargetClampV1(),
+                BlendCoverageApplicationV1.SourceMultiplication,
+            ) == BlendPlan.NoOpV1
+        }
+
+        /** Closed W7 selection fact shared by root ownership and occurrence construction. */
+        internal fun selectedW7AaDeferredBlend(
+            draw: DrawNode,
+            target: RenderTargetDescriptor,
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+            historicalAaSource: Boolean,
+        ): BlendPlan? {
+            if (!W4dGeneralPathPlanCompiler.w7AaDeferredSource(catalog).acceptsW7AaDeferredSourceScope(draw)) return null
+            val initial = requireNotNull(FinalBlendPlanner.plan(draw.blend, CoveragePlan.StencilAA4,
+                SamplePlan.SingleSample, logicalColorFormat(target).blendTargetClampV1(),
+                BlendCoverageApplicationV1.SourceMultiplication, BlendCoverageEncodingV1.ScalarCoverageInShader))
+            val blend = if (initial is BlendPlan.FixedFunctionV1 && initial.mode != org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER) {
+                requireNotNull(FinalBlendPlanner.plan(draw.blend, CoveragePlan.StencilAA4,
+                    SamplePlan.SingleSample, logicalColorFormat(target).blendTargetClampV1(),
+                    BlendCoverageApplicationV1.DestinationInterpolation, BlendCoverageEncodingV1.ScalarCoverageInShader))
+            } else initial
+            return blend.takeIf { (it is BlendPlan.DestinationReadV1) ||
+                ((!historicalAaSource || requiresW7AffineRectProjection(draw)) && it.isW7AaDeferredBlendV1()) }
+        }
+
+        /** W4a cannot lower a sheared/rotated Rect; W7 may project only that missing lane. */
+        internal fun requiresW7AffineRectProjection(draw: DrawNode): Boolean =
+            draw.origin == DrawOrigin.RECT && draw.geometry is GeometryNode.Rect &&
+                draw.transform.toMatrix3x3F64().classifyPathTransform() == PathTransformClass.GeneralAffine
+
+        /** Closed root-only W7 ownership for the existing W4a analytic Rect lane. */
+        internal fun ownsRootAaDeferredRect(
+            scene: SceneSnapshot,
+            target: RenderTargetDescriptor,
+        ): Boolean {
+            if (target.compositionDomain != org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR) return false
+            val draws = scene.filterIsInstance<SceneCommand.Draw>()
+            return draws.isNotEmpty() && scene.all { it is SceneCommand.Draw } &&
+                draws.all { acceptsRootAaDeferredRect(it.node) } &&
+                draws.any { it.node.coverage == CoverageRequest.ANTIALIASED &&
+                    rootAaDeferredRectBlendMode(it.node.blend) == org.graphiks.kanvas.render.ir.BlendMode.PLUS } &&
+                draws.any { it.node.coverage == CoverageRequest.HARD_EDGE &&
+                    rootAaDeferredRectBlendMode(it.node.blend) == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER }
+        }
+
+        private fun acceptsRootAaDeferredRect(draw: DrawNode): Boolean {
+            val paint = draw.paint ?: return false
+            val bounds = (draw.geometry as? GeometryNode.Rect)?.copyBounds() ?: return false
+            var material = draw.material
+            while (material is MaterialNode.Opacity) material = material.material
+            val matrix = draw.transform.toMatrix3x3F64()
+            return draw.origin == DrawOrigin.RECT && !bounds.isEmpty &&
+                listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite) &&
+                material is MaterialNode.Solid && paint.style == PaintStyleNode.FILL &&
+                draw.coverage in setOf(CoverageRequest.HARD_EDGE, CoverageRequest.ANTIALIASED) &&
+                draw.resource == null && draw.operationBlendMode == null && paint.blender == null &&
+                paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null &&
+                paint.pathEffect == null && draw.effects == EffectStack.Empty &&
+                rootAaDeferredRectBlendMode(draw.blend) != null && matrix.isFinite() &&
+                matrix.classifyPathTransform() in setOf(PathTransformClass.Identity, PathTransformClass.AxisAlignedAffine) &&
+                matrix.sxF64 != 0.0 && matrix.syF64 != 0.0
+        }
+
+        private fun rootAaDeferredRectBlendMode(blend: BlendNode): org.graphiks.kanvas.render.ir.BlendMode? = when (blend) {
+            BlendNode.SrcOver -> org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER
+            is BlendNode.Mode -> blend.mode.takeIf {
+                it in setOf(org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER, org.graphiks.kanvas.render.ir.BlendMode.PLUS)
+            }
+            is BlendNode.Paint -> blend.mode.takeIf {
+                blend.blender == null && it in setOf(
+                    org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER,
+                    org.graphiks.kanvas.render.ir.BlendMode.PLUS,
+                )
+            }
+            is BlendNode.Custom -> null
+        }
     }
 }

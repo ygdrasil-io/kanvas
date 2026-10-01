@@ -1,7 +1,191 @@
 # W07 — diagnostic GM provisoire
 
-PR draft empilée : [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410),
-sur la PR W6 [#2409](https://github.com/ygdrasil-io/kanvas/pull/2409).
+PR courante : draft [#2426](https://github.com/ygdrasil-io/kanvas/pull/2426),
+empilée sur [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425).
+La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
+reste la base historique sur la PR W6 #2409.
+
+## Qualification Picture / Porter-Duff — 1er octobre 2026
+
+Renderer mesuré : `3398dc3db8c8741d49234c74643f464baae645f6`.
+Le garde de plain layer conserve W4a pour les Rect `identity`/`scale-translate`
+non-`SRC_OVER`/`PLUS`, et n'admet W7 que lorsque le fait existant
+`GeneralAffine` le requiert. Le RED causal au même B analytique complet
+`26808` refuse sans ce garde (`requires 28736`); le GREEN passe avec le garde.
+Les témoins publics W7/Picture, quatre régressions historiques, la garde de
+graphe, 14 cas Rect affine et ce témoin sont **186/186** (archive
+`layer-preservation-covering-186-1`, wrapper/enfant 0/0, zéro
+failure/error/skip/stderr). Le témoin Picture-layer `DST_OUT` observe C
+`64/255`, établi depuis le pattern MSAA4 avant Surface. Le contrôle PLUS
+translation racine demeure positif. Après la revue globale Astra et les
+corrections, la relecture ciblée Sol approuve le correctif : I-new et I1
+résiduel corrigés, aucun nouveau Critical/Important/Minor. La draft #2426 est
+publiée sur #2425 ; cette qualification ne vaut ni merge ni clôture W7.
+
+La suite globale `layer-preservation-full-final-1` expire comme bornée
+(wrapper 124, enfant 143) après 751 END : 710 SUCCESS, 40 FAILURE, 1 SKIPPED.
+Les 725 identités du run final précédent sont toutes présentes avec les mêmes
+40 échecs; 26 identités W5e supplémentaires sont atteintes (25 SUCCESS, un
+SKIPPED) et `cubicDrawImageMatchesMitchellNetravaliOracle` devient SUCCESS.
+Les 718 identités Task1 restent présentes, avec 33 ajouts (32 SUCCESS, un
+SKIPPED) et `rowPadding...` SKIPPED→SUCCESS. Ce n'est pas une suite globale
+verte ni une clôture W7.
+
+Le corpus figé au même SHA est 631 identités / 443 éligibles : 200 rendus,
+178 comparaisons, 39 à ≥99 % et 52 à ≥95 % des pixels à ±2/canal. Les 18
+invariants, tous les hashes et métriques sont identiques à
+`picture-8829d18`; le snapshot remplacé est
+[`picture-3398dc3.json`](picture-3398dc3.json). Face au hardstop,
+`sk3d_simple` reste une admission native seulement (51.931111111111115 % à ±2,
+SSIM 0.6385013748432061, max [136,255,119,0]) : son écart de
+silhouette/couleur est majeur, et l'alpha opaque identique ne prouve aucune
+équivalence. `PlusMergesAA` reste le gain historique. Le timeout `vertices`
+index 607 reste 30 s. Références, seuils, exclusions et oracle n'ont pas été
+modifiés.
+
+Le checkpoint intermédiaire `7488067` reste archivé honnêtement dans les journaux
+privés : son JSON n'est pas conservé dans le repo; il avait gagné
+`PlusMergesAA` mais perdu `lattice2`. Le diagnostic a montré qu'un Rect AA SRC
+forçait W6 avant le plan whole-frame W5e; `93ec530` rétablit la priorité W5e sur
+un vrai candidat root sans layer/W6b. `lattice2` retrouve exactement le hash
+`49d38b8f…02da0`; aucune admission image ou codec n'a été élargie.
+
+## Série AA et composition différée — livrée en draft, 1er octobre 2026
+
+Branche `codex/w7-aa-blend-sources`, draft #2426 sur #2425.
+[Design](aa-blend-sources-design.md), [plan séquentiel](aa-blend-sources-plan.md).
+La correction W5 PLUS couvert est implémentée et approuvée par Sol après
+deux vagues de corrections : `sat(C*S+D)` remplace le post-lerp à saturation,
+avec loi sélectionnée et oracle V2 indépendant, sans tolérance élargie.
+Les témoins natifs W7 corrigés passent **4/4**, processus 0 ; le contrôle
+Point V2 couvre ses trois contextes et passe **1/1**, processus 0.
+
+La couverture AA indépendante du matériau, le consommateur typé et l'émetteur
+partagé racine/plain layer sont implémentés et relus pour PLUS/SRC_OVER.
+Le lot Porter-Duff `dd498a4bc`, corrigé par `7953b2116`, apporte les **52 cellules**
+des 13 modes × Path/Rect × root/layer. Son covering passe **110/110**, sorties enfant/wrapper
+0/0, sans timeout, erreur, skip ni stderr XML ; les 31 identités originales
+et les 59 du checkpoint Task2 sont conservées. La relecture Sol accepte le lot
+après correction de l'observabilité de DST_OUT dans l'ordre inverse.
+DST est sélectionné puis éliminé sans écriture ni version supplémentaire ;
+CLEAR/SRC restent actifs avec une source transparente. Les Rect de layers
+conservent leurs lanes analytiques. Les nouveaux modes Rect root emploient la
+projection W4d existante (coût MSAA/resolve, C=128/255 et non C=.5 analytique).
+SRC_ATOP possède un témoin coloré aligné, pas de nouveau témoin de bord partiel.
+Le scope W7 exclut maintenant explicitement la perspective et les transformations
+sans inverse fini. Un témoin public distingue translation, bord AA et scissor,
+puis vérifie refus de perspective, sentinelle intacte et récupération ; les
+routes historiques de W4d/W4a restent inchangées.
+`aarectmodes` reste `render_failed` sur `w6a.layer.unsupported_child`, cause
+non isolée ; aucun gain GM revendiqué pour ce lot. Picture, la validation
+complète du corpus et le contrôle de limite de graphe sont terminés; W7, W6 et
+W0 ne sont pas clos et la suite globale reste incomplète par timeout.
+
+Les checkpoints ci-dessous retracent la mise en place du contrat partagé.
+Après appui architectural et reprise native ciblés par Astra, le commit
+`6f07a6448` raccorde le consommateur GPU. Son témoin root Path PLUS passe
+**1/1**, processus 0, sans erreur/skip : pixels indépendants à C=0, C=1 et
+C=128/255, Render/Readback réels et second rendu byte-identique. L'archive
+finale `task2-rescue-final-green` ne contient plus de trace temporaire.
+
+L'émetteur commun est extrait depuis `fa84fa81d`. La reprise native corrige
+l'initialisation de la première passe stencil, la double déclaration d'un
+snapshot enfant et la sélection SRC_OVER : conserver l'ancienne source quand
+elle admet le draw, sinon employer la source typée pour Solid/Opacity.
+Le correctif `2dbefcdb9` raccorde la sélection des frames Rect racine mêlant
+AA PLUS et SRC_OVER hard, en conservant la géométrie analytique. La trace
+antérieure montrait un paquet legacy non scellé, avant toute entrée W6 ; aucun
+fallback WGSL ni guard n'a été ajouté pour masquer ce défaut de sélection.
+Le contrôle `task2-rootrect-owner-native-2` compte **25 succès sur 25**, zéro
+échec/erreur/skip et sorties enfant/wrapper **0/0**, sans timeout ni stderr XML.
+Il comprend les huit cellules PLUS/SRC_OVER × Path/Rect × root/layer, quatre
+cas concave/even-odd, le premier témoin PLUS, huit contrôles root historiques
+et quatre témoins de la loi PLUS couverte. Les nouvelles cellules vérifient
+tous leurs pixels sur deux rendus natifs.
+
+La fixture SRC_OVER initialement proposée était non bornée avant Surface aux
+bords partiels : elle ne constituait pas un échec moteur. Ses quatre contrôles
+emploient maintenant des formes alignées avec intérieur/extérieur disjoints,
+sans élargir l'oracle. Les témoins PLUS conservent leurs bords partiels ; cette
+matrice n'apporte pas de nouvelle preuve SRC_OVER aux bords partiels.
+L'audit a également confirmé une double allocation possible d'une même row
+uniforme déclarée. Le correctif `0980fab24` fait emprunter à W5 le buffer
+deferred détenu par W6, avec validation de frame, row, génération, capacité et
+bytes immuables ; W6 reste seul responsable de sa libération. Le contrôle
+`task2-shared-uniform-native` passe **22/22**, sorties **0/0**, sans timeout
+ni stderr XML. Ces pixels vérifient la conservation du rendu, pas le nombre
+d'allocations : ce dernier repose sur l'audit de propriété et reste à relire.
+
+Le témoin de budget `9b822cee1` dérive **B = 27 804 octets** : root, resolve
+et snapshot 3×196, AA4 784, readback 1 792, uniforme W6 16, buffers W4d
+16 384+4 096+4 096 et matériaux D/S 16+32. Le Rect hard PLUS utilise le blend
+fixe One/One ; seul le Path AA exige une snapshot. B passe sur deux rendus ;
+B−1 refuse sans modifier la sentinelle, puis la même Surface récupère sur deux
+rendus. `task2-shared-uniform-budget-3` passe 1/1 et le contrôle couvrant passe
+**23/23**, sorties **0/0**, sans timeout ni stderr XML. Une trace a corroboré
+l'inventaire avant qualification ; le budget n'a pas été ajusté par recherche.
+
+Le checkpoint numérique `b4d48388a` passe **33/33** (`task2-numeric-covering-3`,
+sorties 0/0, sans timeout ni stderr XML) : saturation PLUS, ordre forward/reverse
+avec write intermédiaire, destination périmée, alpha nul, translation/scissor,
+origine de layer et double couverture. L'opacité nulle a révélé un refus de
+`TransparentV1/EmptyV1` ; la recette accepte désormais cette paire normalisée
+déjà prise en charge par l'évaluateur. Le témoin historique bleu sur bleu
+observe aussi le bord restauré (alpha 192 contre 128 si la layer est omise).
+Le premier témoin de mapping combiné avait une attente géométrique erronée et
+est explicitement invalidé ; les deux scènes corrigées passent séparément.
+Les bords chronologiques colorés restent non bornés avant GPU : l'ordre et
+la destination périmée sont observés dans leur overlap, la double couverture
+sur le vrai bord d'une autre scène. Aucun oracle n'a été élargi.
+
+Le rejeu `task2-final-aa-baseline-point` passe **25/25** : PathLayer9,
+MaskBlur8, MixedRootAaRect7 et PointV2. Avec Root8 du covering final, les
+**31 identités AA historiques sont toutes présentes et vertes**, sans doublon,
+plus le positif layer ajouté. Les deux runs comptent **58 tests uniques**,
+sorties 0/0, sans timeout ni stderr XML. Les avertissements Gradle historiques
+restent distincts de ce résultat ciblé.
+
+`PlusMergesAA` est désormais rendu : **7 dispatches, 0 refus**, contre
+`w6a.layer.unsupported_child` auparavant. La mesure ciblée au même commit
+(`task2-plusmergesaa-final`, sorties 0/0) conserve référence, port, domaine et
+seuils. Pixels exacts/tolérance2 : **69,4824 %**, SSIM **0,985107**, delta
+max RGBA **[73,37,0,0]**. Les images actual/reference/diff ont été inspectées :
+écarts R/G sur les deux carrés, alpha identique. Le rendu est débloqué, mais
+sa fidélité couleur n'est pas résolue par ce seul run.
+Le seuil contractuel historique nul n'est pas une preuve de parité.
+
+Le diagnostic couleur en lecture seule trouve le même intérieur à gauche et
+à droite : référence décodée `(14,240,0,255)`, actual `(69,248,0,255)`.
+Le calcul avec alpha240/255 en LINEAR suivi de l'encodage sRGB prédit exactement
+l'actual ; le calcul en valeurs encodées prédit `(15,240,0,255)`. Les 20 000
+pixels des deux carrés expliquent tout le mismatch au seuil2. Le port est fidèle
+au `plus.cpp` Skia épinglé ; la configuration de surface ayant généré la PNG
+n'est pas documentée. **Gap de contrat de domaine/référence à résoudre** :
+pas de changement de domaine, de référence ni de seuil dans cette série.
+Ce diagnostic distingue le décalage intérieur du travail restant sur la parité
+à domaine comparable ; il ne valide pas globalement le renderer.
+
+La revue indépendante Task2 a demandé deux corrections (ownership root
+SRC_OVER trop large et premier consumer non observé par le test d'ordre).
+Le correctif `a851621fc` partage le même fait de sélection entre ownership et
+occurrence, rétablit le budget root historique de 27 576 octets, et observe
+chaque premier consumer sur un pixel exclusif. La relecture Sol ciblée accepte
+les deux corrections, sans nouvelle anomalie importante. Le covering50 et le
+complément9 passent **59/59**, sorties0/0, sans timeout ni stderr XML ; les31
+identités originales sont toutes présentes. La re-mesure du GM conserve
+exactement le hash RGBA et les métriques du checkpoint précédent.
+
+**Tasks2–3 validées**, sans qualifier la suite globale ni clôturer W7.
+Picture et corpus complet suivent. La revue finale Astra de toute la série
+reste requise avant sa draft stackée.
+
+Les limites de validation restent explicites : W5g compte 125 identités,
+69 assertions réussies, deux échecs reproduits sur la base antérieure et
+54 non atteintes. Son run ciblé de 29 assertions réussies quitte ensuite
+avec un executor 133 inexpliqué, donc n'est pas vert. La globale bornée
+compte 677 succès, 40 échecs déjà observés et un cas interrompu ; elle est
+incomplète. Les fonts, codecs/décodage externe et `jpg-color-cube` restent
+exclus. W7 et les gates antérieures restent ouverts, sans merge ni claim ISO.
 
 ## Lot ports hardstop fidèles — 30 septembre 2026
 
