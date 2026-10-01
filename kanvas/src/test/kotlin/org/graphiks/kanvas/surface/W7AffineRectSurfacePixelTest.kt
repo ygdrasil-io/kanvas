@@ -145,6 +145,53 @@ class W7AffineRectSurfacePixelTest {
         assertContentEquals(first.pixels, second.pixels)
     }
 
+    @Test
+    fun `identity and scale translate layer Rects retain the analytic frame budget`() {
+        // B is derived before either Surface exists.  The ordinary W4a layer carries the 7x7
+        // root and child RGBA8 targets (196 + 196), seven aligned 256-byte readback rows
+        // (1792), and its declared V/I/U pool floors (16384 + 4096 + 4096). W6 owns its
+        // initial 16-byte uniform cursor. The final frame retains one 16-byte legacy Solid
+        // source row for each distinct Paint (child SRC_OVER destination and AA DST_OUT source). Thus
+        // B = 26760 + 16 + 16 + 16 = 26808. This is a complete static frame accounting, not a
+        // physical-lifetime boundary.
+        val budgetB = listOf(196L, 196L, 1_792L, 16_384L, 4_096L, 4_096L, 16L, 16L, 16L)
+            .fold(0L, Math::addExact)
+        val source = ColorARGB.Black
+        val destination = opaqueGrey
+        val expectedInterior = ColorARGB.Transparent
+        val expectedExterior = destination
+        require(expectedInterior != expectedExterior) { "DST_OUT must differ from omission" }
+
+        fun record(surface: Surface, scaleTranslate: Boolean) = surface.canvas {
+            saveLayer()
+            drawRect(bounds, Paint(destination, blendMode = BlendMode.SRC_OVER, antiAlias = false))
+            save()
+            if (scaleTranslate) {
+                translate(.5f, 0f)
+                scale(1.25f, 1f)
+            }
+            drawRect(sourceBounds, Paint(source, blendMode = BlendMode.DST_OUT, antiAlias = true))
+            restore()
+            restore()
+        }
+
+        listOf(false, true).forEach { scaleTranslate ->
+            val label = if (scaleTranslate) "scale-translate" else "identity"
+            val admitted = Surface(7, 7, config = RenderConfig(frameLocalBudgetBytes = budgetB))
+            record(admitted, scaleTranslate)
+            val first = admitted.render()
+            assertTrue(first.isClean, "$label ${first.diagnostics.summary()}")
+            assertTrue(first.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "$label ${first.nativeEvidenceScopeKinds}")
+            assertTrue(first.stats.opsDispatched > 0, "$label must dispatch")
+            assertPixel(first.pixels, 7, 2, 2, expectedInterior)
+            assertPixel(first.pixels, 7, 6, 6, expectedExterior)
+            val second = admitted.render()
+            assertTrue(second.isClean, "$label repeat ${second.diagnostics.summary()}")
+            assertContentEquals(first.pixels, second.pixels, "$label repeat pixels")
+        }
+    }
+
     private fun expectedDstOut(source: ColorARGB, destination: ColorARGB,
         coverage: Float): WgslFloatEnvelopeV1Oracle.DrawResult =
         WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(

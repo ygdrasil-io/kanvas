@@ -282,7 +282,12 @@ public class W6aLayerPlanCompiler public constructor(
             // Preserve W4a for its identity/axis-aligned Rect domain.  A finite general-affine
             // Rect has no analytic source lane, so it may select the shared W7 occurrence path.
             val deferredAa = originalCommand?.takeIf { draw ->
-                retainsW7AaDeferredSourceAuthority(segment, draw, target, runtimeCatalog)
+                // A direct layer Rect keeps W4a unless the existing affine fact proves its
+                // analytic lane is unavailable. Root keeps its historical destination-read
+                // route; Picture occurrence selection applies its corresponding guard later.
+                (scopeI32 == null || draw.node.geometry !is GeometryNode.Rect ||
+                    requiresW7AffineRectProjection(draw.node)) &&
+                    retainsW7AaDeferredSourceAuthority(segment, draw, target, runtimeCatalog)
             }?.node?.let { draw ->
                 selectedW7AaDeferredBlend(draw, target, runtimeCatalog, historicalAaSource)
                     ?.let { W7AaDeferredOccurrenceFactsV1(drawIndexI32, it) }
