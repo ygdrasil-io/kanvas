@@ -72,6 +72,34 @@ restent hors des commits renderer Task2. Une seule runtime native active.
 
 ## Validation execution
 
+### Task2 fix round2 — typed Picture clip regression
+
+Le global `task1-resume-global-1` au SHA `ff3e3bb4a` est le RED causal :
+abort natif134 dans le PictureTest existant de clip perspective. Ne pas
+reprovoquer cet abort ni changer l'oracle historique. Réouvrir Task2 avec
+l'implementer original pour l'admission fermée décrite dans le design,
+avant de reprendre la qualification Task1.
+
+- [ ] Modifier uniquement `W6aLayerGraphConstruction.kt`, le partage étroit
+  des prédicats hard dans `W6aLayerPlanCompiler.kt` et, si nécessaire, une
+  query des clips de source dans `OccurrenceSourceInputV1.kt`. Garder les
+  seeds raw/captured structurels et les modes W4d/W4e inchangés.
+- [ ] Ajouter des témoins publics de refus précis, sentinelle et recovery
+  dans `W7HardPictureSurfacePixelTest`, incluant Rect/Path, sibling valide,
+  Picture imbriquée/layer, et annulation de perspective enregistrée par
+  transform externe. Pas de tests d'infrastructure ni de nouvel oracle
+  fitted. Le PictureTest existant et les trois témoins Sk3d restent intacts.
+- [ ] Le contrôleur exécute désormais seul les validations natives, conserve
+  le handle vivant jusqu'au terminal et archive chaque commande. Le worker
+  écrit tests/code/rapport, sans Gradle/GPU. Qualification : identité Picture
+  régressive puis PictureTest complet + hard Picture ; Sk3d/Alpha/Hardstop ;
+  covering160 existant ; un global240 final avant corpus. Sol relit le diff
+  fix2 avec le rapport et les preuves du contrôleur.
+
+Les deux slices `task1-resume-corpus-ff3e3bb` se chevauchent réellement ;
+leurs journaux sont préservés, mais aucune qualification/agrégation ne les
+utilise. La future mesure est neuve, séquentielle, au SHA produit corrigé.
+
 Archive root `/private/tmp/kanvas-w7-sk3d.WUms9p` (fresh per invocation).
 Use `/private/tmp/kanvas-w7-sk3d.WUms9p/bounded-run.rb` (same runner with its
 archive guard scoped to this lot and maximum240s) and read-only

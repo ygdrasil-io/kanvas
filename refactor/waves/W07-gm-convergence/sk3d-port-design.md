@@ -113,6 +113,27 @@ La Picture sans paint reste inline sur la destination courante ; le SRC_OVER
 bleu voit le rouge précédent, sans isolation ajoutée. Tous les caps, budgets,
 proofs, scissor, stencil/reset et FinalBlendPlanner restent effectifs.
 
+Cette promotion hard Picture conserve le refus public des clips capturés
+sous perspective : `unsupported_transform:Perspective`. La famille plain
+hard est reconnue sur le draw capturé, avant normalisation sourceOnly ou
+suppression des effets. À l'admission de l'occurrence, contrôler les clips
+de source effectivement consommés (parents pertinents inclus, seul cull
+authentifié retiré), puis leur carrier composé : une perspective enregistrée
+ne disparaît pas du contrat parce qu'une transformation externe l'annule.
+Ne pas confondre les clips différés de composition avec les clips de source,
+ni le CTM projectif du draw avec celui du clip. Propager ce terminal avant
+la chaîne W4/W5, sans enveloppe `w6a.layer.unsupported_child`, et conserver
+les autres familles sous leurs propres contrats.
+
+Le global au produit `ff3e3bb4a` a révélé cette admission manquante : W4e
+acceptait le clip et le natif abortait sur un scissor hors cible. Le math
+produit bien un scissor borné, mais `ClipMaskProducer` ne le transporte pas
+jusqu'aux recettes stencil/direct. Ce défaut physique distinct reste une
+dette W7 à corriger avec une autorité cible-locale scellée et des témoins
+inverse/empty/stencil ; un clamp tardif ne constitue pas sa réparation.
+Le présent correctif préserve la frontière publique et n'annonce pas une
+réparation universelle W4e.
+
 ### Validation du prérequis
 
 Les oracles sont fixés avant GPU. Homographie indépendante sur Surface16×16 :
