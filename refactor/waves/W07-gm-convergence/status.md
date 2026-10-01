@@ -6,6 +6,58 @@ sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
 
+## Diagnostic inverse direct — 1er octobre 2026, en cours
+
+Branche `codex/w7-inverse-scene-inventory`, base publiée#2430
+`0dce69805c0b441f71279ad520455b4163be9c82`,
+[plan](inverse-scene-inventory-plan.md). Aucun changement produit :
+six témoins Surface8×8 sont encore locaux/non committés et ne constituent
+pas une livraison verte. Ils comparent une géométrie identique, avec/sans AA.
+
+Premier run frais : compilation réussie, **2SUCCESS/4FAILURE/0error/0skip**,
+sorties wrapper/enfant1/1 en15s, aucun timeout, stderr JUnit vide.
+Les deux clips inverses passent les64pixels, preuves natives et répétition.
+Les scènes ordinary+inverse refusent avec
+`invalid.native-core-primitive.w4e-resource`.
+Les inverse-only atteignent une autre erreur :
+`failed.native-core-primitive.w4e-materialization`,
+10opérandes natifs pour5clés dans le scope1.
+
+Le contrôle inverse-only n'est donc pas vert : il révèle un second défaut.
+Sol valide les témoins et le bilan du diagnostic, sans Critical/Important.
+Réserve mineure : l'égalité exacte de l'ensemble des preuves natives est
+plus stricte que la seule présence de Render/Readback.
+
+Une instrumentation temporaire, ensuite retirée intégralement, précise les
+causes. Sa première tentative ne compilait pas (interpolation de texte),
+donc ne constitue pas une observation native. La seconde termine en70s,
+sorties1/1, mêmes2SUCCESS/4FAILURE, aucun timeout/erreur/skip JUnit.
+Le diff produit est revenu vide contre73be2c3 ; les traces sont archivées.
+
+- Mixed hard :4entrées/4passes de rendu, aucun masque/prefixe, mais deux
+  consumers ordinaires null font échouer `all(InverseDomain)`. Le repli
+  exige ensuite des accumulateurs/résolus qui n'existent pas dans cette scène.
+- Mixed AA :6entrées/6passes de rendu, un PathMaskClear et un masque hard
+  pour le sibling ordinaire dans le target4×. Les termes sans prefixe/masque
+  échouent aussi, en plus de `all` ; aucun accumulateur de clip ni résolu.
+- Inverse seul : les deux phases producer/cover portent InverseDomain.Geometry
+  et commonSource=false. Chacune encode8opérandes de commande ; le premier
+  scope a10opérandes au total pour5clés. Le cover suivant est aussi divergent :
+  hard10/7,AA11/8, constatés dans les recettes construites avant le premier refus.
+
+Astra a identifié la divergence de priorité entre la phase historique et le
+consumer inverse dans les recettes clés/commandes. Le risque de répétition
+de couleur doit être testé : aucun effet pixel double n'est encore observé,
+car le payload est refusé avant soumission. Un simple `all→any` ou des clés
+ajoutées après encodage ne résoudraient pas le contrat d'autorité.
+La [stratégie retenue avec Astra](inverse-native-authority-design.md) conserve
+la paire producer/cover authentifiée : intérieur au stencil sans couleur,
+puis complément coloré une fois. L'inventaire graph-issued est traité ensuite,
+séparément. Deux témoins alpha précèdent le premier correctif ; les deux cas
+mixtes restent explicitement rouges jusqu'au second. Task2 temporaire est
+revu/accepté, traces retirées ; aucune réparation produit n'est encore livrée.
+Le dernier corpus publié reste celui d'`inverseclip` ci-dessous.
+
 ## Port inverseclip fidèle — 1er octobre 2026
 
 Branche `codex/w7-inverseclip-port`, parent draft#2429,
