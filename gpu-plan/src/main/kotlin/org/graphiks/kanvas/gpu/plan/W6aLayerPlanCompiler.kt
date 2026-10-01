@@ -244,19 +244,20 @@ public class W6aLayerPlanCompiler public constructor(
             }
             // Keep the historical ordinary general-path compiler for every other segment.
             // The AA variant proves DirectTriangle during select, before capability planning.
+            val historicalAaSource = originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true
             val rootAaSource = scopeI32 == null && !ownsW6b &&
-                originalDraw?.coverage == CoverageRequest.ANTIALIASED &&
-                aaSource.acceptsW6AaColorSourceScope(requireNotNull(originalDraw))
+                originalDraw?.coverage == CoverageRequest.ANTIALIASED && historicalAaSource
             val deferredAa = originalDraw?.takeIf(deferredAaSource::acceptsW7AaDeferredSourceScope)?.let { draw ->
                 val blend = requireNotNull(FinalBlendPlanner.plan(draw.blend, CoveragePlan.StencilAA4,
                     SamplePlan.SingleSample, logicalColorFormat(target).blendTargetClampV1(),
                     BlendCoverageApplicationV1.SourceMultiplication,
                     BlendCoverageEncodingV1.ScalarCoverageInShader))
-                // SRC_OVER retains the already proven resolved-colour lane.  Task 2's new
-                // canonical-white producer is needed only where PLUS needs a destination
-                // snapshot and fullscreen consumer; routing SRC_OVER through it changes its
-                // physical budget and invalidates the established W6 ownership contract.
-                blend.takeIf { it is BlendPlan.DestinationReadV1 }
+                // Preserve every SRC_OVER draw that the historical resolved-colour lane
+                // already admits.  Only its Solid/Opacity gap uses W7's typed coverage
+                // producer and fixed scalar-coverage consumer; PLUS always needs its
+                // destination-read snapshot.
+                blend.takeIf { it is BlendPlan.DestinationReadV1 ||
+                    !historicalAaSource && it.isW7AaDeferredBlendV1() }
                     ?.let { W7AaDeferredOccurrenceFactsV1(drawIndexI32, it) }
             }
             val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&

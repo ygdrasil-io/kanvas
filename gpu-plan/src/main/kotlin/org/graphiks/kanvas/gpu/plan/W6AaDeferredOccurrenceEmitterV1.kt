@@ -54,14 +54,14 @@ internal object W6AaDeferredOccurrenceEmitterV1 {
 
     fun emitOccurrence(selected: Selected, target: Target, destinationVersionBefore: DestinationVersionI64,
         sourcePhases: List<PlanPass>, remapping: Map<PlanResourceId, PlanResourceId>,
-        sourceResources: List<PlanResource>, mapping: LayerMappingF64?, domainDeviceI32: RectI32,
+        sourceResources: List<PlanResource>, domainDeviceI32: RectI32,
         firstOrdinalI32: Int, snapshot: PlanResourceId?): Emission {
         val phases = sourcePhases.mapIndexed { index, original ->
             val path = original as? PlanPass.PathRenderPass ?: error("W7 deferred AA source lost its path phase.")
-            val rebound = path.rebindW4eV6(firstOrdinalI32 + index, remapping::getValue, mapping, domainDeviceI32) as PlanPass.PathRenderPass
-            if (rebound.phase == PathRenderPhase.MultisampleDirectColor) PlanPass.PathRenderPass(rebound.ordinal, rebound.target,
-                rebound.draw, rebound.phase, rebound.drawDataResources, path.atomicGroup, path.depthStencil, path.load, path.store,
-                path.depthStencilAccess, path.depthStencilLoadStore, rebound.resolveTarget, rebound.scanSpansDeviceI32) else rebound
+            val rebound = path.rebindW4eV6(firstOrdinalI32 + index, remapping::getValue, target.mapping, domainDeviceI32) as PlanPass.PathRenderPass
+            PlanPass.PathRenderPass(rebound.ordinal, rebound.target, rebound.draw, rebound.phase, rebound.drawDataResources,
+                rebound.atomicGroup, rebound.depthStencil, path.load, path.store, rebound.depthStencilAccess,
+                rebound.depthStencilLoadStore, rebound.resolveTarget, rebound.scanSpansDeviceI32)
         }
         val coverage = remapping.getValue(sourceResources.single { it.role == PlanResourceRole.CoverageSource }.id)
         val producer = PlanPass.AaCoverageSourcePass(firstOrdinalI32, coverage)

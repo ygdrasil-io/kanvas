@@ -2679,55 +2679,8 @@ internal class W6aLayerGraphConstruction(
                                     selectedDraw.withFinalBlendV1(deferredFacts.blend), deferredFacts.blend),
                                 W6AaDeferredOccurrenceEmitterV1.Target(target, targetExtent, targetOriginDevice(target),
                                     RectI32(0, 0, targetExtent.width, targetExtent.height), geometry?.mapping), before,
-                                binding.source.passes(), remapped, binding.source.resources(), geometry?.mapping,
+                                binding.source.passes(), remapped, binding.source.resources(),
                                 geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32, passes.size, snapshot)
-                            /*
-                            val phases = binding.source.passes().mapIndexed { phaseIndex, original ->
-                                val path = original as? PlanPass.PathRenderPass
-                                    ?: error("W7 deferred AA source lost its path phase.")
-                                val rebound = path.rebindW4eV6(passes.size + phaseIndex, { id -> remapped.getValue(id) },
-                                    geometry?.mapping, geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32) as PlanPass.PathRenderPass
-                                if (rebound.phase == PathRenderPhase.MultisampleDirectColor) {
-                                    PlanPass.PathRenderPass(rebound.ordinal, rebound.target, rebound.draw, rebound.phase,
-                                        rebound.drawDataResources, atomicGroup = path.atomicGroup, depthStencil = path.depthStencil,
-                                        load = path.load, store = path.store,
-                                        depthStencilAccess = path.depthStencilAccess, depthStencilLoadStore = path.depthStencilLoadStore,
-                                        resolveTarget = rebound.resolveTarget, scanSpansDeviceI32 = rebound.scanSpansDeviceI32)
-                                } else rebound
-                            }
-                            val coverage = remapped.getValue(binding.source.resources().single {
-                                it.role == PlanResourceRole.CoverageSource
-                            }.id)
-                            val producer = PlanPass.AaCoverageSourcePass(passes.size, coverage)
-                            aaDeferredPhases[laneI32] = phases
-                            aaDeferredOwners[laneI32] = producer
-                            passes += producer
-                            binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), producer.id) }
-                            val before = DestinationVersionI64(versions.getValue(target))
-                            val snapshot = if (deferredFacts.blend is BlendPlan.DestinationReadV1) {
-                                val id = planResourceId(PlanResourceRole.DestinationSnapshot, occurrences.size + laneI32)
-                                childSnapshots += id
-                                aaDeferredSnapshots += id
-                                passes += PlanPass.TextureCopy(passes.size, target, id, before,
-                                    RectI32(0, 0, targetExtent.width, targetExtent.height), Point2I32.Origin,
-                                    Math.multiplyExact(targetExtent.width.toLong(), 4L))
-                                binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), passes.last().id) }
-                                id
-                            } else null
-                            val draft = W6AaDeferredOccurrenceEmitterV1.emit(
-                                W6AaDeferredOccurrenceEmitterV1.Selected(deferredFacts.commandIndexI32,
-                                    selectedDraw.withFinalBlendV1(deferredFacts.blend), deferredFacts.blend),
-                                W6AaDeferredOccurrenceEmitterV1.Target(target, targetExtent, targetOriginDevice(target),
-                                    RectI32(0, 0, targetExtent.width, targetExtent.height), geometry?.mapping),
-                                before, snapshot,
-                            )
-                            val consumer = PlanPass.AaDeferredComposite(passes.size, target)
-                            aaDeferredDrafts[laneI32] = draft
-                            aaDeferredConsumers[laneI32] = consumer
-                            passes += consumer
-                            versions[target] = draft.destinationVersionAfter.valueI64
-                            binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), consumer.id) }
-                            return@bindingLoop */
                             aaDeferredPhases[laneI32] = emitted.phases
                             aaDeferredOwners[laneI32] = emitted.producer
                             passes += emitted.producer
@@ -3214,6 +3167,8 @@ internal class W6aLayerGraphConstruction(
                 if (bindings[laneI32].scopeI32 != null && bindings[laneI32].scopeI32 !in activeByScope) return@forEachIndexed
                 lane.resources().filter { row ->
                     row.role !in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) &&
+                        !(row.role == PlanResourceRole.DestinationSnapshot &&
+                            laneResourceIds[laneI32].getValue(row.id) in childSnapshots) &&
                         // AaResolvedCoverage is published by its direct W6b occurrence
                         // reservation.  The remapped lane row is deliberately not a second
                         // physical allocation of that same resolve texture.
