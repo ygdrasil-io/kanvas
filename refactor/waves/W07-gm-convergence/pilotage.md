@@ -1,5 +1,44 @@
 # Pilotage de la convergence Skia
 
+## Scissor de clip / resolve root AA4 — 1er octobre 2026
+
+Produit `be813afd75da9e094a9368c65a0d9fc31b2598a9`,
+[snapshot](clip-producer-scissor-be813afd7.json), [plan](clip-producer-scissor-plan.md).
+Branche `codex/w7-clip-producer-scissor`, draft à publier sur #2427 avec
+verdict de qualification Astra favorable à une draft, pas au merge.
+Source corrigée et relue (Sol + Astra),
+347 témoins natifs ciblés et compilation JS passent.
+
+Mesure631/443 : **206 rendus,183 comparés,39≥99 %,52≥95 %**.
+Six admissions nouvelles, zéro perte, aucune modification des200 anciennes
+images ;18invariants inchangés. C'est un gain de capacité, pas six GM conformes.
+Les images révèlent de vrais débordements dans `complexclip4_aa/bw`
+(85.29/85.40 %) et la perte de silhouette de `manypathatlases_128/2048`
+(33.33 %). `circular-clips` reste à65.46 %, `clipsuperrrect` sans référence.
+`inverseclip` progresse jusqu'à un refus d'inventaire W4e, sans rendu.
+Aucun seuil, référence, domaine, corpus, cap ou exclusion modifié.
+
+La globale bornée reste rouge/incomplète :686SUCCESS/37FAILURE/1SKIPPED,
+724END,240s/124–143. Trois échecs hérités corrigés, zéro nouveau parmi les
+atteints ;27identités de la baseline751 non atteintes. L'assertion Bounds
+supplémentaire est reproduite au parent (shutdown executor133 non diagnostiqué).
+Les trois scènes W6 complex-AA4 restent des refus contrôlés avec récupération,
+pas une preuve positive W6ConstantZero4x. Détails et evidence dans le status.
+
+**Priorité du prochain lot : attribuer les défauts visuels nouvellement exposés
+avant de chercher d'autres gains d'admission.** Auditer les ports
+`complexclip4` et `manypathatlases` face à leurs sources Skia, puis isoler
+un témoin public minimal discriminant défaut de port / clip / géométrie /
+composition. Ne pas traiter le score élevé de fond ou la seule alpha opaque
+comme preuve de justesse. Le diagnostic déterminera un correctif transversal
+ou un port fidèle, sans routage par nom de GM. Pas de correction spéculative.
+
+Ensuite : résoudre l'inventaire inverse W4e et le contrat commun
+source clip-free / préfixe W4e figé / consumer différé W6 AA4. Les42premiers
+`unsupported_child` ne sont pas42causes ni42gains promis. Couleur Sk3d,
+allocation temporaire Path, warnings JDK/Gradle, globale et gates W6 restent
+ouverts ; ni merge ni clôture W7.
+
 ## Port Sk3d fidèle / Picture hard — 1er octobre 2026
 
 Produit mesuré `813e61f098317750c3a8a1d98dea185629ead38e`,

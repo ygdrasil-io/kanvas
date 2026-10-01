@@ -6,6 +6,89 @@ sur [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
 
+## Scissor des producteurs de clip / resolve AA4 — 1er octobre 2026
+
+Branche `codex/w7-clip-producer-scissor`, empilée sur #2427,
+[design](clip-producer-scissor-design.md), [plan](clip-producer-scissor-plan.md).
+Produit mesuré `be813afd75da9e094a9368c65a0d9fc31b2598a9`,
+[snapshot complet](clip-producer-scissor-be813afd7.json). Publication draft
+en préparation après verdict final de qualification Astra favorable à une draft.
+
+Le scissor préparé, borné et local à l'attachment est transporté séparément
+de la géométrie complète jusqu'aux recettes et aux deux matérialiseurs root/W6.
+Un producteur ordinaire vide conserve la topologie via ConstantZero, sans
+usages V/I/U exécutables ; l'inverse reste Raster. Intersection/rebase checked
+portable restent dans math. L'autorité fermée du resolve root AA4 authentifie
+les endpoints, frame/seal et renders ordonnés ; seuls les targets logiques
+ainsi prouvés étendent le premier prédicat de session. Les autres guards,
+budgets, caps, références, domaines, seuils et exclusions ne changent pas.
+
+### Résultat mesuré et inspection visuelle
+
+**631 identités / 443 éligibles**, 18 invariants identiques au snapshot Sk3d :
+**206 rendus (+6), 183 comparés (+5), 39 ≥99 %, 52 ≥95 %** à ±2/canal.
+Aucun ancien rendu perdu ; les hashes, métriques, dispatches/refus et outcomes
+des 200 anciens rendus sont inchangés. Médiane des comparés
+73.26467803030303→72.57102272727273 % : population élargie, pas régression
+des anciennes images. Les six gains ont zéro refus.
+
+| Nouveau rendu | Pixels ±2/canal | SSIM luminance | Qualification visuelle |
+| --- | ---: | ---: | --- |
+| circular-clips | 65.461875 % | 0.9812562701 | Découpes globalement reconnaissables, gris central plus clair et contours différents. |
+| clipsuperrrect | non comparé | — | Référence manquante ; le runner n'émet pas de PNG pour ce résultat. Aucune fidélité visuelle revendiquée. |
+| complexclip4_aa | 85.2853555379 % | 0.9815399298 | Débordements jaunes hors des rectangles de clip, intérieur inférieur gauche incorrect ; couleurs différentes. |
+| complexclip4_bw | 85.4003436426 % | 0.9822004522 | Mêmes défauts structurels et de couleur ; ne pas confondre SSIM élevé et clip correct. |
+| manypathatlases_128 | 33.3251953125 % | 0.3579713543 | Silhouette végétale absente : quasi-aplat jaune avec petit centre cyan. |
+| manypathatlases_2048 | 33.3251953125 % | 0.3579713543 | Même image incorrecte que la variante128. |
+
+Actual et référence des cinq nouveaux comparés ont été inspectés côte à côte.
+Leur alpha opaque identique ne prouve pas l'équivalence géométrique. Les
+`declaredContractPass=true` héritent des seuils existants et ne sont pas des
+certificats de parité. Aucun score nouveau ≥95 % ou ≥99 %.
+
+`inverseclip` reste refusé : l'ancien target-count masquait maintenant le
+garde `invalid.native-core-primitive.w4e-resource` (inventaire de masques ou
+domaine inverse scellé incomplet). Il n'est pas compté comme gain. Hors ces
+sept identités, tous les champs non temporels et leur présence sont identiques.
+Bilan :186 render_failed,50 setup_failed,15 rendered_uncompared,
+8 reference_dimension_mismatch et1 timeout. `vertices` conserve son watchdog30s :
+la slice singleton sort wrapper/Gradle1/1, Java124, sans timeout du wrapper240s.
+Les deux autres slices sortent0/0. Aucun journal008 incomplet réutilisé.
+
+### Validation, relecture et limites
+
+**347/347 témoins natifs ciblés** au code final :338 publics (dont27 nouveaux)
+et9GM, sorties0/0 sans timeout ni failure/error/skip/stderr XML.
+`:math:matrix:compileKotlinJs` passe après RED causal. Sol a corrigé/relu le
+cas vide sur un seul axe ; Astra a fait corriger le Math JVM dans commonMain
+et les usages V/I/U ConstantZero. Contre-relectures Sol approuvées et source
+finale Astra sans Critical/Important/Minor ; verdict draft complet favorable,
+sans avis favorable au merge ni à la clôture W7.
+
+Globale finale bornée240s **incomplète et non verte** :
+724END=686SUCCESS/37FAILURE/1SKIPPED, wrapper124/enfant143, sans XML finalisé.
+Les37 échecs atteints sont hérités, aucun nouvel échec atteint ; trois anciens
+échecs sont résolus (deux AA4 GPUPlan et le survivor W5b W4e NoOp).
+`formatsAlphaAndColorSpaceMatchOracle` est interrompu ; cinq identités de la
+baseline Sk3d729 ne sont pas atteintes,27 face à la baseline751 plus large.
+Aucun diagnostic substantiel des37 échecs ne change après normalisation
+des seules adresses d'instances RuntimeEffect/Diagnostics. Pas de conclusion
+de performance ni de couverture globale complète.
+
+La matrice conserve trois refus typés W6 complex-AA4 avec sentinel fraîche
+et recovery ; ce sont des gaps explicites, pas des succès de rendu.
+RootConstantZero4x est positif ; W6ConstantZero4x reste non qualifié.
+L'assertion Bounds `emptyCompositeClipDoesNotMaskUnsupportedBackdropAndSameSurfaceRecovers`
+échoue aussi au parent exact246da8583 ; le run parent finit ensuite en executor133,
+cause non attribuée. Ce cas est distinct des37 échecs globaux atteints.
+La compilation optionnelle des tests gpu-plan rencontre des callsites Picture
+aggregate/RenderGraph préexistants ; aucun test d'infrastructure ajouté ou lancé.
+
+La fidélité des six nouveaux rendus, l'autorité W6 AA4, `inverseclip`, les
+failures/timeouts globaux, la couleur Sk3d et les warnings JDK/Gradle restent
+ouverts. Ce lot corrige l'autorité du scissor et l'admission root AA4 ; il ne
+clôt ni W7 ni les gates W6/W0, et ne vaut pas autorisation de merge.
+
 ## Port Sk3d fidèle et Picture hard — 1er octobre 2026
 
 Branche `codex/w7-sk3d-port`, [design](sk3d-port-design.md),

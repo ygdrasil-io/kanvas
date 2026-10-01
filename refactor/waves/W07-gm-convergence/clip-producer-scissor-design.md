@@ -91,11 +91,34 @@ les calculs de budget doivent être exacts. Ne pas réutiliser aveuglément le
 pipeline clear1x existant pour AA4 : le pipeline doit correspondre à ses
 attachments et au sample count scellé.
 
+La recette/catalogue owner-pass-packet-bundle appartient à la route W6.
+Comme les producers raster existants, la route root consomme sa propre
+autorité préparée authentifiée issue du graphe, sans exiger une recette W6
+qu'elle ne possède pas. Le binding de frame détermine cette distinction :
+une recette absente sur une route W6 reste un refus, jamais un fallback root.
+
 Réalisations et scissor appartiennent au digest du graphe, au catalogue
 canonique natif et aux comparaisons pass → prepared → frozen. ConstantZero
 n'entre dans aucune recette raster concurrente. Corriger la comparaison W6
 qui assimile actuellement bounds du Path et scissor de recette ; garder les
-comparaisons indépendantes de géométrie. Aucun guard global natif modifié.
+comparaisons indépendantes de géométrie. Les guards de payload natif restent inchangés.
+
+### 4. Prérequis AA4 : reconnaître le resolve racine authentifié
+
+La matrice a confirmé un refus hérité distinct : le SceneTarget W4e AA4 est
+produit par resolve depuis la cible multisample, sans être une cible directe
+de Render. Le contrôle de session ne reconnaît actuellement cette preuve que
+pour W4d. L'avis Astra recommande un prérequis fermé dans ce lot : enrichir
+l'autorité de frame W4e existante avec les endpoints exacts root/resolve/readback,
+issus du graphe validé et liés à ses références physiques. Les autorités
+clip-only et préfixes W6 n'obtiennent pas cette exception.
+
+La session admet cette cible resolve-only uniquement si l'autorité commune
+authentifie tous les renders ordonnés, frame/seal, dernier resolve couleur et
+readback/staging. Seul le premier prédicat d'appartenance aux targets directs
+évolue ; toutes les déclarations, descriptions, identités, budgets et contrôles
+natifs suivants restent. Aucun suffix matching, fallback ou skip. Les cas
+ConstantZero4x ne sont pas qualifiés tant que ce prérequis empêche leur exécution.
 
 ## Qualification publique
 
@@ -111,7 +134,7 @@ Readback, dispatch, absence de refus et seconde image byte-identique.
 | Even-odd stencil |Outer[-2,-2,10,10], hole[2,2,6,6] : (1,1) bleu, (3,3) rouge ; inverse complément exact. |
 | Winding concave |L(-2,-2),(10,-2),(10,2),(2,2),(2,10),(-2,10) : (1,6) bleu, (6,6) rouge ; inverse complément. |
 | Hors cible initial |Triangle(10,10),(14,10),(10,14), ou rect Path[10,10,14,14] : normal/intersect rouge, normal/difference bleu, inverse/intersect bleu, inverse/difference rouge. |
-| Hors cible tardif |Root16², layer[4,3,12,11], triangle device(0,0),(2,0),(0,2) : mêmes quatre résultats dans le layer, extérieur rouge. |
+| Hors cible tardif |Root16², clipRect parent hard[4,3,12,11], saveLayer avec ce hint, puis triangle enfant device(0,0),(2,0),(0,2) et draw full16 : mêmes quatre résultats dans le layer, extérieur rouge. Le hint seul ne clippe pas les enfants. |
 | Origine non nulle |Triangle négatif translaté(4,3) dans ce layer : (5,4) bleu, (10,9) rouge, (3,4) rouge. Vraie Picture avec clip affine seulement en compagnon. |
 | Ordre |Masque non trivial avant/après le clip extérieur : identité conserve le masque, zéro reste zéro. |
 | Siblings |Hole non recouvert + deuxième polygone stencil + marqueur vert hors des deux anciens scissors, root et layer. |
@@ -126,6 +149,15 @@ Le contrôleur possède seul les processus natifs : RED négatif ciblé puis
 GREEN de la matrice, couverture existante, un global240 final compté honnêtement,
 et corpus neuf631/443 strictement séquentiel au SHA produit. Les refus AA4
 préexistants doivent être attribués, jamais changés en skip pour passer le lot.
+
+La mesure a distingué une autre frontière, propre aux clips complexes AA4 dans
+les layers W6 : la construction de source différée refuse encore W5A_AA avec
+Operations. Ce lot ne supprime pas ce guard et ne revendique pas leur rendu.
+Les trois scènes nouvelles restent des témoins de refus typé avec sentinelle
+fraîche et récupération native ; leurs futurs oracles pixels restent au plan.
+Le prochain lot W7 doit joindre source clip-free, préfixe W4e figé et consumer
+différé sous autorité commune. ConstantZero4x root doit être positif ici ;
+ConstantZero4x W6 demeure explicitement non qualifié.
 
 ## Succès, limites et self-review
 
