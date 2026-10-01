@@ -324,6 +324,45 @@ class W7ClipProducerScissorSurfacePixelTest {
     }
 
     @Test
+    fun analyticHardRectSingleAxisOutsideCoverage() {
+        assertSingleAxisOutsideAnalyticCoverage(antiAlias = false, rounded = false)
+    }
+
+    @Test
+    fun analyticAaRectSingleAxisOutsideCoverage() {
+        assertSingleAxisOutsideAnalyticCoverage(antiAlias = true, rounded = false)
+    }
+
+    @Test
+    fun analyticHardRRectSingleAxisOutsideCoverage() {
+        assertSingleAxisOutsideAnalyticCoverage(antiAlias = false, rounded = true)
+    }
+
+    @Test
+    fun analyticAaRRectSingleAxisOutsideCoverage() {
+        assertSingleAxisOutsideAnalyticCoverage(antiAlias = true, rounded = true)
+    }
+
+    private fun assertSingleAxisOutsideAnalyticCoverage(antiAlias: Boolean, rounded: Boolean) {
+        listOf(
+            RectF32.ofLTRB(9f, 1f, 12f, 7f),
+            RectF32.ofLTRB(1f, 9f, 7f, 12f),
+        ).forEach { outside -> listOf(ClipOp.INTERSECT, ClipOp.DIFFERENCE).forEach { operation ->
+            val result = Surface(8, 8).also { target -> target.canvas {
+                drawRect(RectF32.ofLTRB(0f, 0f, 8f, 8f), Paint(ColorARGB.Red, antiAlias = false))
+                clipPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 8f, 8f)) }, antiAlias = false)
+                if (rounded) clipRRect(RRectF32.of(outside, radius = 1f), operation, antiAlias)
+                else clipRect(outside, operation, antiAlias)
+                drawRect(RectF32.ofLTRB(0f, 0f, 8f, 8f), Paint(ColorARGB.Blue, antiAlias = false))
+            } }.renderAndRepeat()
+            val blue = operation == ClipOp.DIFFERENCE
+            for (y in 0 until 8) for (x in 0 until 8) {
+                assertPixel(result.pixels, x, y, if (blue) 0 else 255, 0, if (blue) 255 else 0, 255)
+            }
+        } }
+    }
+
+    @Test
     fun aa4BinaryPathScissor() {
         fun donut(inverse: Boolean) = Path().apply {
             addRect(RectF32.ofLTRB(-2f, -2f, 10f, 10f)); addRect(RectF32.ofLTRB(2f, 2f, 6f, 6f))

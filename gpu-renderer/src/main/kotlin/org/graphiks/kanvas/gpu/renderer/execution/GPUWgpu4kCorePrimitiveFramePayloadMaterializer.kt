@@ -945,7 +945,7 @@ internal fun encodeW4eNativePasses(
             ))
             is GPUW4ePreparedClipPassAuthority.Producer -> {
                 if (pass.realization == PlanPass.W4eClipMaskProducerRealizationV1.ConstantZero) {
-                    require(!pass.inverseCoverage && pass.scissor.left == pass.scissor.right && pass.scissor.top == pass.scissor.bottom) {
+                    require(!pass.inverseCoverage && pass.scissor.isEmpty) {
                         "W4e ConstantZero requires an ordinary empty prepared coverage scissor."
                     }
                     if (entry.render.w6aPassV1 != null) {
