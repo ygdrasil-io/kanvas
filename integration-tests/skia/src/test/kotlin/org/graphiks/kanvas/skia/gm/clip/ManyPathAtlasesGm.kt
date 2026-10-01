@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.gm.clip
 
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -37,7 +38,7 @@ open class ManyPathAtlasesGm(private val maxAtlasSize: Int) : SkiaGm {
             val angle = 30f * i + 128f
             val rot = Matrix3x3F32.translation(64f, 70f) * Matrix3x3F32.rotation(angle) * Matrix3x3F32.translation(-64f, -70f)
             val rotatedClip = Path { }.apply { reverseAddPath(transformedClip) }.transform(rot)
-            canvas.clipPath(rotatedClip)
+            canvas.clipPath(rotatedClip, ClipOp.DIFFERENCE, antiAlias = true)
         }
 
         val path = Path {
