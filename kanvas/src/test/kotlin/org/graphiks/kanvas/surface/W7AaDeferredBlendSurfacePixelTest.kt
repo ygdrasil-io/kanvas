@@ -20,6 +20,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -510,38 +511,100 @@ class W7AaDeferredBlendSurfacePixelTest {
         val fixedAfterBackground = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
             W5aSolidOpacityCpuOracle.draw(fixedColor, 1f, destination = background),
         ))
-        val destinationReadAfterFixed = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+        fun afterDstOut(destination: WgslFloatEnvelopeV1Oracle.AttachmentState) = requireNotNull(
+            WgslFloatEnvelopeV1Oracle.nextAttachment(
             WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
-                WgslFloatEnvelopeV1Oracle.solidLinearPremul(deferredColor), fixedAfterBackground, BlendMode.DST_OUT, 1f,
+                    WgslFloatEnvelopeV1Oracle.solidLinearPremul(deferredColor), destination, BlendMode.DST_OUT, 1f,
+                ),
             ),
-        ))
-        val forward = requireBounded("fixed then DST_OUT then SRC_IN", WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
-            WgslFloatEnvelopeV1Oracle.solidLinearPremul(finalAaColor), destinationReadAfterFixed, BlendMode.SRC_IN, 1f,
-        ))
-        val deferredAfterBackground = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+        )
+        fun afterFinal(label: String, destination: WgslFloatEnvelopeV1Oracle.AttachmentState) = requireBounded(label,
             WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
-                WgslFloatEnvelopeV1Oracle.solidLinearPremul(deferredColor), background, BlendMode.DST_OUT, 1f,
-            ),
-        ))
+                WgslFloatEnvelopeV1Oracle.solidLinearPremul(finalAaColor), destination, BlendMode.SRC_IN, 1f,
+            ))
+        val deferredAfterBackground = afterDstOut(background)
+        val forwardInside = afterFinal("fixed then DST_OUT then SRC_IN", afterDstOut(fixedAfterBackground))
+        val forwardInsideWithoutFixed = afterFinal("DST_OUT then SRC_IN without fixed", deferredAfterBackground)
         val fixedAfterDeferred = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
             W5aSolidOpacityCpuOracle.draw(fixedColor, 1f, destination = deferredAfterBackground),
         ))
-        val reverse = requireBounded("DST_OUT then fixed then SRC_IN", WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
-            WgslFloatEnvelopeV1Oracle.solidLinearPremul(finalAaColor), fixedAfterDeferred, BlendMode.SRC_IN, 1f,
-        ))
-        requireDisjoint("fixed/deferred order", forward, reverse)
+        val reverseInside = afterFinal("DST_OUT then fixed then SRC_IN", fixedAfterDeferred)
+        val reverseInsideWithoutFixed = afterFinal("DST_OUT then SRC_IN without fixed", deferredAfterBackground)
+        val reverseOutside = afterFinal("DST_OUT outside fixed then SRC_IN", deferredAfterBackground)
+        val reverseOutsideWithoutDstOut = afterFinal("fixed miss then SRC_IN", background)
+        requireDisjoint("forward fixed contribution", forwardInside, forwardInsideWithoutFixed)
+        requireDisjoint("reverse fixed contribution", reverseInside, reverseInsideWithoutFixed)
+        requireDisjoint("reverse DST_OUT contribution", reverseOutside, reverseOutsideWithoutDstOut)
         val triangle = triangle(1f, 1f, 5f, 1f, 1f, 5f)
         fun record(forwardOrder: Boolean): Surface = Surface(7, 7).also { surface -> surface.canvas {
             drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(shader = Shader.SolidColor(backgroundColor), antiAlias = false))
-            if (forwardOrder) drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f),
+            if (forwardOrder) drawRect(RectF32.ofLTRB(2f, 1f, 4f, 3f),
                 Paint(shader = Shader.SolidColor(fixedColor), blendMode = BlendMode.SRC_OVER, antiAlias = false))
             drawPath(triangle, Paint(shader = Shader.SolidColor(deferredColor), blendMode = BlendMode.DST_OUT, antiAlias = true))
-            if (!forwardOrder) drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f),
+            if (!forwardOrder) drawRect(RectF32.ofLTRB(2f, 1f, 4f, 3f),
                 Paint(shader = Shader.SolidColor(fixedColor), blendMode = BlendMode.SRC_OVER, antiAlias = false))
             drawPath(triangle, Paint(shader = Shader.SolidColor(finalAaColor), blendMode = BlendMode.SRC_IN, antiAlias = true))
         } }
-        renderTwice(record(forwardOrder = true)).forEach { result -> assertAdmits(forward, result.pixels, 7, 2, 2) }
-        renderTwice(record(forwardOrder = false)).forEach { result -> assertAdmits(reverse, result.pixels, 7, 2, 2) }
+        renderTwice(record(forwardOrder = true)).forEach { result -> assertAdmits(forwardInside, result.pixels, 7, 2, 2) }
+        renderTwice(record(forwardOrder = false)).forEach { result ->
+            assertAdmits(reverseInside, result.pixels, 7, 2, 2)
+            assertAdmits(reverseOutside, result.pixels, 7, 1, 2)
+        }
+    }
+
+    @Test
+    fun `new root Rect DST OUT keeps affine scissor and refuses perspective transactionally`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
+        val destinationColor = ColorARGB.of(64, 0, 0, 0)
+        val sourceColor = ColorARGB.of(192, 0, 0, 0)
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            W5aSolidOpacityCpuOracle.draw(destinationColor, 1f),
+        ))
+        val covered = requireBounded("affine scissor DST_OUT", WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
+            WgslFloatEnvelopeV1Oracle.solidLinearPremul(sourceColor), destination, BlendMode.DST_OUT, 1f,
+        ))
+        val translatedEdge = requireBounded("affine translation C128 DST_OUT", WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
+            WgslFloatEnvelopeV1Oracle.solidLinearPremul(sourceColor), destination, BlendMode.DST_OUT, 128f / 255f,
+        ))
+        val outside = requireBounded("affine scissor exterior", W5aSolidOpacityCpuOracle.draw(destinationColor, 1f))
+        requireDisjoint("affine scissor covered/exterior", covered, outside)
+        requireDisjoint("affine translation edge/exterior", translatedEdge, outside)
+        val admitted = Surface(7, 7)
+        admitted.canvas {
+            drawRect(bounds, Paint(shader = Shader.SolidColor(destinationColor), antiAlias = false))
+            save()
+            clipRect(RectF32.ofLTRB(2f, 1f, 5f, 5f), antiAlias = false)
+            translate(1f, 0f)
+            drawRect(RectF32.ofLTRB(1.5f, 1f, 4.5f, 5f), Paint(
+                shader = Shader.SolidColor(sourceColor), blendMode = BlendMode.DST_OUT, antiAlias = true,
+            ))
+            restore()
+        }
+        renderTwice(admitted).forEach { result ->
+            assertAdmits(covered, result.pixels, 7, 3, 2)
+            assertAdmits(translatedEdge, result.pixels, 7, 2, 2)
+            assertAdmits(outside, result.pixels, 7, 5, 2)
+            assertAdmits(outside, result.pixels, 7, 6, 6)
+        }
+
+        val refused = Surface(7, 7)
+        refused.canvas {
+            drawRect(bounds, Paint(shader = Shader.SolidColor(destinationColor), antiAlias = false))
+            save()
+            concat(Matrix3x3F32(persp0 = .125f))
+            drawRect(RectF32.ofLTRB(1.5f, 1f, 4.5f, 5f), Paint(
+                shader = Shader.SolidColor(sourceColor), blendMode = BlendMode.DST_OUT, antiAlias = true,
+            ))
+            restore()
+        }
+        val sentinel = UByteArray(7 * 7 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> { refused.readPixels(bounds, sentinel) }
+        assertTrue(failure.message?.contains("unsupported") == true, failure.message ?: "missing diagnostic")
+        assertContentEquals(before, sentinel)
+        refused.discardRecordedOperations()
+        refused.canvas { drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false)) }
+        renderTwice(refused).forEach { result -> assertExactPixel(listOf(0, 0, 255, 255), result.pixels, 7, 3, 3) }
     }
 
     @ParameterizedTest(name = "{0}")

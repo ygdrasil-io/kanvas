@@ -54,6 +54,7 @@ import org.graphiks.math.matrix.PathTransformClass
 import org.graphiks.math.matrix.PathTransformedFillInvalidSceneReason
 import org.graphiks.math.matrix.PathTransformedFillPreparationResult
 import org.graphiks.math.matrix.classifyPathTransform
+import org.graphiks.math.matrix.invertFiniteOrNull
 import org.graphiks.math.matrix.preparePathFillGeometryF32
 import org.graphiks.math.matrix.preparePathStrokeGeometryF32
 import org.graphiks.math.matrix.toMatrix3x3F64
@@ -550,6 +551,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             return DrawScope.Invalid("Stroke style is invalid")
         } else null
         val matrixF64 = transform.toMatrix3x3F64()
+        if (w7AaDeferredSource &&
+            (matrixF64.classifyPathTransform() == PathTransformClass.Perspective || matrixF64.invertFiniteOrNull() == null)) {
+            return DrawScope.Gap("W7 deferred AA source requires a finite non-singular affine transform")
+        }
         if (rootRectStroke && !(node.coverage == CoverageRequest.ANTIALIASED && node.material is MaterialNode.Solid &&
                 paint.shader == null && paint.colorFilter == null && paint.style == PaintStyleNode.STROKE && paint.pathEffect == null &&
                 node.effects == EffectStack.Empty && paint.strokeJoin == StrokeJoinNode.MITER && paint.strokeMiter.isFinite() &&
