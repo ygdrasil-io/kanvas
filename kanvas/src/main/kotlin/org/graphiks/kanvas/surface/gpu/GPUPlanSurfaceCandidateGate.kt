@@ -16,7 +16,31 @@ internal object GPUPlanSurfaceCandidateGate {
     /** Layers have their own terminal planner ownership before any format or effect filtering. */
     fun ownsW6aLayers(operations: List<DisplayOp>): Boolean = operations.any {
         it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer
-    } || ownsW7AaDeferredPicture(operations)
+    } || ownsW7AaDeferredPicture(operations) || ownsW7HardPicture(operations)
+
+    /** Closed hard Picture seed; an exhausted bounded traversal remains W6-owned. */
+    private fun ownsW7HardPicture(operations: List<DisplayOp>): Boolean {
+        val pending = ArrayDeque<List<DisplayOp>>()
+        operations.filterIsInstance<DisplayOp.DrawPicture>().forEach { pending.addLast(it.picture.ops) }
+        val seenPictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Boolean>()
+        var inspectedI32 = 0
+        while (pending.isNotEmpty()) pending.removeLast().forEach { operation ->
+            inspectedI32 = try { Math.addExact(inspectedI32, 1) } catch (_: ArithmeticException) { return true }
+            if (inspectedI32 > W6B_PICTURE_VISIT_LIMIT_I32) return true
+            when (operation) {
+                is DisplayOp.DrawPath -> if (operation.paint.isW7HardPicturePaint()) return true
+                is DisplayOp.DrawRect -> if (operation.paint.isW7HardPicturePaint()) return true
+                is DisplayOp.DrawPicture -> if (seenPictures.put(operation.picture, true) == null) pending.addLast(operation.picture.ops)
+                else -> Unit
+            }
+        }
+        return false
+    }
+
+    private fun org.graphiks.kanvas.paint.Paint.isW7HardPicturePaint(): Boolean =
+        !antiAlias && style == org.graphiks.kanvas.paint.PaintStyle.FILL && blender == null &&
+            maskFilter == null && imageFilter == null && colorFilter == null && pathEffect == null &&
+            blendMode == BlendMode.SRC_OVER && shader.isSolidOrOpacitySolid()
 
     /**
      * A root Picture has no top-level layer marker, so it must nominate the W6 owner before the

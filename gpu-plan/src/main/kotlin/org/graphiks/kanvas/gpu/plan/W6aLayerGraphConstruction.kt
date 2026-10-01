@@ -279,6 +279,7 @@ internal class W6aLayerGraphConstruction(
             val carrier = input.materialCoordinateDraw()
             val historicalAa = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
                 .acceptsW6AaColorSourceScope(carrier)
+            val hardPictureSource = W4dGeneralPathPlanCompiler.w6HardRectFillSource(runtimeCatalog)
             // Keep Picture's historical analytic Rect lane when it can own the transform.
             // The rebased carrier exposes a finite general affine Rect only when W4a cannot;
             // then use the same selected W7 producer/consumer occurrence as a Path.
@@ -294,6 +295,7 @@ internal class W6aLayerGraphConstruction(
             val generalPath = when {
                 deferredBlend != null -> W4dGeneralPathPlanCompiler.w7AaDeferredSource(runtimeCatalog)
                 historicalAa -> W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
+                hardPictureSource.acceptsW6HardPictureRectScope(carrier) -> hardPictureSource
                 else -> W4dGeneralPathPlanCompiler()
             }
             val compiler = CapabilityCompilerChain.ofProjected(

@@ -26,6 +26,7 @@ public class CapabilityCompilerChain private constructor(
         }
         val ownsW6b = W6bFilterGraphConstruction.owns(scene)
         val ownsW7Deferred = W6aLayerPlanCompiler.ownsAaDeferred(scene, target, runtimeCatalog)
+        val ownsW7HardPicture = W6aLayerPlanCompiler.ownsHardPictureStream(scene, runtimeCatalog)
         val ownsW7RootRect = W6aLayerPlanCompiler.ownsRootAaDeferredRect(scene, target)
         val w6Index = compilers.indexOfFirst { it is W6aLayerPlanCompiler }
         // A direct root image frame has an established whole-frame W5e authority.  A separate
@@ -43,7 +44,7 @@ public class CapabilityCompilerChain private constructor(
             }
         }
         // Layer ownership precedes all remaining geometry/source admission, including composed-source gaps.
-        if (hasLayerBoundary || ownsW6b || ownsW7Deferred || ownsW7RootRect) {
+        if (hasLayerBoundary || ownsW6b || ownsW7Deferred || ownsW7RootRect || ownsW7HardPicture) {
             if (w6Index >= 0) {
                 val compiler = compilers[w6Index]
                 return when (val selection = compiler.select(scene, target)) {

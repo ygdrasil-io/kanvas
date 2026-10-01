@@ -670,6 +670,49 @@ public class W6aLayerPlanCompiler public constructor(
             org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
         }
 
+        /** Captured counterpart of the DisplayOp hard Picture seed; traversal stays bounded. */
+        internal fun ownsHardPictureStream(
+            scene: SceneSnapshot,
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): Boolean {
+            val pending = java.util.ArrayDeque<SceneSnapshot>()
+            scene.filterIsInstance<SceneCommand.Draw>().forEach { draw ->
+                (draw.node.geometry as? GeometryNode.Picture)?.let { pending.addLast(it.scene) }
+            }
+            var inspectedI32 = 0
+            while (pending.isNotEmpty()) {
+                val pictureScene = pending.removeLast()
+                pictureScene.forEach { command ->
+                    inspectedI32 = try { Math.addExact(inspectedI32, 1) } catch (_: ArithmeticException) { return true }
+                    if (inspectedI32 > org.graphiks.kanvas.render.ir.GraphLimits().maxNodes) return true
+                    val draw = command as? SceneCommand.Draw ?: return@forEach
+                    when (val geometry = draw.node.geometry) {
+                        is GeometryNode.Picture -> pending.addLast(geometry.scene)
+                        is GeometryNode.Rect -> if (W4dGeneralPathPlanCompiler.w6HardRectFillSource(catalog)
+                                .acceptsW6HardPictureRectScope(draw.node)) return true
+                        is GeometryNode.Path -> if (isHardPicturePathFill(draw.node)) return true
+                        else -> Unit
+                    }
+                }
+            }
+            return false
+        }
+
+        private fun isHardPicturePathFill(node: DrawNode): Boolean {
+            val paint = node.paint ?: return false
+            val srcOver = when (val blend = node.blend) {
+                BlendNode.SrcOver -> true
+                is BlendNode.Mode -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER
+                is BlendNode.Paint -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER && blend.blender == null
+                is BlendNode.Custom -> false
+            }
+            return node.origin == DrawOrigin.PATH && node.geometry is GeometryNode.Path &&
+                node.coverage == CoverageRequest.HARD_EDGE && node.material is MaterialNode.Solid &&
+                paint.style == PaintStyleNode.FILL && paint.blender == null && paint.colorFilter == null &&
+                paint.maskFilter == null && paint.imageFilter == null && paint.pathEffect == null &&
+                node.effects == EffectStack.Empty && srcOver
+        }
+
         internal fun ownsAaDeferred(
             scene: SceneSnapshot,
             target: RenderTargetDescriptor,
