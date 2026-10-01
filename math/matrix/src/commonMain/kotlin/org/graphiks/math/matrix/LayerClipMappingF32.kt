@@ -21,24 +21,15 @@ public fun LayerMappingF64.mapDeviceDomainToLayerI32OrNull(domainI32: RectI32, t
 public fun LayerMappingF64.mapDeviceScissorToLayerI32OrNull(
     scissorI32: RectI32,
     targetDomainI32: RectI32,
-): RectI32? = try {
+): RectI32? {
     val clipped = RectI32(
         maxOf(scissorI32.left, targetDomainI32.left),
         maxOf(scissorI32.top, targetDomainI32.top),
         minOf(scissorI32.right, targetDomainI32.right),
         minOf(scissorI32.bottom, targetDomainI32.bottom),
     )
-    if (clipped.isEmpty) RectI32.Empty else {
-        val origin = copyLayerOriginDeviceI32()
-        RectI32(
-            Math.subtractExact(clipped.left, origin.x),
-            Math.subtractExact(clipped.top, origin.y),
-            Math.subtractExact(clipped.right, origin.x),
-            Math.subtractExact(clipped.bottom, origin.y),
-        )
-    }
-} catch (_: ArithmeticException) {
-    null
+    if (clipped.isEmpty) return RectI32.Empty
+    return clipped.rebaseAtOriginI32OrNull(copyLayerOriginDeviceI32())
 }
 
 public fun LayerMappingF64.mapDeviceInverseToLayerF32OrNull(geometryF32: InversePathGeometryF32,
