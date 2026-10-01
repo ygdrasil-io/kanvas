@@ -2659,6 +2659,12 @@ internal class W6aLayerGraphConstruction(
                         val selectedDraw = draws.single()
                         val deferredFacts = binding.deferredAa
                         if (deferredFacts != null) {
+                            if (deferredFacts.blend == BlendPlan.NoOpV1) {
+                                // DST is selected as a semantic W7 occurrence so the ordinary
+                                // lane cannot write it.  It consumes neither coverage nor the
+                                // destination version; earlier real background work remains.
+                                return@bindingLoop
+                            }
                             require(binding.source.topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
                                 selectedDraw.commandIndex == deferredFacts.commandIndexI32 && !directFilter) {
                                 "W7 deferred AA must own one non-filter coverage source lane."

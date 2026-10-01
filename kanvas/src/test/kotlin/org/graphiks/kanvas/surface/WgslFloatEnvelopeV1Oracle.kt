@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.math.color.ColorARGB
 
 /**
  * Independent W5a oracle. All node values are intervals over real arithmetic,
@@ -50,6 +51,14 @@ internal object WgslFloatEnvelopeV1Oracle {
     internal fun decodeStoredCodes(codes: List<Set<Int>>): Array<Interval> = decodeStoredAttachment(codes)
     internal fun nativeSrcOver(source: Array<Interval>, destination: Array<Interval>): Array<Interval> =
         Array(4) { channel -> blendAndCoverage(source[channel], source[3], destination[channel], Interval.ONE) }
+
+    /** Direct Solid material evaluation for test-only linear-premultiplied fixtures. */
+    fun solidLinearPremul(color: ColorARGB, opacityF32: Float = 1f): Array<Interval> {
+        val alpha = Interval.input(color.alphaNormalized) * Interval.input(opacityF32)
+        return arrayOf(toLinear(Interval.input(color.redNormalized)) * alpha,
+            toLinear(Interval.input(color.greenNormalized)) * alpha,
+            toLinear(Interval.input(color.blueNormalized)) * alpha, alpha)
+    }
 
     /** Exclusion proof only: deliberately not a DrawResult and never admitted by assertAdmits. */
     class ConservativeExclusion internal constructor(internal val channels: List<Set<Int>>)
@@ -746,6 +755,37 @@ internal object WgslFloatEnvelopeV1Oracle {
                 } }
             }
         }
+    }
+
+    /**
+     * Independent W7 covered Porter--Duff closure.  Unlike the historical W5b point oracle,
+     * this consumes the complete published [filterBlend] equations and applies the selected
+     * destination interpolation only after the full blend.  It deliberately has no access to
+     * renderer material, plan, or shader code.
+     */
+    fun coveredPorterDuffV1(
+        src: Array<Interval>,
+        destination: AttachmentState,
+        mode: BlendMode,
+        coverageF32: Float,
+    ): DrawResult {
+        if (!coverageF32.isFinite()) return DrawResult.Unbounded("Non-finite coverage")
+        val values = try {
+            val coverage = Interval.input(coverageF32)
+            val dst = destination.linearPremul
+            val full = filterBlend(src, dst, mode)
+            Array(4) { channel -> when (coverageF32) {
+                0f -> dst[channel]
+                1f -> full[channel]
+                else -> hull(dst[channel] + coverage * (full[channel] - dst[channel]),
+                    fma(coverage, full[channel] - dst[channel], dst[channel])).clamp01()
+            } }
+        } catch (failure: IllegalArgumentException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        } catch (failure: ArithmeticException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        }
+        return imageSourceAttachment(values)
     }
     fun imageSourceAttachment(source: Array<Interval>): DrawResult {
         val codes = source.mapIndexed { channelI32, value ->

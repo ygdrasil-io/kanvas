@@ -36,11 +36,20 @@ class W7AaDeferredBlendSurfacePixelTest {
         fun cleanupGpu() = GPUBackendRuntimeFactory.dispose()
 
         @JvmStatic
-        fun basicCells(): List<Array<Any>> = listOf(BlendMode.PLUS, BlendMode.SRC_OVER).flatMap { mode ->
+        fun basicCells(): List<Array<Any>> = listOf(
+            BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST, BlendMode.SRC_OVER,
+            BlendMode.DST_OVER, BlendMode.SRC_IN, BlendMode.DST_IN, BlendMode.SRC_OUT,
+            BlendMode.DST_OUT, BlendMode.SRC_ATOP, BlendMode.DST_ATOP, BlendMode.XOR,
+            BlendMode.PLUS,
+        ).flatMap { mode ->
             listOf(Geometry.PATH, Geometry.RECT).flatMap { geometry ->
                 listOf(false, true).map { layer ->
-                    arrayOf("$mode/${geometry.name.lowercase()}/${if (layer) "layer" else "root"}", mode, geometry, layer)
+                    arrayOf<Any>("$mode/${geometry.name.lowercase()}/${if (layer) "layer" else "root"}", mode, geometry, layer, false)
                 }
+            }
+        } + listOf(Geometry.PATH, Geometry.RECT).flatMap { geometry ->
+            listOf(false, true).map { layer ->
+                arrayOf<Any>("SRC_OVER opaque/${geometry.name.lowercase()}/${if (layer) "layer" else "root"}", BlendMode.SRC_OVER, geometry, layer, true)
             }
         }
 
@@ -382,11 +391,21 @@ class W7AaDeferredBlendSurfacePixelTest {
         mode: BlendMode,
         geometry: Geometry,
         layer: Boolean,
+        historicalOpaqueSrcOver: Boolean,
     ) {
         val destination = W5bBlendCpuOracle.Draw(ColorARGB.of(64, 0, 0, 0), 1f, BlendMode.SRC_OVER)
-        val source = if (mode == BlendMode.PLUS)
-            W5bBlendCpuOracle.coveredPlusPrescaleV2PointFixture().center
-        else W5bBlendCpuOracle.Draw(ColorARGB.Black, 1f, BlendMode.SRC_OVER)
+        // CLEAR/SRC intentionally use alpha-zero material: C remains semantically observable
+        // through the destination interpolation and must not be paint-culled.
+        val source = when (mode) {
+            BlendMode.CLEAR, BlendMode.SRC -> W5bBlendCpuOracle.Draw(ColorARGB.Transparent, 1f, mode)
+            BlendMode.DST -> W5bBlendCpuOracle.Draw(ColorARGB.of(192, 0, 0, 0), 1f, mode)
+            BlendMode.SRC_ATOP -> W5bBlendCpuOracle.Draw(ColorARGB.of(192, 255, 0, 0), 1f, mode)
+            BlendMode.PLUS -> W5bBlendCpuOracle.coveredPlusPrescaleV2PointFixture().center
+            BlendMode.SRC_OVER -> W5bBlendCpuOracle.Draw(
+                if (historicalOpaqueSrcOver) ColorARGB.Black else ColorARGB.of(192, 0, 0, 0), 1f, mode,
+            )
+            else -> W5bBlendCpuOracle.Draw(ColorARGB.of(192, 0, 0, 0), 1f, mode)
+        }
 
         // Construct the complete independent oracle before recording the public scene.  The
         // transparent-root restore of the layer variant preserves the black-RGB attachment;
@@ -400,18 +419,15 @@ class W7AaDeferredBlendSurfacePixelTest {
         val interior = expected[2 + 2 * 7]
         val edge = expected[(if (geometry == Geometry.PATH) 3 else 1) + 2 * 7]
         val exterior = expected[6 + 6 * 7]
-        requireDisjoint("$label interior/exterior", interior, exterior)
-        if (mode == BlendMode.PLUS) {
+        if (mode != BlendMode.DST) requireDisjoint("$label interior/exterior", interior, exterior)
+        if (mode !in setOf(BlendMode.DST, BlendMode.SRC_OVER, BlendMode.SRC_ATOP)) {
             requireDisjoint("$label interior/edge", interior, edge)
             requireDisjoint("$label edge/exterior", edge, exterior)
         }
 
         val path = Path().apply {
-            if (mode == BlendMode.PLUS) {
-                moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
-            } else {
-                addRect(RectF32.ofLTRB(1f, 1f, 5f, 5f))
-            }
+            if (mode in setOf(BlendMode.SRC_OVER, BlendMode.SRC_ATOP)) addRect(RectF32.ofLTRB(1f, 1f, 5f, 5f))
+            else { moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close() }
         }
         val sourcePaint = if (mode == BlendMode.SRC_OVER) {
             // The historical route admits its canonical SrcOver plan, not an explicitly
@@ -433,8 +449,8 @@ class W7AaDeferredBlendSurfacePixelTest {
                 when (geometry) {
                     Geometry.PATH -> drawPath(path, sourcePaint)
                     Geometry.RECT -> drawRect(
-                        if (mode == BlendMode.PLUS) RectF32.ofLTRB(1.5f, 1f, 4.5f, 5f)
-                        else RectF32.ofLTRB(1f, 1f, 5f, 5f),
+                        if (mode in setOf(BlendMode.SRC_OVER, BlendMode.SRC_ATOP)) RectF32.ofLTRB(1f, 1f, 5f, 5f)
+                        else RectF32.ofLTRB(1.5f, 1f, 4.5f, 5f),
                         sourcePaint,
                     )
                 }
@@ -457,6 +473,75 @@ class W7AaDeferredBlendSurfacePixelTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `fractional destination alpha distinguishes full covered SRC IN from DST IN`() {
+        val destinationColor = ColorARGB.of(64, 0, 0, 0)
+        val sourceColor = ColorARGB.of(192, 255, 0, 0)
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            W5aSolidOpacityCpuOracle.draw(destinationColor, 1f),
+        ))
+        fun expected(mode: BlendMode) = requireBounded("$mode distinguishing full pixel",
+            WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
+                WgslFloatEnvelopeV1Oracle.solidLinearPremul(sourceColor), destination, mode, 1f,
+            ))
+        val srcIn = expected(BlendMode.SRC_IN)
+        val dstIn = expected(BlendMode.DST_IN)
+        requireDisjoint("fractional destination SRC_IN/DST_IN", srcIn, dstIn)
+        val path = triangle(1f, 1f, 5f, 1f, 1f, 5f)
+        fun record(mode: BlendMode): Surface = Surface(7, 7).also { surface -> surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(shader = Shader.SolidColor(destinationColor), antiAlias = false))
+            drawPath(path, Paint(shader = Shader.SolidColor(sourceColor), blendMode = mode, antiAlias = true))
+        } }
+        renderTwice(record(BlendMode.SRC_IN)).forEach { result -> assertAdmits(srcIn, result.pixels, 7, 2, 2) }
+        renderTwice(record(BlendMode.DST_IN)).forEach { result -> assertAdmits(dstIn, result.pixels, 7, 2, 2) }
+    }
+
+    @Test
+    fun `fixed SRC OVER destination read and AA consume their immediate destination in either order`() {
+        val backgroundColor = ColorARGB.of(64, 0, 0, 0)
+        val fixedColor = ColorARGB.of(255, 0, 0, 0)
+        val deferredColor = ColorARGB.of(192, 0, 0, 0)
+        val finalAaColor = ColorARGB.of(192, 255, 0, 0)
+        val background = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            W5aSolidOpacityCpuOracle.draw(backgroundColor, 1f),
+        ))
+        val fixedAfterBackground = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            W5aSolidOpacityCpuOracle.draw(fixedColor, 1f, destination = background),
+        ))
+        val destinationReadAfterFixed = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
+                WgslFloatEnvelopeV1Oracle.solidLinearPremul(deferredColor), fixedAfterBackground, BlendMode.DST_OUT, 1f,
+            ),
+        ))
+        val forward = requireBounded("fixed then DST_OUT then SRC_IN", WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
+            WgslFloatEnvelopeV1Oracle.solidLinearPremul(finalAaColor), destinationReadAfterFixed, BlendMode.SRC_IN, 1f,
+        ))
+        val deferredAfterBackground = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
+                WgslFloatEnvelopeV1Oracle.solidLinearPremul(deferredColor), background, BlendMode.DST_OUT, 1f,
+            ),
+        ))
+        val fixedAfterDeferred = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            W5aSolidOpacityCpuOracle.draw(fixedColor, 1f, destination = deferredAfterBackground),
+        ))
+        val reverse = requireBounded("DST_OUT then fixed then SRC_IN", WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
+            WgslFloatEnvelopeV1Oracle.solidLinearPremul(finalAaColor), fixedAfterDeferred, BlendMode.SRC_IN, 1f,
+        ))
+        requireDisjoint("fixed/deferred order", forward, reverse)
+        val triangle = triangle(1f, 1f, 5f, 1f, 1f, 5f)
+        fun record(forwardOrder: Boolean): Surface = Surface(7, 7).also { surface -> surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(shader = Shader.SolidColor(backgroundColor), antiAlias = false))
+            if (forwardOrder) drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f),
+                Paint(shader = Shader.SolidColor(fixedColor), blendMode = BlendMode.SRC_OVER, antiAlias = false))
+            drawPath(triangle, Paint(shader = Shader.SolidColor(deferredColor), blendMode = BlendMode.DST_OUT, antiAlias = true))
+            if (!forwardOrder) drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f),
+                Paint(shader = Shader.SolidColor(fixedColor), blendMode = BlendMode.SRC_OVER, antiAlias = false))
+            drawPath(triangle, Paint(shader = Shader.SolidColor(finalAaColor), blendMode = BlendMode.SRC_IN, antiAlias = true))
+        } }
+        renderTwice(record(forwardOrder = true)).forEach { result -> assertAdmits(forward, result.pixels, 7, 2, 2) }
+        renderTwice(record(forwardOrder = false)).forEach { result -> assertAdmits(reverse, result.pixels, 7, 2, 2) }
     }
 
     @ParameterizedTest(name = "{0}")
@@ -514,9 +599,9 @@ class W7AaDeferredBlendSurfacePixelTest {
         }
     }
 
-    private fun coverage(mode: BlendMode, geometry: Geometry, x: Int, y: Int): Float = when (mode) {
-        BlendMode.SRC_OVER -> if (x in 1..4 && y in 1..4) 1f else 0f
-        BlendMode.PLUS -> when (geometry) {
+    private fun coverage(mode: BlendMode, geometry: Geometry, x: Int, y: Int): Float {
+        if (mode in setOf(BlendMode.SRC_OVER, BlendMode.SRC_ATOP)) return if (x in 1..4 && y in 1..4) 1f else 0f
+        return when (geometry) {
         Geometry.PATH -> when {
             x >= 1 && y >= 1 && x + y < 5 -> 1f
             x >= 1 && y >= 1 && x + y == 5 -> 128f / 255f
@@ -528,7 +613,6 @@ class W7AaDeferredBlendSurfacePixelTest {
             else -> 0f
         }
         }
-        else -> error("Matrix only admits PLUS and SRC_OVER")
     }
 
     private fun stencilCoverage(geometry: StencilGeometry, x: Int, y: Int): Float = when (geometry) {
@@ -631,19 +715,15 @@ class W7AaDeferredBlendSurfacePixelTest {
         destination: W5bBlendCpuOracle.Draw,
         mode: BlendMode,
         coverage: Float,
-    ): WgslFloatEnvelopeV1Oracle.DrawResult = when (mode) {
-        BlendMode.PLUS -> W5bBlendCpuOracle.point(source, destination, coverage)
-        BlendMode.SRC_OVER -> W5aSolidOpacityCpuOracle.draw(
-            color = source.color,
-            // Historical resolved-color SRC_OVER materializes AA coverage in the source alpha
-            // before the final full-coverage composite (the diagonal is 128/255, not .5).
-            shaderOpacityOuterF32 = source.opacityF32 * coverage,
-            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
-                W5aSolidOpacityCpuOracle.draw(destination.color, destination.opacityF32),
-            )),
-            coverageF32 = 1f,
+    ): WgslFloatEnvelopeV1Oracle.DrawResult {
+        if (mode == BlendMode.PLUS) return W5bBlendCpuOracle.point(source, destination, coverage)
+        val destinationAttachment = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            W5aSolidOpacityCpuOracle.draw(destination.color, destination.opacityF32),
+        ))
+        return WgslFloatEnvelopeV1Oracle.coveredPorterDuffV1(
+            WgslFloatEnvelopeV1Oracle.solidLinearPremul(source.color, source.opacityF32),
+            destinationAttachment, mode, coverage,
         )
-        else -> error("Matrix only admits PLUS and SRC_OVER")
     }
 
     private fun requireBounded(label: String, result: WgslFloatEnvelopeV1Oracle.DrawResult):

@@ -186,7 +186,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     val paint = command.node.paint
                     if (!finite(command.node.transform) || !finite(command.node.effects) || !finiteClip(command.node.clip) ||
                         (path != null && !finite(path)) ||
-                        (admitsStandaloneRectPathFrames && rect != null && !finite(rect)) ||
+                        ((admitsStandaloneRectPathFrames || w7DeferredRectProjection(command.node)) && rect != null && !finite(rect)) ||
                         (paint != null && !finite(paint))
                     ) return "Draw facts are non-finite"
                 }
@@ -236,7 +236,11 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             }
         }
         val historicalMember = !containsRectProjection && (requiresGeneral || acceptsNarrowTransforms)
-        val standaloneMember = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource) && standaloneFrameFacts &&
+        val w7Frame = w7AaDeferredSource && scene.all { command ->
+            command !is SceneCommand.Draw || command.node.geometry !is GeometryNode.Rect || w7DeferredRectProjection(command.node)
+        }
+        val standaloneMember = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource || w7Frame) &&
+            (w7Frame || standaloneFrameFacts) &&
             (requiresGeneral || requiresStandaloneRectRouting)
         if (outside || !(historicalMember || standaloneMember)) {
             return Preflight.Outside
@@ -489,7 +493,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val rect = (node.geometry as? GeometryNode.Rect)?.copyBounds()
         // Empty/inverted rectangles stay outside this opt-in projection so their existing
         // route retains ownership of their observable semantics.
-        val rectProjection = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource) && rect?.isEmpty == false
+        val rectProjection = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource || w7DeferredRectProjection(node)) && rect?.isEmpty == false
         val path = (node.geometry as? GeometryNode.Path)?.path ?: if (rectProjection) {
             if (!finite(requireNotNull(rect))) return DrawScope.Invalid("Draw facts are non-finite")
             PathBuilder(FillRule.WINDING).addRect(requireNotNull(rect)).build()
@@ -529,8 +533,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             return DrawScope.Gap("W6 AA colour source requires an unfiltered solid SrcOver fill")
         }
         if (w7AaDeferredSource &&
-            (node.coverage != CoverageRequest.ANTIALIASED || paint.style != PaintStyleNode.FILL || !srcOverOrPlus(node.blend))) {
-            return DrawScope.Gap("W7 deferred AA source requires a solid SrcOver or Plus fill")
+            (node.coverage != CoverageRequest.ANTIALIASED || paint.style != PaintStyleNode.FILL || !w7PorterDuff(node.blend))) {
+            return DrawScope.Gap("W7 deferred AA source requires an admitted Porter-Duff fill")
         }
         val fill = paint.style == PaintStyleNode.FILL
         val stroke = paint.style == PaintStyleNode.STROKE || paint.style == PaintStyleNode.STROKE_AND_FILL
@@ -1479,10 +1483,18 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             paint.imageFilter == null && paint.pathEffect == null && node.effects == EffectStack.Empty
     }
 
-    private fun srcOverOrPlus(blend: BlendNode): Boolean = when (blend) {
+    private fun w7PorterDuff(blend: BlendNode): Boolean = when (blend) {
         BlendNode.SrcOver -> true
-        is BlendNode.Mode -> blend.mode in setOf(BlendMode.SRC_OVER, BlendMode.PLUS)
-        is BlendNode.Paint -> blend.blender == null && blend.mode in setOf(BlendMode.SRC_OVER, BlendMode.PLUS)
+        is BlendNode.Mode -> blend.mode in W7_PORTER_DUFF_BLEND_MODES
+        is BlendNode.Paint -> blend.blender == null && blend.mode in W7_PORTER_DUFF_BLEND_MODES
+        is BlendNode.Custom -> false
+    }
+
+    /** Existing SRC_OVER/PLUS Rect lanes keep their analytic/W5 ownership; Task3 adds only the new PD projections. */
+    private fun w7DeferredRectProjection(node: DrawNode): Boolean = w7AaDeferredSource && when (val blend = node.blend) {
+        BlendNode.SrcOver -> false
+        is BlendNode.Mode -> blend.mode !in setOf(BlendMode.SRC_OVER, BlendMode.PLUS)
+        is BlendNode.Paint -> blend.blender == null && blend.mode !in setOf(BlendMode.SRC_OVER, BlendMode.PLUS)
         is BlendNode.Custom -> false
     }
 

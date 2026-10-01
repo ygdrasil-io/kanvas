@@ -248,10 +248,16 @@ public class W6aLayerPlanCompiler public constructor(
             val historicalAaSource = originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true
             val rootAaSource = scopeI32 == null && !ownsW6b &&
                 originalDraw?.coverage == CoverageRequest.ANTIALIASED && historicalAaSource
-            val deferredAa = originalDraw?.let { draw ->
+            // The existing W4a Rect layer producer already composes these blends correctly.
+            // Keep its lane, allocation, and refusal identity; W7 fills the root Rect gap and
+            // the Path cases that W4a cannot select.
+            val deferredAa = if (scopeI32 != null && originalDraw?.geometry is GeometryNode.Rect) null else originalDraw?.let { draw ->
                 selectedW7AaDeferredBlend(draw, target, runtimeCatalog, historicalAaSource)
                     ?.let { W7AaDeferredOccurrenceFactsV1(drawIndexI32, it) }
             }
+            // DST is a selected W7 semantic NoOp.  Keep W6 ownership so sibling rendering
+            // remains native, but publish no source lane, resource, pass, or destination write.
+            if (deferredAa?.blend == BlendPlan.NoOpV1) return@forEach
             val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&
                 originalDraw?.let(rootAaRectSource::acceptsW6RootAaRectStrokeScope) == true
             val encodedHairline = ownsEncodedHairlineFrame &&
@@ -271,9 +277,17 @@ public class W6aLayerPlanCompiler public constructor(
                 (scopeI32 != null && originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true) || rootAaSource -> aaSource
                 else -> W4dGeneralPathPlanCompiler()
             }
-            val child = CapabilityCompilerChain.ofProjected(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
-                W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
-                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), generalPath), runtimeCatalog)
+            val child = CapabilityCompilerChain.ofProjected(
+                if (deferredAa != null) listOf(
+                    W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(),
+                    W4dPathStrokePlanCompiler(), generalPath,
+                ) else listOf(
+                    W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(),
+                    W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
+                    W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), generalPath,
+                ),
+                runtimeCatalog,
+            )
             when (val selection = child.select(segment, target)) {
                 is GpuPlanSelection.Candidate -> segments += Segment(scopeI32, drawIndexI32, child, selection.candidate, deferredAa)
                 // A source lane that is admissible except for its W5 material must retain that
@@ -637,9 +651,14 @@ public class W6aLayerPlanCompiler public constructor(
             historicalAaSource: Boolean,
         ): BlendPlan? {
             if (!W4dGeneralPathPlanCompiler.w7AaDeferredSource(catalog).acceptsW7AaDeferredSourceScope(draw)) return null
-            val blend = requireNotNull(FinalBlendPlanner.plan(draw.blend, CoveragePlan.StencilAA4,
+            val initial = requireNotNull(FinalBlendPlanner.plan(draw.blend, CoveragePlan.StencilAA4,
                 SamplePlan.SingleSample, logicalColorFormat(target).blendTargetClampV1(),
                 BlendCoverageApplicationV1.SourceMultiplication, BlendCoverageEncodingV1.ScalarCoverageInShader))
+            val blend = if (initial is BlendPlan.FixedFunctionV1 && initial.mode != org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER) {
+                requireNotNull(FinalBlendPlanner.plan(draw.blend, CoveragePlan.StencilAA4,
+                    SamplePlan.SingleSample, logicalColorFormat(target).blendTargetClampV1(),
+                    BlendCoverageApplicationV1.DestinationInterpolation, BlendCoverageEncodingV1.ScalarCoverageInShader))
+            } else initial
             return blend.takeIf { (it is BlendPlan.DestinationReadV1) ||
                 (!historicalAaSource && it.isW7AaDeferredBlendV1()) }
         }
