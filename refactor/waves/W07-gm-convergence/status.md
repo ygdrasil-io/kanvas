@@ -6,6 +6,101 @@ sur [#2426](https://github.com/ygdrasil-io/kanvas/pull/2426).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
 
+## Ports fidèles complexclip4 / manypathatlases — 1er octobre 2026
+
+Branche `codex/w7-clip-gm-ports`, parent draft#2428,
+[plan](clip-gm-ports-plan.md). Source/test final
+`6e0fca2df5aef733bb516ddd2b714dd342920ab4`,
+[snapshot complet](clip-gm-ports-6e0fca2df.json). Qualification terminée ;
+Astra approuve la publication draft, sans Critical/Important/Minor restant.
+Publication empilée sur#2428 en préparation, sans merge ni clôture W7.
+
+Deux erreurs de port ont été vérifiées contre Skia
+`defc3a5a92966c32cb2a6a901e2fa3036a13bb8a` :
+les quatre feuilles de `manypathatlases` sont soustraites avec Difference,
+pas intersectées ; les restrictions device de `complexclip4` survivent
+jusqu'au dessin jaune. Sa dernière restriction est fixée avant la CTM.
+Les couleurs, courbes, rotations et opérations de dessin sont conservées.
+
+Le remplissage final de cette scène garde l'adaptation RGB existante :
+l'inverse de R20*T50 place tous les coins de la restriction dans le viewport,
+loin des bords. La convexité établit que chaque sample couvert reçoit le
+même jaune opaque. Le véritable DrawColor sous clip analytique complexe
+reste refusé ; aucun guard n'est affaibli, aucune API ResetClip ajoutée.
+Le renderer et GmCanvas ne changent pas.
+
+### Validation et rendus ciblés
+
+Quatre tests rendent les vrais GM via Surface, vérifient pixels littéraux,
+Render/Readback, absence de refus et répétition. RED initial4/4 causal.
+Après correction et suppression du helper susceptible de skip, **40/40
+témoins natifs frais** passent :4nouveaux+9GMhistoriques+27scissor.
+Sorties0/0, aucun timeout/failure/error/skip/stderr JUnit.
+Relecture Sol et contre-relecture R1 approuvées. Warnings JDK/Gradle hérités
+visibles, pas de changement toolchain.
+La revue finale Astra vérifie indépendamment source, preuve de couverture,
+XML/exits et comparaison complète des snapshots ; elle s'appuie sur
+l'inspection visuelle du contrôleur pour les huit images actual/diff.
+
+Quatre PNG et seulement leurs quatre entrées de score ont été régénérés.
+Les anciens scores properties sont historiques, donc ne servent pas de
+baseline au bilan du corpus. Le comparateur ciblé actuel mesure
+99.92611683848797 % pour complexclip4_aa,99.99881046788263 % pour complexclip4_bw,
+95.32470703125 % pour chaque manypathatlases, à ±2/canal.
+L'inspection confirme disparition des débordements, rectangle device correctement
+placé et retour des silhouettes de feuilles. Les résidus d'AA ne sont pas
+déclarés résolus.
+
+Les aperçus des PNG bruts ne suffisent pas à attribuer une erreur couleur :
+la référence complexclip4 contient un profil ICC Rec.2020, le rendu généré
+est sRGB. Les deux comparateurs existants normalisent la référence vers sRGB.
+Cette correction de lecture n'altère ni codec, ni profil, ni référence,
+ni métrique, ni domaine LINEAR.
+
+### Corpus complet à périmètre constant
+
+Les 631 identités,443 éligibles et18invariants sont identiques au snapshot
+be813afd7. **206 rendus,183 comparés,41 ≥99 % (+2),56 ≥95 % (+4)**.
+La médiane ±2/canal passe de72.57102272727273 à74.01023391812865 %.
+Aucune admission nouvelle ni perte ; seuls les quatre hashes et leurs
+métriques changent. Les202autres rendus sont pixel-identiques ; tous les
+champs non temporels des627autres identités sont inchangés, présence comprise.
+Outcomes, diagnostics, dispatches et refus restent identiques partout.
+
+| GM | Avant ±2/canal | Après ±2/canal | Après exact |
+| --- | ---: | ---: | ---: |
+| complexclip4_aa | 85.28536 % | 99.92612 % | 80.37801 % |
+| complexclip4_bw | 85.40034 % | 99.99881 % | 80.41938 % |
+| manypathatlases_128 | 33.32520 % | 95.32471 % | 95.32471 % |
+| manypathatlases_2048 | 33.32520 % | 95.32471 % | 95.32471 % |
+
+Les actual/diff du corpus ont été inspectés. Le diff est un masque binaire
+des écarts exacts, pas une amplitude ni un dépassement de±2 : les régions
+vertes complexclip4 restent marquées malgré le score±2 élevé. La silhouette
+est corrigée, sans équivalence byte-à-byte ; manypathatlases conserve des
+écarts de contour. SSIM final0.999771/0.999962/0.980548/0.980548.
+Les quatre scores ciblés concordent exactement avec le corpus.
+
+Les slices sérielles[0,607),[607,608),[608,631) sortent0/1/0 sans timeout
+externe ; le singleton vertices conserve le watchdog30s, Java124.
+Le bilan reste186 render_failed,50 setup_failed,15 rendered_uncompared,
+8 dimensions incompatibles et1 timeout. Journaux, exits et images dans
+`/private/tmp/kanvas-w7-clip-ports.5rrxkH/corpus-6e0fca2df` et les trois
+archives voisines. Aucun journal incomplet ou autre SHA n'est réutilisé.
+
+Pas de nouvelle globale kanvas pour ces changements limités aux ports/tests
+d'intégration : la globale be813afd7 demeure686SUCCESS/37FAILURE/1SKIPPED
+à240s et27identités non atteintes, sans être réattribuée au nouveau SHA.
+La première tentative de génération a utilisé par erreur les indices triés
+du runner de parité sur le registry non trié ; deux GM hors cible ont refusé,
+sans PNG écrit, puis Java133. Les huit exécutions utiles suivantes utilisent
+les noms exacts et terminent normalement. Aucun résultat de cet essai erroné
+ne qualifie les ports ; shutdown133 non diagnostiqué.
+
+La fidélité complète du corpus, les gates W6 AA4, inverseclip, la globale,
+les dettes couleur Sk3d/allocation Path/JDK et la quarantaine W0 restent
+distincts. Aucune clôture W7 ni autorisation de merge.
+
 ## Scissor des producteurs de clip / resolve AA4 — 1er octobre 2026
 
 Branche `codex/w7-clip-producer-scissor`, empilée sur #2427,
