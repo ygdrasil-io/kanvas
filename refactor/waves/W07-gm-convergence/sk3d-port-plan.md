@@ -1,6 +1,6 @@
 # W7 Sk3d Faithful Port Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Execute the original Skia sk3d_simple scene and measure its true residual parity gap.
 **Architecture:** Preserve the faithful GM port and genuine Picture Rect+CTM. A distinct prerequisite extends hard Picture ownership and its closed W4d Rect source, reusing W6 occurrence assembly; no new compositor/backend.
@@ -25,7 +25,28 @@
 4. AA implicite et bord à x=40,504985 : pixels voisins hard, sans oracle ajusté.
 5. Picture réelle et état restauré : audit du port, pixels extérieurs et repeat natif ; aucune substitution de chemin pour contourner une capacité manquante. Task2 contrôle aussi origine cible, stencil, refus AA-perspective et budgets analytiques.
 
-## Ordre d'exécution amendé après preuve native
+## État qualifié — 1er octobre 2026
+
+Task1 et Task2 terminées sur leur périmètre amendé, reviews Sol approuvées.
+Revue globale Astra suivie d'une unique correction test/KDoc et d'une
+contre-relecture Sol approuvée : trou even-odd maintenant observable,
+allocations temporaires documentées. Draft [#2427](https://github.com/ygdrasil-io/kanvas/pull/2427)
+empilée sur #2426 ; aucun merge ni clôture W7.
+
+Produit mesuré813e61f09 : ciblés263/263, corpus631/443 complet. Correction
+finale5a931c87a : public94+GM9 frais,103/103, code exécutable inchangé. La
+globale240s reste incomplète (688SUCCESS/40FAILURE/1SKIPPED,22anciennes
+identités non atteintes) ; sa réussite n'est pas un livrable atteint.
+Les détails et limites sont dans [status](status.md) et [pilotage](pilotage.md).
+
+Les checkboxes ci-dessous indiquent les obligations traitées par la solution
+finale amendée, pas la conservation des implémentations intermédiaires.
+Fix3 a remplacé l'admission tardive fix2 ; fix4 a rendu le préfixe F64 lazy
+après provenance par entrée. Le contrôleur a repris toute qualification
+native, globale et corpus après l'essai chevauché invalide. L'historique
+ci-dessous est conservé pour expliquer ces amendements.
+
+## Historique de l'ordre d'exécution amendé après preuve native
 
 Task1 a produit le RED causal et le port fidèle WIP, puis a rencontré un
 refus renderer. Elle reste suspendue, non terminée. Exécuter Task2, le
@@ -43,16 +64,16 @@ restent hors des commits renderer Task2. Une seule runtime native active.
 
 **Interfaces:** Existing SkiaGm.draw/GmCanvas, PictureRecorder and math matrices; consume the reviewed Task2 hard Picture source. Task1 itself changes no renderer/API contract. Read the spec for exact Skia parameters and order; update the port's source link to the pinned revision. Direct GmCanvas and recorder Canvas retain their existing distinct adapters.
 
-- [ ] Write three public native tests named `perspectiveFootprintMatchesIndependentCamera`, `pictureOverlayUsesSkiaAlpha`, `hardEdgeHasNoPartialCoverage`. Record the actual GM onto a white public Surface, using its existing composition config; no snapshot-op/source-text assertions. The expected coordinates/colors are set before creating Surface.
+- [x] Write three public native tests named `perspectiveFootprintMatchesIndependentCamera`, `pictureOverlayUsesSkiaAlpha`, `hardEdgeHasNoPartialCoverage`. Record the actual GM onto a white public Surface, using its existing composition config; no snapshot-op/source-text assertions. The expected coordinates/colors are set before creating Surface.
   - Footprint: inside `(60,100)` and `(150,100)` are `(182±1,0,193±1,255)`; outside `(20,150)`, `(220,150)`, `(0,0)`, `(299,299)` are exact white. Use the spec's independent camera derivation, not a production matrix helper for expectations.
   - Alpha: interior `(150,100)` has the same fixed color band; show before GPU that these bands exclude half-alpha `(188,0,188)` and omitted Picture `(255,0,0)`.
   - Hard edge: `(40,100)` exact white, `(41,100)` interior color. The left edge x=40.5049845 is just beyond the first pixel centre; document the independent margin. Do not change expected bands after observing GPU.
   - Every test requires clean Render/Readback, dispatch >0, no refusal/diagnostic/skip and second clean byte-identical render. Follow existing native Surface cleanup conventions.
-- [ ] Run only this class to causal RED before editing the port. Archive test identities, exact failure and wrapper/child exit; setup/compiler failure is not RED.
-- [ ] Implement the spec's faithful camera, colors and AA flags, preserving real recorder Rect+CTM and drawing order. After the archived green-1 refusal, consume Task2 and run focused GREEN without altering the three expectations.
-- [ ] Re-run this class plus `AlphaGradientsSurfacePixelTest` and `HardstopGradientSurfacePixelTest`. Account all identities, XML failures/errors/skips/stderr and exits. Run one bounded240 `:kanvas:test` attempt after final edits; list reached failures by identity and preserve timeout/unreached as incomplete, not green. No per-edit global reruns.
-- [ ] Commit only port/tests. Measure frozen631/443 at that exact full SHA with existing `measureSkiaParity` and strict `summarize-parity.mjs`, 30s/GM, partitions0–607/607–608/608–631. Use fresh run dirs; keep live handles until terminal, never restart on observation timeout. Compare18invariants and every prior outcome/hash/metric against `picture-3398dc3.json`. Only sk3d_simple has an edited scene; the generic Task2 capability may change other outcomes, which must each be listed and explained, never omitted from the denominator. Inspect sk3d actual/reference/diff even if score rises. Investigate any previously rendered loss or changed old image outside sk3d before claiming preservation. Report gains/losses and fidelity separately.
-- [ ] Update the existing durable docs and add the current snapshot without falsifying baseline history. Mark review pending. Self-review, commit docs, and write full report with literal commands, RED/GREEN evidence, all commits, corpus comparison and remaining limitations. Controller owns independent Sol task review and publication.
+- [x] Run only this class to causal RED before editing the port. Archive test identities, exact failure and wrapper/child exit; setup/compiler failure is not RED.
+- [x] Implement the spec's faithful camera, colors and AA flags, preserving real recorder Rect+CTM and drawing order. After the archived green-1 refusal, consume Task2 and run focused GREEN without altering the three expectations.
+- [x] Re-run this class plus `AlphaGradientsSurfacePixelTest` and `HardstopGradientSurfacePixelTest`. Account all identities, XML failures/errors/skips/stderr and exits. Run one bounded240 `:kanvas:test` attempt after final edits; list reached failures by identity and preserve timeout/unreached as incomplete, not green. No per-edit global reruns.
+- [x] Commit only port/tests. Measure frozen631/443 at that exact full SHA with existing `measureSkiaParity` and strict `summarize-parity.mjs`, 30s/GM, partitions0–607/607–608/608–631. Use fresh run dirs; keep live handles until terminal, never restart on observation timeout. Compare18invariants and every prior outcome/hash/metric against `picture-3398dc3.json`. Only sk3d_simple has an edited scene; the generic Task2 capability may change other outcomes, which must each be listed and explained, never omitted from the denominator. Inspect sk3d actual/reference/diff even if score rises. Investigate any previously rendered loss or changed old image outside sk3d before claiming preservation. Report gains/losses and fidelity separately.
+- [x] Update the existing durable docs and add the current snapshot without falsifying baseline history. Mark review pending. Self-review, commit docs, and write full report with literal commands, RED/GREEN evidence, all commits, corpus comparison and remaining limitations. Controller owns independent Sol task review and publication.
 
 ### Task 2: Supply the closed hard Picture renderer prerequisite
 
@@ -64,11 +85,11 @@ restent hors des commits renderer Task2. Une seule runtime native active.
 
 **Interfaces:** Add internal `W4dGeneralPathPlanCompiler.w6HardRectFillSource(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler` and a distinct closed projection mode `PictureHardFill`. Nominate the same hard Picture family in DisplayOp and captured Scene ownership; prefer W6 only for this Picture family, with bounded identity traversal. Source selection consumes `OccurrenceSourceInputV1.materialCoordinateDraw()` in `preparePictureDrawLane`; outputs the existing ordinary hard `SourceDeferredRenderConstructionV4`. No changes to prepared flat compositor, math API, AA source contract or direct W6 source selector. Read the spec's prerequisite section for binding admission/provenance/mapping rules.
 
-- [ ] Write the public native class before renderer edits, using the fixed H/A geometry and color witnesses in the spec. Tests: `projectiveRectHasHardCoverage`, `projectiveTriangleKeepsItsShape`, `projectiveEvenOddHoleDoesNotLeakStencil`, `affineRectPictureUsesItsRecordedTransform`, `twoPictureOccurrencesSeeTheirOwnDestination`, `nestedPictureComposesOuterTranslationOnce`, `pictureLayerRebasesHardScissorAndSiblings`, `identityAndScaleTranslatePicturesKeepAnalyticBudget`, `hardPictureRefusalsPreserveSentinelAndRecover`, `hardSiblingDoesNotAdmitAaPerspective`, `directFrameWithoutPictureStaysClean`. Use parameterization for the five refusal inputs (horizon, NaN, RGBA16_FLOAT, budget1, mixed AA) if clearer, without duplicating mixed-AA coverage. Derive identity/scale-translate Picture budget and layer/scissor witness margins statically before GPU and record the calculation in test/report. Budget1 is an immutable insufficiency check, not an empirical measured threshold. Positive tests demand native Render/Readback, clean stats, dispatch and repeat; negatives demand precise predicted diagnostic family, unchanged readPixels sentinel and clean recovery with the admitted H control.
-- [ ] Run only this new class to causal RED, archive every identity/outcome and exit. The existing Sk3d green-1 is additional causal evidence, not permission to skip the new public RED. Keep oracles unchanged after observation. If a fixture cannot be justified from existing contracts, ask with its proposed independent derivation before GPU.
-- [ ] Implement owner nomination, captured priority, closed hard Rect factory/preflight/copy propagation and Picture occurrence source selection together. Preserve identity/scale analytic selection and Path source semantics. Reuse existing math/assembly/physical resource checks. If native execution uncovers an additional boundary, report the exact cause before widening assembly scope; do not add a replacement scene or weaken a proof.
-- [ ] Run focused GREEN for this class and the unchanged three Sk3d tests. Run covering classes `W7AaDeferredPictureSurfacePixelTest`, `W7AaDeferredBlendSurfacePixelTest`, `W7AffineRectSurfacePixelTest`, `W7CoveredPlusSurfacePixelTest` and the existing encoded Rect hairline public test class (resolve its exact filename before running). Account all END identities, XML failures/errors/skips/stderr and wrapper/child exits, fresh archives. No global/corpus run in Task2: the one final global attempt and corpus belong to resumed Task1 after this review.
-- [ ] Self-review, `git diff --check`, commit only the five renderer files and the new public test. Write `.superpowers/sdd/sk3d-port-plan/task-2-report.md` with commands, complete RED/GREEN/covering accounting, static budget derivation, commits and remaining limitations; return concise DONE/NEEDS_CONTEXT. No helpers, no push/PR/merge. Controller creates independent Sol task review before resuming Task1.
+- [x] Write the public native class before renderer edits, using the fixed H/A geometry and color witnesses in the spec. Tests: `projectiveRectHasHardCoverage`, `projectiveTriangleKeepsItsShape`, `projectiveEvenOddHoleDoesNotLeakStencil`, `affineRectPictureUsesItsRecordedTransform`, `twoPictureOccurrencesSeeTheirOwnDestination`, `nestedPictureComposesOuterTranslationOnce`, `pictureLayerRebasesHardScissorAndSiblings`, `identityAndScaleTranslatePicturesKeepAnalyticBudget`, `hardPictureRefusalsPreserveSentinelAndRecover`, `hardSiblingDoesNotAdmitAaPerspective`, `directFrameWithoutPictureStaysClean`. Use parameterization for the five refusal inputs (horizon, NaN, RGBA16_FLOAT, budget1, mixed AA) if clearer, without duplicating mixed-AA coverage. Derive identity/scale-translate Picture budget and layer/scissor witness margins statically before GPU and record the calculation in test/report. Budget1 is an immutable insufficiency check, not an empirical measured threshold. Positive tests demand native Render/Readback, clean stats, dispatch and repeat; negatives demand precise predicted diagnostic family, unchanged readPixels sentinel and clean recovery with the admitted H control.
+- [x] Run only this new class to causal RED, archive every identity/outcome and exit. The existing Sk3d green-1 is additional causal evidence, not permission to skip the new public RED. Keep oracles unchanged after observation. If a fixture cannot be justified from existing contracts, ask with its proposed independent derivation before GPU.
+- [x] Implement owner nomination, captured priority, closed hard Rect factory/preflight/copy propagation and Picture occurrence source selection together. Preserve identity/scale analytic selection and Path source semantics. Reuse existing math/assembly/physical resource checks. If native execution uncovers an additional boundary, report the exact cause before widening assembly scope; do not add a replacement scene or weaken a proof.
+- [x] Run focused GREEN for this class and the unchanged three Sk3d tests. Run covering classes `W7AaDeferredPictureSurfacePixelTest`, `W7AaDeferredBlendSurfacePixelTest`, `W7AffineRectSurfacePixelTest`, `W7CoveredPlusSurfacePixelTest` and the existing encoded Rect hairline public test class (resolve its exact filename before running). Account all END identities, XML failures/errors/skips/stderr and wrapper/child exits, fresh archives. No global/corpus run in Task2: the one final global attempt and corpus belong to resumed Task1 after this review.
+- [x] Self-review, `git diff --check`, commit only the five renderer files and the new public test. Write `.superpowers/sdd/sk3d-port-plan/task-2-report.md` with commands, complete RED/GREEN/covering accounting, static budget derivation, commits and remaining limitations; return concise DONE/NEEDS_CONTEXT. No helpers, no push/PR/merge. Controller creates independent Sol task review before resuming Task1.
 
 ## Validation execution
 
@@ -80,16 +101,16 @@ reprovoquer cet abort ni changer l'oracle historique. Réouvrir Task2 avec
 l'implementer original pour l'admission fermée décrite dans le design,
 avant de reprendre la qualification Task1.
 
-- [ ] Modifier uniquement `W6aLayerGraphConstruction.kt`, le partage étroit
+- [x] Modifier uniquement `W6aLayerGraphConstruction.kt`, le partage étroit
   des prédicats hard dans `W6aLayerPlanCompiler.kt` et, si nécessaire, une
   query des clips de source dans `OccurrenceSourceInputV1.kt`. Garder les
   seeds raw/captured structurels et les modes W4d/W4e inchangés.
-- [ ] Ajouter des témoins publics de refus précis, sentinelle et recovery
+- [x] Ajouter des témoins publics de refus précis, sentinelle et recovery
   dans `W7HardPictureSurfacePixelTest`, incluant Rect/Path, sibling valide,
   Picture imbriquée/layer, et annulation de perspective enregistrée par
   transform externe. Pas de tests d'infrastructure ni de nouvel oracle
   fitted. Le PictureTest existant et les trois témoins Sk3d restent intacts.
-- [ ] Le contrôleur exécute désormais seul les validations natives, conserve
+- [x] Le contrôleur exécute désormais seul les validations natives, conserve
   le handle vivant jusqu'au terminal et archive chaque commande. Le worker
   écrit tests/code/rapport, sans Gradle/GPU. Qualification : identité Picture
   régressive puis PictureTest complet + hard Picture ; Sk3d/Alpha/Hardstop ;
@@ -107,18 +128,18 @@ clips singular/overflow et provenance perspective schema1. La review Sol
 les garde ouverts. Appliquer la correction de design ci-dessus avec le même
 implementer, en remplaçant (pas en doublant) l'admission tardive fix2.
 
-- [ ] Extraire l'énumération des clips consommés sans nécessiter un carrier.
+- [x] Extraire l'énumération des clips consommés sans nécessiter un carrier.
   Parcourir une fois les drafts actifs avant leur premier cull. Préserver
   ordre, scopes source/composition, empty/no-op et diagnostics typés.
-- [ ] Ajouter seulement l'extraction numérique math/matrix et l'adaptateur
+- [x] Ajouter seulement l'extraction numérique math/matrix et l'adaptateur
   render-ir nécessaires ; réutiliser les primitives existantes et partager
   le classifier utilisé par GPUClipMapper si extrait. Aucun backend/scissor,
   proof, cap, seed, mode W4d, oracle historique ou nouveau test d'infrastructure.
-- [ ] Companions publics : singular/overflow et legacy sentinelle+recovery,
+- [x] Companions publics : singular/overflow et legacy sentinelle+recovery,
   grande matrice dont la projection est encore F32 finie, ordre des refus,
   préservation des sous-arbres au clip terminal vide existant. Ne jamais
   augmenter les tolérances après observation. Conserver les tests fix2.
-- [ ] Contrôleur seul : SurfaceTest et PictureTest inchangés avec hardPicture,
+- [x] Contrôleur seul : SurfaceTest et PictureTest inchangés avec hardPicture,
   puis GM9 et covering160 ; relecture Sol fix3 ; ensuite un global240 final.
   Réutiliser le globalfix2 comme RED causal des deux identités, sans répétition
   avant modification. Aucun corpus tant que ces régressions restent ouvertes.

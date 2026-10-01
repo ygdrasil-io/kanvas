@@ -4,8 +4,10 @@
 
 Produit mesuré `813e61f098317750c3a8a1d98dea185629ead38e`,
 [snapshot](sk3d-port-813e61f09.json), [design](sk3d-port-design.md),
-[plan](sk3d-port-plan.md), branche `codex/w7-sk3d-port` sur #2426.
-Task2 approuvée par Sol ; review Task1 et revue globale en attente avant draft.
+[plan](sk3d-port-plan.md), branche `codex/w7-sk3d-port`, draft
+[#2427](https://github.com/ygdrasil-io/kanvas/pull/2427) publiée sur #2426.
+Task1/Task2 approuvées par Sol, revue globale Astra puis unique contre-relecture
+Sol du correctif `5a931c87a` approuvée, sans nouveau Critical/Important/Minor.
 
 Le port rétablit caméra perspective/rotation Y, alpha136/255 et hard edge,
 sans supprimer la vraie Picture Rect+CTM. L'owner hard Picture et sa source
@@ -27,7 +29,11 @@ hash ni métrique ne change et aucun ancien rendu n'est perdu. `vertices`
 garde son timeout30s. Mesure neuve strictement séquentielle ; l'essai
 ff3e3bb chevauché est conservé mais exclu de la qualification.
 
-263/263 témoins publics ciblés passent avec processus0/0 et XML propres.
+263/263 témoins publics ciblés passent au produit813e61f09 avec processus0/0
+et XML propres. Après revue, le trou even-odd dispose d'un témoin rouge non
+masqué par le dessin vert suivant ; 103/103 validations fraîches public94/GM9
+passent au correctif test/KDoc, mêmes sorties propres. Code exécutable inchangé,
+pas de nouveau covering160/global/corpus attribué à ce correctif.
 La globale240s reste incomplète :688SUCCESS/40FAILURE/1SKIPPED,124/143,
 mêmes40échecs atteints que la baseline,22 anciennes identités non atteintes.
 Pas de nouvelle assertion en échec atteinte, ni de claim globale verte.
@@ -36,6 +42,9 @@ Priorités encore ouvertes : attribuer l'écart couleur sans modifier l'oracle,
 réparer séparément l'autorité de scissor cible-local W4e, puis poursuivre les
 causes transversales mesurées. Le groupe unsupported_child compte toujours
 42premiers diagnostics, ce n'est ni42causes indépendantes ni42gains promis.
+Suivis non bloquants : limiter les allocations temporaires O(taille du Path)
+de l'admission numérique sans réimplémenter les arcs ; résoudre les warnings
+hérités Gradle/LWJGL native access et `sun.misc.Unsafe` avant upgrade JDK.
 Ni merge, ni clôture W7/W6/W0.
 
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
