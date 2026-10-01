@@ -1,8 +1,8 @@
 # W07 — diagnostic GM provisoire
 
-Dernier lot publié : draft [#2427](https://github.com/ygdrasil-io/kanvas/pull/2427),
-empilée sur [#2426](https://github.com/ygdrasil-io/kanvas/pull/2426), elle-même
-sur [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425).
+Dernier lot publié : draft [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428),
+empilée sur [#2427](https://github.com/ygdrasil-io/kanvas/pull/2427), elle-même
+sur [#2426](https://github.com/ygdrasil-io/kanvas/pull/2426).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
 
@@ -11,8 +11,9 @@ reste la base historique sur la PR W6 #2409.
 Branche `codex/w7-clip-producer-scissor`, empilée sur #2427,
 [design](clip-producer-scissor-design.md), [plan](clip-producer-scissor-plan.md).
 Produit mesuré `be813afd75da9e094a9368c65a0d9fc31b2598a9`,
-[snapshot complet](clip-producer-scissor-be813afd7.json). Publication draft
-en préparation après verdict final de qualification Astra favorable à une draft.
+[snapshot complet](clip-producer-scissor-be813afd7.json). Draft
+[#2428](https://github.com/ygdrasil-io/kanvas/pull/2428) publiée sur #2427,
+après verdict final de qualification Astra favorable à une draft.
 
 Le scissor préparé, borné et local à l'attachment est transporté séparément
 de la géométrie complète jusqu'aux recettes et aux deux matérialiseurs root/W6.

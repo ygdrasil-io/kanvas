@@ -133,7 +133,7 @@ rtk proxy ruby /private/tmp/kanvas-w7-clip-scissor.L7Iwrt/bounded-run.rb ARCHIVE
 - [x] At final product SHA, one bounded full `:kanvas:test`. Compare every reached failure by identity with inherited40; list deadline skips/unreached tests. Timeout is not a successful global suite.
 - [x] Final corpus631/443 sequential slices0–607,607–608,608–631 with30s GM watchdog and PNG enabled; strict aggregator vs `sk3d-port-813e61f09.json`. Preserve all18 invariants and inspect every changed rendered hash/metric; no count-gain promise.
 - [x] Astra whole-branch review of source, qualification and deferred minors, then at most one combined fix wave and scoped Sol re-review. If source changes, rerun covering qualification at actual final SHA; prior source evidence must not be relabeled.
-- [ ] Update `refactor/README.md`, `status.md`, `pilotage.md`, plan and exact-SHA snapshot with gains, losses, unresolved limits. Publish/attach draft stacked on `codex/w7-sk3d-port` (#2427). Keep W7 active.
+- [x] Update `refactor/README.md`, `status.md`, `pilotage.md`, plan and exact-SHA snapshot with gains, losses, unresolved limits. Publish/attach draft stacked on `codex/w7-sk3d-port` (#2427). Keep W7 active.
 
 ## Self-review
 
@@ -157,4 +157,4 @@ All three fresh slices terminated sequentially;0–607 and608–631 exit0/0. ver
 
 Optional `:gpu-plan:compileTestKotlin` exposes preexisting unchanged Picture aggregate/RenderGraph callsite mismatches. Only the five mandatory scissor constructor arguments were adapted; no infrastructure assertions/tests were added or run. This module test-source compilation debt is not hidden as a success.
 
-Independent Astra approves the stacked draft on #2427 after the final qualification/docs review:0Critical/0Important/0Minor source findings remain. It explicitly does not certify the cause/fidelity of new images, W6AA4, inverseclip or exhaustive regression; these are retained follow-ups, not silently dropped. No positive merge or W7 closure verdict. Publication remains pending; corpus comparison and visual inspection are complete with the limits above. No global green or ISO claim.
+Independent Astra approves the stacked draft on #2427 after the final qualification/docs review:0Critical/0Important/0Minor source findings remain. It explicitly does not certify the cause/fidelity of new images, W6AA4, inverseclip or exhaustive regression; these are retained follow-ups, not silently dropped. No positive merge or W7 closure verdict. Draft [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428) is published and attached on `codex/w7-sk3d-port`; corpus comparison and visual inspection are complete with the limits above. No global green or ISO claim.

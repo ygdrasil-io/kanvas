@@ -4,7 +4,8 @@
 
 Produit `be813afd75da9e094a9368c65a0d9fc31b2598a9`,
 [snapshot](clip-producer-scissor-be813afd7.json), [plan](clip-producer-scissor-plan.md).
-Branche `codex/w7-clip-producer-scissor`, draft à publier sur #2427 avec
+Branche `codex/w7-clip-producer-scissor`, draft
+[#2428](https://github.com/ygdrasil-io/kanvas/pull/2428) publiée sur #2427 avec
 verdict de qualification Astra favorable à une draft, pas au merge.
 Source corrigée et relue (Sol + Astra),
 347 témoins natifs ciblés et compilation JS passent.
