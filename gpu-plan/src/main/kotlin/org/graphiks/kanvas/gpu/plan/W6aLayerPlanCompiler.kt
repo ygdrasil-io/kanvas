@@ -248,17 +248,8 @@ public class W6aLayerPlanCompiler public constructor(
             val historicalAaSource = originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true
             val rootAaSource = scopeI32 == null && !ownsW6b &&
                 originalDraw?.coverage == CoverageRequest.ANTIALIASED && historicalAaSource
-            val deferredAa = originalDraw?.takeIf(deferredAaSource::acceptsW7AaDeferredSourceScope)?.let { draw ->
-                val blend = requireNotNull(FinalBlendPlanner.plan(draw.blend, CoveragePlan.StencilAA4,
-                    SamplePlan.SingleSample, logicalColorFormat(target).blendTargetClampV1(),
-                    BlendCoverageApplicationV1.SourceMultiplication,
-                    BlendCoverageEncodingV1.ScalarCoverageInShader))
-                // Preserve every SRC_OVER draw that the historical resolved-colour lane
-                // already admits.  Only its Solid/Opacity gap uses W7's typed coverage
-                // producer and fixed scalar-coverage consumer; PLUS always needs its
-                // destination-read snapshot.
-                blend.takeIf { it is BlendPlan.DestinationReadV1 ||
-                    !historicalAaSource && it.isW7AaDeferredBlendV1() }
+            val deferredAa = originalDraw?.let { draw ->
+                selectedW7AaDeferredBlend(draw, target, runtimeCatalog, historicalAaSource)
                     ?.let { W7AaDeferredOccurrenceFactsV1(drawIndexI32, it) }
             }
             val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&
@@ -549,11 +540,6 @@ public class W6aLayerPlanCompiler public constructor(
         return null
     }
 
-    private fun logicalColorFormat(target: RenderTargetDescriptor): PlanLogicalColorFormat = when (target.compositionDomain) {
-        org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
-        org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
-    }
-
     /**
      * W6b binds only the captured IR payload to its frozen graph.  The W5 lane may still prove
      * the unfiltered source draw, but never sees a public spatial-filter object or chooses a
@@ -628,14 +614,35 @@ public class W6aLayerPlanCompiler public constructor(
     public companion object {
         public const val CAPABILITY_ID: String = "w6a.layer.v1"
 
+        private fun logicalColorFormat(target: RenderTargetDescriptor): PlanLogicalColorFormat = when (target.compositionDomain) {
+            org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+            org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
+        }
+
         internal fun ownsAaDeferred(
             scene: SceneSnapshot,
             target: RenderTargetDescriptor,
             catalog: RuntimeEffectSemanticCatalogSnapshot,
         ): Boolean = target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR &&
             scene.filterIsInstance<SceneCommand.Draw>().any { draw ->
-                W4dGeneralPathPlanCompiler.w7AaDeferredSource(catalog).acceptsW7AaDeferredSourceScope(draw.node)
+                val historical = W4dGeneralPathPlanCompiler.w6AaColorSource(catalog).acceptsW6AaColorSourceScope(draw.node)
+                selectedW7AaDeferredBlend(draw.node, target, catalog, historical) != null
             }
+
+        /** Closed W7 selection fact shared by root ownership and occurrence construction. */
+        private fun selectedW7AaDeferredBlend(
+            draw: DrawNode,
+            target: RenderTargetDescriptor,
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+            historicalAaSource: Boolean,
+        ): BlendPlan? {
+            if (!W4dGeneralPathPlanCompiler.w7AaDeferredSource(catalog).acceptsW7AaDeferredSourceScope(draw)) return null
+            val blend = requireNotNull(FinalBlendPlanner.plan(draw.blend, CoveragePlan.StencilAA4,
+                SamplePlan.SingleSample, logicalColorFormat(target).blendTargetClampV1(),
+                BlendCoverageApplicationV1.SourceMultiplication, BlendCoverageEncodingV1.ScalarCoverageInShader))
+            return blend.takeIf { (it is BlendPlan.DestinationReadV1) ||
+                (!historicalAaSource && it.isW7AaDeferredBlendV1()) }
+        }
 
         /** Closed root-only W7 ownership for the existing W4a analytic Rect lane. */
         internal fun ownsRootAaDeferredRect(

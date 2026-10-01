@@ -280,12 +280,20 @@ class W7AaDeferredBlendSurfacePixelTest {
 
     @Test
     fun `two deferred PLUS consumers use the stored intervening destination in recorded order`() {
-        val destinationColor = ColorARGB.of(64, 0, 0, 0)
-        val forward = requireBounded("chronology forward overlap", chronologyExpected(2, 1, destinationColor, forward = true))
-        val reverse = requireBounded("chronology reverse overlap", chronologyExpected(2, 1, destinationColor, forward = false))
-        val stale = chronologyExpected(2, 1, destinationColor, forward = true, includeMiddle = false)
+        val destinationColor = ColorARGB.Black
+        val forward = requireBounded("chronology forward overlap", chronologyExpected(3, 1, destinationColor, forward = true))
+        val reverse = requireBounded("chronology reverse overlap", chronologyExpected(3, 1, destinationColor, forward = false))
+        val stale = chronologyExpected(3, 1, destinationColor, forward = true, includeMiddle = false)
+        // At these C=1 coordinates the first triangle is the only draw: exact 0/1 source and
+        // opaque black D make sat(C*S+D) an exact UNORM singleton, independent of the broader
+        // transfer envelope used for colored fractional coverage.
+        val forwardFirst = listOf(255, 0, 0, 255)
+        val reverseFirst = listOf(0, 255, 0, 255)
+        val omittedFirst = listOf(0, 0, 0, 255)
         requireDisjoint("chronology forward/reverse overlap", forward, reverse)
         requireDisjointFromConservativeExclusion("chronology stale destination", forward, stale)
+        check(forwardFirst != omittedFirst)
+        check(reverseFirst != omittedFirst)
         val outside = requireBounded("chronology exterior", W5aSolidOpacityCpuOracle.draw(destinationColor, 1f))
 
         fun record(forwardOrder: Boolean): Surface = Surface(7, 7).also { surface -> surface.canvas {
@@ -294,16 +302,18 @@ class W7AaDeferredBlendSurfacePixelTest {
             val second = if (forwardOrder) secondTriangle() else firstTriangle()
             drawPath(first, Paint(shader = Shader.SolidColor(if (forwardOrder) ColorARGB.Red else ColorARGB.Green),
                 blendMode = BlendMode.PLUS, antiAlias = true))
-            drawRect(RectF32.ofLTRB(2f, 1f, 5f, 4f), Paint(shader = Shader.SolidColor(ColorARGB.Black), antiAlias = false))
+            drawRect(RectF32.ofLTRB(3f, 1f, 4f, 2f), Paint(shader = Shader.SolidColor(ColorARGB.Black), antiAlias = false))
             drawPath(second, Paint(shader = Shader.SolidColor(if (forwardOrder) ColorARGB.Green else ColorARGB.Red),
                 blendMode = BlendMode.PLUS, antiAlias = true))
         } }
         renderTwice(record(forwardOrder = true)).forEach { result ->
-            assertAdmits(forward, result.pixels, 7, 2, 1)
+            assertAdmits(forward, result.pixels, 7, 3, 1)
+            assertExactPixel(forwardFirst, result.pixels, 7, 1, 1)
             assertAdmits(outside, result.pixels, 7, 6, 6)
         }
         renderTwice(record(forwardOrder = false)).forEach { result ->
-            assertAdmits(reverse, result.pixels, 7, 2, 1)
+            assertAdmits(reverse, result.pixels, 7, 3, 1)
+            assertExactPixel(reverseFirst, result.pixels, 7, 5, 1)
             assertAdmits(outside, result.pixels, 7, 6, 6)
         }
     }
@@ -547,11 +557,11 @@ class W7AaDeferredBlendSurfacePixelTest {
         val secondCoverage = secondTriangleCoverage(x, y)
         if (forward) {
             plus(redIntervals(), firstCoverage)
-            if (includeMiddle && x in 2..4 && y in 1..3) middle()
+            if (includeMiddle && x == 3 && y == 1) middle()
             plus(greenIntervals(), secondCoverage)
         } else {
             plus(greenIntervals(), secondCoverage)
-            if (includeMiddle && x in 2..4 && y in 1..3) middle()
+            if (includeMiddle && x == 3 && y == 1) middle()
             plus(redIntervals(), firstCoverage)
         }
         return result
@@ -559,7 +569,7 @@ class W7AaDeferredBlendSurfacePixelTest {
 
     private fun firstTriangle(): Path = triangle(1f, 1f, 5f, 1f, 1f, 5f)
 
-    private fun secondTriangle(): Path = triangle(2f, 1f, 6f, 1f, 2f, 5f)
+    private fun secondTriangle(): Path = triangle(3f, 1f, 7f, 1f, 3f, 5f)
 
     private fun triangle(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float): Path = Path().apply {
         moveTo(ax, ay); lineTo(bx, by); lineTo(cx, cy); close()
@@ -572,8 +582,8 @@ class W7AaDeferredBlendSurfacePixelTest {
     }
 
     private fun secondTriangleCoverage(x: Int, y: Int): Float = when {
-        x >= 2 && y >= 1 && x + y < 6 -> 1f
-        x >= 2 && y >= 1 && x + y == 6 -> 128f / 255f
+        x >= 3 && y >= 1 && x + y < 7 -> 1f
+        x >= 3 && y >= 1 && x + y == 7 -> 128f / 255f
         else -> 0f
     }
 
@@ -697,5 +707,11 @@ class W7AaDeferredBlendSurfacePixelTest {
         width: Int, x: Int, y: Int) {
         val offset = (y * width + x) * 4
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(offset, offset + 4))
+    }
+
+    private fun assertExactPixel(expected: List<Int>, pixels: UByteArray, width: Int, x: Int, y: Int) {
+        val offset = (y * width + x) * 4
+        val actual = (0 until 4).map { pixels[offset + it].toInt() and 0xff }
+        assertContentEquals(expected, actual)
     }
 }

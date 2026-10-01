@@ -87,6 +87,27 @@ class W7RootAaSurfacePixelTest {
     }
 
     @Test
+    fun `root AA SRC_OVER preserves its direct historical capacity without a layer`() {
+        // Direct W4d AA uses root RGBA8 (196), AA4 (784), resolved root (196), aligned
+        // readback (1792), W4d V/I/U floors (16384+4096+4096), and W4d/Solid uniforms (16+16).
+        val budgetB = listOf(196L, 784L, 196L, 1_792L, 16_384L, 4_096L, 4_096L, 16L, 16L)
+            .fold(0L, Math::addExact)
+        val blue = ColorARGB.of(255, 17, 61, 211)
+        val surface = Surface(7, 7, config = RenderConfig(frameLocalBudgetBytes = budgetB))
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 7f, 7f), Paint(ColorARGB.Black, antiAlias = false))
+            drawPath(triangle(1f, 1f, 5f, 1f, 1f, 5f), Paint(blue, antiAlias = true))
+        }
+        val first = surface.render()
+        assertPixel(first.pixels, 7, 1, 1, 17, 61, 211, 255)
+        assertPixel(first.pixels, 7, 6, 6, 0, 0, 0, 255)
+        val second = surface.render()
+        assertContentEquals(first.pixels, second.pixels)
+        assertNative(first)
+        assertNative(second)
+    }
+
+    @Test
     fun `Picture playback inside layer remains unsupported transactionally`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
         val halfWhite = ColorARGB.of(128, 255, 255, 255)
