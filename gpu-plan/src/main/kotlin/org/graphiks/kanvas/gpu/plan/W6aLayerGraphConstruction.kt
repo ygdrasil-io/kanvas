@@ -258,6 +258,7 @@ internal class W6aLayerGraphConstruction(
             sourceOnly: Boolean,
         ): Pair<OccurrenceSourceInputV1, SourceDeferredRenderConstructionV4>? {
             val captured = requireNotNull(entry.source.sourceDraw)
+            val plainHardPictureSource = W6aLayerPlanCompiler.isPlainHardPictureSource(captured)
             val domain = sourceGeometry.copyDeviceBoundsI32()
             // A filter-owned Picture aggregate is already rooted in its exact source
             // context.  Its child scene transform must compose from that mapping, rather
@@ -277,6 +278,12 @@ internal class W6aLayerGraphConstruction(
             // The occurrence compiler receives the rebased carrier, so selection must inspect
             // those exact target-local facts rather than the Picture-recorded coordinates.
             val carrier = input.materialCoordinateDraw()
+            if (plainHardPictureSource && input.hasFinitePerspectiveSourceClip(carrier)) {
+                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    "unsupported_transform:Perspective",
+                    "Plain hard Picture source retains a typed perspective clip refusal.",
+                ))
+            }
             val historicalAa = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
                 .acceptsW6AaColorSourceScope(carrier)
             val hardPictureSource = W4dGeneralPathPlanCompiler.w6HardRectFillSource(runtimeCatalog)

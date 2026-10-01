@@ -696,6 +696,10 @@ public class W6aLayerPlanCompiler public constructor(
             return false
         }
 
+        /** Closed raw-source family shared with Picture clip-refusal admission. */
+        internal fun isPlainHardPictureSource(node: DrawNode): Boolean =
+            isHardPictureRectFill(node) || isHardPicturePathFill(node)
+
         private fun isHardPicturePathFill(node: DrawNode): Boolean {
             val paint = node.paint ?: return false
             val srcOver = when (val blend = node.blend) {

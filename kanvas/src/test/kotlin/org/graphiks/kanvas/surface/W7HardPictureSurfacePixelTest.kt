@@ -27,6 +27,12 @@ class W7HardPictureSurfacePixelTest {
         // H(x,y)=((x+4)/(1+x/16),(y+3)/(1+x/16)); these literals are the
         // independent fixture, not a product-math oracle.
         private val h = Matrix3x3F32(tx = 4f, ty = 3f, persp0 = 1f / 16f)
+        private val perspectiveClipMatrix = Matrix3x3F32(
+            sx = 1.25f, kx = .2f, tx = 3f,
+            ky = -.1f, sy = .8f, ty = 7f,
+            persp0 = .01f, persp1 = -.02f, persp2 = 1f,
+        )
+        private val dyadicPerspectiveClipMatrix = Matrix3x3F32.Identity.copy(persp0 = 1f / 16f)
         private val blue = ColorARGB.of(136, 0, 0, 255)
         private val red = ColorARGB.Red
         private val green = ColorARGB.Green
@@ -167,6 +173,55 @@ class W7HardPictureSurfacePixelTest {
         assertPixel(recovered.pixels, 16, 8, 8, 0, 255, 0, 255)
     }
 
+    @Test fun serializedHardRectPictureKeepsPerspectiveClipRefusal() {
+        assertPerspectiveClipRefusalAndRecover { target ->
+            target.canvas { translate(1f, 0f); drawPicture(perspectiveClipPicture(path = false, serialized = true)) }
+        }
+    }
+
+    @Test fun serializedHardPathPictureKeepsPerspectiveClipRefusal() {
+        assertPerspectiveClipRefusalAndRecover { target ->
+            target.canvas { translate(1f, 0f); drawPicture(perspectiveClipPicture(path = true, serialized = true)) }
+        }
+    }
+
+    @Test fun forbiddenPerspectiveClipWinsOverHardProjectiveSiblingInEitherOrder() {
+        listOf(false, true).forEach { forbiddenFirst ->
+            assertPerspectiveClipRefusalAndRecover { target -> target.canvas {
+                val forbidden = perspectiveClipPicture(path = false, serialized = true)
+                val admitted = projectiveRectPicture()
+                if (forbiddenFirst) {
+                    drawPicture(forbidden); drawPicture(admitted)
+                } else {
+                    drawPicture(admitted); drawPicture(forbidden)
+                }
+            } }
+        }
+    }
+
+    @Test fun enclosingPictureKeepsPerspectiveClipRefusal() {
+        assertPerspectiveClipRefusalAndRecover { target -> target.canvas {
+            drawPicture(recorded { drawPicture(perspectiveClipPicture(path = false, serialized = true)) })
+        } }
+    }
+
+    @Test fun enclosingLayerKeepsPerspectiveClipRefusal() {
+        assertPerspectiveClipRefusalAndRecover { target -> target.canvas {
+            saveLayer(RectF32.ofLTRB(0f, 0f, 8f, 8f))
+            drawPicture(perspectiveClipPicture(path = false, serialized = true))
+            restore()
+        } }
+    }
+
+    @Test fun capturedPerspectiveClipDoesNotBecomeAffineThroughOuterInverse() {
+        val inverse = requireNotNull(dyadicPerspectiveClipMatrix.invert())
+        assertTrue(Matrix3x3F32.concat(inverse, dyadicPerspectiveClipMatrix).isIdentity)
+        assertPerspectiveClipRefusalAndRecover { target -> target.canvas {
+            concat(inverse)
+            drawPicture(perspectiveClipPicture(path = false, serialized = true, clipMatrix = dyadicPerspectiveClipMatrix))
+        } }
+    }
+
     @Test fun hardSiblingDoesNotAdmitAaPerspective() {
         val hard = projectiveRectPicture()
         val aa = recorded { drawRect(bounds, Paint(blue, antiAlias = true)) }
@@ -191,6 +246,40 @@ class W7HardPictureSurfacePixelTest {
     }
 
     private fun projectiveRectPicture(): Picture = recorded { concat(h); drawRect(bounds, Paint(blue, antiAlias = false)) }
+    private fun perspectiveClipPicture(
+        path: Boolean,
+        serialized: Boolean,
+        clipMatrix: Matrix3x3F32 = perspectiveClipMatrix,
+    ): Picture {
+        val recorder = PictureRecorder()
+        recorder.beginRecording(bounds).apply {
+            setMatrix(clipMatrix)
+            clipPath(Path().addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f)), antiAlias = false)
+            resetMatrix()
+            if (path) drawPath(Path().addRect(bounds), Paint(red, antiAlias = false))
+            else drawRect(bounds, Paint(red, antiAlias = false))
+        }
+        val picture = recorder.finishRecordingAsPicture()
+        return if (serialized) requireNotNull(Picture.fromByteArray(picture.toByteArray())) else picture
+    }
+    private fun assertPerspectiveClipRefusalAndRecover(record: (Surface) -> Unit) {
+        val refused = Surface(16, 16).also(record)
+        val sentinel = UByteArray(16 * 16 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> {
+            refused.readPixels(RectF32.ofLTRB(0f, 0f, 16f, 16f), sentinel)
+        }
+        assertTrue(failure.message.orEmpty().startsWith("unsupported_transform:Perspective"), failure.message)
+        assertContentEquals(before, sentinel)
+        refused.discardRecordedOperations()
+        refused.canvas {
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint(red, antiAlias = false))
+            drawPicture(projectiveRectPicture())
+        }
+        val recovered = refused.renderAndRepeat()
+        assertBlueComposite(recovered.pixels, 16, 5, 5)
+    }
     private fun hardPictureSurface(): Surface = pictureSurface(16, 16, projectiveRectPicture())
     private fun pictureSurface(width: Int, height: Int, picture: Picture): Surface = Surface(width, height).also { target -> target.canvas {
         drawRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat()), Paint(red, antiAlias = false)); drawPicture(picture)
