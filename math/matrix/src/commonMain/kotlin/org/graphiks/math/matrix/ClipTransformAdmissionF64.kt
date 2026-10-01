@@ -30,8 +30,10 @@ public fun Matrix3x3F64.classifyClipTransformMatrixAdmissionF64(): ClipTransform
 }
 
 /**
- * Validates the actual affine clip coordinates at the one F64-to-F32 boundary.  It neither
- * flattens paths nor allocates clip work, so callers retain the renderer's existing budgets.
+ * Validates the actual affine clip coordinates at the one F64-to-F32 boundary. It does not
+ * flatten paths or debit renderer work, so callers retain the existing resource budgets. Path
+ * and RRect admission does materialize widened and mapped path snapshots before the finite check
+ * can return, which is O(path size) temporary host allocation.
  */
 public fun classifyClipTransformAdmissionF64(
     geometryF64: ClipTransformGeometryF64,
@@ -59,7 +61,10 @@ private fun ClipTransformGeometryF64.hasFiniteF32ProjectionThrough(matrixF64: Ma
     is ClipTransformGeometryF64.Path -> matrixF64.mapsPathInputFiniteF32(PathFillInputF64.fromPathF32(pathF32))
 }
 
-/** Reuses the renderer's affine arc metadata mapping without debiting or allocating clip work. */
+/**
+ * Reuses the affine arc metadata mapper with a no-op renderer-work debit. It materializes an
+ * O(path size) mapped host snapshot before `.all` can inspect a segment.
+ */
 private fun Matrix3x3F64.mapsPathInputFiniteF32(inputF64: PathFillInputF64): Boolean = try {
     mapAffinePathFillInputF64(inputF64, PathTransformWorkDebitI64 { }).all { segment ->
         segment.hasFiniteF32Representation()

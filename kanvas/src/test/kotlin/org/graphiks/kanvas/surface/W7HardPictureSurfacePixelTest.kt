@@ -68,10 +68,11 @@ class W7HardPictureSurfacePixelTest {
     @Test fun projectiveEvenOddHoleDoesNotLeakStencil() {
         val picture = recorded { concat(h); drawPath(Path().apply {
             fillType = FillType.EVEN_ODD; addRect(bounds); addRect(RectF32.ofLTRB(2f, 2f, 6f, 6f))
-        }, Paint(blue, antiAlias = false)); drawRect(RectF32.ofLTRB(2f, 2f, 6f, 6f), Paint(ColorARGB.Green, antiAlias = false)) }
+        }, Paint(blue, antiAlias = false)); drawRect(RectF32.ofLTRB(2f, 2f, 3f, 6f), Paint(ColorARGB.Green, antiAlias = false)) }
         val result = pictureSurface(16, 16, picture).renderAndRepeat()
         assertBlueComposite(result.pixels, 16, 5, 3)
-        assertPixel(result.pixels, 16, 6, 5, 0, 255, 0, 255)
+        assertPixel(result.pixels, 16, 5, 5, 0, 255, 0, 255)
+        assertPixel(result.pixels, 16, 6, 5, 255, 0, 0, 255)
     }
 
     @Test fun affineRectPictureUsesItsRecordedTransform() {
