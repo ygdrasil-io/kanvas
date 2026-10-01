@@ -29,8 +29,11 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb as GpuPathVerb
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.matrix.ClipTransformAdmissionF64
+import org.graphiks.math.matrix.classifyClipTransformMatrixAdmissionF64
 import org.graphiks.math.matrix.mapAxisAligned
 import org.graphiks.math.matrix.mapAxisAlignedRect
+import org.graphiks.math.matrix.toMatrix3x3F64
 
 /**
  * Maps captured clips into the legacy coverage transport.
@@ -239,15 +242,12 @@ internal fun ClipTransformSnapshot.transitionalClipRefusalOrNull(): String? = wh
 }
 
 private fun Matrix3x3F32.transitionalClipRefusalOrNull(): String? {
-    if (!listOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2).all(Float::isFinite)) {
-        return TRANSITIONAL_CLIP_NONFINITE
-    }
-    if (hasPerspective()) return TRANSITIONAL_CLIP_PERSPECTIVE
-    val determinant = sx.toDouble() * sy.toDouble() - kx.toDouble() * ky.toDouble()
-    return when {
-        !determinant.isFinite() -> TRANSITIONAL_CLIP_NONFINITE
-        determinant == 0.0 -> TRANSITIONAL_CLIP_SINGULAR
-        else -> null
+    return when (toMatrix3x3F64().classifyClipTransformMatrixAdmissionF64()) {
+        ClipTransformAdmissionF64.Ready -> null
+        ClipTransformAdmissionF64.NonFinite -> TRANSITIONAL_CLIP_NONFINITE
+        ClipTransformAdmissionF64.Perspective -> TRANSITIONAL_CLIP_PERSPECTIVE
+        ClipTransformAdmissionF64.Singular -> TRANSITIONAL_CLIP_SINGULAR
+        ClipTransformAdmissionF64.NonFiniteProjection -> error("Matrix-only classification cannot project geometry.")
     }
 }
 

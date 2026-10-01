@@ -19,6 +19,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
+import java.util.Base64
 
 /** Public native witnesses for the closed W6 Picture hard-fill prerequisite. */
 class W7HardPictureSurfacePixelTest {
@@ -222,6 +223,60 @@ class W7HardPictureSurfacePixelTest {
         } }
     }
 
+    @Test fun hardPictureSingularAndOverflowClipsKeepTypedPriority() {
+        listOf(
+            "singular" to Matrix3x3F32(sx = 0f),
+            "overflow" to Matrix3x3F32(sx = Float.MAX_VALUE),
+        ).forEach { (label, matrix) ->
+            assertClipPriorityRefusal(
+                if (label == "singular") "unsupported.transform.affine_singular"
+                else "unsupported_clip_transform:NonFiniteProjection",
+            ) { target -> target.canvas { setMatrix(matrix); drawPicture(hardClipPicture(bounds, RectF32.ofLTRB(1f, 1f, 7f, 7f))) } }
+        }
+    }
+
+    @Test fun hardPictureBadSourceClipOrderKeepsFirstTypedRefusal() {
+        val singular = hardClipPicture(bounds, RectF32.ofLTRB(1f, 1f, 7f, 7f))
+        val overflow = hardClipPicture(bounds, RectF32.ofLTRB(1f, 1f, 7f, 7f))
+        listOf(true, false).forEach { singularFirst ->
+            assertClipPriorityRefusal(
+                if (singularFirst) "unsupported.transform.affine_singular" else "unsupported_clip_transform:NonFiniteProjection",
+            ) { target -> target.canvas {
+                if (singularFirst) {
+                    setMatrix(Matrix3x3F32(sx = 0f)); drawPicture(singular); resetMatrix()
+                    setMatrix(Matrix3x3F32(sx = Float.MAX_VALUE)); drawPicture(overflow)
+                } else {
+                    setMatrix(Matrix3x3F32(sx = Float.MAX_VALUE)); drawPicture(overflow); resetMatrix()
+                    setMatrix(Matrix3x3F32(sx = 0f)); drawPicture(singular)
+                }
+            } }
+        }
+    }
+
+    @Test fun historicalLegacyPerspectiveClipKeepsTypedPriority() {
+        assertClipPriorityRefusal("unsupported_transform:Perspective") { target -> target.canvas {
+            translate(1f, 0f); drawPicture(historicalLegacyPerspectiveClipPicture())
+        } }
+    }
+
+    @Test fun largeFiniteClipProjectionKeepsLaterCullRefusal() {
+        val cull = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val clip = RectF32.ofLTRB(.25f, .25f, .75f, .75f)
+        // 0.75 * Float.MAX_VALUE remains an IEEE F32 finite coordinate; this witnesses the
+        // projection boundary separately from the later I32 cull admission.
+        assertTrue((.75 * Float.MAX_VALUE.toDouble()).toFloat().isFinite())
+        assertClipPriorityRefusal("w6b.filter.invalid_bounds") { target -> target.canvas {
+            setMatrix(Matrix3x3F32(sx = Float.MAX_VALUE)); drawPicture(hardClipPicture(cull, clip))
+        } }
+    }
+
+    @Test fun emptySourceClipDoesNotPreemptLaterCullBounds() {
+        // Nine finite F32 scales overflow only while composing the dormant source prefix in F64.
+        assertClipPriorityRefusal("w6b.filter.invalid_bounds") { target -> target.canvas {
+            drawPicture(nestedUnclippedHardPicture(depth = 9))
+        } }
+    }
+
     @Test fun hardSiblingDoesNotAdmitAaPerspective() {
         val hard = projectiveRectPicture()
         val aa = recorded { drawRect(bounds, Paint(blue, antiAlias = true)) }
@@ -261,6 +316,45 @@ class W7HardPictureSurfacePixelTest {
         }
         val picture = recorder.finishRecordingAsPicture()
         return if (serialized) requireNotNull(Picture.fromByteArray(picture.toByteArray())) else picture
+    }
+    private fun hardClipPicture(cull: RectF32, clip: RectF32): Picture {
+        val recorder = PictureRecorder()
+        recorder.beginRecording(cull).apply {
+            clipRect(clip, antiAlias = false)
+            drawRect(cull, Paint(red, antiAlias = false))
+        }
+        return requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+    }
+    private fun nestedUnclippedHardPicture(depth: Int): Picture {
+        var picture = recorded { drawRect(bounds, Paint(red, antiAlias = false)) }
+        repeat(depth) {
+            val child = picture
+            picture = recorded {
+                setMatrix(Matrix3x3F32(sx = Float.MAX_VALUE))
+                drawPicture(child)
+            }
+        }
+        return picture
+    }
+    private fun historicalLegacyPerspectiveClipPicture(): Picture = requireNotNull(Picture.fromByteArray(Base64.getDecoder().decode(
+        "S1BJQwAAAAgAAAAAAAAAAEEAAABBAAAArRa6rgAAAAEAAAAIAAAACAAAAARzUkdCAAAABFNSR0IAAAAEU1JHQgAAAAEAAAABAAAAAQAAAAAAAAAAQQAAAEEAAAAAAAAC//8AAAAAAAlIQVJEX0VER0UAAAADAAAAAQAAAAE/gAAAP4AAAEDgAABA4AAAAAAACUlOVEVSU0VDVAABAAAAC3BlcnNwZWN0aXZlAAAAAQAAAAE/gAAAAAAAAAAAAAAAAAAAP4AAAAAAAAAAAAAAAAAAAD+AAAAAAAAEUkVDVAH//wAAAAAAAAhTUkNfT1ZFUgAAAAAAAAAABEZJTEw/gAAAAAAABEJVVFQAAAAFTUlURVJAgAAAAAAA",
+    )))
+    private fun assertClipPriorityRefusal(expectedPrefix: String, record: (Surface) -> Unit) {
+        val refused = Surface(16, 16).also(record)
+        val sentinel = UByteArray(16 * 16 * 4) { 0x5au }
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> {
+            refused.readPixels(RectF32.ofLTRB(0f, 0f, 16f, 16f), sentinel)
+        }
+        assertTrue(failure.message.orEmpty().startsWith(expectedPrefix), failure.message)
+        assertContentEquals(before, sentinel)
+        refused.discardRecordedOperations()
+        refused.canvas {
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint(red, antiAlias = false))
+            drawPicture(projectiveRectPicture())
+        }
+        assertBlueComposite(refused.renderAndRepeat().pixels, 16, 5, 5)
     }
     private fun assertPerspectiveClipRefusalAndRecover(record: (Surface) -> Unit) {
         val refused = Surface(16, 16).also(record)

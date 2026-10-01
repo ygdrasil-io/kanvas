@@ -109,3 +109,49 @@ public class FilterOccurrenceSourceV1 internal constructor(
         return draw.copy(material = material, clip = ClipStackNode.Empty, transform = transform)
     }
 }
+
+/**
+ * One captured clip scope consumed by a Picture source.  The nullable prefix distinguishes the
+ * draw's inner clip from an inline parent Picture clip without materializing a target-local
+ * carrier.
+ */
+internal class PictureSourceClipScopeV1(
+    val clip: ClipStackNode,
+    /** Number of enclosing Pictures before this parent clip; null denotes the captured draw. */
+    val outerPrefixSize: Int?,
+)
+
+/**
+ * The only raw-coverage clips consumed by this occurrence.  Composition-boundary clips remain
+ * excluded, and the recorder cull is removed only when it is authenticated by the captured
+ * Picture path.
+ */
+internal fun FilterOccurrenceSourceV1.pictureSourceClipScopesV1(): List<PictureSourceClipScopeV1> {
+    val pictures = outerPictures()
+    val lastIsolated = pictures.indexOfLast { it.paint != null }
+    val scopes = mutableListOf<PictureSourceClipScopeV1>()
+    pictures.forEachIndexed { index, picture -> if (index > lastIsolated && picture.paint == null) {
+        val cull = (pictures.getOrNull(index - 1)?.geometry as? GeometryNode.Picture)?.copyCullRect()
+        val clip = cull?.let { withoutPictureCull(picture.clip, it) } ?: picture.clip
+        scopes += PictureSourceClipScopeV1(clip, index)
+    } }
+    scopes += PictureSourceClipScopeV1(recordedInnerClipWithoutCull(), null)
+    return scopes
+}
+
+/**
+ * Composes a source-clip's actual forward enclosing prefix in F64.  A null result preserves a
+ * non-finite composition fact for the admission caller; it is never replaced by an identity.
+ */
+internal fun FilterOccurrenceSourceV1.sourceClipPrefixF64V1(
+    scope: PictureSourceClipScopeV1,
+    initialF64: Matrix3x3F64 = Matrix3x3F64(),
+): Matrix3x3F64? {
+    var prefix = initialF64
+    val pictures = outerPictures()
+    val limit = scope.outerPrefixSize ?: pictures.size
+    pictures.take(limit).forEach { picture ->
+        prefix = prefix.timesCheckedOrNull(picture.transform.toMatrix3x3F64()) ?: return null
+    }
+    return prefix
+}

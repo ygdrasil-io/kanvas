@@ -62,35 +62,10 @@ internal class OccurrenceSourceInputV1(
     val commandIndexI32: Int,
     val sourceOnly: Boolean,
 ) {
-    private class SourceClipScope(
-        val clip: ClipStackNode,
-        /** Number of enclosing Pictures before this parent clip; null denotes the captured draw. */
-        val outerPrefixSize: Int?,
-    )
-
     private val domain = targetDomainDeviceI32.copy()
     private val demand = demandDeviceI32.copy()
     fun copyDomainDeviceI32(): RectI32 = domain.copy()
     fun copyDemandDeviceI32(): RectI32 = demand.copy()
-
-    /** The only raw-coverage clips consumed by this occurrence; composition clips stay excluded. */
-    private fun sourceClipScopes(): List<SourceClipScope> {
-        val pictures = captured.outerPictures()
-        val lastIsolated = pictures.indexOfLast { it.paint != null }
-        val scopes = mutableListOf<SourceClipScope>()
-        pictures.forEachIndexed { index, picture -> if (index > lastIsolated && picture.paint == null) {
-            val cull = (pictures.getOrNull(index - 1)?.geometry as? GeometryNode.Picture)?.copyCullRect()
-            val clip = cull?.let { withoutPictureCull(picture.clip, it) } ?: picture.clip
-            scopes += SourceClipScope(clip, index)
-        } }
-        scopes += SourceClipScope(recordedInnerClip, null)
-        return scopes
-    }
-
-    /** Retains a typed perspective source refusal even when carrier composition later cancels it. */
-    internal fun hasFinitePerspectiveSourceClip(carrier: DrawNode): Boolean =
-        sourceClipScopes().any { scope -> scope.clip.hasFinitePerspectiveSnapshot() } ||
-            carrier.clip.hasFinitePerspectiveSnapshot()
 
     /** F64 composition and rebasing precede the checked projection to the existing W4 ABI. */
     fun materialCoordinateDraw(): DrawNode {
@@ -122,7 +97,7 @@ internal class OccurrenceSourceInputV1(
             })
         }
         val pictures = captured.outerPictures()
-        val clips = sourceClipScopes().map { scope ->
+        val clips = captured.pictureSourceClipScopesV1().map { scope ->
             val sourceMapping = scope.outerPrefixSize?.let { prefixSize ->
                 val enclosing = composeInOrderF64(pictures.take(prefixSize).map { it.transform })
                 requireNotNull(mapping.copyDeviceToLayerF64().timesCheckedOrNull(enclosing))
@@ -146,18 +121,5 @@ internal class OccurrenceSourceInputV1(
             } ?: draw.effects,
             blend = if (sourceOnly) BlendNode.SrcOver else draw.blend,
         )
-    }
-}
-
-private fun ClipStackNode.hasFinitePerspectiveSnapshot(): Boolean = when (this) {
-    ClipStackNode.Empty, is ClipStackNode.DeviceRect -> false
-    is ClipStackNode.Operations -> any { entry ->
-        when (val transform = entry.transform) {
-            is ClipTransformSnapshot.Known -> transform.copyMatrixF32().let { matrix ->
-                listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty,
-                    matrix.persp0, matrix.persp1, matrix.persp2).all(Float::isFinite) && matrix.hasPerspective()
-            }
-            is ClipTransformSnapshot.LegacyUnavailable -> transform.perspectiveCaptureRefusal
-        }
     }
 }
