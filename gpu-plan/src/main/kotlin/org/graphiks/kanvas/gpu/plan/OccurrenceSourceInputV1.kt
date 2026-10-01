@@ -96,16 +96,14 @@ internal class OccurrenceSourceInputV1(
                 )))
             })
         }
-        val clips = mutableListOf<ClipStackNode>()
         val pictures = captured.outerPictures()
-        val lastIsolated = pictures.indexOfLast { it.paint != null }
-        pictures.forEachIndexed { index, picture -> if (index > lastIsolated && picture.paint == null) {
-            val cull = (pictures.getOrNull(index - 1)?.geometry as? GeometryNode.Picture)?.copyCullRect()
-            val clip = cull?.let { withoutPictureCull(picture.clip, it) } ?: picture.clip
-            val enclosing = composeInOrderF64(pictures.take(index).map { it.transform })
-            clips += transformClip(clip, requireNotNull(mapping.copyDeviceToLayerF64().timesCheckedOrNull(enclosing)))
-        } }
-        clips += transformClip(recordedInnerClip, clipMapping)
+        val clips = captured.pictureSourceClipScopesV1().map { scope ->
+            val sourceMapping = scope.outerPrefixSize?.let { prefixSize ->
+                val enclosing = composeInOrderF64(pictures.take(prefixSize).map { it.transform })
+                requireNotNull(mapping.copyDeviceToLayerF64().timesCheckedOrNull(enclosing))
+            } ?: clipMapping
+            transformClip(scope.clip, sourceMapping)
+        }
         val active = clips.filterNot { it == ClipStackNode.Empty }
         val inner = if (active.size <= 1) active.singleOrNull() ?: ClipStackNode.Empty else ClipStackNode.Operations.of(
             active.flatMap { clip -> when (clip) {

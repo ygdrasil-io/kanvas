@@ -1,9 +1,103 @@
 # W07 — diagnostic GM provisoire
 
-PR courante : draft [#2426](https://github.com/ygdrasil-io/kanvas/pull/2426),
-empilée sur [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425).
+Dernier lot publié : draft [#2427](https://github.com/ygdrasil-io/kanvas/pull/2427),
+empilée sur [#2426](https://github.com/ygdrasil-io/kanvas/pull/2426), elle-même
+sur [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
+
+## Port Sk3d fidèle et Picture hard — 1er octobre 2026
+
+Branche `codex/w7-sk3d-port`, [design](sk3d-port-design.md),
+[plan](sk3d-port-plan.md). Code mesuré
+`813e61f098317750c3a8a1d98dea185629ead38e`,
+[snapshot complet](sk3d-port-813e61f09.json). Draft
+[#2427](https://github.com/ygdrasil-io/kanvas/pull/2427) publiée sur #2426.
+Task1 et le prérequis renderer Task2 sont approuvés par Sol. La revue globale
+Astra a conduit au correctif final test/KDoc `5a931c87a`, approuvé par l'unique
+contre-relecture Sol ; aucun nouveau Critical/Important/Minor dans ce diff.
+
+Le port utilise désormais la caméra perspective et la rotation Y de Skia,
+alpha bleu136/255 et deux paints sans AA. Il conserve une vraie Picture avec
+Rect+CTM. Le prérequis renderer nomme un owner W6 pour les Pictures hard,
+solid sans shader, Rect/Path FILL SRC_OVER, et fournit une source Rect fermée
+à W4d pour GeneralAffine/Perspective. Les Rect identity/scale-translate
+pixel-aligned gardent leur lane analytique et son budget public B=5168.
+Ni substitution par un Path préprojeté, ni fallback CPU, ni changement de
+référence, domaine LINEAR, seuil, exclusion, cap ou proof.
+
+L'admission ordonnée des clips de source précède cull/inverse/carrier. La
+provenance Known/Legacy de chaque entrée précède son préfixe F64 checked,
+évalué à la demande ; le premier refus demeure terminal. Les clips vides
+et les sous-arbres terminalement vides conservent leur comportement. Les
+régressions historiques perspective, singular/overflow et schema1 sont
+corrigées sans modifier leurs tests. La classification numérique partagée
+appartient à `math/matrix`, l'adaptation de provenance à `render-ir`.
+
+### Résultat mesuré
+
+| Mesure `sk3d_simple` | Baseline `3398dc3` | Produit `813e61f09` |
+| --- | ---: | ---: |
+| Pixels à ±2/canal | 51.931111111111115 % | 77.62444444444445 % |
+| SSIM luminance | 0.6385013748432061 | 0.9828793554600629 |
+| Erreur absolue moyenne normalisée | 0.13672342047930283 | 0.026341503267973857 |
+
+Actual, référence et diff ont été inspectés : le quadrilatère est désormais
+visuellement proche de la référence, mais sa couleur intérieure reste
+différente. Ce gain de fidélité de scène ne prouve ni l'identité exacte du
+contour ni la parité couleur ; le domaine de génération de la référence
+n'est pas déduit de son apparence. Max RGBA inchangé `[136,255,119,0]`,
+3 opérations/3 dispatches/0 refus ; alpha opaque identique ne prouve pas
+l'équivalence géométrique. Nouveau hash RGBA :
+`c90551d0446a0964d98ee161bea744d0a7b957499139b558116f80eebcc60f59`.
+
+Les **631 identités / 443 éligibles** sont toutes présentes, sans doublon.
+Les 18 invariants restent identiques au snapshot `picture-3398dc3`.
+Seul `sk3d_simple` change de hash et de métriques ; tous les autres hashes,
+métriques, outcomes, diagnostics, dispatches et refus sont inchangés. Aucun
+rendu gagné ou perdu : **200 rendus, 178 comparés, 39 ≥99 %, 52 ≥95 %**.
+La médiane passe de72.34801136363637 % à73.26467803030303 %. Les 192
+render_failed, 50 setup_failed, 14 rendered_uncompared, huit dimensions de
+référence incompatibles et le timeout30s de `vertices` restent au bilan.
+Les slices0–607/607–608/608–631 sont neuves et strictement séquentielles ;
+les journaux chevauchés du premier essai ff3e3bb ne servent à aucune mesure.
+
+### Validation et limites
+
+Produit `813e61f09` figé : **263/263 tests ciblés**, sorties wrapper/enfant0/0,
+zéro failure/error/skip/stderr XML : public94 (Surface23, Picture39,
+hardPicture29, emptyW6b3), GM9, covering160. Les nouveaux témoins vérifient
+pixels, répétition, sentinel et recovery publics ; pas de tests d'infrastructure.
+Le dernier défaut d'ordre a un RED causal2FAIL/1PASS puis un GREEN inchangé.
+
+Après revue globale, le témoin even-odd ne recouvre plus entièrement le trou
+avec le dessin vert suivant : bleu `(5,3)`, vert `(5,5)` et fond rouge exact
+`(6,5)` sont observés indépendamment, avec Render/Readback et repeat. Le
+correctif `5a931c87a` ne change que ce test et la KDoc d'allocation. **103/103
+validations fraîches supplémentaires** passent (public94 + GM9), sorties0/0,
+XML sans failure/error/skip/stderr. Le covering160, le global et le corpus
+précédents restent les preuves du même code exécutable ; aucun rerun de ces
+trois ensembles n'est revendiqué pour le correctif test/KDoc.
+
+La globale unique bornée240s n'est **pas verte** : 729END =688SUCCESS /
+40FAILURE /1SKIPPED, sorties124/143. Les40 identités en échec sont exactement
+celles de la baseline ; aucun nouvel échec atteint. Le test
+`unownedSyntheticImageSamplersKeepHistoricalCompatibility` est interrompu
+à la limite et22 identités W5e de la baseline ne sont pas atteintes. Aucun
+XML global finalisé avant timeout ; les JSONL donnent les résultats atteints.
+Les anciennes régressions Surface/Picture sont à nouveau SUCCESS.
+
+Le transport du scissor borné de `ClipMaskProducer` vers les recettes W4e
+reste une dette distincte, pas réparée par le refus typé restauré ici.
+Deux suivis non bloquants de la revue finale restent explicites : l'admission
+numérique matérialise des snapshots temporaires O(taille du Path) avant sa
+vérification de finitude (optimisation à court-circuit différée), et les
+warnings hérités de native access/`sun.misc.Unsafe` de Gradle/LWJGL doivent
+être traités avant une future montée de JDK. Aucun échec de ressource natif
+n'est attribué au premier point ; aucun warning n'est masqué ou requalifié
+en stderr JUnit. Ni algorithme d'arc ni version de toolchain ne change ici.
+La couleur résiduelle Sk3d, les failures/timeouts globaux et les gates W6
+restent ouverts. Aucun merge ni clôture W7.
 
 ## Qualification Picture / Porter-Duff — 1er octobre 2026
 

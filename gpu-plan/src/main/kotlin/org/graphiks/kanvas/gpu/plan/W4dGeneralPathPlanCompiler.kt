@@ -99,11 +99,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private val w7AaDeferredSource: Boolean = false,
     /** The public Rect projection must not become an implicit encoded-composition entry. */
     private val requiresPublicEncodedAdmission: Boolean = false,
+    /** Closed W6 Picture authority, distinct from standalone, AA and hairline switches. */
+    private val rectProjectionMode: RectProjectionMode = RectProjectionMode.None,
 ) : GpuPlanCompiler {
+    internal enum class RectProjectionMode { None, PictureHardFill }
     internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, w6RootAaRectStrokeSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission)
+        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, w6RootAaRectStrokeSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode)
     internal fun withImageOriginProjection(projection: ImageOriginGeometryProjectionV6?): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,w6RootAaRectStrokeSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission)
+        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,w6RootAaRectStrokeSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode)
     public constructor() : this(PathStrokePolicyF64(), requiresPublicEncodedAdmission = true)
 
     /**
@@ -187,7 +190,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     val paint = command.node.paint
                     if (!finite(command.node.transform) || !finite(command.node.effects) || !finiteClip(command.node.clip) ||
                         (path != null && !finite(path)) ||
-                        ((admitsStandaloneRectPathFrames || w7DeferredRectProjection(command.node)) && rect != null && !finite(rect)) ||
+                        ((admitsStandaloneRectPathFrames || rectProjectionMode == RectProjectionMode.PictureHardFill || w7DeferredRectProjection(command.node)) && rect != null && !finite(rect)) ||
                         (paint != null && !finite(paint))
                     ) return "Draw facts are non-finite"
                 }
@@ -240,8 +243,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val w7Frame = w7AaDeferredSource && scene.all { command ->
             command !is SceneCommand.Draw || command.node.geometry !is GeometryNode.Rect || w7DeferredRectProjection(command.node)
         }
-        val standaloneMember = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource || w7Frame) &&
-            (w7Frame || standaloneFrameFacts) &&
+        val pictureHardFrame = rectProjectionMode == RectProjectionMode.PictureHardFill &&
+            scene.filterIsInstance<SceneCommand.Draw>().all { acceptsPictureHardRect(it.node) }
+        val standaloneMember = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource || w7Frame || pictureHardFrame) &&
+            (w7Frame || pictureHardFrame || standaloneFrameFacts) &&
             (requiresGeneral || requiresStandaloneRectRouting)
         if (outside || !(historicalMember || standaloneMember)) {
             return Preflight.Outside
@@ -494,7 +499,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val rect = (node.geometry as? GeometryNode.Rect)?.copyBounds()
         // Empty/inverted rectangles stay outside this opt-in projection so their existing
         // route retains ownership of their observable semantics.
-        val rectProjection = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource || w7DeferredRectProjection(node)) && rect?.isEmpty == false
+        val rectProjection = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource ||
+            rectProjectionMode == RectProjectionMode.PictureHardFill || w7DeferredRectProjection(node)) && rect?.isEmpty == false
         val path = (node.geometry as? GeometryNode.Path)?.path ?: if (rectProjection) {
             if (!finite(requireNotNull(rect))) return DrawScope.Invalid("Draw facts are non-finite")
             PathBuilder(FillRule.WINDING).addRect(requireNotNull(rect)).build()
@@ -537,6 +543,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             (node.coverage != CoverageRequest.ANTIALIASED || paint.style != PaintStyleNode.FILL || !w7PorterDuff(node.blend))) {
             return DrawScope.Gap("W7 deferred AA source requires an admitted Porter-Duff fill")
         }
+        if (rectProjectionMode == RectProjectionMode.PictureHardFill && !acceptsPictureHardRect(node))
+            return DrawScope.Gap("W6 hard Picture source requires a general hard solid Rect fill")
         val fill = paint.style == PaintStyleNode.FILL
         val stroke = paint.style == PaintStyleNode.STROKE || paint.style == PaintStyleNode.STROKE_AND_FILL
         if (fill && paint.pathEffect != null) return DrawScope.Gap("Path effects require a stroke in W4d.2")
@@ -1512,6 +1520,20 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             node.transform.toMatrix3x3F64().classifyPathTransform() == PathTransformClass.GeneralAffine
     }
 
+    private fun acceptsPictureHardRect(node: DrawNode): Boolean {
+        val paint = node.paint ?: return false
+        val transformClass = node.transform.toMatrix3x3F64().classifyPathTransform()
+        return node.origin == DrawOrigin.RECT && node.geometry is GeometryNode.Rect &&
+            node.coverage == CoverageRequest.HARD_EDGE && node.material is MaterialNode.Solid &&
+            paint.style == PaintStyleNode.FILL && paint.shader == null && paint.colorFilter == null &&
+            paint.blender == null && paint.maskFilter == null && paint.imageFilter == null && paint.pathEffect == null &&
+            node.effects == EffectStack.Empty && srcOver(node.blend) &&
+            transformClass in setOf(PathTransformClass.GeneralAffine, PathTransformClass.Perspective)
+    }
+
+    internal fun acceptsW6HardPictureRectScope(node: DrawNode): Boolean =
+        rectProjectionMode == RectProjectionMode.PictureHardFill && acceptsPictureHardRect(node)
+
     /** Strict W7 root extension; broader historical W4d path admission remains unchanged. */
     private fun standaloneFrameDraw(node: DrawNode): Boolean {
         val paint = node.paint ?: return false
@@ -1711,6 +1733,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             acceptsNarrowTransforms = true,
             allowAaColorSource = true,
             runtimeCatalog = catalog,
+        )
+
+        /** Closed W6 source for a recorded general-affine/perspective hard Rect Picture fill. */
+        internal fun w6HardRectFillSource(
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): W4dGeneralPathPlanCompiler = W4dGeneralPathPlanCompiler(
+            PathStrokePolicyF64(), runtimeCatalog = catalog,
+            rectProjectionMode = RectProjectionMode.PictureHardFill,
         )
 
         /** W6-only hard source retaining the Task 1 Rect hairline projection. */

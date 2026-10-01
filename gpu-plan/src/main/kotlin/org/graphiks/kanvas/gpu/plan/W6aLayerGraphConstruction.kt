@@ -5,6 +5,7 @@ import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
+import org.graphiks.kanvas.render.ir.ClipTransformAdmissionV1
 import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.MaskFilterNode
 import org.graphiks.kanvas.render.ir.CoverageRequest
@@ -14,6 +15,7 @@ import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.SceneCommand
+import org.graphiks.kanvas.render.ir.clipTransformAdmissionV1
 import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorF32
@@ -274,11 +276,10 @@ internal class W6aLayerGraphConstruction(
                 enclosing, domain, domain, entry.source.recordedInnerClipWithoutCull(), ClipStackNode.Empty, target,
                 occurrenceRenderTarget(domain, entry.source.scene.colorSpace),
                 entry.plannedCommandId.valueI32, sourceOnly)
-            // The occurrence compiler receives the rebased carrier, so selection must inspect
-            // those exact target-local facts rather than the Picture-recorded coordinates.
             val carrier = input.materialCoordinateDraw()
             val historicalAa = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
                 .acceptsW6AaColorSourceScope(carrier)
+            val hardPictureSource = W4dGeneralPathPlanCompiler.w6HardRectFillSource(runtimeCatalog)
             // Keep Picture's historical analytic Rect lane when it can own the transform.
             // The rebased carrier exposes a finite general affine Rect only when W4a cannot;
             // then use the same selected W7 producer/consumer occurrence as a Path.
@@ -294,6 +295,7 @@ internal class W6aLayerGraphConstruction(
             val generalPath = when {
                 deferredBlend != null -> W4dGeneralPathPlanCompiler.w7AaDeferredSource(runtimeCatalog)
                 historicalAa -> W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
+                hardPictureSource.acceptsW6HardPictureRectScope(carrier) -> hardPictureSource
                 else -> W4dGeneralPathPlanCompiler()
             }
             val compiler = CapabilityCompilerChain.ofProjected(
@@ -624,6 +626,59 @@ internal class W6aLayerGraphConstruction(
         }
         preparePictureFacts = { rootDraft, parentSource, filterOwner ->
             val facts = PreparedPictureFacts()
+            fun terminalDeferredClipIsEmpty(draft: PictureStreamAggregateDraftV1): Boolean =
+                (draft.source.recordedInnerClipWithoutCull().terminalDeferredClip() as? ClipStackNode.DeviceRect)
+                    ?.copyBounds()?.isEmpty == true
+            fun clipAdmissionFailure(admission: ClipTransformAdmissionV1): Nothing {
+                val code = when (admission) {
+                    ClipTransformAdmissionV1.Ready -> error("Ready clip admission has no refusal.")
+                    ClipTransformAdmissionV1.NonFinite -> "unsupported_clip_transform:NonFinite"
+                    ClipTransformAdmissionV1.Perspective -> "unsupported_transform:Perspective"
+                    ClipTransformAdmissionV1.Singular -> "unsupported.transform.affine_singular"
+                    ClipTransformAdmissionV1.NonFiniteProjection -> "unsupported_clip_transform:NonFiniteProjection"
+                    ClipTransformAdmissionV1.LegacyUnavailable -> "unsupported_clip_transform:LegacyUnavailable"
+                }
+                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    code, "Plain hard Picture source clip admission refused $admission.",
+                ))
+            }
+            fun inspectSourceClipAdmission(source: FilterOccurrenceSourceV1) {
+                val captured = source.sourceDraw ?: return
+                if (!W6aLayerPlanCompiler.isPlainHardPictureSource(captured)) return
+                val filterPrefixF64 = filterOwner?.mapping?.copyLocalToDeviceF64() ?: Matrix3x3F64()
+                source.pictureSourceClipScopesV1().forEach { scope ->
+                    if (scope.clip == ClipStackNode.Empty) return@forEach
+                    // Parent scopes carry only their recorded Picture prefix.  The captured
+                    // inner scope additionally carries the filter-owner context, matching the
+                    // established materialCoordinateDraw carrier convention exactly.
+                    val initialPrefixF64 = if (scope.outerPrefixSize == null) filterPrefixF64 else Matrix3x3F64()
+                    val prefixF64 by lazy { source.sourceClipPrefixF64V1(scope, initialPrefixF64) }
+                    when (val admission = scope.clip.clipTransformAdmissionV1 { prefixF64 }) {
+                        ClipTransformAdmissionV1.Ready -> Unit
+                        else -> clipAdmissionFailure(admission)
+                    }
+                }
+            }
+            lateinit var inspectAggregateClipAdmission: (PictureStreamAggregateDraftV1) -> Unit
+            lateinit var inspectEntriesClipAdmission: (List<PictureStreamEntryDraftV1>) -> Unit
+            inspectEntriesClipAdmission = { values ->
+                values.forEach { entry -> when (entry) {
+                    is PictureStreamEntryDraftV1.Draw -> inspectSourceClipAdmission(entry.source)
+                    is PictureStreamEntryDraftV1.Picture -> inspectAggregateClipAdmission(entry.child)
+                    is PictureStreamEntryDraftV1.Layer -> inspectEntriesClipAdmission(entry.children())
+                    is PictureStreamEntryDraftV1.Clear,
+                    is PictureStreamEntryDraftV1.DrawColor,
+                    is PictureStreamEntryDraftV1.ConsumedState,
+                    is PictureStreamEntryDraftV1.AnnotationNoOp,
+                    -> Unit
+                } }
+            }
+            inspectAggregateClipAdmission = { draft ->
+                if (!terminalDeferredClipIsEmpty(draft)) inspectEntriesClipAdmission(draft.entries())
+            }
+            // This single source-order pass precedes every aggregate cull, mapping inverse, and
+            // target-local carrier.  It observes exactly the aggregate branches assembly visits.
+            inspectAggregateClipAdmission(rootDraft)
             fun sourceFacts(source: W6bSourceGeometryV1) = W6bFilterSourceFactsV1(source.copyDeviceBoundsI32(),
                 source.copyKnownContentDeviceI32(), source.copyDesiredOutputDeviceI32() ?: source.copyDeviceBoundsI32(), source.mapping)
             fun evaluate(occurrence: W6bFilterGraphConstruction.PositiveOccurrence?, raw: W6bRecipeSourceV1,
