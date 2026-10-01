@@ -13,12 +13,18 @@ import org.graphiks.math.color.ColorF32
 
 /** Coverage-only sibling: no W5 material/template and no colour-AA continuation authority. */
 internal class GPUW4dAaCoveragePreparedAuthority private constructor(
-    val owner: PlanPass.FilterCoverageSourcePass,
+    val owner: PlanPass,
     val binding: PlanW4dAaCoverageSourceBindingV1,
     facts: List<W4dGeneralNativePathPassFact>,
     val geometry: W4dGeneralNativeFrameResourceSeal,
     built: List<W4dGeneralPathGraphLowerer.BuiltPacket>,
 ) {
+    private val output: PlanResourceId
+        get() = when (owner) {
+            is PlanPass.FilterCoverageSourcePass -> owner.output
+            is PlanPass.AaCoverageSourcePass -> owner.output
+            else -> error("AA coverage binding has an unadmitted owner")
+        }
     val facts: List<W4dGeneralNativePathPassFact> = java.util.Collections.unmodifiableList(facts.toList())
     val built: List<W4dGeneralPathGraphLowerer.BuiltPacket> = java.util.Collections.unmodifiableList(built.toList())
     val phases: List<PlanPass.PathRenderPass> get() = binding.passes()
@@ -26,7 +32,7 @@ internal class GPUW4dAaCoveragePreparedAuthority private constructor(
     fun resourceUses(refs: Map<PlanResourceId, GPUFrameResourceRef>): List<GPUFrameResourceUse> = buildList {
         val terminal = phases.last()
         add(GPUFrameResourceUse(refs.getValue(phases.first().target), GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true))
-        add(GPUFrameResourceUse(refs.getValue(owner.output), GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true))
+        add(GPUFrameResourceUse(refs.getValue(output), GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true))
         phases.first().depthStencil?.let { add(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true)) }
         add(GPUFrameResourceUse(refs.getValue(terminal.drawDataResources.vertex), GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, GPUFrameResourceLifetime.FrameLocal, false))
         add(GPUFrameResourceUse(refs.getValue(terminal.drawDataResources.index), GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, GPUFrameResourceLifetime.FrameLocal, false))
@@ -52,8 +58,8 @@ internal class GPUW4dAaCoveragePreparedAuthority private constructor(
             val physical = requireNotNull(graph.physicalLayoutOrNull())
             require(physical.w4dAaCoverageSourceBindings().any { it === binding } &&
                 physical.nativeSiteRecipeCatalogV1().recipe(binding.recipe.owner) === binding.recipe)
-            val owner = graph.passes().filterIsInstance<PlanPass.FilterCoverageSourcePass>().single {
-                it.id == binding.ownerPassId && it.aaCoverageBinding === binding
+            val owner = graph.passes().single {
+                it.id == binding.ownerPassId && it.aaCoverageBindingOrNullV1() === binding
             }
             require(binding.resources().all { row -> graph.resources().any { it === row } })
             val extent = binding.copyExtentI32()

@@ -35,7 +35,10 @@ public class PlanW4dAaCoverageSourceBindingV1 internal constructor(
     public fun copyOriginDeviceI32(): Point2I32 = Point2I32(originSnapshot.x, originSnapshot.y)
 
     init {
-        require(sourceCapabilityId == W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID)
+        require(sourceCapabilityId in setOf(
+            W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID,
+            W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID,
+        ))
         require(commandIndexI32 >= 0 && extent.width > 0 && extent.height > 0)
         require(sourceIds.size == phases.size && sourceIds.distinct().size == sourceIds.size)
         val terminal = when (phases.size) {
@@ -44,7 +47,9 @@ public class PlanW4dAaCoverageSourceBindingV1 internal constructor(
                     direct.draw.strategy == PathFillStrategy.DirectTriangle && direct.depthStencil == null &&
                     direct.atomicGroup == null && direct.load == AttachmentLoadPlan.ClearTransparent &&
                     direct.store == AttachmentStorePlan.Store && direct.depthStencilAccess == null &&
-                    direct.depthStencilLoadStore == null)
+                    direct.depthStencilLoadStore == null) {
+                    "Direct W4d AA coverage phase must not bind depth-stencil state."
+                }
             }
             2 -> phases[1].also { cover ->
                 val producer = phases[0]

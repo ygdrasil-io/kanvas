@@ -91,7 +91,12 @@ internal fun GPUW6aLayerFramePlan.validatesNativePathPayload(
             depthViews[depthId] = view.view
             return@forEachIndexed
         }
-        val coverageBinding = (pass as? PlanPass.FilterCoverageSourcePass)?.aaCoverageBinding
+        if (pass is PlanPass.AaDeferredComposite) {
+            val native = byStep[ordinalI32 + 1] as? GPUPreparedNativeScopeOperand.Render ?: return false
+            if (!validatesAaDeferredNativeV1(this, pass, native)) return false
+            return@forEachIndexed
+        }
+        val coverageBinding = pass.aaCoverageBindingOrNullV1()
         if (coverageBinding != null) {
             val authority = w4dAaCoverageAuthorities[coverageBinding] ?: return false
             val native = byStep[ordinalI32 + 1] as? GPUPreparedNativeScopeOperand.Render ?: return false

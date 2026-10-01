@@ -305,6 +305,10 @@ public class RenderGraph private constructor(
                                     } == true
                                 } == true)
                             is PlanPass.PathAaColorComposite -> pass.destination == scope.targetResource
+                            is PlanPass.AaCoverageSourcePass -> pass.binding?.let { binding ->
+                                binding.copyOriginDeviceI32() == requireNotNull(scope.mapping).copyLayerOriginDeviceI32()
+                            } == true
+                            is PlanPass.AaDeferredComposite -> pass.destination == scope.targetResource && pass.contract != null
                             is PlanPass.StencilGeometryProducerV3 -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
                             is PlanPass.StencilCover -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
                             is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
@@ -624,10 +628,14 @@ public class RenderGraph private constructor(
             require(dependencies.distinct().size == dependencies.size) { "Dependencies must be unique" }
             validatePassCapabilities(passes, capabilities)
             if (capabilityId in setOf(W4dGeneralPathPlanCompiler.W6_AA_COLOR_SOURCE_CAPABILITY_ID,
-                    W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID)) {
+                    W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID,
+                    W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID)) {
                 validateAaResolvedColorSource(
                     resources, passes, dependencies, resourcesById, capabilities, targetExtent, colorFormat,
-                    visualCommandCount, capabilityId == W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID,
+                    visualCommandCount, capabilityId in setOf(
+                        W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID,
+                        W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID,
+                    ),
                 )
                 validateVisualCommandOrder(passes)
                 val calculatedPeak = peak(resources, passes.size)
@@ -977,6 +985,15 @@ public class RenderGraph private constructor(
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
             is PlanPass.LayerComposite -> listOf(pass.source, pass.destination)
             is PlanPass.PathAaColorComposite -> listOf(pass.source, pass.destination)
+            is PlanPass.AaCoverageSourcePass -> buildList {
+                add(pass.output)
+                pass.binding?.let { binding -> addAll(binding.resources().map { it.id }) }
+            }
+            is PlanPass.AaDeferredComposite -> pass.contract?.let { contract -> buildList {
+                add(contract.target)
+                add(contract.coverage.resources().single { it.role == PlanResourceRole.CoverageSource }.id)
+                contract.destinationSnapshot?.let(::add)
+            } } ?: listOf(pass.destination)
             is PlanPass.FilterSourceClear -> listOf(pass.output, pass.boundSourceId)
             is PlanPass.FilterCoverageSourcePass -> buildList {
                 add(pass.output)
@@ -1138,6 +1155,8 @@ public class RenderGraph private constructor(
                         it is PlanPass.ClipMaskFold ||
                         it is PlanPass.FilterSourceClear ||
                         it is PlanPass.FilterCoverageSourcePass ||
+                        it is PlanPass.AaCoverageSourcePass ||
+                        it is PlanPass.AaDeferredComposite ||
                         it is PlanPass.FilterCoverageRetainPass ||
                         it is PlanPass.PictureAggregateBeginPass ||
                         it is PlanPass.PictureAggregateSealPass ||
@@ -2543,6 +2562,7 @@ public class RenderGraph private constructor(
                         PathRenderPhase.HardEdgeMaskStencilCover,
                         -> Unit
                     }
+                    is PlanPass.AaDeferredComposite -> pass.contract?.let { add(it.sourceDraw) }
                     else -> Unit
                 }
             }

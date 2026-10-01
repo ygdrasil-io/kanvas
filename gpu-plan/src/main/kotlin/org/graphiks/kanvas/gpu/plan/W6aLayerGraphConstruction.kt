@@ -41,7 +41,19 @@ internal class W6aLayerSourceBinding(
     val firstCommandIndexI32: Int,
     val source: SourceDeferredRenderConstructionV4,
     val occurrenceInput: OccurrenceSourceInputV1? = null,
+    /** Selection-owned final blend; the hidden coverage producer carries no paint authority. */
+    val deferredAa: W7AaDeferredOccurrenceFactsV1? = null,
 )
+
+/** Closed selection facts retained across source construction and final W6 assembly. */
+internal class W7AaDeferredOccurrenceFactsV1(
+    val commandIndexI32: Int,
+    val blend: BlendPlan,
+) {
+    init {
+        require(commandIndexI32 >= 0 && blend.isW7AaDeferredBlendV1())
+    }
+}
 
 /** All device-space regions are sealed before the physical target has an extent. */
 private class W6aScopeGeometry(
@@ -163,6 +175,11 @@ internal class W6aLayerGraphConstruction(
     /** Hidden W4d phases emitted as command groups by one W6 FilterCoverage native pass. */
     private val aaCoveragePhases = linkedMapOf<Int, List<PlanPass.PathRenderPass>>()
     private val aaCoverageOwners = linkedMapOf<Int, PlanPass.FilterCoverageSourcePass>()
+    /** W7 owns the same geometric binding without borrowing W6b filter semantics. */
+    private val aaDeferredPhases = linkedMapOf<Int, List<PlanPass.PathRenderPass>>()
+    private val aaDeferredOwners = linkedMapOf<Int, PlanPass.AaCoverageSourcePass>()
+    private val aaDeferredDrafts = linkedMapOf<Int, W6AaDeferredOccurrenceEmitterV1.Draft>()
+    private val aaDeferredConsumers = linkedMapOf<Int, PlanPass.AaDeferredComposite>()
     private val childSnapshots = mutableSetOf<PlanResourceId>()
     val nonUniformBytesI64: Long
     val passCountI32: Int get() = rawPasses.size
@@ -184,6 +201,10 @@ internal class W6aLayerGraphConstruction(
             before.firstCommandIndexI32 < after.firstCommandIndexI32
         }) { "W6 child occurrences must be published in recorded command order." }
         require(lanes.all { source ->
+            source.capabilityId == W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID &&
+                source.topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
+                source.passes().all { pass -> pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw &&
+                    pass.draw.sample == SamplePlan.Multisample4 && pass.draw.coverage == CoveragePlan.StencilAA4 } ||
             source.topology in setOf(DeferredLaneTopologyV4.AaResolvedColor, DeferredLaneTopologyV4.AaResolvedCoverage) && source.passes().let { aa ->
                 aa.all { pass -> pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw &&
                     pass.draw.sample == SamplePlan.Multisample4 && pass.draw.coverage == CoveragePlan.StencilAA4 } &&
@@ -204,7 +225,9 @@ internal class W6aLayerGraphConstruction(
                     sourceDraw is PathFillDraw || sourceDraw is PathStrokeDraw || sourceDraw is GeneralPathDraw ||
                     sourceDraw is W5bPointDraw || sourceDraw is W5bVerticesDraw || sourceDraw is W5bW4ePathDraw
             } }) {
-            "w6a.layer.unsupported_child"
+            "w6a.layer.unsupported_child:${lanes.joinToString { source ->
+                "${source.capabilityId}/${source.topology}/${source.passes().map(PlanPass::role)}"
+            }}"
         }
 
         val restoreFactsByScope = occurrences.associate { occurrence ->
@@ -2632,6 +2655,63 @@ internal class W6aLayerGraphConstruction(
                             }
                         }
                         val selectedDraw = draws.single()
+                        val deferredFacts = binding.deferredAa
+                        if (deferredFacts != null) {
+                            require(binding.source.topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
+                                selectedDraw.commandIndex == deferredFacts.commandIndexI32 && !directFilter) {
+                                "W7 deferred AA must own one non-filter coverage source lane."
+                            }
+                            val laneI32 = bindings.indexOf(binding)
+                            val remapped = laneResourceIds[laneI32]
+                            val target = parentTarget
+                            val targetExtent = targetExtent(target)
+                            val geometry = binding.scopeI32?.let(activeByScope::getValue)
+                            val phases = binding.source.passes().mapIndexed { phaseIndex, original ->
+                                val path = original as? PlanPass.PathRenderPass
+                                    ?: error("W7 deferred AA source lost its path phase.")
+                                val rebound = path.rebindW4eV6(passes.size + phaseIndex, { id -> remapped.getValue(id) },
+                                    geometry?.mapping, geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32) as PlanPass.PathRenderPass
+                                if (rebound.phase == PathRenderPhase.MultisampleDirectColor) {
+                                    PlanPass.PathRenderPass(rebound.ordinal, rebound.target, rebound.draw, rebound.phase,
+                                        rebound.drawDataResources, atomicGroup = path.atomicGroup, depthStencil = path.depthStencil,
+                                        load = path.load, store = path.store,
+                                        depthStencilAccess = path.depthStencilAccess, depthStencilLoadStore = path.depthStencilLoadStore,
+                                        resolveTarget = rebound.resolveTarget, scanSpansDeviceI32 = rebound.scanSpansDeviceI32)
+                                } else rebound
+                            }
+                            val coverage = remapped.getValue(binding.source.resources().single {
+                                it.role == PlanResourceRole.CoverageSource
+                            }.id)
+                            val producer = PlanPass.AaCoverageSourcePass(passes.size, coverage)
+                            aaDeferredPhases[laneI32] = phases
+                            aaDeferredOwners[laneI32] = producer
+                            passes += producer
+                            binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), producer.id) }
+                            val before = DestinationVersionI64(versions.getValue(target))
+                            val snapshot = if (deferredFacts.blend is BlendPlan.DestinationReadV1) {
+                                val id = planResourceId(PlanResourceRole.DestinationSnapshot, occurrences.size + laneI32)
+                                childSnapshots += id
+                                passes += PlanPass.TextureCopy(passes.size, target, id, before,
+                                    RectI32(0, 0, targetExtent.width, targetExtent.height), Point2I32.Origin,
+                                    Math.multiplyExact(targetExtent.width.toLong(), 4L))
+                                binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), passes.last().id) }
+                                id
+                            } else null
+                            val draft = W6AaDeferredOccurrenceEmitterV1.emit(
+                                W6AaDeferredOccurrenceEmitterV1.Selected(deferredFacts.commandIndexI32,
+                                    selectedDraw.withFinalBlendV1(deferredFacts.blend), deferredFacts.blend),
+                                W6AaDeferredOccurrenceEmitterV1.Target(target, targetExtent, targetOriginDevice(target),
+                                    RectI32(0, 0, targetExtent.width, targetExtent.height), geometry?.mapping),
+                                before, snapshot,
+                            )
+                            val consumer = PlanPass.AaDeferredComposite(passes.size, target)
+                            aaDeferredDrafts[laneI32] = draft
+                            aaDeferredConsumers[laneI32] = consumer
+                            passes += consumer
+                            versions[target] = draft.destinationVersionAfter.valueI64
+                            binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), consumer.id) }
+                            return@bindingLoop
+                        }
                         // The direct W4d MSAA resolve is the raw W6b coverage source.  It is
                         // one logical texture, not an intermediate W4d resource plus an
                         // independently allocated W6b source with the same role/ordinal.
@@ -3069,6 +3149,14 @@ internal class W6aLayerGraphConstruction(
                     checkedTextureBytesI64(4, parentExtent.width, parentExtent.height, 1),
                     setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, passes.size))
             }
+            passes.filterIsInstance<PlanPass.TextureCopy>().filter { it.destination in childSnapshots }.forEach { copy ->
+                val snapshotExtent = targetExtents.getValue(copy.source)
+                add(PlanResource.of(PlanResourceRole.DestinationSnapshot,
+                    copy.destination.value.substringAfter(':').toInt(), PlanResourceKind.Texture2D,
+                    PlanTextureFormat.Color(logicalColorFormat), snapshotExtent,
+                    checkedTextureBytesI64(4, snapshotExtent.width, snapshotExtent.height, 1),
+                    setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, passes.size))
+            }
             sourceSpecs.forEach { spec -> add(spec.seal(passes.size)) }
             frozenFilterResourceSpecs.forEach { spec -> add(spec.seal(passes.size)) }
             coverageDepthExtents.forEach { (id, depthExtent) ->
@@ -3101,7 +3189,7 @@ internal class W6aLayerGraphConstruction(
                         // AaResolvedCoverage is published by its direct W6b occurrence
                         // reservation.  The remapped lane row is deliberately not a second
                         // physical allocation of that same resolve texture.
-                        !(lanes[laneI32].topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
+                        !(laneI32 in aaCoverageOwners && lanes[laneI32].topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
                             row.role == PlanResourceRole.CoverageSource)
                 }.forEach { row ->
                     val targetSized = row.kind == PlanResourceKind.Texture2D && row.role != PlanResourceRole.DestinationSnapshot
@@ -3128,6 +3216,19 @@ internal class W6aLayerGraphConstruction(
                 source.mapping.copyLayerOriginDeviceI32())
             val owner = aaCoverageOwners.getValue(laneI32)
             passes[owner.ordinal] = owner.withAaCoverageBinding(binding)
+        }
+        aaDeferredPhases.forEach { (laneI32, phases) ->
+            val owner = aaDeferredOwners.getValue(laneI32)
+            val remapping = laneResourceIds[laneI32]
+            val target = targetFor(bindings[laneI32].scopeI32)
+            val binding = PlanW4dAaCoverageSourceBindingV1(owner.id,
+                lanes[laneI32].capabilityId, phases.first().draw.commandIndex,
+                lanes[laneI32].passes().map { it.id }, phases, remapping,
+                resources.filter { it.id in remapping.values }, targetExtent(target), targetOriginDevice(target))
+            passes[owner.ordinal] = owner.withBinding(binding)
+            val consumer = aaDeferredConsumers.getValue(laneI32)
+            val sealed = aaDeferredDrafts.getValue(laneI32).bindAndSeal(binding)
+            passes[consumer.ordinal] = consumer.withContract(sealed)
         }
         nativeByLane.forEach { (laneI32, native) ->
             val target = native.values.filterIsInstance<PlanPass.PathRenderPass>().firstOrNull()?.target
@@ -3301,6 +3402,17 @@ internal class W6aLayerGraphConstruction(
                     plannedCommandId = pass.plannedCommandId,
                     materialDeviceOriginI32 = pass.copyMaterialDeviceOriginI32() ?: targetOriginDevice(pass.target))
             } else when (pass) {
+                is PlanPass.AaDeferredComposite -> {
+                    val contract = requireNotNull(pass.contract)
+                    val laneI32 = aaDeferredConsumers.entries.single { it.value.id == pass.id }.key
+                    val materialDraw = byLaneAndCommand.getValue(laneI32 to contract.commandIndexI32)
+                        .withFinalBlendV1(contract.blend)
+                    PlanPass.AaDeferredComposite(pass.ordinal, pass.destination, PlanAaDeferredCompositeV1(
+                        contract.commandIndexI32, contract.coverage, materialDraw, contract.target,
+                        contract.destinationSnapshot, contract.blend, contract.destinationVersionBefore,
+                        contract.destinationVersionAfter, contract.copyTargetExtentI32(), contract.copySourceBoundsTargetI32(),
+                        contract.copyTargetOriginDeviceI32(), contract.mapping))
+                }
                 is PlanPass.PathRenderPass -> {
                     require(pass.phase in setOf(PathRenderPhase.MultisampleDirectColor,
                         PathRenderPhase.MultisampleStencilProducer, PathRenderPhase.MultisampleStencilColorCover))
@@ -3437,7 +3549,7 @@ internal class W6aLayerGraphConstruction(
                 binding.passes().map { phase -> passes.single { it.id == phase.id } as PlanPass.PathRenderPass },
                 binding.resourceRemapping(), binding.resources(), binding.copyExtentI32(), binding.copyOriginDeviceI32())
         }
-        val finalW4dAaCoverageBindings = passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().mapNotNull { it.aaCoverageBinding }
+        val finalW4dAaCoverageBindings = passes.mapNotNull(PlanPass::aaCoverageBindingOrNullV1)
         val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes, logicalColorFormat)
         // RenderGraph.construct publishes this same frame-local row later, after all final
         // recipes have been assembled.  The W5a recipe needs its typed logical descriptor now;
@@ -3517,6 +3629,7 @@ internal class W6aLayerGraphConstruction(
         // W4e's terminal masked consumer is physically final even though its PathRenderPass is
         // carried by the rebased binding rather than the top-level pass list.  Feed that sealed
         // binding to the catalog so its owner is authenticated before native allocation.
+        val aaDeferredCompositeRecipes = freezeW6AaDeferredCompositeRecipesV1(passes, table, resources + source.resources, source.uniforms)
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
             passes + finalW4eBindings.flatMap { it.nativePasses() }, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
             plainLayerCompositeRecipes, filteredLayerCompositeRecipes, layerCompositeDestinationRecipes, layerCompositeFilteredDestinationRecipes, pictureCompositeGraphRecipes, pictureCompositeGraphFilteredRecipes, pictureCompositeGraphDestinationRecipes, filterCompositeDrawRecipes, filterCompositeLayerPlainRecipes, filterCompositeLayerFilteredRecipes, filterCompositeLayerDestinationRecipes, filterCompositeLayerFilteredDestinationRecipes, filterCompositePicturePlainRecipes, filterCompositePictureGraphRecipes, filterCompositePictureGraphFilteredRecipes, filterCompositePictureGraphDestinationRecipes, filterCompositePictureGraphFilteredDestinationRecipes, filterCompositePictureDestinationRecipes, clipMaskInitializeRecipes, clipMaskProducerRecipes, clipMaskProducerDirectTriangleRecipes, clipMaskProducerStencilEdgeRecipes, clipMaskFoldRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
@@ -3534,6 +3647,7 @@ internal class W6aLayerGraphConstruction(
             w5aOrdinarySolidSources = w5aOrdinarySolidSourceRecipes,
             w4dAaSources = finalW4dAaBindings,
             w4dAaCoverageSources = finalW4dAaCoverageBindings,
+            aaDeferredComposites = aaDeferredCompositeRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3543,6 +3657,7 @@ internal class W6aLayerGraphConstruction(
             w4eGeometry = finalW4eBindings,
             w4dAaSources = finalW4dAaBindings,
             w4dAaCoverageSources = finalW4dAaCoverageBindings,
+            aaDeferredComposites = aaDeferredCompositeRecipes,
             w6SolidRectHostRecipes = solidRectHostRecipes,
             w6CorePrimitiveHostRecipes = corePrimitiveHostRecipes,
             w6PreparedVerticesHostRecipes = preparedVerticesHostRecipes,

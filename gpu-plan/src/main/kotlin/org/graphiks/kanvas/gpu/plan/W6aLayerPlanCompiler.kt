@@ -68,12 +68,14 @@ public class W6aLayerPlanCompiler public constructor(
         val firstCommandIndexI32: Int,
         val compiler: CapabilityCompilerChain,
         val candidate: GpuPlanCandidate,
+        val deferredAa: W7AaDeferredOccurrenceFactsV1? = null,
     )
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         val commands = scene.toList()
         val ownsW6b = W6bFilterGraphConstruction.owns(scene)
         val hasLayerBoundary = commands.any { it is SceneCommand.BeginLayer || it is SceneCommand.EndLayer }
+        val ownsAaDeferred = ownsAaDeferred(scene, target, runtimeCatalog)
         val ownsMixedRootAaRect = !hasLayerBoundary && !ownsW6b && ownsMixedRootAaRectFrame(commands)
         val ownsEncodedHairlineFrame = !ownsW6b && target.compositionDomain ==
             org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
@@ -81,7 +83,7 @@ public class W6aLayerPlanCompiler public constructor(
             commands.filterIsInstance<SceneCommand.Draw>().any(CompositionAdmissionV1::isAdmittedEncodedRectHairline)
         val ownsEncodedRootSegments = !hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect &&
             (ownsEncodedRootSegmentFrame(scene, target, commands) || ownsEncodedHairlineFrame)
-        if (!hasLayerBoundary && !ownsW6b && !ownsMixedRootAaRect && !ownsEncodedRootSegments) {
+        if (!hasLayerBoundary && !ownsW6b && !ownsAaDeferred && !ownsMixedRootAaRect && !ownsEncodedRootSegments) {
             return GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Scene has no layer boundary.")))
         }
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
@@ -188,7 +190,7 @@ public class W6aLayerPlanCompiler public constructor(
             }
         }
         if (stack.isNotEmpty()) return invalid(W6aPlanDiagnostics.MalformedStack, "BeginLayer has no matching EndLayer.")
-        if (scopes.isEmpty() && !ownsW6b && !ownsMixedRootAaRect && !ownsEncodedRootSegments)
+        if (scopes.isEmpty() && !ownsW6b && !ownsAaDeferred && !ownsMixedRootAaRect && !ownsEncodedRootSegments)
             return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
 
         val segments = mutableListOf<Segment>()
@@ -234,6 +236,7 @@ public class W6aLayerPlanCompiler public constructor(
             val aaSource = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
             val rootAaRectSource = W4dGeneralPathPlanCompiler.w6RootAaRectStrokeSource(runtimeCatalog)
             val aaCoverageSource = W4dGeneralPathPlanCompiler.w6AaCoverageSource(runtimeCatalog)
+            val deferredAaSource = W4dGeneralPathPlanCompiler.w7AaDeferredSource(runtimeCatalog)
             val encodedHairlineSource = W4dGeneralPathPlanCompiler.w6EncodedRectHairlineSource(runtimeCatalog)
             val originalDraw = (recordedCommand as? SceneCommand.Draw)?.node
             val unfilteredDraw = (recordedCommand as? SceneCommand.Draw)?.let {
@@ -244,6 +247,13 @@ public class W6aLayerPlanCompiler public constructor(
             val rootAaSource = scopeI32 == null && !ownsW6b &&
                 originalDraw?.coverage == CoverageRequest.ANTIALIASED &&
                 aaSource.acceptsW6AaColorSourceScope(requireNotNull(originalDraw))
+            val deferredAa = originalDraw?.takeIf(deferredAaSource::acceptsW7AaDeferredSourceScope)?.let { draw ->
+                val blend = requireNotNull(FinalBlendPlanner.plan(draw.blend, CoveragePlan.StencilAA4,
+                    SamplePlan.SingleSample, logicalColorFormat(target).blendTargetClampV1(),
+                    BlendCoverageApplicationV1.SourceMultiplication,
+                    BlendCoverageEncodingV1.ScalarCoverageInShader))
+                W7AaDeferredOccurrenceFactsV1(drawIndexI32, blend)
+            }
             val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&
                 originalDraw?.let(rootAaRectSource::acceptsW6RootAaRectStrokeScope) == true
             val encodedHairline = ownsEncodedHairlineFrame &&
@@ -256,6 +266,7 @@ public class W6aLayerPlanCompiler public constructor(
                 } == true &&
                 unfilteredDraw?.let(aaCoverageSource::acceptsW6AaColorSourceScope) == true
             val generalPath = when {
+                deferredAa != null -> deferredAaSource
                 rootAaCoverage -> aaCoverageSource
                 rootAaRectStroke -> rootAaRectSource
                 encodedHairline -> encodedHairlineSource
@@ -266,7 +277,7 @@ public class W6aLayerPlanCompiler public constructor(
                 W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
                 W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), generalPath), runtimeCatalog)
             when (val selection = child.select(segment, target)) {
-                is GpuPlanSelection.Candidate -> segments += Segment(scopeI32, drawIndexI32, child, selection.candidate)
+                is GpuPlanSelection.Candidate -> segments += Segment(scopeI32, drawIndexI32, child, selection.candidate, deferredAa)
                 // A source lane that is admissible except for its W5 material must retain that
                 // material authority.  The outer router will terminalize it because W6 owns the
                 // layer boundary; collapsing it to UnsupportedChild would both lose the public
@@ -356,7 +367,7 @@ public class W6aLayerPlanCompiler public constructor(
             val bindings = mutableListOf<W6aLayerSourceBinding>()
             for (segment in selected.segments) when (val result = segment.compiler.constructSourceLanes(segment.candidate, capabilities, budget)) {
                 is RenderPlanResult.Ready -> result.plan.forEach { bindings += W6aLayerSourceBinding(
-                    segment.scopeI32, segment.firstCommandIndexI32, it,
+                    segment.scopeI32, segment.firstCommandIndexI32, it, deferredAa = segment.deferredAa,
                 ) }
                 // The child has already named its owner/capture limit. W6 only owns the
                 // aggregate peak after every child source is sealed.
@@ -609,5 +620,14 @@ public class W6aLayerPlanCompiler public constructor(
 
     public companion object {
         public const val CAPABILITY_ID: String = "w6a.layer.v1"
+
+        internal fun ownsAaDeferred(
+            scene: SceneSnapshot,
+            target: RenderTargetDescriptor,
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): Boolean = target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR &&
+            scene.filterIsInstance<SceneCommand.Draw>().any { draw ->
+                W4dGeneralPathPlanCompiler.w7AaDeferredSource(catalog).acceptsW7AaDeferredSourceScope(draw.node)
+            }
     }
 }

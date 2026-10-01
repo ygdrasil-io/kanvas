@@ -42,6 +42,8 @@ public enum class PlanPassRole {
     ClipMaskFold,
     LayerComposite,
     PathAaColorComposite,
+    AaCoverageSource,
+    AaDeferredComposite,
     FilterSourceClear,
     FilterCoverageSource,
     FilterCoverageRetain,
@@ -52,6 +54,19 @@ public enum class PlanPassRole {
     FilterComposite,
 }
 public enum class ClipCombineOperation { Intersect, Difference }
+
+/** Closed owner union for the reused W4d opaque-white coverage binding. */
+public fun PlanPass.aaCoverageBindingOrNullV1(): PlanW4dAaCoverageSourceBindingV1? = when (this) {
+    is PlanPass.FilterCoverageSourcePass -> aaCoverageBinding
+    is PlanPass.AaCoverageSourcePass -> binding
+    else -> null
+}
+
+public fun PlanPass.aaCoverageOutputOrNullV1(): PlanResourceId? = when (this) {
+    is PlanPass.FilterCoverageSourcePass -> output
+    is PlanPass.AaCoverageSourcePass -> output
+    else -> null
+}
 
 /**
  * The one parent-target composition selected at a W6b occurrence boundary.  It retains the
@@ -1163,6 +1178,38 @@ public sealed interface PlanPass {
         )
         override val role: PlanPassRole = PlanPassRole.PathAaColorComposite
         override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /** W7 owner for the hidden opaque-white MSAA4 coverage producer. */
+    public class AaCoverageSourcePass(
+        override val ordinal: Int,
+        public val output: PlanResourceId,
+        public val binding: PlanW4dAaCoverageSourceBindingV1? = null,
+    ) : PlanPass {
+        init { binding?.let { require(it.resources().single { row -> row.role == PlanResourceRole.CoverageSource }.id == output) } }
+        override val role: PlanPassRole = PlanPassRole.AaCoverageSource
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+
+        public fun withBinding(value: PlanW4dAaCoverageSourceBindingV1): AaCoverageSourcePass {
+            require(binding == null && value.resources().single { it.role == PlanResourceRole.CoverageSource }.id == output)
+            return AaCoverageSourcePass(ordinal, output, value)
+        }
+    }
+
+    /** W7 fullscreen final consumer; a complete contract is attached before graph publication. */
+    public class AaDeferredComposite(
+        override val ordinal: Int,
+        public val destination: PlanResourceId,
+        public val contract: PlanAaDeferredCompositeV1? = null,
+    ) : PlanPass {
+        init { contract?.let { require(it.target == destination) } }
+        override val role: PlanPassRole = PlanPassRole.AaDeferredComposite
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+
+        public fun withContract(value: PlanAaDeferredCompositeV1): AaDeferredComposite {
+            require(contract == null && value.target == destination)
+            return AaDeferredComposite(ordinal, destination, value)
+        }
     }
 
     /** Produces a semantically distinct transparent-black input for one captured W6b node. */

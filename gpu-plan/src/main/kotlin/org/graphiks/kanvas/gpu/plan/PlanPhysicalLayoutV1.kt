@@ -37,6 +37,7 @@ internal class SourcePhysicalConstructionV1(
     val w4eGeometry: List<PlanW4eGeometryBindingV1> = emptyList(),
     val w4dAaSources: List<PlanW4dAaSourceBindingV1> = emptyList(),
     val w4dAaCoverageSources: List<PlanW4dAaCoverageSourceBindingV1> = emptyList(),
+    val aaDeferredComposites: List<W6AaDeferredCompositeRecipeV1> = emptyList(),
     /** Final W6 SolidRect host choices, attached before the peak/layout publication boundary. */
     val w6SolidRectHostRecipes: Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1> = emptyMap(),
     /** Final W6 non-W4e CorePrimitive host choices, attached beside the already sealed physical source. */
@@ -847,7 +848,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 }
             }
             val aaPhases = source.w4dAaSources.flatMap { it.passes() }
-            require(graph.passes().filterIsInstance<PlanPass.FilterCoverageSourcePass>().mapNotNull { it.aaCoverageBinding } == source.w4dAaCoverageSources)
+            require(graph.passes().mapNotNull(PlanPass::aaCoverageBindingOrNullV1) == source.w4dAaCoverageSources)
             source.w4dAaCoverageSources.forEach { binding ->
                 require(binding.resources().all { row -> rows.any { it === row } })
             }
@@ -857,6 +858,9 @@ public class PlanPhysicalLayoutV1 private constructor(
                 require(binding.resources().all { row -> rows.any { it === row } } &&
                     binding.passes().none { phase -> source.w4eGeometry.any { phase.id in it.graphPassIds() } })
             }
+            val expectedAaDeferred = freezeW6AaDeferredCompositeRecipesV1(graph.passes(), graph.materialPlanTableOrNull(), rows, source.uniforms)
+            require(source.aaDeferredComposites.map { it.canonicalLogicalEncodingV1 } == expectedAaDeferred.map { it.canonicalLogicalEncodingV1 })
+            require(source.aaDeferredComposites.all { recipe -> graph.passes().any { it === recipe.pass } })
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
                 graph.passes() + finalNativeW4ePasses, expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
                 expectedPlainLayerComposites, expectedFilteredLayerComposites, expectedLayerCompositeDestinations, expectedLayerCompositeFilteredDestinations, expectedPictureCompositeGraphs, expectedPictureCompositeGraphFiltered, expectedPictureCompositeGraphDestinations, expectedFilterCompositeDraws, expectedFilterCompositeLayerPlains, expectedFilterCompositeLayerFiltered, expectedFilterCompositeLayerDestinations, expectedFilterCompositeLayerFilteredDestinations, expectedFilterCompositePicturePlains, expectedFilterCompositePictureGraphs, expectedFilterCompositePictureGraphFiltereds, expectedFilterCompositePictureGraphDestinations, expectedFilterCompositePictureGraphFilteredDestinations, expectedFilterCompositePictureDestinations, expectedClipMaskInitializes, expectedClipMaskProducers, expectedDirectTriangles, expectedStencilEdges, expectedClipMaskFolds, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends, expectedSeparableBlurs, expectedMaskBlurNormals, expectedMaskBlurDualSources, expectedMaskShaders, expectedMaskTables, expectedMaterializedSources, expectedDropShadowColorizes, expectedDropShadowComposites,
@@ -868,6 +872,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 w5aOrdinarySolidSources = expectedW5aOrdinarySolidSources,
                 w4dAaSources = source.w4dAaSources,
                 w4dAaCoverageSources = source.w4dAaCoverageSources,
+                aaDeferredComposites = source.aaDeferredComposites,
             )
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
@@ -904,6 +909,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 w5aOrdinarySolidSources = source.w5aOrdinarySolidSourceRecipes,
                 w4dAaSources = source.w4dAaSources,
                 w4dAaCoverageSources = source.w4dAaCoverageSources,
+                aaDeferredComposites = source.aaDeferredComposites,
             )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),

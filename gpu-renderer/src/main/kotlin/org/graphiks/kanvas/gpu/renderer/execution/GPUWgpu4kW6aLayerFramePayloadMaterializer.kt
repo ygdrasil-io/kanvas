@@ -2121,6 +2121,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         try {
             val graph = frame.graph
             preflightW6FullscreenEmpties(frame, framePlan)
+            val aaDeferredNative = GPUAaDeferredCompositeNativeV1.preflight(frame, framePlan)
             preflightW6FullscreenCoverageAlphas(frame, framePlan)
             preflightW6FullscreenCoverageSolidRects(frame, framePlan)
             preflightW6FullscreenCoverageRetains(frame, framePlan)
@@ -2274,7 +2275,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     recipe.host.uniformResource to recipe.host
                 }
             }.groupBy({ it.first }, { it.second })
-            val sourceUniformBuffers = (graphTextureUniformIds + maskMaterialsByUniform.keys + colorFiltersByUniform.keys).distinct().associateWith { id ->
+            val sourceUniformBuffers = (graphTextureUniformIds + maskMaterialsByUniform.keys + colorFiltersByUniform.keys + aaDeferredNative.values.map { it.recipe.uniformResource }).distinct().associateWith { id ->
                 val resource = frame.physical.resource(id)
                 require(resource.role == PlanResourceRole.SourceUniformData && resource.kind == PlanResourceKind.Buffer &&
                     resource.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination))
@@ -2449,7 +2450,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 }
                 val config = GPUPreparedNativeRenderPassConfig(
                     colorTarget = GPUPreparedNativeTextureViewOperand(views.getValue(phases.first().target), generation),
-                    resolveTarget = GPUPreparedNativeTextureViewOperand(views.getValue(authority.owner.output), generation),
+                    resolveTarget = GPUPreparedNativeTextureViewOperand(views.getValue(requireNotNull(authority.owner.aaCoverageOutputOrNullV1())), generation),
                     depthStencilTarget = phases.first().depthStencil?.let { GPUPreparedNativeTextureViewOperand(views.getValue(it), generation) },
                     loadOperation = GPUPreparedNativeLoadOperation.Clear, storeOperation = GPUPreparedNativeStoreOperation.Store,
                     clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0), depthReadOnly = true,
@@ -2887,6 +2888,11 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load },
                                 stencilStoreOperation = depthId?.let { GPUPreparedNativeStoreOperation.Store }),
                             commands, render.drawPackets.map { requireNotNull(it.semanticPayload) }, w6aPassV1 = pass)
+                    }
+                    is PlanPass.AaDeferredComposite -> {
+                        val native = aaDeferredNative.getValue(pass.id)
+                        renderOperands += native.materialize(device, queue, views,
+                            sourceUniformBuffers.getValue(native.recipe.uniformResource), generation, stepIndex, owned)
                     }
                     is PlanPass.PathAaColorComposite -> {
                         val site = W6LayerCompositeSiteKeyV1(pass.id, 0)
@@ -5490,7 +5496,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
 }
 
 
-private class W6aOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
+internal class W6aOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
     private val handles = mutableListOf<AutoCloseable>()
     val templates = java.util.IdentityHashMap<GPURenderPipeline, GPUW5aGeometryPipelineTemplate>()
     fun <T : AutoCloseable> own(value: T): T = value.also { handles += it }

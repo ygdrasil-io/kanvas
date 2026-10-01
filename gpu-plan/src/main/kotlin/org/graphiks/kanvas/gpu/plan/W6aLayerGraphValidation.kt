@@ -162,7 +162,7 @@ internal fun validateW6aLayerTopology(
                     actual.copyScissorsI32().size == spans.spanCountI32 &&
                     (spans.spanCountI32 == 0) == actual.copyScissorsI32().isEmpty() &&
                     cover.draw is W5bW4ePathDraw &&
-                    (cover.draw as W5bW4ePathDraw).hasW4eInverseMaskStencilPair())
+                    cover.draw.hasW4eInverseMaskStencilPair())
             }
         }
         is PlanPass.StencilCover -> {
@@ -299,6 +299,60 @@ internal fun validateW6aLayerTopology(
                 "AA resolved-colour composites must preserve recorded child order."
             }
             lastAaCompositeCommandI32 = commandIndexI32
+        }
+        is PlanPass.AaCoverageSourcePass -> {
+            val binding = requireNotNull(pass.binding) { "W7 AA coverage owner must be sealed before publication." }
+            require(binding.ownerPassId == pass.id && binding.resources().all { byId[it.id] === it })
+            val output = byId.getValue(pass.output)
+            require(output.role == PlanResourceRole.CoverageSource && output.kind == PlanResourceKind.Texture2D &&
+                output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
+                PlanResourceUsage.Sampled in output.usages())
+            val phases = binding.passes()
+            val terminal = phases.last()
+            require(terminal.resolveTarget == pass.output)
+            phases.map { it.target }.distinct().forEach { target ->
+                require(initialized.add(target)) { "W7 AA source target belongs to one occurrence." }
+                versions[target] = 0L
+            }
+            phases.mapNotNull { it.depthStencil }.distinct().forEach { depth ->
+                require(initialized.add(depth)) { "W7 AA source depth belongs to one occurrence." }
+                versions[depth] = 0L
+            }
+            require(initialized.add(pass.output) && resolvedAaSources.add(pass.output)) {
+                "W7 AA coverage output belongs to one occurrence."
+            }
+            versions[pass.output] = 0L
+        }
+        is PlanPass.AaDeferredComposite -> {
+            val contract = requireNotNull(pass.contract) { "W7 AA consumer must be sealed before publication." }
+            val source = byId.getValue(contract.coverage.resources().single {
+                it.role == PlanResourceRole.CoverageSource
+            }.id)
+            val destination = byId.getValue(pass.destination)
+            val owner = passes.filterIsInstance<PlanPass.AaCoverageSourcePass>().singleOrNull {
+                it.output == source.id && it.binding === contract.coverage
+            }
+            require(owner != null && source.id in initialized && consumedAaSources.add(source.id) &&
+                source.role == PlanResourceRole.CoverageSource && PlanResourceUsage.Sampled in source.usages()) {
+                "W7 AA consumer must consume its sealed coverage source exactly once."
+            }
+            require(destination.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget) &&
+                destination.id in initialized && destination.id !in restored && contract.target == pass.destination &&
+                contract.destinationVersionBefore.valueI64 == versions[destination.id]) {
+                "W7 AA consumer destination generation diverged."
+            }
+            val previous = passes.getOrNull(indexI32 - 1)
+            if (contract.blend is BlendPlan.DestinationReadV1) {
+                val copy = previous as? PlanPass.TextureCopy
+                require(copy?.source == pass.destination && copy.destination == contract.destinationSnapshot &&
+                    copy.destinationVersion == contract.destinationVersionBefore &&
+                    contract.blend.destinationReadSnapshotResourceV1() == copy.destination &&
+                    contract.blend.requiredDestinationVersionV1() == copy.destinationVersion) {
+                    "W7 AA destination-read consumer lacks its adjacent frozen snapshot."
+                }
+            } else require(previous !is PlanPass.TextureCopy || previous.destination !in contract.coverage.resources().map { it.id }.toSet())
+            commands += contract.commandIndexI32
+            versions[destination.id] = contract.destinationVersionAfter.valueI64
         }
         is PlanPass.FilterSourceClear -> {
             val output = byId.getValue(pass.output)
@@ -627,6 +681,10 @@ internal fun validateW6aLayerTopology(
                         }
                         .singleOrNull()
                     val blend = when (consumer) {
+                        is PlanPass.AaDeferredComposite -> {
+                            require(consumer.destination == source.id)
+                            requireNotNull(consumer.contract).blend
+                        }
                         is PlanPass.LayerComposite -> {
                             require(consumer.destination == source.id && sourceBounds == RectI32(0, 0, sourceExtent.width, sourceExtent.height) &&
                                 destinationExtent == sourceExtent)

@@ -45,6 +45,7 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
         it.commandIdValue == pass.draw.commandIndex && it.role == GPUDrawPacketRole.PathStencilCover } == true
     is PlanPass.LayerComposite,
     is PlanPass.PathAaColorComposite,
+    is PlanPass.AaDeferredComposite,
     is PlanPass.PictureAggregateBeginPass,
     is PlanPass.PictureAggregateSealPass,
     is PlanPass.PictureSourcePass,
@@ -54,6 +55,18 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
     is PlanPass.FilterSourceClear,
     is PlanPass.FilterCoverageRetainPass,
     -> packets.isEmpty()
+    is PlanPass.AaCoverageSourcePass -> pass.binding?.let { binding ->
+        val phases = binding.passes()
+        packets.size == phases.size && packets.zip(phases).all { (packet, phase) ->
+            packet.passId == phase.id.value && packet.commandIdValue == binding.commandIndexI32 &&
+                packet.role == when (phase.phase) {
+                    PathRenderPhase.MultisampleStencilProducer -> GPUDrawPacketRole.PathStencilProducer
+                    PathRenderPhase.MultisampleStencilColorCover -> GPUDrawPacketRole.PathStencilCover
+                    PathRenderPhase.MultisampleDirectColor -> GPUDrawPacketRole.Shading
+                    else -> return@all false
+                }
+        }
+    } ?: false
     is PlanPass.FilterCoverageSourcePass -> pass.aaCoverageBinding?.let { binding ->
         val phases = binding.passes()
         packets.size == phases.size && packets.zip(phases).all { (packet, phase) ->
@@ -391,7 +404,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             }?.uniformResource
         }.toSet()
         val coverageResourceIds = physical.w4dAaCoverageSourceBindings().flatMap { it.resources().map { row -> row.id } }.toSet()
-        val preparations = graph.resources().filter { it.id in coverageResourceIds || it.kind == PlanResourceKind.Texture2D && it.lifetime == PlanResourceLifetime.FrameLocal ||
+        val aaDeferredUniformIds = graph.passes().filterIsInstance<PlanPass.AaDeferredComposite>().map { aaDeferredRecipe(it).uniformResource }.toSet()
+        val preparations = graph.resources().filter { it.id in aaDeferredUniformIds || it.id in coverageResourceIds || it.kind == PlanResourceKind.Texture2D && it.lifetime == PlanResourceLifetime.FrameLocal ||
             it.role in setOf(PlanResourceRole.ReadbackStaging, PlanResourceRole.MaskTableData) || physical.w4eGeometryBindings().any { binding ->
                 it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } || physical.w4dAaSourceBindings().any { binding -> it.id in binding.resources().map { row -> row.id } } || it.id in colorFilterUniformIds || it.id in maskShaderUniformIds || it.id in filteredLayerCompositeUniformIds || it.id in filteredDestinationLayerCompositeUniformIds || it.id in filteredFilterCompositeLayerUniformIds || it.id in filteredDestinationFilterCompositeLayerUniformIds || it.id in filteredPictureCompositeUniformIds || it.id in filteredFilterCompositePictureGraphUniformIds || it.id in filteredDestinationFilterCompositePictureGraphUniformIds }
             .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
@@ -437,7 +451,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             add(GPUFrameStep.PrepareResourcesStep(preparations, listOf(GPUTaskID("w6a.prepare"))))
             scheduledPasses.forEach { pass ->
                 val task = listOf(GPUTaskID("w6a.${pass.id.value}"))
-                val coverage = (pass as? PlanPass.FilterCoverageSourcePass)?.aaCoverageBinding?.let(w4dAaCoverageAuthorities::getValue)
+                val coverage = pass.aaCoverageBindingOrNullV1()?.let(w4dAaCoverageAuthorities::getValue)
                 if (coverage != null) {
                     add(GPUFrameStep.RenderPassStep(refs.getValue(coverage.phases.first().target) as GPUFrameTargetRef,
                         GPULoadStorePlan("clear", GPUStorePlan.Store), GPUSamplePlan.MultisampleFrame(4),
@@ -614,7 +628,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     is PlanPass.PictureAggregateBeginPass, is PlanPass.PictureAggregateSealPass,
                     is PlanPass.PictureSourcePass, is PlanPass.PictureComposite,
                     is PlanPass.FilterPass, is PlanPass.FilterComposite, is PlanPass.FilterSourceClear,
-                    is PlanPass.FilterCoverageSourcePass, is PlanPass.FilterCoverageRetainPass -> {
+                    is PlanPass.FilterCoverageSourcePass, is PlanPass.AaCoverageSourcePass,
+                    is PlanPass.AaDeferredComposite, is PlanPass.FilterCoverageRetainPass -> {
                         val render = pass as? PlanPass.RenderPass
                         val targetId = when (pass) {
                             is PlanPass.RenderPass -> pass.target
@@ -630,12 +645,15 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             is PlanPass.FilterComposite -> pass.destination
                             is PlanPass.FilterSourceClear -> pass.output
                             is PlanPass.FilterCoverageSourcePass -> pass.output
+                            is PlanPass.AaCoverageSourcePass -> pass.output
+                            is PlanPass.AaDeferredComposite -> pass.destination
                             is PlanPass.FilterCoverageRetainPass -> pass.output
                         }
                         val depthId = when (pass) {
                             is PlanPass.StencilGeometryProducerV3 -> pass.depthStencil
                             is PlanPass.StencilCover -> pass.depthStencil
                             is PlanPass.FilterCoverageSourcePass -> pass.rasterBinding?.depthStencil
+                            is PlanPass.AaCoverageSourcePass -> null
                             else -> null
                         }
                         val draws = when (pass) {
@@ -657,6 +675,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                     )
                                 }
                             } }.orEmpty()
+                            is PlanPass.AaCoverageSourcePass, is PlanPass.AaDeferredComposite -> emptyList()
                             else -> draws.map { Triple(pass, it, false) }
                         }
                         val targetExtent = requireNotNull(graph.resources().single { it.id == targetId }.copyExtent())
@@ -669,6 +688,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 "W6a render has no plan-sealed W5 material origin for ${pass.id.value}."
                             }
                             is PlanPass.FilterCoverageSourcePass -> Point2I32.Origin
+                            is PlanPass.AaCoverageSourcePass, is PlanPass.AaDeferredComposite -> Point2I32.Origin
                             else -> Point2I32.Origin
                         }
                         val packets = packetInputs.mapIndexed { drawOrdinalI32, (packetPass, draw, coverageProducer) ->
@@ -823,6 +843,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             else -> false
                         }
                         val sampled = when (pass) {
+                            is PlanPass.AaDeferredComposite -> aaDeferredUses(pass)
                             is PlanPass.LayerComposite, is PlanPass.PathAaColorComposite -> buildList {
                                 val source = when (pass) {
                                     is PlanPass.LayerComposite -> pass.source

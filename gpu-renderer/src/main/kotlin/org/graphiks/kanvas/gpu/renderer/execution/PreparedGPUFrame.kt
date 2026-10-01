@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.plan.aaCoverageBindingOrNullV1
+
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayout
 
 import java.io.ByteArrayOutputStream
@@ -177,6 +179,7 @@ class GPUCommandEncoderScopePlan internal constructor(
         val w6aPass = (w6aStep as? org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep)?.w6aPassV1
         val w6aNative = w6aPass?.let { w6aFrameV1?.physical?.w4eGeometryBinding(it.id)?.nativePass(it.id) }
         val w6aStencil = w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
+            w6aPass?.aaCoverageBindingOrNullV1()?.passes()?.firstOrNull()?.depthStencil != null ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass && w6aPass.depthStencil != null ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass &&
@@ -1584,12 +1587,13 @@ internal class PreparedGPUFrame(
                 // materializing a stencil-backed mask coverage source.  It is intentionally
                 // not a new path route: the two packets and the borrowed stencil attachment
                 // are the frozen W4 authority carried by the typed source binding.
-                val w6bStencilCoverage = sealedW6a && !sealedW4e &&
+                val w6bStencilCoverage = sealedW6a && !sealedW4e && (
+                    step.w6aPassV1?.aaCoverageBindingOrNullV1()?.passes()?.firstOrNull()?.depthStencil != null ||
                     (step.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)
                         ?.let { coverage ->
                             coverage.rasterBinding?.depthStencil != null ||
                                 coverage.aaCoverageBinding?.passes()?.firstOrNull()?.depthStencil != null
-                        } == true
+                        } == true)
                 val pathSealed = w6aPath || scope.corePrimitivePathStencilNativeRouteSeal is
                     GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
                     scope.corePrimitivePathStencilNativeRouteSeal is
@@ -2237,7 +2241,8 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEnc
     GPUEncoderOperationKind = when (this) {
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep ->
         if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite ||
-            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.PathAaColorComposite
+            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.PathAaColorComposite ||
+            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.AaDeferredComposite
         ) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ComputePassStep -> GPUEncoderOperationKind.Compute
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.UploadResourceStep -> GPUEncoderOperationKind.Upload
@@ -2254,7 +2259,7 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEnc
 private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep.hasW6aAaSourceBinding(
     scope: GPUCommandEncoderScopePlan,
 ): Boolean {
-    val coverage = (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)?.aaCoverageBinding
+    val coverage = w6aPassV1?.aaCoverageBindingOrNullV1()
     if (coverage != null) return scope.w6aFrameV1?.w4dAaCoverageAuthorities?.get(coverage)?.owner === w6aPassV1
     val pass = w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass ?: return false
     return scope.w6aFrameV1?.physical?.w4dAaSourceBindings()?.singleOrNull { pass in it.passes() } != null
@@ -2268,7 +2273,8 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
             add("beginRenderPass")
             val w6aAaSource = hasW6aAaSourceBinding(scope)
             if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite ||
-                w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.PathAaColorComposite
+                w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.PathAaColorComposite ||
+                w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.AaDeferredComposite
             ) {
                 addAll(listOf("setRenderPipeline", "setBindGroup", "draw", "endRenderPass"))
                 return@buildList
