@@ -1,5 +1,61 @@
 # W07 — diagnostic GM provisoire
 
+## CTM des paths — 2 octobre 2026, lot qualifié localement
+
+Branche `codex/w7-scaled-stroke-diagnostic`, base publiée#2434/7658d902b.
+[Plan causal et qualification](scaled-stroke-diagnostic-plan.md),
+[snapshot frais](path-ctm-4e4b699a6.json). La frontière était dans GmCanvas :
+path affine prétransformé, paint/largeur/shader encore en coordonnées locales.
+Le correctif garde path et paint sous le même CTM temporaire pour chaque path
+nonidentity, après capture du clip, avec restauration propre en finally.
+Aucun changement math/renderer, cap, référence, seuil ou périmètre.
+
+RED réel : GM1PASS/1pixelFAIL et nouveaux témoins3PASS/4pixelFAIL.
+GREEN :12intégrationPASS +4Surface natifsPASS +2mathPASS, zéro skip/erreur ;
+le fix de fixture innerCTM avant construction a été rejoué12PASS.
+Sol a fermé les Important des témoins/fixture ; warnings hérités restent ouverts.
+Source blob676c74e83 à private4e4b699a6 ; fixture privée finale d5bafb278,
+produit identique. Revue large Astra7658..4c3d approuvée pour draft :
+C0/I0 nouveaux,M1warnings hérité/M2pathops ouverts ; mergeNO,W7NO.
+Draft[#2435](https://github.com/ygdrasil-io/kanvas/pull/2435) publiée/rattachée,
+base7658d902b exacte#2434,headinitial2e044cd8e distant identique vérifié.
+Corps conforme aux mesures/limites ; ce reçu postérieur ne change que les docs.
+CI distante non inspectée, aucune fusion.
+
+Corpus631/443 :217rendus/194comparés inchangés, **47≥99%(+1),63≥95%(=)**,
+médiane77.45815728081598%. Aucune identité/outcome perdue,212hashes RGBA
+inchangés et cinq changés. crbug retrouve son arc/diamètre :
+98.3154→98.7686% à±2,SSIM0.861836→0.989508 ; pas bit-exact.
+ctmpatheffect99.7546%,teenyStrokes99.5228% ; pathops_skbug_10155 garde95.7428%
+malgré pixels différents ; sharedcorners reste720×740 versusréférence980×740,
+sans score forcé. ComplexClip2 Path/RRect quatre hashes identiques.
+26diagnostics changent :23index-only, trois raisons réelles de GM déjà refusés
+retenues (geometry.invalid→class_downgrade,VertexLimit↔PathWorkLimit).
+Tous les sept invariants metadata et18par cas sont préservés.
+Tranches0/1/0 en129s/38s/11s, vertices seul garde son watchdog30s,
+aucun timeout externe. SHA256snapshot0ac040efb1f5d2dc9f9699b61f215a97f7c4d5e8914a4cd7c6a0735d62792019.
+
+Quatre triples visuels inspectés ; crbug a encore des écarts de bord,
+ctmpatheffect/teenyStrokes des couleurs de traits différentes, pathops des
+positions/contours différents. sharedcorners actuel/référence inspectés avec
+leur mismatch de tailles/port. Scores élevés ≠ égalité de contenu.
+Cinq PNG régénérés : quatre byte-identiques au corpus, cinq hashes RGBA égaux.
+Quatre scores ciblés rafraîchis par quatre sélections1PASS/XML1/0/0/0 sans
+skip/timeout ;555autres valeurs inchangées sur559,datestamp seul en plus.
+pathops passe du score historique97.16796875 au frais95.7427978515625,
+déjà mesuré dans le corpus parent ; son SSIM baisse légèrement
+0.7854852194775083→0.7854735497630504, écart réel OPEN, pas masqué.
+sharedcorners ne reçoit aucun score.
+Priorité suivante Astra : diagnostic couleur/port des deux GM ensemble,
+avec vérification du même profil ICC Skia observé dans leurs références ;
+aucune conversion/référence modifiée, cause encore inconnue. AA crbug différé.
+
+Qualification proportionnée à l'adaptateur seul : pas de nouveau run global
+exhaustif. Globale héritée725END687PASS37FAIL1interruption et intégration10/11
+restent RED/incomplètes. AA du port crbug, RRect/I2, inverse/filter,
+exception outerwithClip et API/clip state, couleurs/ports restent OPEN.
+Fonts/codecs/jpg-color-cube restent exclus. Pas de merge ou W7 clos.
+
 ## Diagnostic ComplexClip2 Path/RRect — 2 octobre 2026, publié
 
 **Qualification math locale :** source/tests
