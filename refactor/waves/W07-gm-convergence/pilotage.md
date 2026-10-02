@@ -1,5 +1,53 @@
 # Pilotage de la convergence Skia
 
+## Assemblage inverse/hairline — 2 octobre 2026
+
+Source/tests `2e5419afd6501cfc9d09dbed8409324149450a4c`,
+[snapshot](inverse-hairline-2e5419afd.json),
+[design](inverse-hairline-assembly-design.md),
+[plan](inverse-hairline-assembly-plan.md).
+Branche `codex/w7-inverse-filter-convergence`, parent publié#2431/9c182355b.
+Deux gates Sol approuvés puis revue large Astra : aucun défaut introduitC/I/M,
+un Important hérité de port et un Minor hérité d'environnement suivis.
+Source qualifiée pour publication draft, pas pour merge.
+
+Le fix sépare normalisation AA solide et admission Rect dans les deux seams
+W4e ordinaires. Le shader BinaryConsumer inverse le path, pas le clip.
+La source root Rect/STROKE existante est sélectionnée sousW6b uniquement depuis
+le draw original non filtré ; aucune autorité issue de faits stripped ni ouverture
+de Picture/layer/guard single-sample. Sept tests retenus passent réellement
+(Kanvas6 +GmCanvas1), pixels littéraux/native/repeat ; six probes diagnostiques
+inchangés gardent3PASS/3FAIL au garde W4e de source-AA.
+
+Qualification :449/452natifsPASS, trois échecs hérités. Les deux Picture
+nouvellement rencontrés ont aussi échoué sur le parent exact exécuté séparément.
+Globale bornée240s :729END,691PASS/37FAIL/1SKIP d'interruption, incomplète ;
+mêmes37échecs atteints,0nouveau,403nonatteints connus sur une borne1132,
+pas une preuve exhaustive. Warnings natifs/Gradle conservés.
+
+Corpus631/443 : **212rendus(+5),189comparés(+5),42≥99%(=),58≥95%(+1),
+médiane75%**. Aucun ancien rendu perdu/modifié :207hashes/métriques identiques.
+Les18invariants restent figés ;44deltas hors temps=5admissions+39diagnostics.
+Small_sigma96.707%,complexclip2/rectAA≈79.699/79.698%,
+localmatrix66.462%,offset82.825% : le gain d'admission n'est pas l'ISO.
+Cinq triples visuels inspectés, cinq PNG générés byte-identiques au corpus,
+cinq seuls scores rafraîchis via le runner existant ; ses PASS au seuil0
+ne prouvent pas la parité. Aucun changement de référence ou d'exclusion.
+
+**Prochaine priorité : port fidèle des six variantes ComplexClip2**, choisi
+avec Astra avant une nouvelle capacité de source root W6b. Sources Skia figées
+defc3a5a92966c32cb2a6a901e2fa3036a13bb8a : stream SkRandom.nextU()%2,
+peintures explicitement non-AA, clip-AA conservé. Le helper SkiaRandom existe ;
+ordre boucles/index et remplissage fini50×50/hairline0 restent fidèles.
+Tests publics visibles/native/repeat puis corpus identique ; aucun gain promis.
+La révision primaire établit ces écarts de port, pas l'origine des PNG.
+
+Après ce lot borné, GM337 reste au guard source-AA et GM338 au premier root
+PATH/WINDING/AA ordinaire non filtré sousW6b. Le contrat architectural devra
+séparer autorité originale, demande source/halo, domaine inverse fini et
+clip terminal. Localmatrix3colonnes absentes/API, offset/font exclu,
+globale, W7/W6/W0 et merge restent ouverts ; aucune clôture globale.
+
 ## Inverse direct / Picture inverse-AA — 2 octobre 2026
 
 Produit/tests `38c75ab120494be5889929a2e7afc9195d3905a3`,

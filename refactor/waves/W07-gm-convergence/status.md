@@ -7,6 +7,95 @@ sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
 
+## Assemblage inverse/hairline — 2 octobre 2026, qualification finale
+
+Branche `codex/w7-inverse-filter-convergence`, parent publié#2431/9c182355b.
+[Design](inverse-hairline-assembly-design.md) et [plan](inverse-hairline-assembly-plan.md)
+issus du diagnostic causal relu par Astra : source solide AA indûment capturée
+comme composée dans W4e, puis source root hairline W6 liée au mauvais propriétaire.
+Les diagnostics ont été enrichis sans changer les admissions, avec gate Sol propre.
+
+Task1 candidate arbre `a261f07c8e260b32598733c7e5b7ff1a8e5b308c` : normalisation
+AA solide résolue indépendante de l'admission Rect, opt-in interne aux deux seams
+W4e. Le contrôle force-AA a ensuite révélé un vrai défaut `BinaryConsumer` :
+complément du clip au lieu du path ; correction limitée à cette équation WGSL.
+**4/4 témoins retenus PASS** : deux tableaux160pixels identity/nonuniform,
+inverse HARD sous clip-AA, vrai GmCanvas cellule simple GM337, chacun native/repeat.
+Les premiers échecs de compilation/discovery restent distincts du RED de rendu.
+Relecture indépendante Sol Task1 approuvée :0Critical/0Important,1Minor de warnings
+d'environnement hérités, conservés sans suppression. Ces deux stages précèdent
+la qualification finale et le commit2e5419afd ci-dessous.
+
+Task2 candidate arbre `6c6d0ffc67982b940ff709a3717735fbd50b0225` :
+source existante root-AA Rect/STROKE sélectionnée sous ownsW6b à partir du draw
+original sans filtre direct, sans ouvrir les layers ni les autres propriétaires.
+**6/6 Kanvas PASS** (3nouveaux+3Task1), vrai GmCanvas retenu1PASS.
+Relecture Sol Task2 approuvée :0Critical/0Important,1Minor warnings hérités.
+Les six probes diagnostiques inchangés restent **3PASS/3FAIL**, mais les trois
+cas filtrés/GM337 passent maintenant le hairline et atteignent le garde
+`W5b final blending requires the admitted single-sample W4e topology` dans
+W4e.constructSources. **Ce routage amélioré n'est pas un rendu inverse filtré.**
+
+Qualification élargie fraîche au même arbre : **449/452 natifs PASS**, XML452/3/0/0,
+94s, sans skip/abort/timeout, sorties1/1 dues aux trois vrais échecs conservés.
+W5bNoOp était connu ; les deux autres (Picture non-axis sous filtre et sibling
+Picture mixed-root) ont été exécutés séparément sur le parent exact9c182355 :
+2/2FAIL,126s sans timeout, mêmes types/reasons ; seul le suffixe diagnostic
+mixed-root est enrichi. Aucun oracle de refus ou pixel n'est modifié.
+La globale fraîche bornée240s reste incomplète : **729START/END,691PASS/37FAIL/1SKIP**,
+wrapper124/enfant143, aucun XML finalisé. Même37échecs que le parent,32messages
+identiques et5ne différant que par les adresses RuntimeEffect/Diagnostics auditées.
+Quatre cas supplémentaires atteints ; cubic précédemment interrompu passe cette
+fois, sans lui attribuer un gain de décodage. Le SKIP d'interruption concerne
+désormais unownedSyntheticImageSamplers. Borne inférieure connue1132identités,
+403non atteintes ;381du covering sont hors globale,379PASS et2FAIL hérités
+qualifiés séparément. Ce n'est pas l'univers exhaustif ni une globale verte.
+Source/tests committés `2e5419afd6501cfc9d09dbed8409324149450a4c`, sept fichiers
+identiques au candidat natif6c6d. Probe six-cas toujours rouge non committée,
+archivée byte-identique sans suppression de custody.
+Le [corpus frais exact](inverse-hairline-2e5419afd.json) conserve631/443 et les
+18invariants : **212rendus(+5),189comparés(+5),42≥99%(=),58≥95%(+1),médiane75%**.
+Cinq admissions : check_small_sigma_offset, complexclip2, complexclip2_rect_aa,
+localmatriximagefilter et offsetimagefilter. Aucun ancien rendu ne change :
+207hashes/métriques identiques, aucune perte.587lignes hors temps sont identiques ;
+les44deltas sont les5gains et39diagnostics enrichis, pas44gains.
+Les trois tranches terminent0/1/0 en132s/38s/11s, sans timeout externe :
+vertices garde son watchdog30s. Les9lignes warning par tranche sont identiques.
+Snapshot vérifié SHA256896e47f3ef12e402e9c143d5eb7efe546b89b198866edb73ec5b80d0e227bdef.
+
+Les5triples image actuelle/diff/référence sont inspectés. Seul smallsigma atteint
+96.7067% ±2 ; complexclip2/rectAA restent≈79.699/79.698%, localmatrix66.4624%
+avec3colonnes de référence absentes, offset82.825% avec la lettre absente.
+Ce sont des gains d'admission, pas de l'ISO. La génération ciblée des5PNG/scores
+est terminée : cinq tests natifs1/1PASS, sorties0/0, XML propres, sans skip/timeout.
+Les5PNG sont byte-identiques aux actual du corpus et les5seules valeurs de score
+modifiées correspondent exactement aux mesures ±2. Le datestamp Properties.store
+change aussi. Les anciennes valeurs de fichiers générés ne sont pas des rendus
+qualifiés du parent : smallsigma97.545→96.707 corrige un score historique périmé,
+pas une régression de l'un des207anciens rendus qualifiés. L'essai complexclip2
+sans includeBlocking a sélectionné zéro GM et échoué sans test natif ; la reprise
+bornée avec les deux flags existants termine1PASS. Références inchangées.
+GM337 reste au garde de source-AA
+W4e ; GM338 refuse d'abord un path WINDING/AA root ordinaire non filtré sousW6b
+(index1), pas un inverse-first. Revue large indépendante Astra : aucun défaut
+introduit Critical/Important/Minor, publication draft approuvée après ces gates
+d'artefacts ; merge non qualifié. Suivis hérités1Important/1Minor : port
+ComplexClip2 et warnings d'environnement. La publication stackée suit ;
+aucun rendu GM337/338 complet, merge ou clôture W7 annoncé.
+
+**Prochain lot choisi avec Astra : port ComplexClip2 fidèle**, avant l'extension
+de source root AA sousW6b. Les sources primaires figées
+[complexclip2.cpp](https://github.com/google/skia/blob/defc3a5a92966c32cb2a6a901e2fa3036a13bb8a/gm/complexclip2.cpp),
+[SkRandom.h](https://github.com/google/skia/blob/defc3a5a92966c32cb2a6a901e2fa3036a13bb8a/src/base/SkRandom.h) et
+[SkPaint.cpp](https://github.com/google/skia/blob/defc3a5a92966c32cb2a6a901e2fa3036a13bb8a/src/core/SkPaint.cpp)
+confirment deux écarts : Kotlin Random au lieu du stream SkRandom.nextU()%2,
+peintures AA par défaut au lieu de non-AA. Le SkiaRandom test-local existe déjà.
+Le remplissage fini50×50 et le hairline0 sont fidèles et restent inchangés.
+La variante clip-AA reste distincte de l'AA des peintures. Pas de seuil de score
+promis ni de provenance du PNG déduite de cette révision diagnostique.
+L'architecture inverse/filter reste ensuite ouverte : autorité du draw original,
+demande source/halo, domaine inverse fini et clip terminal doivent rester séparés.
+
 ## Inverse direct et Picture AA — 2 octobre 2026, qualification finale
 
 Source/tests `38c75ab120494be5889929a2e7afc9195d3905a3`, arbre relu
