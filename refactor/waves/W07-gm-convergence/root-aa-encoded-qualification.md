@@ -126,7 +126,12 @@ sans rerun natif ni changement de données.
 
 Revue finale Astra : C0/I0/M2, draft acceptable, merge/W7 non qualifiés.
 Une seule vague documentaire ferme M1 ; contre-revue ciblée Sol : M1 ADDRESSED,
-aucun nouveau C/I/M, M2 warnings hérités DEFERRED. Publication draft empilée en cours.
+aucun nouveau C/I/M, M2 warnings hérités DEFERRED.
+Draft [#2436](https://github.com/ygdrasil-io/kanvas/pull/2436) publiée/rattachée sur#2435,
+base codex/w7-scaled-stroke-diagnostic/6f059f0dc et head produit initial
+7d4a1b7f58069a4e2cf7370719d35f1b6b45bc18 distants vérifiés, description exacte.
+Le code/tests publié est byte-identique aux blobs qualifiés28adb36d3.
+Les commits ultérieurs de suivi ne changent pas ces blobs. CI non inspectée.
 Ni merge, ni globale verte, ni W7 clos.
 AA sampling/placement, précision du resolve, consommation GM encoded,
 Picture/refus hérités, RRect/ComplexClip2, inverse/filter, crbug résiduel,

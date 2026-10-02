@@ -4,13 +4,15 @@
 
 [Qualification locale](root-aa-encoded-qualification.md) et
 [corpus frais](root-aa-encoded-28adb36d3.json) ; source privée28adb36d3,
-base publiée#2435/6f059f0dc, draft empilée en préparation.
+base publiée#2435/6f059f0dc, draft [#2436](https://github.com/ygdrasil-io/kanvas/pull/2436)
+publiée/rattachée, base/head produit initial7d4a1b7f5/body distants vérifiés.
 Le témoin indépendant sépare188LINEAR/128encoded et conserve les masques
 corrélés ;3LINEARPASS+3encodedRED puis9guardsRED précèdent le patch.
 Après source :15nativePASS,48/49contrôles historiquesPASS avec1PictureFAIL
 exact parent. Sol Task1/Task2 approuve ; Astra finale C0/I0/M2, draft acceptable.
 M1 agrégation documenté, contre-revue Sol sans nouvelle rupture ; M2 warnings
-différés. Publication draft en cours, merge et W7 non qualifiés.
+différés. Source/tests publiés byte-identiques au candidat qualifié ;
+suivi documentaire ultérieur seul, CI non inspectée, merge/W7 non qualifiés.
 Globale RED/incomplète et suites unitaires à tests hérités noncompilants
 explicitement suivies. Précision native générale du resolve non démontrée.
 

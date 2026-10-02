@@ -27,7 +27,10 @@ Aucun GM/domain/référence/seuil/budget modifié, aucune image ou score à rég
 Pas de gain Skia revendiqué par cette seule capacité.
 Précision générale du resolve OPEN, backend/driver non exposés, warnings hérités
 conservés. Revue finale Astra C0/I0/M2 ; M1 documentaire corrigé et relu Sol,
-M2 warnings différés. Publication draft en cours ; W7 et globale restent ouverts.
+M2 warnings différés. Draft [#2436](https://github.com/ygdrasil-io/kanvas/pull/2436)
+publiée/rattachée sur#2435, base6f059f0dc/head produit initial7d4a1b7f5/body
+distants vérifiés. Code/tests identiques au snapshot natif28adb36d3.
+Suivi documentaire ultérieur seul, CI non inspectée ; W7/globale restent ouverts.
 
 ## Autorité couleur — 2 octobre 2026, diagnostic sans changement produit
 

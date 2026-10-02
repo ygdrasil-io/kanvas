@@ -80,4 +80,10 @@
 - [x] Propagate selected logical format through root AA preflight/construction/graph/lowering/keys/native interpretation. Keep W4e/W6 sources LINEAR; authenticate generation/views/roles/samples4/1 and final-only resolve. No global AA_FORMAT replacement or gate removal alone.
 - [x] Controller runs unchanged Task1 + new guards, audits; budget B admits and B−1 refuses before partial readback, recovery succeeds. Sol review with actual receipts, same-worker fix loop.
 - [x] Controller runs unchanged W7SurfaceCompositionPixelTest (old encoded hard Rect/image/gradient/plain-layer controls), W7MixedRootAaRectSurfacePixelTest, W7RootAaSurfacePixelTest, W7AaPathLayerSurfacePixelTest and new classes, sequential audited invocations, plus one bounded full project suite. Fresh corpus631/443 with domains/scopes unchanged, identify every failure/lost outcome/hash/diagnostic/metric rather than masking. No global green on a partial or terminated run.
-- [ ] Final scoped whole-lot review/fixwave, ordinary explicit commit and draft PR stacked on #2435, attach, verify exact remote base/head/body. Keep global failures, AA sampling mismatch, reference provenance, crbug/RRect/inverse/filter/pathops debts open. GM opt-in is a separate future measured scene change.
+- [x] Final scoped whole-lot review/fixwave, ordinary explicit commit and draft PR stacked on #2435, attach, verify exact remote base/head/body. Keep global failures, AA sampling mismatch, reference provenance, crbug/RRect/inverse/filter/pathops debts open. GM opt-in is a separate future measured scene change.
+
+Execution receipt: source/tests28adb36d3 private snapshot published byte-identical
+at7d4a1b7f5; Astra C0/I0/M2, one doc-only fixwave/Sol M1ADDRESSED/M2DEFERRED,
+draft#2436 stacked#2435, attached and exact initial remote base/head/body verified.
+This checklist records the executed bounded lot, not full-suite GREEN, merge
+readiness, general native numerical proof or W7 completion. See qualification.
