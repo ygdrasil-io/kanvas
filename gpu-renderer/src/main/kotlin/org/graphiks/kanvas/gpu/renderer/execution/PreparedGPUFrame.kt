@@ -180,6 +180,9 @@ class GPUCommandEncoderScopePlan internal constructor(
         val w6aNative = w6aPass?.let { w6aFrameV1?.physical?.w4eGeometryBinding(it.id)?.nativePass(it.id) }
         val w6aStencil = w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
             w6aPass?.aaCoverageBindingOrNullV1()?.passes()?.firstOrNull()?.depthStencil != null ||
+            (w6aPass as? org.graphiks.kanvas.gpu.plan.PlanPass.AaCoverageSourcePass)?.binding
+                ?.let { it as? org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1 }
+                ?.passes()?.firstOrNull()?.depthStencil != null ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass && w6aPass.depthStencil != null ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass &&
@@ -2287,7 +2290,9 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                     packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
                 }
             ) {
-                add("draw")
+                val sourceOwnedW7 = (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.AaCoverageSourcePass)
+                    ?.binding is org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1
+                repeat(if (sourceOwnedW7) drawPackets.size else 1) { add("draw") }
                 add("endRenderPass")
                 return@buildList
             }

@@ -30,6 +30,7 @@ import org.graphiks.math.geometry.translateCheckedOrNull
 import org.graphiks.math.vector.Vector2I32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
+import org.graphiks.math.matrix.TargetLocalDeviceProvenanceI32
 import org.graphiks.math.matrix.composeInOrderF64
 import org.graphiks.math.matrix.isFinite
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
@@ -205,10 +206,15 @@ internal class W6aLayerGraphConstruction(
             before.firstCommandIndexI32 < after.firstCommandIndexI32
         }) { "W6 child occurrences must be published in recorded command order." }
         require(lanes.all { source ->
-            source.capabilityId == W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID &&
+            (source.capabilityId == W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID &&
                 source.topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
                 source.passes().all { pass -> pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw &&
-                    pass.draw.sample == SamplePlan.Multisample4 && pass.draw.coverage == CoveragePlan.StencilAA4 } ||
+                    pass.draw.sample == SamplePlan.Multisample4 && pass.draw.coverage == CoveragePlan.StencilAA4 }) ||
+            (source.capabilityId == W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID &&
+                source.topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
+                source.passes().all { pass -> pass is PlanPass.PathRenderPass &&
+                    pass.draw.inverseDomainClipOrNullV1() != null && pass.draw.sample == SamplePlan.Multisample4 &&
+                    pass.draw.coverage == CoveragePlan.StencilAA4 }) ||
             source.topology in setOf(DeferredLaneTopologyV4.AaResolvedColor, DeferredLaneTopologyV4.AaResolvedCoverage) && source.passes().let { aa ->
                 aa.all { pass -> pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw &&
                     pass.draw.sample == SamplePlan.Multisample4 && pass.draw.coverage == CoveragePlan.StencilAA4 } &&
@@ -276,14 +282,27 @@ internal class W6aLayerGraphConstruction(
                 enclosing, domain, domain, entry.source.recordedInnerClipWithoutCull(), ClipStackNode.Empty, target,
                 occurrenceRenderTarget(domain, entry.source.scene.colorSpace),
                 entry.plannedCommandId.valueI32, sourceOnly)
-            val carrier = input.materialCoordinateDraw()
+            // A captured clipRect is retained as a one-entry operation stream after its
+            // PictureRecorder cull is removed.  W7 alone may canonicalize that exact hard
+            // rectangle; every generic/root/filter source remains on the original carrier.
+            val w7Input = input.withW7InverseAaCoverageCarrier()
+            val w7Carrier = w7Input.materialCoordinateDraw()
+            val inverseAaPicture = !sourceOnly && ownerContext == null &&
+                W4eClipPlanCompiler.inverseAaCoverageSource(runtimeCatalog)
+                    .acceptsInverseAaCoverageSourceScope(w7Carrier)
+            val selectedInput = if (inverseAaPicture) w7Input else input
+            val carrier = selectedInput.materialCoordinateDraw()
             val historicalAa = W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
                 .acceptsW6AaColorSourceScope(carrier)
             val hardPictureSource = W4dGeneralPathPlanCompiler.w6HardRectFillSource(runtimeCatalog)
             // Keep Picture's historical analytic Rect lane when it can own the transform.
             // The rebased carrier exposes a finite general affine Rect only when W4a cannot;
             // then use the same selected W7 producer/consumer occurrence as a Path.
-            val deferredBlend = if (carrier.geometry is GeometryNode.Rect &&
+            // This authenticated Picture occurrence is the sole admission site for the new
+            // inverse-AA source. Ordinary root/layer segments retain their historical W4d path.
+            val deferredBlend = if (inverseAaPicture) {
+                W6aLayerPlanCompiler.selectedW7InverseAaDeferredBlend(carrier, selectedInput.renderTarget, runtimeCatalog)
+            } else if (carrier.geometry is GeometryNode.Rect &&
                 !W6aLayerPlanCompiler.requiresW7AffineRectProjection(carrier)) null else
                 W6aLayerPlanCompiler.selectedW7AaDeferredBlend(
                     carrier, input.renderTarget, runtimeCatalog, historicalAaSource = false,
@@ -293,6 +312,7 @@ internal class W6aLayerGraphConstruction(
             // draw which the resolved-colour stream must elide.
             if (deferredBlend == BlendPlan.NoOpV1) return null
             val generalPath = when {
+                inverseAaPicture -> W4eClipPlanCompiler.inverseAaCoverageSource(runtimeCatalog)
                 deferredBlend != null -> W4dGeneralPathPlanCompiler.w7AaDeferredSource(runtimeCatalog)
                 historicalAa -> W4dGeneralPathPlanCompiler.w6AaColorSource(runtimeCatalog)
                 hardPictureSource.acceptsW6HardPictureRectScope(carrier) -> hardPictureSource
@@ -310,7 +330,7 @@ internal class W6aLayerGraphConstruction(
                 ),
                 runtimeCatalog,
             )
-            val lane = when (val result = compiler.constructSourceLanes(input, caps, budget)) {
+            val lane = when (val result = compiler.constructSourceLanes(selectedInput, caps, budget)) {
                 is org.graphiks.kanvas.render.ir.RenderPlanResult.Ready -> result.plan.single()
                 else -> {
                     val diagnostics = when (result) {
@@ -326,7 +346,7 @@ internal class W6aLayerGraphConstruction(
             }
             val rebound = lane.bindOccurrenceCommandV1(entry.plannedCommandId.valueI32)
             require(rebound.id == lane.id) { "Identity-only occurrence rebinding changed its compiler PlanId." }
-            return input to lane
+            return selectedInput to lane
         }
 
         data class PictureAggregateDomain(
@@ -1730,7 +1750,8 @@ internal class W6aLayerGraphConstruction(
                 val input = OccurrenceSourceInputV1(entry.plannedCommandId, entry.locator, entry.source,
                     preparedInput.mapping, preparedInput.enclosingMappingF64, preparedInput.copyDomainDeviceI32(),
                     preparedInput.copyDemandDeviceI32(), preparedInput.recordedInnerClip, preparedInput.deferredCompositeClip,
-                    target, preparedInput.renderTarget, entry.plannedCommandId.valueI32, preparedInput.sourceOnly)
+                    target, preparedInput.renderTarget, entry.plannedCommandId.valueI32, preparedInput.sourceOnly,
+                    preparedInput.w7InverseAaCoverageCarrier)
                 val lane = preparedLane.bindOccurrenceCommandV1(entry.plannedCommandId.valueI32)
                 val enclosing = input.enclosingMappingF64
                 val selected = RenderGraph.visualDraws(lane.passes()).singleOrNull() ?: return null
@@ -1768,12 +1789,18 @@ internal class W6aLayerGraphConstruction(
                     dataByCommand[selected.commandIndex] = data
                 }
                 if (target !in versions) appendRender(target, emptyList(), true)
-                if (lane.capabilityId == W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID) {
+                if (lane.capabilityId in setOf(
+                    W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID,
+                    W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID,
+                )) {
                     require(coverage == null && coverageProducer == null) {
                         "W7 deferred Picture source cannot be routed through a filter coverage owner."
                     }
                     val carrier = input.materialCoordinateDraw()
-                    val blend = requireNotNull(W6aLayerPlanCompiler.selectedW7AaDeferredBlend(
+                    val blend = requireNotNull(if (
+                        lane.capabilityId == W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID
+                    ) W6aLayerPlanCompiler.selectedW7InverseAaDeferredBlend(carrier, input.renderTarget, runtimeCatalog)
+                    else W6aLayerPlanCompiler.selectedW7AaDeferredBlend(
                         carrier, input.renderTarget, runtimeCatalog,
                         // A W7 Picture lane is never the preserved analytic Rect lane.
                         // Recompute with the same Path admission fact used before construction.
@@ -1796,6 +1823,14 @@ internal class W6aLayerGraphConstruction(
                             RectI32(0, 0, targetExtent.width, targetExtent.height), input.mapping),
                         DestinationVersionI64(versions.getValue(target)), lane.passes(), ids, lane.resources(),
                         input.copyDomainDeviceI32(), passes.size, snapshot, sourcePhaseMapping = null,
+                        coordinateProvenance = if (lane.capabilityId ==
+                            W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID) {
+                            requireNotNull(TargetLocalDeviceProvenanceI32.ofOrNull(
+                                targetExtent, RectI32(0, 0, targetExtent.width, targetExtent.height),
+                                RectI32(0, 0, targetExtent.width, targetExtent.height),
+                                input.copyDomainDeviceI32(), Point2I32.Origin, targetOriginDevice(target), input.mapping,
+                            )) { "W7 inverse-AA target-local/device provenance is not representable" }
+                        } else null,
                     )
                     aaDeferredPhases[laneI32] = emitted.phases
                     aaDeferredOwners[laneI32] = emitted.producer
@@ -2826,7 +2861,16 @@ internal class W6aLayerGraphConstruction(
                                 W6AaDeferredOccurrenceEmitterV1.Target(target, targetExtent, targetOriginDevice(target),
                                     RectI32(0, 0, targetExtent.width, targetExtent.height), geometry?.mapping), before,
                                 binding.source.passes(), remapped, binding.source.resources(),
-                                geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32, passes.size, snapshot)
+                                geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32, passes.size, snapshot,
+                                coordinateProvenance = if (binding.source.capabilityId ==
+                                    W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID) {
+                                    requireNotNull(TargetLocalDeviceProvenanceI32.ofOrNull(
+                                        targetExtent, RectI32(0, 0, targetExtent.width, targetExtent.height),
+                                        RectI32(0, 0, targetExtent.width, targetExtent.height),
+                                        geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32, Point2I32.Origin,
+                                        targetOriginDevice(target), geometry?.mapping,
+                                    )) { "W7 inverse-AA target-local/device provenance is not representable" }
+                                } else null)
                             aaDeferredPhases[laneI32] = emitted.phases
                             aaDeferredOwners[laneI32] = emitted.producer
                             passes += emitted.producer
@@ -3350,7 +3394,15 @@ internal class W6aLayerGraphConstruction(
             val owner = aaDeferredOwners.getValue(laneI32)
             val remapping = laneResourceIds[laneI32]
             val target = physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)
-            val binding = PlanW4dAaCoverageSourceBindingV1(owner.id,
+            val binding: PlanAaCoverageSourceBindingV1 = if (
+                lanes[laneI32].capabilityId == W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID
+            ) PlanW4eInverseAaCoverageSourceBindingV1.issue(lanes[laneI32], owner.id,
+                phases.first().draw.commandIndex, phases, remapping,
+                resources.filter { it.id in remapping.values }, targetExtent(target), targetOriginDevice(target),
+                requireNotNull(aaDeferredDrafts.getValue(laneI32).coordinateProvenance) {
+                    "W7 inverse-AA source binding lost its target-local/device provenance"
+                })
+            else PlanW4dAaCoverageSourceBindingV1(owner.id,
                 lanes[laneI32].capabilityId, phases.first().draw.commandIndex,
                 lanes[laneI32].passes().map { it.id }, phases, remapping,
                 resources.filter { it.id in remapping.values }, targetExtent(target), targetOriginDevice(target))
@@ -3378,7 +3430,7 @@ internal class W6aLayerGraphConstruction(
                 return@forEach
             }
             val payload = requireNotNull(W4eNativePayloadPlan.fromDeferred(native.values.toList(), resources, targetExtent,
-                caps, lanes[laneI32].sourceTable(), origin)) { "w6a.layer.w4e_payload" }
+                caps, lanes[laneI32].sourceTable(), originDeviceI32 = origin)) { "w6a.layer.w4e_payload" }
             w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload, origin)
         }
         rawPasses = immutableList(passes)
@@ -3540,7 +3592,7 @@ internal class W6aLayerGraphConstruction(
                         contract.commandIndexI32, contract.coverage, materialDraw, contract.target,
                         contract.destinationSnapshot, contract.blend, contract.destinationVersionBefore,
                         contract.destinationVersionAfter, contract.copyTargetExtentI32(), contract.copySourceBoundsTargetI32(),
-                        contract.copyTargetOriginDeviceI32(), contract.mapping))
+                        contract.copyTargetOriginDeviceI32(), contract.mapping, contract.coordinateProvenance))
                 }
                 is PlanPass.PathRenderPass -> {
                     require(pass.phase in setOf(PathRenderPhase.MultisampleDirectColor,
@@ -3686,6 +3738,8 @@ internal class W6aLayerGraphConstruction(
                 binding.resourceRemapping(), binding.resources(), binding.copyExtentI32(), binding.copyOriginDeviceI32())
         }
         val finalW4dAaCoverageBindings = passes.mapNotNull(PlanPass::aaCoverageBindingOrNullV1)
+        val finalW4eInverseAaCoverageBindings = passes.mapNotNull(PlanPass::aaDeferredCoverageBindingOrNullV1)
+            .filterIsInstance<PlanW4eInverseAaCoverageSourceBindingV1>()
         val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes, logicalColorFormat)
         // RenderGraph.construct publishes this same frame-local row later, after all final
         // recipes have been assembled.  The W5a recipe needs its typed logical descriptor now;
@@ -3784,6 +3838,7 @@ internal class W6aLayerGraphConstruction(
             w5aOrdinarySolidSources = w5aOrdinarySolidSourceRecipes,
             w4dAaSources = finalW4dAaBindings,
             w4dAaCoverageSources = finalW4dAaCoverageBindings,
+            w4eInverseAaCoverageSources = finalW4eInverseAaCoverageBindings,
             aaDeferredComposites = aaDeferredCompositeRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
@@ -3794,6 +3849,7 @@ internal class W6aLayerGraphConstruction(
             w4eGeometry = finalW4eBindings,
             w4dAaSources = finalW4dAaBindings,
             w4dAaCoverageSources = finalW4dAaCoverageBindings,
+            w4eInverseAaCoverageSources = finalW4eInverseAaCoverageBindings,
             aaDeferredComposites = aaDeferredCompositeRecipes,
             w6SolidRectHostRecipes = solidRectHostRecipes,
             w6CorePrimitiveHostRecipes = corePrimitiveHostRecipes,

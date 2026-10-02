@@ -207,12 +207,16 @@ internal class W4eClipGraphLowerer {
                     },
             )
         }
-        val frameAuthority = authority.issueRootFrameAuthority(graph, refs, request.frameId.value, seal.sealHash, renders)
+        val preparations = graph.resources().map { resource ->
+            preparation(resource, refs.getValue(resource.id.value), bounds, graph.capabilities.copyBytesPerRowAlignment.toLong())
+        }
+        val frameAuthority = authority.issueRootFrameAuthority(
+            graph, refs, preparations, request.frameId.value, seal.sealHash, renders,
+        )
         renders.forEach { render ->
             render.drawPackets.single().attachW4ePreparedFrameAuthority(frameAuthority)
         }
         if (!frameAuthority.validatesRenders(request.frameId.value, seal.sealHash, renders)) return invalid()
-        val preparations = graph.resources().map { resource -> preparation(resource, refs.getValue(resource.id.value), bounds, graph.capabilities.copyBytesPerRowAlignment.toLong()) }
         val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w4e.${graph.id.value}.readback"), bounds, GPUReadbackPixelFormat.Rgba8Unorm, GPUColorInterpretation.EncodedPremulSrgb)
         val memory = memory(
             graph,

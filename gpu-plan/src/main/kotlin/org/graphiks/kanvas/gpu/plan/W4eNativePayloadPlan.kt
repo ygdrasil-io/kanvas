@@ -33,7 +33,9 @@ public class W4eNativePayloadPlan private constructor(
     public val vertexCapacityBytes: Long,
     public val indexCapacityBytes: Long,
     public val uniformCapacityBytes: Long,
+    originDeviceI32: Point2I32,
 ) {
+    private val originDeviceValue = Point2I32(originDeviceI32.x, originDeviceI32.y)
     private val vertexDataSnapshot: FloatArray = vertexData.copyOf()
     private val indexDataSnapshot: IntArray = indexData.copyOf()
     private val uniformDataSnapshot: ByteArray = uniformData.copyOf()
@@ -53,6 +55,17 @@ public class W4eNativePayloadPlan private constructor(
     public fun copyIndexData(): IntArray = indexDataSnapshot.copyOf()
 
     public fun copyUniformData(): ByteArray = uniformDataSnapshot.copyOf()
+
+    public fun copyOriginDeviceI32(): Point2I32 = Point2I32(originDeviceValue.x, originDeviceValue.y)
+
+    /** Factory-issued W7 coverage has an opaque-white cover uniform; generic deferred payloads do not. */
+    internal fun hasCanonicalWhiteUniform(slice: W4eNativeUniformSlice): Boolean {
+        if (slice.offsetBytes < 0L || slice.byteSize < 4L * Float.SIZE_BYTES ||
+            slice.offsetBytes > uniformDataSnapshot.size - 4L * Float.SIZE_BYTES) return false
+        val values = ByteBuffer.wrap(uniformDataSnapshot).order(ByteOrder.LITTLE_ENDIAN)
+        values.position(slice.offsetBytes.toInt())
+        return values.float == 1f && values.float == 1f && values.float == 1f && values.float == 1f
+    }
 
     public fun geometrySlice(passId: String, purpose: String): W4eNativeGeometrySlice? =
         geometrySlicesSnapshot.singleOrNull { it.passId == passId && it.purpose == purpose }
@@ -75,6 +88,24 @@ public class W4eNativePayloadPlan private constructor(
         } == true
     }
 
+    /** Rebinds a compiler-owned payload to the final W6 occurrence without touching its bytes. */
+    internal fun rebindForOccurrence(
+        resources: Map<PlanResourceId, PlanResourceId>,
+        passes: Map<String, String>,
+    ): W4eNativePayloadPlan = W4eNativePayloadPlan(
+        vertexResourceId = resources.getValue(vertexResourceId),
+        indexResourceId = resources.getValue(indexResourceId),
+        uniformResourceId = resources.getValue(uniformResourceId),
+        vertexData = copyVertexData(), indexData = copyIndexData(), uniformData = copyUniformData(),
+        geometrySlices = geometrySlices.map { slice -> slice.copy(passId = passes.getValue(slice.passId)) },
+        uniformSlices = uniformSlices.map { slice -> slice.copy(passId = passes.getValue(slice.passId)) },
+        vertexUsefulBytes = vertexUsefulBytes, indexUsefulBytes = indexUsefulBytes,
+        uniformUsefulBytes = uniformUsefulBytes, uniformReservedBytes = uniformReservedBytes,
+        vertexCapacityBytes = vertexCapacityBytes, indexCapacityBytes = indexCapacityBytes,
+        uniformCapacityBytes = uniformCapacityBytes,
+        originDeviceI32 = copyOriginDeviceI32(),
+    )
+
     public companion object {
         /**
          * Builds the exact reusable native slab before [RenderGraph] publication.  A null result
@@ -93,8 +124,10 @@ public class W4eNativePayloadPlan private constructor(
         /** Geometry bytes only; symbolic source refs are authenticated, never evaluated here. */
         internal fun fromDeferred(passes: List<PlanPass>,resources: List<PlanResource>,targetExtent: SizeI32,
             capabilities: PlanCapabilitySnapshot,sources: MaterialSourceConstructionTableV4,
+            canonicalWhiteInverseCoverage: Boolean = false,
             originDeviceI32: Point2I32 = Point2I32.Origin): W4eNativePayloadPlan? =
-            build(passes,resources,targetExtent,capabilities,null,null,sources,originDeviceI32)
+            build(passes,resources,targetExtent,capabilities,null,null,sources,originDeviceI32,
+                canonicalWhiteInverseCoverage)
 
         /** W4e producer-only payload. No color/path draw or material may enter this authority. */
         internal fun fromClipPrefix(
@@ -119,6 +152,7 @@ public class W4eNativePayloadPlan private constructor(
             clipOnlyData: PlanDrawDataResources?,
             deferredSources: MaterialSourceConstructionTableV4? = null,
             originDeviceI32: Point2I32,
+            canonicalWhiteInverseCoverage: Boolean = false,
         ): W4eNativePayloadPlan? = try {
             if (targetExtent.isEmpty()) return null
             val pathPasses = passes.filterIsInstance<PlanPass.PathRenderPass>()
@@ -220,6 +254,7 @@ public class W4eNativePayloadPlan private constructor(
                             resourcesById,
                             materialPlanTable,
                             deferredSources,
+                            canonicalWhiteInverseCoverage,
                             ::addGeometry,
                             ::addDirectGeometry,
                             ::addUniform,
@@ -275,6 +310,7 @@ public class W4eNativePayloadPlan private constructor(
                 vertexCapacityBytes = vertexCapacity,
                 indexCapacityBytes = indexCapacity,
                 uniformCapacityBytes = uniformCapacity,
+                originDeviceI32 = originDeviceI32,
             )
         } catch (_: ArithmeticException) {
             null
@@ -294,6 +330,7 @@ public class W4eNativePayloadPlan private constructor(
             resourcesById: Map<PlanResourceId, PlanResource>,
             materialPlanTable: MaterialPlanTable?,
             deferredSources: MaterialSourceConstructionTableV4?,
+            canonicalWhiteInverseCoverage: Boolean,
             addGeometry: (String, String, FloatArray, IntArray) -> Boolean,
             addDirectGeometry: (String, String, PathFillGeometryF32) -> Boolean,
             addUniform: (String, String, FloatArray) -> Boolean,
@@ -301,7 +338,9 @@ public class W4eNativePayloadPlan private constructor(
             fun materialColor(): org.graphiks.math.color.ColorF32? {
                 if (deferredSources != null) {
                     deferredSources.source(pass.draw.materialAuthority.materialPlanRef())
-                    return org.graphiks.math.color.ColorF32.Transparent
+                    return if (canonicalWhiteInverseCoverage &&
+                        pass.draw.w4eClipStrategyOrNull() is ClipPlanStrategy.InverseDomain)
+                        org.graphiks.math.color.ColorF32.White else org.graphiks.math.color.ColorF32.Transparent
                 }
                 return when (val authority = pass.draw.materialAuthority) {
                 is PlanDrawMaterialAuthority.MaterialV5 -> error(W5gPlanDiagnostics.Unpromoted)

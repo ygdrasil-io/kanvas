@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.kanvas.render.ir.RenderPlanResult
 
@@ -175,9 +176,19 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
             // by RenderGraph.construct. No material table or source certificate is fabricated.
             RenderGraph.validateConstructionTopology(capabilityId, extent, format, caps, budget,
                 visualCommandCount, resources, passes, dependencies, RenderGraph.peak(resources, passes.size),
-                w5bW4eFacts=geometrySource?.takeIf { it.w4ePayload != null }?.let(W4eGeometryFactsV6::from))
-            require(w4ePayload == null || capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID &&
+                w5bW4eFacts=geometrySource?.takeIf { it.w4ePayload != null }?.let(W4eGeometryFactsV6::from),
+                w7InverseAaCoveragePayload = w4ePayload?.takeIf {
+                    capabilityId == W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID
+                })
+            require(w4ePayload == null || capabilityId in setOf(
+                W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID,
+                W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID,
+            ) &&
                 w4ePayload.matchesDeclaredResources(resources)) { W5fPlanDiagnostics.Schema }
+            require(capabilityId != W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID ||
+                topology == DeferredLaneTopologyV4.AaResolvedCoverage &&
+                    w4ePayload != null && w4ePayload.copyOriginDeviceI32() == Point2I32.Origin &&
+                    geometrySource == null) { W5fPlanDiagnostics.Schema }
             val allDraws = passes.flatMap { pass -> when (pass) {
                 is PlanPass.RenderPass -> pass.draws()
                 is PlanPass.StencilProducer -> listOf(pass.draw)

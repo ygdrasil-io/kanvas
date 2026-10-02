@@ -308,6 +308,15 @@ internal fun validateW6aLayerTopology(
         is PlanPass.AaCoverageSourcePass -> {
             val binding = requireNotNull(pass.binding) { "W7 AA coverage owner must be sealed before publication." }
             require(binding.ownerPassId == pass.id && binding.resources().all { byId[it.id] === it })
+            require(when (binding) {
+                is PlanW4dAaCoverageSourceBindingV1 -> binding.sourceCapabilityId in setOf(
+                    W4dGeneralPathPlanCompiler.W6_AA_COVERAGE_SOURCE_CAPABILITY_ID,
+                    W4dGeneralPathPlanCompiler.W7_AA_DEFERRED_SOURCE_CAPABILITY_ID,
+                )
+                is PlanW4eInverseAaCoverageSourceBindingV1 -> binding.sourceCapabilityId ==
+                    W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID &&
+                    binding.recipe.family == NativeSiteRecipeFamilyV1.W4eInverseAaCoverageSource
+            }) { "W7 AA coverage owner lost its closed source provenance." }
             val output = byId.getValue(pass.output)
             require(output.role == PlanResourceRole.CoverageSource && output.kind == PlanResourceKind.Texture2D &&
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
@@ -767,6 +776,13 @@ internal fun w6aRasterBoundsI32(draw: PlanDraw): RectI32 = when (draw) {
         is PathDrawGeometry.Stroke -> geometry.valueF32.copyConservativeScissorI32()
         is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty -> draw.copyScissorI32()
     }
+    is ClippedGeneralPathDraw -> when (val clip = draw.clip) {
+        // This is the W4e-authenticated finite inverse domain in the source target's local
+        // coordinates. Callers retain the source scissor intersection and apply their existing
+        // picture/layer origin translation afterwards; interior geometry cannot bound an inverse.
+        is ClipPlanStrategy.InverseDomain -> clip.geometryF32.copyDomainI32()
+        else -> error("w6a.layer.unsupported_child")
+    }
     is W5bPointDraw -> draw.copyBoundsI32()
     is W5bVerticesDraw -> draw.copyBoundsI32()
     is W5bW4ePathDraw -> draw.copyScissorI32()
@@ -778,6 +794,7 @@ internal fun w6aScissorI32(draw: PlanDraw): RectI32 = when (draw) {
     is AnalyticRectDraw -> draw.copyScissor()
     is AnalyticRRectDraw -> draw.copyScissor()
     is PathDraw -> draw.copyScissorI32()
+    is ClippedGeneralPathDraw -> draw.copyScissorI32()
     is W5bPointDraw -> draw.copyScissorI32()
     is W5bVerticesDraw -> draw.copyScissorI32()
     else -> error("w6a.layer.unsupported_child")

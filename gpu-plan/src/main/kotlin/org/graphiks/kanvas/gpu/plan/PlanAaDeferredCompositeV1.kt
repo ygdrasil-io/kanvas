@@ -4,6 +4,7 @@ import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.LayerMappingF64
+import org.graphiks.math.matrix.TargetLocalDeviceProvenanceI32
 
 /**
  * Fully sealed W6 AA consumer.  Its coverage producer is geometric white only; [sourceDraw]
@@ -11,7 +12,7 @@ import org.graphiks.math.matrix.LayerMappingF64
  */
 public class PlanAaDeferredCompositeV1 internal constructor(
     public val commandIndexI32: Int,
-    public val coverage: PlanW4dAaCoverageSourceBindingV1,
+    public val coverage: PlanAaCoverageSourceBindingV1,
     public val sourceDraw: PlanDraw,
     public val target: PlanResourceId,
     public val destinationSnapshot: PlanResourceId?,
@@ -22,6 +23,7 @@ public class PlanAaDeferredCompositeV1 internal constructor(
     sourceBoundsTargetI32: RectI32,
     targetOriginDeviceI32: Point2I32,
     public val mapping: LayerMappingF64?,
+    public val coordinateProvenance: TargetLocalDeviceProvenanceI32? = null,
 ) {
     private val targetExtentSnapshot = targetExtentI32.copy()
     private val sourceBoundsSnapshot = sourceBoundsTargetI32.copy()
@@ -47,6 +49,15 @@ public class PlanAaDeferredCompositeV1 internal constructor(
         } else require(destinationSnapshot == null) { "W7 fixed consumer cannot own a snapshot" }
         require(destinationVersionAfter.valueI64 == Math.addExact(destinationVersionBefore.valueI64,
             if (blend.compositionFacts.writesParentDevice) 1L else 0L))
+        if (coverage is PlanW4eInverseAaCoverageSourceBindingV1) {
+            val provenance = requireNotNull(coordinateProvenance) {
+                "W7 inverse-AA composite lost its target-local/device provenance"
+            }
+            require(provenance === coverage.coordinateProvenance() && provenance.matches(
+                targetExtentSnapshot, sourceBoundsSnapshot, coverage.sourcePayload().copyOriginDeviceI32(),
+                targetOriginSnapshot, mapping,
+            )) { "W7 inverse-AA composite provenance differs from its binding or final owner" }
+        } else require(coordinateProvenance == null) { "Only W7 inverse-AA composites may carry W7 provenance" }
     }
 }
 

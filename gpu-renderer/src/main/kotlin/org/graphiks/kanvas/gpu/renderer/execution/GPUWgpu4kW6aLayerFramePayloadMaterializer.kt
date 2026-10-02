@@ -2190,6 +2190,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             val w6PathRenderDirectColors = preflightW6PathRenderDirectColors(frame, framePlan)
+            GPUW4eInverseAaCoverageNativeV1.preflight(frame, framePlan)
             require(frame.validatesW4dAaSources(framePlan))
             val w4dAaCoverageMappings = frame.w4dAaCoverageAuthorities.mapValues { (binding, authority) ->
                 require(frame.physical.nativeSiteRecipeCatalogV1().recipe(binding.recipe.owner) === binding.recipe)
@@ -2269,7 +2270,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             val drawData = graph.passes().mapNotNull { frame.physical.geometryBinding(it.id)?.data } +
                 frame.physical.w4eGeometryBindings().map { PlanDrawDataResources(it.payload.vertexResourceId, it.payload.indexResourceId, it.payload.uniformResourceId) } +
                 frame.physical.w4dAaSourceBindings().flatMap { it.passes().map { pass -> pass.drawDataResources } } +
-                frame.physical.w4dAaCoverageSourceBindings().flatMap { it.passes().map { pass -> pass.drawDataResources } }
+                frame.physical.w4dAaCoverageSourceBindings().flatMap { it.passes().map { pass -> pass.drawDataResources } } +
+                frame.physical.w4eInverseAaCoverageSourceBindings().flatMap { it.passes().map { pass -> pass.drawDataResources } }
             val drawUniformIds = drawData.map { it.uniform }.toSet()
             val geometryUniform = frame.physical.resource(graph.resources().single {
                 it.role == PlanResourceRole.UniformData && it.id !in drawUniformIds }.id)
@@ -2571,6 +2573,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         }, phase)
                 }
             }.toMap()
+            val w4eInverseAaCoverageOperands = GPUW4eInverseAaCoverageNativeV1.materialize(
+                device, queue, frame, framePlan, views, geometryBuffers, generation, owned,
+            )
             val w4eOperands = frame.w4eAuthorities.flatMap { (binding, authority) ->
                 val payload = binding.payload
                 require(payload.matchesDeclaredResources(graph.resources()))
@@ -2658,6 +2663,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         encoderPlan.scopes.single { it.sourceStepIndex == stepIndex }.nativeOperandKeys)
                     return@forEachIndexed
                 }
+                w4eInverseAaCoverageOperands[stepIndex]?.let { renderOperands += it; return@forEachIndexed }
                 w4eOperands[stepIndex]?.let { renderOperands += it; return@forEachIndexed }
                 w4dAaOperands[stepIndex]?.let { renderOperands += it; return@forEachIndexed }
                 w4dAaCoverageOperands[stepIndex]?.let { renderOperands += it; return@forEachIndexed }

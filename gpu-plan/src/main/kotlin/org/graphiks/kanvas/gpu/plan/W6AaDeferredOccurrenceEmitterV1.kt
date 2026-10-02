@@ -4,6 +4,7 @@ import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.LayerMappingF64
+import org.graphiks.math.matrix.TargetLocalDeviceProvenanceI32
 
 /** Private two-phase seam shared by root and layer assembly; it never selects a compiler. */
 internal object W6AaDeferredOccurrenceEmitterV1 {
@@ -39,11 +40,12 @@ internal object W6AaDeferredOccurrenceEmitterV1 {
         val destinationVersionBefore: DestinationVersionI64,
         val destinationVersionAfter: DestinationVersionI64,
         val snapshot: PlanResourceId?,
+        val coordinateProvenance: TargetLocalDeviceProvenanceI32?,
     ) {
-        fun bindAndSeal(coverage: PlanW4dAaCoverageSourceBindingV1): PlanAaDeferredCompositeV1 =
+        fun bindAndSeal(coverage: PlanAaCoverageSourceBindingV1): PlanAaDeferredCompositeV1 =
             PlanAaDeferredCompositeV1(selected.commandIndexI32, coverage, selected.sourceDraw, target.resource,
                 snapshot, selected.blend, destinationVersionBefore, destinationVersionAfter, target.extentI32,
-                target.sourceBoundsTargetI32, target.originDeviceI32, target.mapping)
+                target.sourceBoundsTargetI32, target.originDeviceI32, target.mapping, coordinateProvenance)
     }
 
     /** Complete ordered occurrence; callers reserve IDs and only publish these sealed passes. */
@@ -55,7 +57,8 @@ internal object W6AaDeferredOccurrenceEmitterV1 {
     fun emitOccurrence(selected: Selected, target: Target, destinationVersionBefore: DestinationVersionI64,
         sourcePhases: List<PlanPass>, remapping: Map<PlanResourceId, PlanResourceId>,
         sourceResources: List<PlanResource>, domainDeviceI32: RectI32,
-        firstOrdinalI32: Int, snapshot: PlanResourceId?, sourcePhaseMapping: LayerMappingF64? = target.mapping): Emission {
+        firstOrdinalI32: Int, snapshot: PlanResourceId?, sourcePhaseMapping: LayerMappingF64? = target.mapping,
+        coordinateProvenance: TargetLocalDeviceProvenanceI32? = null): Emission {
         val phases = sourcePhases.mapIndexed { index, original ->
             val path = original as? PlanPass.PathRenderPass ?: error("W7 deferred AA source lost its path phase.")
             val rebound = path.rebindW4eV6(firstOrdinalI32 + index, remapping::getValue, sourcePhaseMapping, domainDeviceI32) as PlanPass.PathRenderPass
@@ -65,7 +68,7 @@ internal object W6AaDeferredOccurrenceEmitterV1 {
         }
         val coverage = remapping.getValue(sourceResources.single { it.role == PlanResourceRole.CoverageSource }.id)
         val producer = PlanPass.AaCoverageSourcePass(firstOrdinalI32, coverage)
-        val draft = emit(selected, target, destinationVersionBefore, snapshot)
+        val draft = emit(selected, target, destinationVersionBefore, snapshot, coordinateProvenance)
         val copy = snapshot?.let { PlanPass.TextureCopy(firstOrdinalI32 + 1, target.resource, it, destinationVersionBefore,
             RectI32(0, 0, target.extentI32.width, target.extentI32.height), Point2I32.Origin,
             Math.multiplyExact(target.extentI32.width.toLong(), 4L)) }
@@ -74,7 +77,7 @@ internal object W6AaDeferredOccurrenceEmitterV1 {
     }
 
     fun emit(selected: Selected, target: Target, destinationVersionBefore: DestinationVersionI64,
-        snapshot: PlanResourceId?): Draft {
+        snapshot: PlanResourceId?, coordinateProvenance: TargetLocalDeviceProvenanceI32?): Draft {
         val blend = if (selected.blend is BlendPlan.DestinationReadV1) {
             requireNotNull(snapshot)
             selected.blend.bindDestinationReadV1(destinationVersionBefore, snapshot)
@@ -85,6 +88,7 @@ internal object W6AaDeferredOccurrenceEmitterV1 {
         val bound = selected.copy(sourceDraw = selected.sourceDraw.withFinalBlendV1(blend), blend = blend)
         val writes = blend.compositionFacts.writesParentDevice
         return Draft(bound, target, destinationVersionBefore,
-            DestinationVersionI64(Math.addExact(destinationVersionBefore.valueI64, if (writes) 1L else 0L)), snapshot)
+            DestinationVersionI64(Math.addExact(destinationVersionBefore.valueI64, if (writes) 1L else 0L)), snapshot,
+            coordinateProvenance)
     }
 }

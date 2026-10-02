@@ -10,29 +10,29 @@ import org.graphiks.math.geometry.SizeI32
  * and the original W5 material is evaluated later over the whole filtered domain.
  */
 public class PlanW4dAaCoverageSourceBindingV1 internal constructor(
-    public val ownerPassId: PlanPassId,
-    public val sourceCapabilityId: String,
-    public val commandIndexI32: Int,
+    override val ownerPassId: PlanPassId,
+    override val sourceCapabilityId: String,
+    override val commandIndexI32: Int,
     sourcePassIds: List<PlanPassId>,
     passes: List<PlanPass.PathRenderPass>,
     resourceRemapping: Map<PlanResourceId, PlanResourceId>,
     resources: List<PlanResource>,
     extent: SizeI32,
     origin: Point2I32,
-) {
+) : PlanAaCoverageSourceBindingV1 {
     private val sourceIds = immutableList(sourcePassIds)
     private val phases = immutableList(passes)
     private val remapping = java.util.Collections.unmodifiableMap(resourceRemapping.toMap())
     private val rows = immutableList(resources)
     private val extentSnapshot = extent.copy()
     private val originSnapshot = Point2I32(origin.x, origin.y)
-    public val recipe: W4dAaCoverageSourceNativeSiteRecipeV1
-    public fun sourcePassIds(): List<PlanPassId> = sourceIds
-    public fun passes(): List<PlanPass.PathRenderPass> = phases
-    public fun resourceRemapping(): Map<PlanResourceId, PlanResourceId> = remapping
-    public fun resources(): List<PlanResource> = rows
-    public fun copyExtentI32(): SizeI32 = extentSnapshot.copy()
-    public fun copyOriginDeviceI32(): Point2I32 = Point2I32(originSnapshot.x, originSnapshot.y)
+    override val recipe: W4dAaCoverageSourceNativeSiteRecipeV1
+    override fun sourcePassIds(): List<PlanPassId> = sourceIds
+    override fun passes(): List<PlanPass.PathRenderPass> = phases
+    override fun resourceRemapping(): Map<PlanResourceId, PlanResourceId> = remapping
+    override fun resources(): List<PlanResource> = rows
+    override fun copyExtentI32(): SizeI32 = extentSnapshot.copy()
+    override fun copyOriginDeviceI32(): Point2I32 = Point2I32(originSnapshot.x, originSnapshot.y)
 
     init {
         require(sourceCapabilityId in setOf(

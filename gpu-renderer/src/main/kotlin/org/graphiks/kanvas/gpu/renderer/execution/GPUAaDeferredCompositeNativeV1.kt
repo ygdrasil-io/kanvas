@@ -41,6 +41,13 @@ internal class GPUAaDeferredCompositeNativeV1 private constructor(
             return recipes.associate { recipe ->
                 val composite = recipe.composite
                 val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1 === recipe.pass }
+                when (val coverage = composite.coverage) {
+                    is PlanW4dAaCoverageSourceBindingV1 -> require(frame.physical.w4dAaCoverageSourceBindings().any { it === coverage })
+                    is PlanW4eInverseAaCoverageSourceBindingV1 -> require(
+                        frame.physical.w4eInverseAaCoverageSourceBindings().any { it === coverage } &&
+                            frame.physical.nativeSiteRecipeCatalogV1().recipe(coverage.recipe.owner) === coverage.recipe,
+                    )
+                }
                 require(render.target == frame.refs.getValue(composite.target) && render.resourceUses == frame.aaDeferredUses(recipe.pass) &&
                     render.drawPackets.isEmpty() && render.samplePlan.sampleCount == 1 && render.depthStencilLoadStore == null &&
                     render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store)
