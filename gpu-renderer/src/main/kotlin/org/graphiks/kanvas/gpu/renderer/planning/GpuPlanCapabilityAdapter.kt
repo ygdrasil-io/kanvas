@@ -99,6 +99,7 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
     val hasW4dPhysicalTopology = hasW4dBroadColorFormats &&
         hasW4dTextureUsages && hasW4dD24S8RenderAttachmentEvidence
     val hasFourSampleSrgb = hasW4dPhysicalTopology && 4 in srgbSamples.orEmpty()
+    val hasFourSampleEncoded = hasW4dPhysicalTopology && 4 in encodedSamples.orEmpty()
     val operations = rendererFeatures.mapNotNull { feature ->
         when (feature) {
             GPURendererFeature.RenderPass -> PlanOperationCapability.RenderPass
@@ -162,6 +163,15 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                 ),
             )
         }
+        if (hasFourSampleEncoded) {
+            add(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL),
+                    4,
+                    setOf(PlanResourceUsage.RenderAttachment),
+                ),
+            )
+        }
         depthStencilSamples
             .filter { sampleCount -> hasSingleSampleD24S8 && sampleCount in setOf(1, 4) }
             .forEach { sampleCount ->
@@ -197,6 +207,17 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             add(
                 PlanTextureResolveSupport.of(
                     PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    4,
+                    1,
+                ),
+            )
+        }
+        if (hasFourSampleEncoded && 4 in textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+                ?.resolveSourceSampleCounts.orEmpty()
+        ) {
+            add(
+                PlanTextureResolveSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL),
                     4,
                     1,
                 ),

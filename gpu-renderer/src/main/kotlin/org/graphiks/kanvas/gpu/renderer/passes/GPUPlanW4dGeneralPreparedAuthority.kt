@@ -141,6 +141,18 @@ public class GPUPlanW4dGeneralPreparedAuthority private constructor(
         return fact.uniformPayloadBytes.toByteArray()
     }
 
+    /** The continuation key's color identity comes only from this sealed MSAA target fact. */
+    internal fun multisampleColorFormatForPathPass(pathPassId: String): org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat? {
+        if (sampleContinuation == null) return null
+        val pass = nativeMaterialization.pathPass(pathPassId) ?: return null
+        if (pass.sampleCountI32 != 4) return null
+        val target = nativeMaterialization.resourceFacts.singleOrNull { fact ->
+            fact.resourceId == pass.targetResourceId
+        } ?: return null
+        if (target.role != PlanResourceRole.MultisampleColorTarget || target.sampleCountI32 != 4) return null
+        return (target.format as? PlanTextureFormat.Color)?.value
+    }
+
     internal fun preflightRevalidates(
         graph: RenderGraph,
         pathPasses: List<PlanPass.PathRenderPass>,

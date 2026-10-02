@@ -28,7 +28,7 @@ modifierait simultanément sampling et géométrie. La tranche Path est la plus
 petite capacité utile pour ces consommateurs. La stratégie Astra est statique,
 pas une qualification runtime.
 
-Admission fermée de la frame entière : root seulement, source solide sans
+Admission fermée de la frame entière contenant au moins un Path AA : root seulement, source solide sans
 shader/effet, SrcOver, clip absent ou hard Rect entier, Path non inverse.
 Fills composés de segments linéaires et strokes de largeur positive,
 BUTT/MITER avec miter fini selon la policy existante. Identité/translation,
@@ -36,6 +36,7 @@ puis affine axis-aligned finie non singulière déjà portée par math.
 Le fond et les contrôles utilisent des Paths FILL de cette même famille ;
 aucune admission implicite de Rect/image/gradient/layer par mélange.
 Les anciennes frames encodées restent admises selon leur contrat antérieur.
+Une frame de seuls Paths hard ne constitue pas une nouvelle entrée implicite.
 
 ## Autorité des samples et qualification numérique
 
@@ -49,10 +50,15 @@ Le [resolve Metal documenté](https://developer.apple.com/documentation/metal/im
 moyenne les samples. L'oracle de test conserve les quatre états, compose et
 quantifie chaque sample avant le resolve, décode les stores LINEAR et calcule
 les code sets avec les primitives existantes. Aucune borne ou CompositionEnvelope
-élargie. La précision native du resolve n'est pas une primitive WGSL : sa
-qualification sera explicitement bornée au backend réel observé. Une incertitude
-non bornable arrête la qualification avant toute implémentation produit ;
-pas de tolérance empirique ni attendu tiré du rendu.
+élargie. La précision native du resolve n'est pas une primitive WGSL : aucune
+borne générale applicable n'est démontrée et cette dette reste OPEN. Le contrat
+de ce lot est la qualification empirique de ces témoins sur la configuration
+native observée, pas une enveloppe conservatrice prouvée de tous les résultats
+natifs conformes, même sur cette plateforme. L'oracle moyenne exactement les
+intervalles mais ne contient pas d'erreur propre au resolve natif. Aucun gating
+automatique des autres backends n'est revendiqué. Une sortie hors des ensembles
+figés arrête la qualification avant source ; déterminer sa cause, sans fitting,
+tolérance empirique, élargissement des primitives ou attendu tiré du GPU.
 
 Témoin 12×12 : segment vertical (4,2)→(4,10), width5 ; x1/x6 à y5 ont masque2/4,
 x2..5 intérieur, x0/x7 extérieur. Miroir horizontal (2,4)→(10,4), mêmes
@@ -61,8 +67,13 @@ RGB et domaine. Noir répété sous le même masque doit garder le résultat2/4 
 deux fills noirs aux masques complémentaires doivent rendre noir plein.
 Ces cas séparent les masques corrélés d'alphas scalaires résolus par draw.
 
-Les couleurs non saturées, opacité de paint, F32 tiny-scale teeny et
-anisotropie nécessitent des attentes indépendantes avant GPU. Si une faute
+Le témoin non saturé R128 G64 B32 A128, transparent et blanc, est figé et vérifié
+en LINEAR avant source, puis conservé identique pour encoded. Il qualifie des
+sorties composées observées, pas la précision générale du resolve. L'identité
+réelle de l'adapter/backend, les données logicielles disponibles, les formats,
+les samples4 et les domaines sont archivés ; une identité non exposée reste
+CannotVerify, sans déduction depuis le Mac. Opacité de paint, F32 tiny-scale
+teeny et anisotropie nécessitent des attentes indépendantes avant GPU. Si une faute
 math est découverte, corriger séparément à cette frontière, jamais
 prétransformer les GMs, changer width ou ajouter un epsilon.
 
@@ -78,6 +89,8 @@ Graph lowerer, autorité préparée, clés physiques MSAA et continuation doiven
 porter le même format/interprétation/domaine, generation, roles, views et
 samples4/1. Aucun seal/check facultatif, source opaque/noire interchangeable
 ou resolve par draw. Le contrat public RenderConfig/Router reste inchangé.
+Le preflight W4d.2 compare également format et interprétation aux facts scellés,
+sans conserver un format LINEAR en dur ni accepter une valeur libre du caller.
 Budget, durée de vie, floors et overflow I64 préflightés avant publication.
 
 ## Livraison séquentielle et arrêts

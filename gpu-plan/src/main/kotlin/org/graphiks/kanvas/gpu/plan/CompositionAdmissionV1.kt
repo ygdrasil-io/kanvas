@@ -21,6 +21,11 @@ import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.geometry.PathSegmentF32
+import org.graphiks.math.matrix.PathTransformClass
+import org.graphiks.math.matrix.classifyPathTransform
+import org.graphiks.math.matrix.invertFiniteOrNull
+import org.graphiks.math.matrix.toMatrix3x3F64
 
 /**
  * Whole-scene policy for the opt-in encoded composition contract.
@@ -32,6 +37,15 @@ public object CompositionAdmissionV1 {
     public fun validate(scene: SceneSnapshot, target: RenderTargetDescriptor): List<RenderDiagnostic> {
         if (target.compositionDomain != CompositionDomain.SRGB_ENCODED) return emptyList()
         topologyRefusal(scene)?.let { return listOf(it) }
+        if (scene.any { command -> command is SceneCommand.Draw &&
+                command.node.origin == DrawOrigin.PATH && command.node.geometry is GeometryNode.Path &&
+                command.node.coverage == CoverageRequest.ANTIALIASED
+            }) {
+            scene.forEachIndexed { index, command ->
+                rootAaPathFrameRefusal(command, index)?.let { return listOf(it) }
+            }
+            return emptyList()
+        }
         scene.forEachIndexed { index, command ->
             when (command) {
                 is SceneCommand.BeginLayer -> plainLayerRefusal(command, index)?.let { return listOf(it) }
@@ -40,6 +54,57 @@ public object CompositionAdmissionV1 {
             }
         }
         return emptyList()
+    }
+
+    private fun rootAaPathFrameRefusal(command: SceneCommand, index: Int): RenderDiagnostic? = when (command) {
+        is SceneCommand.Draw -> rootAaPathDrawRefusal(command, index)
+        is SceneCommand.SetTransform -> if (command.matrix.isRootAaPathTransform()) null
+            else diagnostic("geometry", index, "Encoded root AA Path requires finite invertible identity or axis-aligned affine transforms.")
+        is SceneCommand.SetClip -> if (command.clip.isHardIntegerRectOrEmpty()) null
+            else diagnostic("geometry", index, "Encoded root AA Path requires an empty or hard integer rectangle clip.")
+        is SceneCommand.Annotation -> null
+        is SceneCommand.BeginLayer, SceneCommand.EndLayer ->
+            diagnostic("layer", index, "Encoded root AA Path frames do not admit layers.")
+        is SceneCommand.DrawColor, is SceneCommand.Clear, is SceneCommand.Readback, is SceneCommand.State ->
+            diagnostic("geometry", index, "Encoded root AA Path frames admit only Path draws and state transforms/clips.")
+    }
+
+    private fun rootAaPathDrawRefusal(command: SceneCommand.Draw, index: Int): RenderDiagnostic? {
+        val node = command.node
+        val geometry = node.geometry as? GeometryNode.Path
+        if (node.origin != DrawOrigin.PATH || geometry == null) {
+            return diagnostic("geometry", index, "Encoded root AA Path frames admit only Path draws.")
+        }
+        val path = geometry.path
+        if (path.fillRule !in setOf(org.graphiks.math.geometry.FillRule.WINDING, org.graphiks.math.geometry.FillRule.EVEN_ODD) ||
+            path.any { it !is PathSegmentF32.MoveTo && it !is PathSegmentF32.LineTo && it != PathSegmentF32.Close }
+        ) return diagnostic("geometry", index, "Encoded root AA Path admits only non-inverse linear Paths.")
+        if (!node.transform.isRootAaPathTransform() || !node.clip.isHardIntegerRectOrEmpty()) {
+            return diagnostic("geometry", index, "Encoded root AA Path requires a finite invertible supported transform and hard integer clip.")
+        }
+        val paint = node.paint ?: return diagnostic("source", index, "Encoded root AA Path requires direct solid paint.")
+        if (paint.style !in setOf(PaintStyleNode.FILL, PaintStyleNode.STROKE) ||
+            (paint.style == PaintStyleNode.STROKE && (!paint.strokeWidth.isFinite() || paint.strokeWidth <= 0f ||
+                paint.strokeCap != org.graphiks.kanvas.render.ir.StrokeCapNode.BUTT ||
+                paint.strokeJoin != org.graphiks.kanvas.render.ir.StrokeJoinNode.MITER ||
+                !paint.strokeMiter.isFinite() || paint.strokeMiter < 2f)) ||
+            (node.coverage == CoverageRequest.HARD_EDGE && (paint.style != PaintStyleNode.FILL || paint.antiAlias))
+        ) return diagnostic("geometry", index, "Encoded root AA Path admits fills and positive BUTT/MITER strokes only.")
+        if (!node.blend.isSrcOver() || paint.blendMode != BlendMode.SRC_OVER || node.operationBlendMode != null) {
+            return diagnostic("blend", index, "Encoded root AA Path admits only SrcOver blending.")
+        }
+        if (node.material !is org.graphiks.kanvas.render.ir.MaterialNode.Solid || paint.shader != null ||
+            paint.blender != null || paint.colorFilter != null || paint.maskFilter != null ||
+            paint.pathEffect != null || paint.imageFilter != null || node.effects !=
+            org.graphiks.kanvas.render.ir.EffectStack.Empty || node.resource != null
+        ) return diagnostic("source", index, "Encoded root AA Path requires direct solid paint without effects.")
+        return null
+    }
+
+    private fun Matrix3x3F32.isRootAaPathTransform(): Boolean {
+        val matrix = toMatrix3x3F64()
+        return matrix.classifyPathTransform() in setOf(PathTransformClass.Identity, PathTransformClass.AxisAlignedAffine) &&
+            matrix.invertFiniteOrNull() != null
     }
 
     /** Layer topology precedes command-order refusal in the encoded contract. */

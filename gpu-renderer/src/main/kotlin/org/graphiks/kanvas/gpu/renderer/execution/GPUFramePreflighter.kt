@@ -4010,18 +4010,31 @@ internal class GPUFramePreflighter(
         ) {
             return refused("W4d.2 MSAA transitions must retain one stored color target.")
         }
+        val sealedLogicalFormat = authority.multisampleColorFormatForPathPass(
+            msaaRenders.first().drawPackets.single().passId,
+        ) ?: return refused("W4d.2 MSAA target has no authenticated four-sample color format fact.")
+        val (sealedColorFormat, sealedColorInterpretation) = when (sealedLogicalFormat) {
+            org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ->
+                GPUColorFormat.RGBA8UnormSrgb to GPUColorInterpretation.LinearPremul
+            org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL ->
+                GPUColorFormat.RGBA8Unorm to GPUColorInterpretation.EncodedPremulSrgb
+        }
         val key = requireNotNull(msaaRenders.first().sampleContinuation).key
         if (key.target.value != target.value ||
             key.targetGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
             key.deviceGeneration != context.deviceGeneration ||
-            key.colorFormat != GPUColorFormat.RGBA8UnormSrgb ||
-            key.colorInterpretation != GPUColorInterpretation.LinearPremul ||
+            key.colorFormat != sealedColorFormat ||
+            key.colorInterpretation != sealedColorInterpretation ||
             key.samplePlan != GPUSamplePlan.MultisampleFrame(4) ||
             key.attachmentAuthority != org.graphiks.kanvas.gpu.renderer.passes
                 .GPUSampleAttachmentAuthority.PreparedFramePayload ||
             key.colorAttachment.value != "msaa-color:${target.value}:$PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION" ||
             key.depthStencilAttachment != null ||
-            msaaRenders.any { render -> render.sampleContinuation?.key != key }
+            msaaRenders.any { render ->
+                val passId = render.drawPackets.single().passId
+                render.sampleContinuation?.key != key ||
+                    authority.multisampleColorFormatForPathPass(passId) != sealedLogicalFormat
+            }
         ) {
             return refused("W4d.2 MSAA attachment identity or format was substituted.")
         }

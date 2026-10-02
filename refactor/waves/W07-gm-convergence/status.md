@@ -1,5 +1,34 @@
 # W07 — diagnostic GM provisoire
 
+## Root Path AA encoded — 2 octobre 2026, qualification locale
+
+[Design](root-aa-encoded-design.md), [plan](root-aa-encoded-plan.md),
+[qualification](root-aa-encoded-qualification.md),
+[corpus frais complet](root-aa-encoded-28adb36d3.json).
+Source privée28adb36d3, stack prévue sur#2435/6f059f0dc.
+Nouvelle capacité Surface/Picture root SRGB_ENCODED pour Paths solides AA
+noninverses linéaires/FILL ou finite positive STROKE BUTT/MITER, clip hard,
+CTM axis-aligned. MSAA4 conservé jusqu'au resolve final, format/interprétation
+authentifiés de bout en bout ; anciens domains/routes préservés.
+
+RED causal avant source puis **15/15 nouveaux témoins natifs PASS, XML complets** ;
+Sol Task1/Task2 Approved C0/I0. Contrôles historiques49=48PASS/1PictureFAIL
+strictement identique au parent, pas de suppression d'attendu.
+Globale240s RED/incomplète724END=686PASS/37FAIL/1interruption ;37mêmes
+échecs,32messages raw égaux/5adresses seules et37stacks égaux.
+Les suites gpu-plan/renderer ne commencent pas (tests hérités ne compilant
+pas : signatures product/tests inchangées au parent) ; aucune qualification
+unitaire ni merge déduite. Détails et coûts dans la qualification.
+
+**Corpus631/443 :217rendus/194comparés,47≥99%,63≥95%,médiane77.45815728081598%**.
+Toutes631fiches hors timing,217hashes/métriques/diagnostics/outcomes,
+18invariants et7invariants de run identiques au parent. vertices30s conservé.
+Aucun GM/domain/référence/seuil/budget modifié, aucune image ou score à régénérer.
+Pas de gain Skia revendiqué par cette seule capacité.
+Précision générale du resolve OPEN, backend/driver non exposés, warnings hérités
+conservés. Revue finale Astra C0/I0/M2 ; M1 documentaire corrigé et relu Sol,
+M2 warnings différés. Publication draft en cours ; W7 et globale restent ouverts.
+
 ## Autorité couleur — 2 octobre 2026, diagnostic sans changement produit
 
 [Diagnostic et relecture Sol](color-authority-diagnostic.md) : les triplets ICC

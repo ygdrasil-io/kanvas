@@ -153,17 +153,19 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
         if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid) return invalid("Scene validation failed")
         if (scene.colorSpace != ColorSpace.SRGB) return gap("W4d.2 supports only sRGB")
+        val publicEncodedRootAaPathFrame = isPublicEncodedRootAaPathFrame(scene, target)
         if (requiresPublicEncodedAdmission) CompositionAdmissionV1.validate(scene, target).firstOrNull()?.let { diagnostic ->
             return GpuPlanSelection.InvalidScene(listOf(diagnostic))
         }
-        when (val preflight = preflight(scene)) {
+        when (val preflight = preflight(scene, target)) {
             Preflight.Member -> Unit
             Preflight.Outside -> return gap("Scene is outside W4d.2")
             is Preflight.Invalid -> return invalid(preflight.message)
             is Preflight.Limit -> return limit(preflight.message)
         }
         if ((forceAaFrame || scene.any { it is SceneCommand.Draw && it.node.coverage == CoverageRequest.ANTIALIASED }) &&
-            target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED
+            target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
+            !publicEncodedRootAaPathFrame
         ) return gap("W4d.2 AA supports only LINEAR composition")
         return when (val recognized = recognize(scene, target)) {
             is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(
@@ -207,7 +209,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     }
 
     /** Establishes ownership before spending any shared :math work ledger. */
-    private fun preflight(scene: SceneSnapshot): Preflight {
+    private fun preflight(scene: SceneSnapshot, target: RenderTargetDescriptor): Preflight {
         finiteSceneError(scene)?.let { return Preflight.Invalid(it) }
         var visualDrawCountI32 = 0
         var requiresGeneral = false
@@ -247,7 +249,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
         val pictureHardFrame = rectProjectionMode == RectProjectionMode.PictureHardFill &&
             scene.filterIsInstance<SceneCommand.Draw>().all { acceptsPictureHardRect(it.node) }
-        val standaloneMember = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource || w7Frame || pictureHardFrame) &&
+        val publicEncodedRootAaPathFrame = isPublicEncodedRootAaPathFrame(scene, target)
+        val standaloneMember = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource || w7Frame || pictureHardFrame ||
+            publicEncodedRootAaPathFrame) &&
             (w7Frame || pictureHardFrame || standaloneFrameFacts) &&
             (requiresGeneral || requiresStandaloneRectRouting)
         if (outside || !(historicalMember || standaloneMember)) {
@@ -255,6 +259,15 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
         return if (visualDrawCountI32 > MAX_DRAWS) Preflight.Limit("W4d.2 accepts at most 512 visual path draws") else Preflight.Member
     }
+
+    private fun isPublicEncodedRootAaPathFrame(scene: SceneSnapshot, target: RenderTargetDescriptor): Boolean =
+        requiresPublicEncodedAdmission &&
+            target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
+            scene.any { command -> command is SceneCommand.Draw && command.node.origin == DrawOrigin.PATH &&
+                command.node.geometry is GeometryNode.Path && command.node.coverage == CoverageRequest.ANTIALIASED } &&
+            scene.filterIsInstance<SceneCommand.Draw>().all { command ->
+                command.node.origin == DrawOrigin.PATH && command.node.geometry is GeometryNode.Path
+            }
 
     private fun recognize(scene: SceneSnapshot, target: RenderTargetDescriptor): Recognition {
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
@@ -268,7 +281,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             it.node.coverage == CoverageRequest.ANTIALIASED
         }) && normalizedDraws.all { standaloneFrameDraw(it.node) }
         val standaloneAaSolids = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource ||
-            resolvePlainAaSolids) && resolvesPlainAaFrame
+            resolvePlainAaSolids || isPublicEncodedRootAaPathFrame(scene, target)) && resolvesPlainAaFrame
         val draws = mutableListOf<SealedDraw>()
         val materialEntries = mutableListOf<MaterialPlanEntry>()
         val sources = mutableListOf<MaterialSourceConstructionV4>()
@@ -799,7 +812,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
         val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
         val anyAa = forceAaFrame || selected.requestedAa
-        val colorFormat = if (anyAa) AA_FORMAT else logicalColorFormat(selected.target)
+        val colorFormat = if (anyAa) aaLogicalColorFormat(selected.target) else logicalColorFormat(selected.target)
         if (!coreCapabilities(capabilities, extent, colorFormat)) return promoted("Required W4d.2 device capability is unavailable")
         val anyHard = selected.draws.any { !it.requestsAntiAlias }
         val aaStencil = selected.draws.any { it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
@@ -1279,7 +1292,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         fun buffer(role: PlanResourceRole, bytes: Long, usages: Set<PlanResourceUsage>, first: Int, last: Int) =
             PlanResource.of(role, 0, PlanResourceKind.Buffer, null, null, bytes, usages,
                 PlanResourceLifetime.FrameLocal, first, last)
-        val colorFormat = AA_FORMAT
+        val colorFormat = aaLogicalColorFormat(selected.target)
         resources += texture(PlanResourceRole.MultisampleColorTarget, 0, PlanTextureFormat.Color(colorFormat),
             memory.multisampleColorBytes, setOf(PlanResourceUsage.RenderAttachment), 0, readbackIndex, 4)
         resources += texture(PlanResourceRole.LogicalTarget, 0, PlanTextureFormat.Color(colorFormat), memory.base.targetBytes,
@@ -1333,6 +1346,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
     }
+
+    private fun aaLogicalColorFormat(target: RenderTargetDescriptor): PlanLogicalColorFormat =
+        if (requiresPublicEncodedAdmission) logicalColorFormat(target) else AA_FORMAT
 
     private fun coreCapabilities(
         capabilities: PlanCapabilitySnapshot,

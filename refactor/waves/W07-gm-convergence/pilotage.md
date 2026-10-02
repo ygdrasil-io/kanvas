@@ -1,5 +1,25 @@
 # Pilotage de la convergence Skia
 
+## Capacité root Path AA encoded — 2 octobre 2026
+
+[Qualification locale](root-aa-encoded-qualification.md) et
+[corpus frais](root-aa-encoded-28adb36d3.json) ; source privée28adb36d3,
+base publiée#2435/6f059f0dc, draft empilée en préparation.
+Le témoin indépendant sépare188LINEAR/128encoded et conserve les masques
+corrélés ;3LINEARPASS+3encodedRED puis9guardsRED précèdent le patch.
+Après source :15nativePASS,48/49contrôles historiquesPASS avec1PictureFAIL
+exact parent. Sol Task1/Task2 approuve ; Astra finale C0/I0/M2, draft acceptable.
+M1 agrégation documenté, contre-revue Sol sans nouvelle rupture ; M2 warnings
+différés. Publication draft en cours, merge et W7 non qualifiés.
+Globale RED/incomplète et suites unitaires à tests hérités noncompilants
+explicitement suivies. Précision native générale du resolve non démontrée.
+
+Toutes631fiches hors temps strictement identiques au parent :217/194,
+47≥99%/63≥95%, zéro gain/perte GM. Aucun GM migré ou fond remplacé par un
+Path artificiel. La consommation GM encoded doit être un lot mesuré distinct,
+avec un vrai témoin causal et son admission complète ; ne pas confondre
+ouverture de capacité, changement de sampling et gain Skia. W7 reste actif.
+
 ## Attribution des intensités — 2 octobre 2026
 
 Le [diagnostic couleur](color-authority-diagnostic.md), relu par Sol C0/I0,
