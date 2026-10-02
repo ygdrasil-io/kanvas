@@ -1,5 +1,81 @@
 # W07 — diagnostic GM provisoire
 
+## Diagnostic ComplexClip2 Path/RRect — 2 octobre 2026, local
+
+**Qualification math locale :** source/tests
+`c0567497f217337012f39284b4701edc74093760`,
+[plan undashed arc](undashed-arc-work-plan.md). Le certificat conservateur relu
+par Astra évite la mesure de longueur inutilisée des SVG arcs sans tirets ;
+Bézier, dégénérescences et cas numériques non prouvés gardent la mesure existante.
+Caps/epsilons/géométrie/spans/branche dashed inchangés, travail réel retiré.
+RED causal2/21 puis GREEN21/21 aux oracles figés ; geometry488+matrix310
+JVM PASS, compilation JS réellement exécutée, six témoins natifs PASS4+2.
+Review Sol Task1 approuvée C0/I0/M1 warnings hérités.
+
+Le [checkpoint complet frais](undashed-arc-c0567497f.json) conserve631/443,
+7invariants metadata et18par cas : **217rendus(+5),194comparés(+5),
+46≥99%(+2),63≥95%(+3),médiane77.45815728081598%(avant75%)**.
+Aucun ancien rendu perdu/modifié :212hashes RGBA et métriques identiques.
+608lignes hors temps identiques ;23deltas=5admissions+18diagnostics.
+17diagnostics gardent leur raison et ajoutent l'index ; `bug41422450`
+passe du refus de mesure FlatteningDidNotConverge au garde VertexLimit,
+sans nouveau rendu. `image-surface` reste exclu codec ; aucun périmètre changé.
+Tranches0/1/0, BUILD131s/38s/11s, sans timeout externe ; `vertices` conserve
+son watchdog natif30s et sa ligne timeout. Snapshot SHA256
+`833bc1f91111096696c28ef1b2447cf5e53a22af9afd0db7cd4c4b71ce1c7e78`.
+
+Les quatre vrais GM anciennement refusés rendent sans refus,152dispatch :
+RRectBW94.75237399561723%, RRectAA94.22132943754565%,
+PathBW99.91234477720964%, PathAA99.06135865595326% à±2.
+La cinquième admission générique `crbug_691386` atteint98.3154296875%
+mais son contour noir est presque absent : **score dominé par le fond,
+pas un gain de parité visuelle**. Les cinq triples actuel/diff/référence
+sont inspectés : les RRect diffèrent dans des zones remplies, dont une
+cellule complète, pas uniquement sur les contours. Les Path gardent
+des différences de bords ; aucun claim bit-exact ou RRect≥99.
+Les cinq PNG/scores ciblés sont régénérés : cinq sélections1PASS/XML1/0/0/0,
+sans skip/timeout, PNG byte-identiques au corpus.554anciens scores autres
+inchangés ; PathAA a un arrondi de1.421e-14 entre formules, mêmes pixels.
+Crbug passe du score historique98.4939575 au frais98.3154297, pas une perte
+d'un rendu parent qualifié (ce GM y refusait). Revue finale/publication en cours.
+
+Gate native élargie481/484PASS,95s sans skip/timeout :456anciens statuts
+identiques et28tests existants supplémentaires sélectionnés PASS.
+Les trois échecs NoOp/Picture ont les mêmes types/raisons (une adresse
+Diagnostics diffère). Intégration10/11PASS,15s sans skip/timeout :
+les10anciens PASS ; le test stroke supplémentaire échoue sur la première
+attente `strokedline_caps` (`linear_gradient_stop_count` versus `stroke.cap`).
+Le parent mesurait déjà `stroke.cap`/13ops dans son corpus ; source du
+test et recording/render identiques. Classe non rejouée séparément sur
+parent, ses deux assertions suivantes non atteintes : échec conservé,
+pas converti en PASS ni oracle modifié.
+
+Globale240s **725START/END=687PASS37FAIL1interruption**, wrapper124/enfant143,
+aucun XML finalisé. Même725IDs/statuts que le parent ;37types identiques,
+35messages bruts identiques et2adresses Diagnostics seules auditées.
+Le SKIP reste cubic Mitchell, sans diagnostic codec nouveau.
+401tests du covering hors globale399PASS2PictureFAIL ; union1126identités,
+non exhaustive. Globale RED/incomplète, warnings hérités non supprimés.
+Pas de nouvelle PR, merge ou W7 clos.
+
+Branche `codex/w7-complexclip2-resource-convergence`, parent draft#2433/ff3cc8398.
+[Plan de diagnostic](complexclip2-resource-diagnostic-plan.md), source locale
+`6aef9c27890a2e3e6f39a58fa28504d05fb29ebd`, deux messages seulement : W4e conserve
+les diagnostics W4d, W4d ajoute l'index canonique au refus d'un draw.
+Quatre vrais GM exécutés séparément refusent toujours `FrameWorkLimit` :
+RRect BW/AA commande66, Path BW/AA commande135. XML1/1/0/0 chacun,
+aucun timeout/skip ; six témoins natifs inchangés PASS4+2.
+Sol spec/qualité approuvé C0/I0/M1 warnings hérités. Sources identiques
+à l'arbre exécuté c379a4e8 et au paquet privé revu b8750fad.
+Ce diagnostic n'apporte aucun nouveau rendu, score ou claim de parité.
+
+Le traçage identifie un candidat générique : même sans tirets, les arcs
+passent par la mesure fine de longueur destinée aux tirets, avant de retenir
+les intervalles complets. L'avis ciblé Astra est achevé ; le correctif math
+ci-dessus enlève cette récursion seulement quand la preuve finie/positive
+est établie. Les quatre admissions sont ensuite mesurées réellement.
+Pas de nouvelle PR publiée, merge ou W7 clos à ce stade.
+
 Dernier lot publié : draft [#2433](https://github.com/ygdrasil-io/kanvas/pull/2433),
 empilée sur [#2432](https://github.com/ygdrasil-io/kanvas/pull/2432), elle-même
 sur [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431), elle-même
