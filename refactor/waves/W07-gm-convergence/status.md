@@ -63,8 +63,12 @@ Snapshot SHA25651ce49062332208166ac688ef08ba14b3500778fbfbba8c1cc0fd6d10baa3ed2.
 Ce100%à±2 n'est pas l'égalité bit à bit ; les PASS du runner au seuil0
 ne prouvent pas la parité. Les deux PNG sont régénérés byte-identiques au corpus,
 deux scores seuls sont mis à jour (plus datestamp Properties.store) : deux
-sélections natives1PASS/XML1/0/0/0,13s/15s sans skip/timeout. Revue finale et
-publication en cours ; aucune mutation produit/tests après092a293be.
+sélections natives1PASS/XML1/0/0/0,13s/15s sans skip/timeout. Revue finale Astra
+du lotd958..b56 approuvée pour draft : aucun défaut introduitC/I/M, ancienI1
+du port corrigé, M1warningshérité conservé ; aucun fixwave produit nécessaire.
+Publication en cours, aucun merge ni W7clos. Aucune mutation produit/tests
+après092a293be. La priorité suivante est le diagnostic causal borné des quatre
+refus Path/RRect à la frontière normalizedW4d.2, sans relever caps/budgets.
 
 ## Assemblage inverse/hairline — 2 octobre 2026, qualification finale
 

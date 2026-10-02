@@ -20,14 +20,21 @@ Six témoins/10intégrationPASS, Sol C0/I0/M1 ; covering453/456PASS avec les tro
 échecs hérités, globale bornée687PASS/37FAIL/1interruption sur725END.
 Même37échecs atteints, au moins411identités non atteintes sur borne1136 :
 pas de globale verte/merge/W7clos. Deux PNG/scores régénérés byte-identiques au
-corpus, deux sélections natives1PASS chacune, sans skip. Revue finale Astra en cours.
+corpus, deux sélections natives1PASS chacune, sans skip. Revue finale Astra
+d958..b56 : C0/I0/M0 introduits, ancienI1du port corrigé, M1warningshérité ouvert.
+Publication draft approuvée, fusion non qualifiée ; aucun fixwave produit.
 
-Après publication de ce lot, reprendre une cause mesurée de `inverse_fill_filters`
-337/338 : source-AA single-sample et root PATH/WINDING/AA sousW6b restent ouverts.
-Le contrat doit séparer autorité originale, source/halo, domaine inverse fini,
-clip terminal. Un témoin public causal précède toute extension ; aucune
-relaxation d'oracle. La carte blanche autorise le changement architectural
-nécessaire, pas une revendication ISO sans mesure.
+Après publication, priorité choisie avec Astra : diagnostic causal borné des
+quatre refus ComplexClip2 Path/RRect122/123/125/126, même frontière
+`w4e.clip.geometry-limit: W4d.2 rejected normalized W4e draw resources`.
+Identifier le premier draw/resource normalisé fautif, avec les deux contrôles
+proches≥99%, avant toute extension. Ce n'est pas une promesse de quatre gains.
+Conserver caps/budgets et autorité math, aucun GM routing. Si la limite est
+légitime et exige une refonte large, comparer son coût au chantier inverse/filter.
+`inverse_fill_filters`337/338, source-AA single-sample et root PATH/WINDING/AA
+sousW6b restent ouverts : autorité originale, source/halo, domaine inverse fini,
+clip terminal à distinguer. Témoin public causal avant tout fix, sans oracle
+relâché. Carte blanche pour les changements nécessaires, pas un claim ISO.
 
 ## Assemblage inverse/hairline — 2 octobre 2026
 

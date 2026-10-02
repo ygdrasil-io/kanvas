@@ -77,7 +77,7 @@ Task1 owns the common port/test, the measured three-file renderer extension, and
 
 ## Qualification and controller rulings
 
-Source/tests092a293be, [fresh snapshot](complexclip2-092a293be.json), [measured results and limits](status.md). Six retained native witnesses and ten integration tests pass; covering453/456 and global687/725 remain known-red/incomplete. Only two images gain parity,100%/99.075% at unchanged±2; four shared variants still refuse. Two PNGs/scores regenerated through exact-name native selections, byte-equal to corpus. Whole-lot review/publication pending.
+Source/tests092a293be, [fresh snapshot](complexclip2-092a293be.json), [measured results and limits](status.md). Six retained native witnesses and ten integration tests pass; covering453/456 and global687/725 remain known-red/incomplete. Only two images gain parity,100%/99.075% at unchanged±2; four shared variants still refuse. Two PNGs/scores regenerated through exact-name native selections, byte-equal to corpus. Whole-lot Astra reviewd958..b56: introducedC0/I0/M0, inheritedM1warnings, previousportI1addressed; draftready, mergenotqualified, nofixwave. Publication pending.
 
 - Ruling: compact existing-flow design under W7 carte blanche, not another approval loop — bounded reversible work; cost if wrong: local rework, no oracle change.
 - Ruling: primary-proven ComplexClip2 port before W6b root-AA extension — two measured low-quality admissions; cost if wrong: no corpus gain, reported honestly.
@@ -86,3 +86,5 @@ Source/tests092a293be, [fresh snapshot](complexclip2-092a293be.json), [measured 
 - Ruling: preserve previous/current private custody despite skill cleanup — incomplete W7 and safety constraint; cost if wrong: private storage only.
 - Ruling: measured mask-only recipe extension with existing color4/16/NativeMask/Position — actual public causal RED and source contract; cost if wrong: reversible repair and honest failed pixels, no oracle relaxation.
 - Ruling: correction2 preserves BinaryMaskedPathDraw mask/fetch/broadcast in a third renderer file — actual missing-mask native refusal; cost if wrong: still-red native evidence/rework, never guard bypass or reconstructed authority.
+- Ruling: retain all nine Astra review limits/exclusions — no broader evidence: wholeW7/global/merge, residual contour cause, inverse/filter337/338, four refused rootcauses and universalblend/material coverage remain open; fonts/codecs/jpg excluded; source-versus-PNGprovenance unasserted; native/visual chronology controller-owned — cost if wrong: later measurement may expose more inherited gaps, no release claim.
+- Ruling: diagnose four Path/RRect resource refusals before wider inverse/filter — sameboundary and nearbyqualified controls — cost if wrong: no admission gain and delayed inverse/filter, no cap/budget increase.
