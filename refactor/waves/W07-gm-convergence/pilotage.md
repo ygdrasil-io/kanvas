@@ -1,5 +1,16 @@
 # Pilotage de la convergence Skia
 
+## Attribution des intensités — 2 octobre 2026
+
+Le [diagnostic couleur](color-authority-diagnostic.md), relu par Sol C0/I0,
+écarte l'hypothèse des primaires erronées fondée sur des PNG ICC bruts. Le chemin
+existant reproduit les scores qualifiés après normalisation sRGB, sans changement
+produit/référence/score. Une précision Minor de formulation est appliquée.
+Les 129 échantillons des rampes sRGB sont maintenant archivés ; prochaine
+expérience : isoler placement/couverture et composition par un témoin natif
+indépendant. Aucune
+correction renderer/couleur/codec n'est encore justifiée. W7 reste ouvert.
+
 ## CTM des paths — 2 octobre 2026
 
 [Plan et qualification locale](scaled-stroke-diagnostic-plan.md),
@@ -18,7 +29,8 @@ identiques vérifiés ; corps conforme, CI non inspectée, aucune fusion.
 **217rendus/194comparés inchangés,47≥99%(+1),63≥95%(=)** à631/443 figé.
 Aucune perte d'admission,212RGBA identiques,cinq changés.
 crbug arc/diamètre présents,98.7686%,SSIM0.989508 ; il reste nonISO.
-ctmpatheffect99.7546/teenyStrokes99.5228 gardent des écarts de couleurs visibles ;
+ctmpatheffect99.7546/teenyStrokes99.5228 gardent des écarts d'intensité visibles ;
+les aperçus ICC bruts ne prouvent pas des couleurs pleines erronées ;
 pathops garde95.7428 malgré pixels différents ; sharedcorners reste de mauvaise
 taille versusréférence, sans score inventé. Quatre triples et ce dernier couple
 inspectés. Cinq PNG frais ont les mêmes pixels que le corpus.
@@ -27,10 +39,10 @@ SSIM0.7854852→0.7854735 même si son score corpus reste95.7428 ; garder OPEN.
 23diagnostics ne changent que l'index ; trois reclassifications réelles restent
 suivies sur des GM toujours refusés. ComplexClip2 Path/RRect inchangés.
 
-Prochaine priorité unique Astra retenue : diagnostic commun des couleurs/ports
-ctmpatheffect et teenyStrokes. Les deux références portent le même profil ICC
-Skia et un même vert différent du vert actuel ; vérifier l'autorité de couleur
-avant toute correction de renderer/port, sans changer référence/seuil.
+Priorité Astra du diagnostic couleur/port désormais traitée : le vert brut ICC
+diffère du vert sRGB mais les plateaux normalisés concordent. La suite porte
+sur les intensités/couverture/placement/composition, pas sur une correction
+spéculative de couleurs ou du décodage externe, sans changer référence/seuil.
 AA=false de crbug reste différé, pas un nouveau relèvement de cap.
 Les limites de clips/état, RRect/I2 et inverse/filter restent OPEN.
 Suites globales héritées RED/incomplètes, pas de promesse de parité/W7 clos.
