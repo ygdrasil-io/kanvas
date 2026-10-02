@@ -202,6 +202,7 @@ public class W4eClipPlanCompiler internal constructor(
         acceptsNarrowTransforms = true,
         retainGeometryConstructionGraph = true,
         runtimeCatalog = runtimeCatalog,
+        resolvePlainAaSolids = true,
     )
     private val w4dAaSeam = W4dGeneralPathPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
@@ -209,6 +210,7 @@ public class W4eClipPlanCompiler internal constructor(
         forceAaFrame = true,
         retainGeometryConstructionGraph = true,
         runtimeCatalog = runtimeCatalog,
+        resolvePlainAaSolids = true,
     )
     // This seam is issued only by the closed W7 inverse-AA factory.  It keeps the
     // W4d general compiler's historical source admission intact while asking it to
@@ -437,7 +439,10 @@ public class W4eClipPlanCompiler internal constructor(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
             ))
             is RenderPlanResult.InvalidScene -> return invalidCandidate()
-            is RenderPlanResult.GapOnPromotedScope -> return promoted("W4d.2 construction capability is unavailable")
+            is RenderPlanResult.GapOnPromotedScope -> return promoted(
+                "W4d.2 construction capability is unavailable; seamPhase=staged-preflight; innerReasons=" +
+                    result.diagnostics.joinToString(" | ") { "${it.code.value}: ${it.message}" },
+            )
             is RenderPlanResult.ResourceLimitExceeded -> return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4d.2 frame resources are exceeded")
         }
         val framePreview = try {
@@ -455,7 +460,10 @@ public class W4eClipPlanCompiler internal constructor(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
             ))
             is RenderPlanResult.InvalidScene -> return invalidCandidate()
-            is RenderPlanResult.GapOnPromotedScope -> return promoted("W4d.2 construction capability is unavailable")
+            is RenderPlanResult.GapOnPromotedScope -> return promoted(
+                "W4d.2 construction capability is unavailable; seamPhase=final-construction; innerReasons=" +
+                    result.diagnostics.joinToString(" | ") { "${it.code.value}: ${it.message}" },
+            )
             is RenderPlanResult.ResourceLimitExceeded -> return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4d.2 frame resources are exceeded")
         }
         return try {

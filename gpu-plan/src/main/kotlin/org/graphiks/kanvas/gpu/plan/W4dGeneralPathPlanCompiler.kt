@@ -101,12 +101,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private val requiresPublicEncodedAdmission: Boolean = false,
     /** Closed W6 Picture authority, distinct from standalone, AA and hairline switches. */
     private val rectProjectionMode: RectProjectionMode = RectProjectionMode.None,
+    /** W4e-only construction permission: retain already-normalized plain solid AA material. */
+    private val resolvePlainAaSolids: Boolean = false,
 ) : GpuPlanCompiler {
     internal enum class RectProjectionMode { None, PictureHardFill }
     internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, w6RootAaRectStrokeSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode)
+        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, w6RootAaRectStrokeSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode,resolvePlainAaSolids)
     internal fun withImageOriginProjection(projection: ImageOriginGeometryProjectionV6?): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,w6RootAaRectStrokeSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode)
+        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,w6RootAaRectStrokeSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode,resolvePlainAaSolids)
     public constructor() : this(PathStrokePolicyF64(), requiresPublicEncodedAdmission = true)
 
     /**
@@ -256,13 +258,17 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
     private fun recognize(scene: SceneSnapshot, target: RenderTargetDescriptor): Recognition {
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
-        // The standalone AA extension already proves a whole frame of plain solid
-        // SrcOver draws. Normalize those solids directly while retaining their original
-        // draw/source authority; a deferred composed stroke source would select W5b's
-        // single-sample source topology instead of this compiler's closed AA frame.
-        val standaloneAaSolids = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource) &&
-            scene.any { it is SceneCommand.Draw && it.node.coverage == CoverageRequest.ANTIALIASED } &&
-            scene.filterIsInstance<SceneCommand.Draw>().all { standaloneFrameDraw(it.node) }
+        // The standalone AA extension and W4e's private construction seam both prove a
+        // whole frame of plain solid SrcOver draws. Normalize those solids directly while
+        // retaining their original draw/source authority; a deferred composed stroke source
+        // would select W5b's single-sample source topology instead of this compiler's closed
+        // AA frame.
+        val normalizedDraws = scene.filterIsInstance<SceneCommand.Draw>()
+        val resolvesPlainAaFrame = (forceAaFrame || normalizedDraws.any {
+            it.node.coverage == CoverageRequest.ANTIALIASED
+        }) && normalizedDraws.all { standaloneFrameDraw(it.node) }
+        val standaloneAaSolids = (admitsStandaloneRectPathFrames || w6RootAaRectStrokeSource ||
+            resolvePlainAaSolids) && resolvesPlainAaFrame
         val draws = mutableListOf<SealedDraw>()
         val materialEntries = mutableListOf<MaterialPlanEntry>()
         val sources = mutableListOf<MaterialSourceConstructionV4>()

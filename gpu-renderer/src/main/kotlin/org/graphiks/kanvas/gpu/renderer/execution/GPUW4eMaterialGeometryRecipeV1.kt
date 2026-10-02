@@ -68,9 +68,9 @@ internal fun w4eMaterialGeometrySourceV1(recipe: GPUW4eMaterialGeometryRecipeV1)
                 let coordinate = vec2i(position.xy);
                 let pathSample: vec4f = textureLoad(pathMask, coordinate, 0);
                 let clipSample: vec4f = textureLoad(clipMask, coordinate, 0);
-                let pathCoverage = clamp(pathSample.r, 0.0, 1.0);
-                let rawClip = clamp(clipSample.r, 0.0, 1.0);
-                let clipCoverage = select(rawClip, 1.0 - rawClip, consumer.inverse > 0.5);
+                let rawPath = clamp(pathSample.r, 0.0, 1.0);
+                let pathCoverage = select(rawPath, 1.0 - rawPath, consumer.inverse > 0.5);
+                let clipCoverage = clamp(clipSample.r, 0.0, 1.0);
                 return consumer.color * (pathCoverage * clipCoverage);
             }
         """.trimIndent()
