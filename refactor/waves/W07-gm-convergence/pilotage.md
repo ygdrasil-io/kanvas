@@ -1,5 +1,39 @@
 # Pilotage de la convergence Skia
 
+## CTM des paths — 2 octobre 2026
+
+[Plan et qualification locale](scaled-stroke-diagnostic-plan.md),
+[snapshot complet](path-ctm-4e4b699a6.json), branche
+`codex/w7-scaled-stroke-diagnostic` empilée sur#2434/7658d902b.
+Le vrai GM transformé reproduisait un contour absent malgré le succès natif.
+Sur avis ciblé Astra, GmCanvas conserve maintenant path/paint source sous
+un même CTM pour tous les paths nonidentity, pas une largeur scalaire devinée.
+12intégration +4Surface +2math PASS ; la fixture pré-CTM corrigée est rejouée
+12PASS, Sol ferme les Important. Source private4e4b699a6 identique aprèsd5b.
+Revue finale Astra7658..4c3d approuvée pour draft,C0/I0 nouveaux,
+M1warnings hérité/M2pathops ouverts ; publication en attente, aucune fusion.
+
+**217rendus/194comparés inchangés,47≥99%(+1),63≥95%(=)** à631/443 figé.
+Aucune perte d'admission,212RGBA identiques,cinq changés.
+crbug arc/diamètre présents,98.7686%,SSIM0.989508 ; il reste nonISO.
+ctmpatheffect99.7546/teenyStrokes99.5228 gardent des écarts de couleurs visibles ;
+pathops garde95.7428 malgré pixels différents ; sharedcorners reste de mauvaise
+taille versusréférence, sans score inventé. Quatre triples et ce dernier couple
+inspectés. Cinq PNG frais ont les mêmes pixels que le corpus.
+Quatre scores rafraîchis,555autres inchangés. pathops a une légère baisse de
+SSIM0.7854852→0.7854735 même si son score corpus reste95.7428 ; garder OPEN.
+23diagnostics ne changent que l'index ; trois reclassifications réelles restent
+suivies sur des GM toujours refusés. ComplexClip2 Path/RRect inchangés.
+
+Prochaine priorité unique Astra retenue : diagnostic commun des couleurs/ports
+ctmpatheffect et teenyStrokes. Les deux références portent le même profil ICC
+Skia et un même vert différent du vert actuel ; vérifier l'autorité de couleur
+avant toute correction de renderer/port, sans changer référence/seuil.
+AA=false de crbug reste différé, pas un nouveau relèvement de cap.
+Les limites de clips/état, RRect/I2 et inverse/filter restent OPEN.
+Suites globales héritées RED/incomplètes, pas de promesse de parité/W7 clos.
+Carte blanche couvre les changements nécessaires, pas une cause présumée.
+
 ## Travail undashed SVG arc et refus ComplexClip2 — 2 octobre 2026, publié
 
 Branche `codex/w7-complexclip2-resource-convergence`, parent draft#2433/ff3cc8398.
