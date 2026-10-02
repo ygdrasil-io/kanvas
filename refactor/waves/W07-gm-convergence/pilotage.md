@@ -6,7 +6,10 @@ Source/tests `2e5419afd6501cfc9d09dbed8409324149450a4c`,
 [snapshot](inverse-hairline-2e5419afd.json),
 [design](inverse-hairline-assembly-design.md),
 [plan](inverse-hairline-assembly-plan.md).
-Branche `codex/w7-inverse-filter-convergence`, parent publié#2431/9c182355b.
+Branche `codex/w7-inverse-filter-convergence`, draft
+[#2432](https://github.com/ygdrasil-io/kanvas/pull/2432) publiée/rattachée sur
+parent#2431/9c182355b. Head distant initial118aee3d9 identique au checkout vérifié ;
+les commits après2e5419afd ne changent que documents/artefacts générés.
 Deux gates Sol approuvés puis revue large Astra : aucun défaut introduitC/I/M,
 un Important hérité de port et un Minor hérité d'environnement suivis.
 Source qualifiée pour publication draft, pas pour merge.

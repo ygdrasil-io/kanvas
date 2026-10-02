@@ -1,7 +1,8 @@
 # W07 — diagnostic GM provisoire
 
-Dernier lot publié : draft [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431),
-empilée sur [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430), elle-même
+Dernier lot publié : draft [#2432](https://github.com/ygdrasil-io/kanvas/pull/2432),
+empilée sur [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431), elle-même
+sur [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430), elle-même
 sur [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429), elle-même
 sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
@@ -80,8 +81,9 @@ W4e ; GM338 refuse d'abord un path WINDING/AA root ordinaire non filtré sousW6b
 (index1), pas un inverse-first. Revue large indépendante Astra : aucun défaut
 introduit Critical/Important/Minor, publication draft approuvée après ces gates
 d'artefacts ; merge non qualifié. Suivis hérités1Important/1Minor : port
-ComplexClip2 et warnings d'environnement. La publication stackée suit ;
-aucun rendu GM337/338 complet, merge ou clôture W7 annoncé.
+ComplexClip2 et warnings d'environnement. La draft#2432 est publiée et rattachée
+sur#2431 ; base exacte9c182355b et head distant initial118aee3d9 identique au
+checkout vérifiés. Aucun rendu GM337/338 complet, merge ou clôture W7 annoncé.
 
 **Prochain lot choisi avec Astra : port ComplexClip2 fidèle**, avant l'extension
 de source root AA sousW6b. Les sources primaires figées
