@@ -1,0 +1,83 @@
+# W7 Root AA Hard Rect Integration Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Admettre honnêtement la frame publique encoded Rect hard + Path AA puis mesurer la vraie scène teenyStrokes dans les deux domaines, sans changer son domaine déclaré.
+
+**Architecture:** Admission whole-scene commune et possession Rect explicite de la factory publique standalone existante. Projection de préparation uniquement, provenance/source/CTM d'origine et MSAA4 corrélé jusqu'au resolve final conservés ; lanes privées inchangées.
+
+**Tech Stack:** Kotlin/JVM, Surface/GmCanvas/Picture publics, W4d GPU plans et WebGPU natif, oracles MSAA/composition parent figés.
+
+**Spec:** refactor/waves/W07-gm-convergence/root-aa-rect-design.md
+
+## Global Constraints
+
+- Worktree exact /Users/chaos/.codex/worktrees/w7-gm-diagnostic/kanvas ; branche codex/w7-root-aa-rect-admission ; base53bf9c55b8950c36eb14a40eb44626cb02d6020c (#2436).
+- W7 carte blanche et Subagent-Driven Development déjà délégués ; Luna/high pour implementation, Sol/high reviews, Astra parcimonieuse stratégie/finale. Pas de nouveau chat ni de subagents par les workers.
+- Contrôleur seul runtime/Gradle/native, preuves, docs/Git/publication ; un runtime à la fois, terminal original puis NEXT audit complet séparé avant le suivant ou tout edit source. Workers ne lancent aucun build/test/runtime ni Git mutation.
+- Shell toujours rtk ; edits apply_patch ; worktree hors writable roots donc require_escalated pour ses écritures. Cwd cbf6 n'est jamais un fallback. Ne pas lire les anciens workspaces SDD.
+- Aucune modification font, codec externe, jpg-color-cube, référence, tolérance2, seuil93.2 teeny, scores historiques, registry631/scope443, domaine déclaré GM, sampling, caps, floors, budget policy ou précision des oracles.
+- Pas de test infrastructure/mock/source-text/forwarding, CPU renderer/fallback, faux Picture, GPU skip, GM-name routing ou Path de fond artificiel. Géométrie/arithmétique produit dans math, nomenclature I/F32/64.
+- La famille exige SRGB_ENCODED root et au moins un vrai Path AA ; Paths suivent exactement #2436. Rect siblings : origine RECT/Geometry.Rect, FILL hard non-AA, bounds entières finies nonvides I32, solid direct SrcOver sans effets, CTM identité/translation entière finie I32, clip hard integer Rect/absent. SetTransform de scène garde les CTM Path axis-aligned ; ne pas lui appliquer la restriction Rect.
+- Même état MSAA4 pendant tous les draws et resolve final seulement. Format logique/authentifié, prepared facts, physical keys, samples4/1, roles/generation/views et preflight #2436 inchangés/cohérents. Lanes W4e/W6 privées inchangées.
+- Garder diagnostics historiques, notamment rect-gradient -> unsupported.surface.composition.geometry ; seul hard-draw-rect entier/noir devient intentionnellement positif et est remplacé par un Rect fractionnaire négatif.
+- Préserver l'untracked integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/W7InverseFilterDiagnosticSurfaceTest.kt (SHA96cd8349c5b08032fe7374566e4b220edd931e881ee1e3e3cbbfcdaf92bfd747), toute custody et tous les autres workspaces ; aucune suppression/merge/force push.
+- Rapports append-only aux fix rounds ; distinguer preuves statiques, RED causal, GREEN natif, failures hérités et CannotVerify. Ni merge, ni W7 clos, ni globale GREEN par simple gate ciblé.
+
+## Review Focus
+
+1. Resolve intermédiaire à travers un hard Rect : Task1 fixture C et disjonction avec scalarResolvePerDraw à x1.
+2. Rect translucide/applications doubles d'alpha : Task1 fixture D sur transparent avec RGBA/BGRA et domaines alternés.
+3. Possession/famille faussement héritée des autres encoded lanes : Task2 prédicat commun + présence réelle AA Path + ownership Rect standalone ; Task1 négatifs géométrie/shader/blend/clip/layer.
+4. I32, Rect vide et CTM/state mal contextualisés : Task1 B et F ; aucune modification des helpers des anciennes familles.
+5. Faux contrôle du GM ou changement invisible de diagnostic/budget : Task1 H compare LINEAR au parent et G fige27136/27135 ; Task2 conserve rect-gradient geometry et Path-only26880.
+
+---
+
+### Task 1: Frozen native mixed-family witnesses and real Teeny diagnostic
+
+**Files:**
+- Create: kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W7RootAaMixedRectSurfacePixelTest.kt
+- Create: integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/TeenyStrokesCompositionSurfacePixelTest.kt
+- Read unchanged oracle: kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W7MsaaCompositionCpuOracle.kt and W7CompositionCpuOracle.kt
+- Do not modify any product file, existing test, GM, oracle or document. Report only into this plan's task-1-report.md.
+
+**Interfaces:**
+- Consumes Surface/Canvas/RenderConfig(compositionDomain), real PictureRecorder/Picture playback/archive APIs and GPUBackendRuntimeFactory.dispose cleanup; existing W7MsaaCompositionCpuOracle.pixel(Pixel,domain,background,draws) with literal Mask(bits), unchanged CompositionEnvelope channels/storeTrace.
+- Consumes actual TeenyStrokesGm.onOnceBeforeDraw/draw and GmCanvas. Reference comparison via org.graphiks.kanvas.test.ComparisonUtils existing sRGB loader/compareRgba; don't add another decoder/comparator.
+- Produces frozen two test files; all expected sets constructed and disjunctions checked BEFORE any GPU render. Names below are the controller's --tests filters. No product helpers called to calculate expectations.
+
+- [ ] **Step 1: Write exact A–G public Surface pixel witnesses.** New class methods:
+  - linearMixedRectPathDomainControl: A in LINEAR and independent full-image expectation.
+  - encodedMixedRectBackgroundKeepsAllPixels: A, RGBA then BGRA; true white Rect [0,12)x[0,12), black Path A=(4,2)->(4,10), width5 BUTT/MITER. All144 pixels from literal box [1.5,6.5)x[2,10) and existing oracle; explicitly pin y5 masks x1=1010/x6=0101/x3=1111/x0=x7=0. Expected edges encoded127..128 versus LINEAR187..188, alpha255; interiorblack/exteriorwhite. Render repeat stable with native Render+Readback evidence, clean result/refused0.
+  - encodedMixedRectOrderPreservesFullReplacement: Path A then full white Rect -> everypixel white; separate exact old exclusion Path A then full black Rect -> everypixel black. This positively preserves the old case, not just a differently colored substitute.
+  - encodedMixedRectRetainsCorrelatedSamples: C = fullwhite Rect, Path A black, white Rect [4,12)x[0,12), same Path A. Assert the same independent masks/pixels A at y5; at x1 oracle per-sample repeated mask must be disjoint from scalarResolvePerDraw(domain,white,black,.5,2). Expose both domains in this method (LINEAR then encoded), freeze before GPU.
+  - encodedMixedRectAlphaAndDomainStayDistinct: D = transparent initial target, fullRect ColorARGB.of(128,64,128,192) (RGBA64,128,192,128), Path A black. Freeze oracle draws [(fullMask,rectColor),(PathMask,black)] at x0/x1/x3/x6/x7,y5. x0/7 alpha128, x1/6 alpha around192 by unchanged envelope, x3 opaqueblack; prove at least one tuple disjoint from source alpha applied twice via existing independent oracle. Loop LINEAR->SRGB_ENCODED->LINEAR for RGBA then BGRA; swizzle expected once, repeat stable per target. Do not constrain alpha only on an opaque white background.
+  - encodedMixedRectTranslationAndClipPreserveDeviceMasks: B = 12x12, clip harddevice [0,7)x[0,12) BEFORE save/T(1,1), fullwhite Rect and A then restore. At y6 x2 half, x4 black, x1 white, x7 transparent; exercise bothdomains with expected alpha for clipped pixel0. No pretransform of source geometry.
+  - encodedMixedRectPictureReplaysIndependentPixels: record C once, direct Surface versus memory Picture and archived Picture playback, encoded12x12. Every144pixel independently expected as C, not nativeproducer used as the sole oracle; native evidence and stable replay. Use real APIs, no fake Picture.
+  - encodedMixedRectBudgetBoundaryIsTransactional: 8x8 fullwhite Rect then Path(4,2)->(4,6)width5. B27136=target256+floors24576+MSAAcolor1024+depth1024+hardmask256, readback2048 terminal phase. At B native success/repeat with half masks y4 x1/x6, x3black,x0/x7white. At27135 readPixels sentinel5a unchanged and w4d.general.budget.frame-local-exceeded; discard then existing empty encoded clear/readback recovery twice, allRGBA0 (no invented low-budget draw route).
+  - encodedMixedRectExcludedSiblingsAreTransactional: begin with VALID encoded Path-only A (no already-invalid background), then an invalid Rect/state. Full12x12 sentinel5a intact, expected composition geometry prefix for non-AA fractional [0.5,0,12,12], RectAA, RectSTROKE width0, Rectscale2, fractional translation.5, bounds right2147483648f, empty/inverted Rect, shader LinearGradient, ImageFilter.Offset, blendSRC. Rect-gradient retains geometry. Layer uses composition.layer; AAclip uses geometry. Each discard/reset then recover same Surface with valid Path-only A to independent transparent-target pixels twice. Preserve parent wider exclusion matrix unchanged until Task2's one specified fixture edit.
+
+- [ ] **Step 2: Write H, native actual Teeny scene evidence.** Two methods linearActualSceneKeepsQualifiedControl and encodedActualSceneSeparatesDomainFromCoverage. Fresh actual TeenyStrokesGm per domain; public Surface400x800 with explicit config; actual runner white hard Rect then GmCanvas hooks/draw unchanged. Native clean/refused0, repeat stable; literal first blackvertical (67,60)/(72,60) grayscale sets187..188 LINEAR or127..128 encoded, (70,60)black, (66,60)/(73,60)white. Compare via existing loader against original reference, verify dimensions and fixedSHA78cbf8bfe9b44e74f282311f517f86daa20ff0512f5770b6bc79819544a47597. Report metrics at tolerance0 and2, SSIM/error, actualRGBA SHA, operation/dispatched/refused counts and vertical/diagonal ramps for allfive colors (y60, x=50n+20±4, diagonal=50n+60±5,n1..5); keep fullRGBA outputs/images private if needed via a controller-specified property. Report samplevalues as machine-readable JSON/stdout, not opaque text; no empirical threshold/gain assertion or expected diagonal values after GPU. No SkiaGmRenderer config override (it is overridden by the GM property), wrapper GM, copied GM geometry or file score writes.
+
+- [ ] **Step 3: Controller verifies LINEAR controls then causal RED, one invocation/archive at a time.** Use offline/no-daemon :kanvas:test --rerun with W7RootAaMsaaDomainSurfacePixelTest, W7RootAaEncodedCapabilitySurfacePixelTest and new linearMixedRectPathDomainControl first. Then select new encodedMixedRect* methods; then integration class H. Expected native controlsPASS; new admitted encoded scenesFAIL at public composition geometry (before pixels), LINEAR H PASS. Existing negatives may alreadyPASS and are not requiredRED. Controller records exactcommands/exit/events/XML/logs/outputs, complete failures, source unchanged. Writer does not run commands.
+
+- [ ] **Step 4: Freeze files into private explicit review snapshot; self-review then Sol task gate.** Report READY_FOR_VALIDATION, code/test intent, exact expectations/disjointness, no runtimeclaim; append controller's audited native evidence afterward. Review accepts witness-only causalRED as this deliverable, not a GREEN implementation or globalqualification. Ordinary HEAD/index controlled only by controller. Task2 cannot alter these files to fit GPU.
+
+### Task 2: Public mixed encoded admission and native qualification
+
+**Files:**
+- Modify: gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/CompositionAdmissionV1.kt
+- Modify: gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4dGeneralPathPlanCompiler.kt
+- Modify one fixture only: kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W7RootAaEncodedCapabilitySurfacePixelTest.kt hard-draw-rect -> fractional-hard-draw-rect [0.5,0,12,12] geometry
+- Task1 files/oracles/GM/renderer/physical implementation are frozen and read-only. New consumer edit requires controller ruling before edit, with concrete missing proof.
+
+**Interfaces:**
+- Produces internal CompositionAdmissionV1.isAdmittedEncodedRootAaPathFrame(scene:SceneSnapshot,target:RenderTargetDescriptor):Boolean. It proves encoded domain + real PATH/Path AA presence + root topology + complete contextual per-command admission, not validate.empty() alone. W4d consumes that common policy.
+- Consumes existing standaloneRectPathFrames() Rect projection and private no-Rect constructor ownership, existing aaLogicalColorFormat target facts/physical consumers #2436. No new public config, factory, lane, format or numerical algorithm.
+
+- [ ] **Step 1: Implement after the Task1 audited causal RED and Sol review.** Contextually add the exact new Rect contract to CompositionAdmissionV1; old Path admission unchanged and unsupported Rectgradient geometry precedence retained. Integrality alone is not I32; use existing math/checked numerical authority at this guard, without changing historical helpers globally. Reuse the common family predicate in W4d, plus Rect ownership flag admitsStandaloneRectPathFrames for scenes containing Rect; Path-only constructor remains Path-only. Keep SetTransform axis-aligned policy separate from Rect source CTM restriction.
+- [ ] **Step 2: Make the one explicit historical fixture evolution.** Replace only hard-draw-rect with fractional-hard-draw-rect bounds[0.5,0,12,12]. A's new Path-before-fullblack Rect already conserves the previous input as a positive witness. No other parent oracle/prefix/tolerance change.
+- [ ] **Step 3: Controller replays the SAME Task1 tests, parent15, historical root/composition/layer controls and H.** Require new admitted casesGREEN and unchanged negative/target/budget contracts; audit everyinvocation fully before next/edit. Actual H LINEAR hash/metrics must agree with parent33456023a5161000f9f8eb1d2006bf72288090ffae945519751bb32182e9a073 and99.5228125@2; mismatch means attribution OPEN until explained. Encoded H metrics are measured, not a presetpass score. No metric migration yet.
+- [ ] **Step 4: Controller runs suites separately and corpus qualification.** Unfiltered :kanvas:test --rerun, :gpu-plan:test --rerun, :gpu-renderer:test --rerun with unchanged240s wrapper/privateevidence; disclose every failure/skip/compileerror. Fresh measureSkiaParity631/443, untouched30s vertices watchdog, slices0..607,607..608,608..631; compare allper-case identities/outputs/metrics, not summaries alone. No loss or difference is silently hidden. No repository PNG/score regeneration if zero changed GMpixels; private images retained. This family may newly admit an existing encoded GM: attribute and inspect actualdeltas rather than assume allcases identical.
+- [ ] **Step 5: Sol task review, then broad final review, one scoped final fix wave if needed.** Product/tests must equal frozen qualified privatecandidate. Controller writes refactor qualification/status/pilotage and uses explicitprivateGitindex snapshots/review packages; allCannotVerify and deferredfindings disposed. Publish draft stacked on#2436 only after qualification/reviews, remote exacthead/base/body verified and attachartifact. No merge, globalGREEN or W7closure. Preserve workspace/custody; enumerate every ledger Ruling and cost in finalhandoff.
