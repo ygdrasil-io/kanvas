@@ -33,7 +33,7 @@ Fonts, external codecs and jpg-color-cube excluded. No infrastructure/mock/sourc
 - [x] Independent task-scoped Sol spec+quality review of exact two-file package with actual RED/GREEN receipts. Fix through same writer rounds1–3, no controller product/test edits.
 - [x] Controller fresh full corpus631/443 plus affected/native/global bounded gates and exact invariant/hash comparison. Actual global remains RED/incomplete, not relabelled green.
 - [x] Regenerate only the five newly admitted PNG/scores through existing tools; all PNG byte-identical to fresh corpus, five score keys only. Visual gaps explicitly preserved.
-- [ ] Final broad branch review, dispositions/corrections, then stacked draft on#2433. No merge or W7 completion.
+- [x] Final broad branch review, dispositions/corrections, then stacked draft on#2433. No merge or W7 completion.
 
 ## Self-review
 
@@ -121,4 +121,14 @@ deux spans math littéraux[0,1], puis pixels black/background sur diamètre et
 bas de l'arc. Expliciter les arrondis F32/F64, pas d'égalité bit-exact forcée.
 Hypothèses seulement : espace de largeur/tolérance, outline fermé/topologie,
 ou couverture aval. Pas de patch avant frontière fautive reproductible ;
-RRect différé derrière cette isolation. Publication encore à effectuer.
+RRect différé derrière cette isolation.
+
+## Publication vérifiée
+
+Draft [#2434](https://github.com/ygdrasil-io/kanvas/pull/2434), publiée et
+rattachée au chat, empilée sur #2433. Base distante vérifiée
+ff3cc8398461bb776115ee5d4dcb709f62bc04aa ; head initial de publication
+b8d5f9f9ad0f7082899a076336fd1b3c8d64b031. Corps distant identique au corps
+qualifié hors whitespace terminal. Produit/tests inchangés après c0567497f.
+Ce lot local est suivi/publié ; W7, gaps visuels, globale et CI distante
+non inspectée restent ouverts. Aucune fusion.

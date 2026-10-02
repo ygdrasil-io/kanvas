@@ -1,6 +1,6 @@
 # Pilotage de la convergence Skia
 
-## Travail undashed SVG arc et refus ComplexClip2 — 2 octobre 2026, local
+## Travail undashed SVG arc et refus ComplexClip2 — 2 octobre 2026, publié
 
 Branche `codex/w7-complexclip2-resource-convergence`, parent draft#2433/ff3cc8398.
 [Plan de diagnostic](complexclip2-resource-diagnostic-plan.md), puis
@@ -35,7 +35,7 @@ des écarts de zones remplies et une cellule entière, pas seulement d'AA.
 Les cinq artefacts ciblés sont régénérés byte-identiques au corpus ; cinq
 sélections natives1PASS chacune, cinq scores seuls changent. Le score historique
 crbug98.49 n'était pas un rendu parent qualifié ; sa mise à jour98.315 garde
-le gap de contenu visible. La revue finale de branche précède encore la draft.
+le gap de contenu visible. La revue finale Astra approuve la draft locale.
 
 Relecture finale Astra ff3..6423 : Spec/Quality locales approuvées, draftYes,
 mergeNo/W7No, C0/I2/M1 exposés/hérités, introduits démontrés0/0/0.
@@ -50,6 +50,11 @@ traiter ce98% comme une réussite et ne pas lancer les deux chantiers.
 Le chantier inverse/filter337/338 reste ouvert, sans forcer l'admission
 single-sample ni relever caps/epsilons/seuils. Carte blanche permet les
 changements nécessaires, pas une approbation anticipée de cause ou de parité.
+
+Draft [#2434](https://github.com/ygdrasil-io/kanvas/pull/2434) publiée/rattachée
+sur #2433, base ff3cc8398461bb776115ee5d4dcb709f62bc04aa et head initial
+b8d5f9f9ad0f7082899a076336fd1b3c8d64b031 distants vérifiés. Corps conforme ;
+produit/tests inchangés après c0567497f. CI distante non inspectée, pas de merge.
 
 ## Port ComplexClip2 — 2 octobre 2026
 

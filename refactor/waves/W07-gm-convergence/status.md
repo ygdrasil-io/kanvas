@@ -1,6 +1,6 @@
 # W07 — diagnostic GM provisoire
 
-## Diagnostic ComplexClip2 Path/RRect — 2 octobre 2026, local
+## Diagnostic ComplexClip2 Path/RRect — 2 octobre 2026, publié
 
 **Qualification math locale :** source/tests
 `c0567497f217337012f39284b4701edc74093760`,
@@ -40,7 +40,7 @@ Crbug passe du score historique98.4939575 au frais98.3154297, pas une perte
 d'un rendu parent qualifié (ce GM y refusait). Revue finale Astra ff3..6423 :
 Spec/Quality locales Approved, draftYes/mergeNo/W7No ; C0/I2/M1 exposés/hérités,
 introduits démontrés0/0/0. I1crbug et I2RRect restent OPEN, aucun patch causal
-aval approuvé ni gap fermé. Publication en cours, pas de nouvelle PR à ce point.
+aval approuvé ni gap fermé. Draft #2434 publiée/rattachée, pas de fusion.
 
 Gate native élargie481/484PASS,95s sans skip/timeout :456anciens statuts
 identiques et28tests existants supplémentaires sélectionnés PASS.
@@ -81,9 +81,10 @@ passent par la mesure fine de longueur destinée aux tirets, avant de retenir
 les intervalles complets. L'avis ciblé Astra est achevé ; le correctif math
 ci-dessus enlève cette récursion seulement quand la preuve finie/positive
 est établie. Les quatre admissions sont ensuite mesurées réellement.
-Pas de nouvelle PR publiée, merge ou W7 clos à ce stade.
+Le lot combiné est publié en draft #2434 ; ni merge ni W7 clos.
 
-Dernier lot publié : draft [#2433](https://github.com/ygdrasil-io/kanvas/pull/2433),
+Dernier lot publié : draft [#2434](https://github.com/ygdrasil-io/kanvas/pull/2434),
+empilée sur [#2433](https://github.com/ygdrasil-io/kanvas/pull/2433),
 empilée sur [#2432](https://github.com/ygdrasil-io/kanvas/pull/2432), elle-même
 sur [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431), elle-même
 sur [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430), elle-même
@@ -91,6 +92,11 @@ sur [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429), elle-même
 sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
+
+Reçu de publication #2434 : base distante ff3cc8398461bb776115ee5d4dcb709f62bc04aa,
+head initial b8d5f9f9ad0f7082899a076336fd1b3c8d64b031, corps vérifié identique
+hors whitespace terminal. Produit/tests inchangés après c0567497f ; CI distante
+non inspectée, globale rouge/incomplète conservée.
 
 ## Port ComplexClip2 fidèle — 2 octobre 2026, qualification publiée
 
