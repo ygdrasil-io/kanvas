@@ -1,12 +1,78 @@
 # W07 — diagnostic GM provisoire
 
-Dernier lot publié : draft [#2432](https://github.com/ygdrasil-io/kanvas/pull/2432),
-empilée sur [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431), elle-même
+Dernier lot publié : draft [#2433](https://github.com/ygdrasil-io/kanvas/pull/2433),
+empilée sur [#2432](https://github.com/ygdrasil-io/kanvas/pull/2432), elle-même
+sur [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431), elle-même
 sur [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430), elle-même
 sur [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429), elle-même
 sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
+
+## Port ComplexClip2 fidèle — 2 octobre 2026, qualification publiée
+
+Branche `codex/w7-complexclip2-port`, parent publié#2432/d958bd26c.
+[Plan exécuté](complexclip2-port-plan.md), source/tests
+`092a293be0d37534769b32fa774faa56d1231952`,
+[snapshot frais exact](complexclip2-092a293be.json).
+La carte blanche W7 permet ce lot mesuré sans nouvelle boucle d'approbation.
+Luna/high implémente ; controller runtime/Git/docs/artefacts ; Sol review uniquement.
+
+Le port partagé suit le stream Skia seed0/nextU()%2 et rend les deux paints
+explicitement non-AA ; ordre/index, clip-AA, remplissage fini50×50 et hairline0
+restent inchangés. La révision primaire diagnostique le port, sans prétendre
+établir la provenance des PNG. Son premier essai rendait les contours pleins :
+deux REDs pixel ont donc précédé une extension renderer mesurée avec Astra.
+Quatre témoins publics indépendants exécutés RED ont isolé la perte de couverture.
+Trois fichiers renderer corrigent les deux frontières : retenir les autorités
+BinaryMaskedPathDraw mask/fetch/broadcast, puis consommer ce masque avec une recette
+path-mask-only host/native cohérente, ColorBlock16bytes/NativeMask/Position,
+coverage multipliée une fois. Pas de nouveau producer, guard/budget/ABI, ni math.
+
+**6/6 témoins retenus PASS** : deux vrais GM (25cellules×11 contrôles chacun),
+Rect/Path hairlines, triangles opaque/translucide, ordre/alpha/native/repeat.
+Gate Sol spec+quality approuvé, C0/I0/M1 warnings hérités. Les six fichiers
+committés sont identiques au candidat exécuté3e546479 et au paquet revu43213361.
+Qualification élargie : **453/456PASS**, XML456/3/0/0,92s sans timeout/skip.
+Les452 anciens statuts sont identiques ; seuls quatre nouveaux PASS s'ajoutent.
+Les trois échecs NoOp/Picture sont ceux du parent, types/messages inchangés
+(hors une adresse Diagnostics explicitement auditée). Intégration fraîche :
+**10/10PASS**, XML10/0/0/0,15s, sans timeout/skip.
+
+Globale fraîche au même source : **725START/END,687PASS/37FAIL/1SKIP**,
+borne240s, wrapper124/enfant143, aucun XML finalisé. Mêmes37échecs que le
+parent :32messages bruts identiques et5adresses RuntimeEffect/Diagnostics seules.
+Quatre identités anciennes non atteintes cette fois ; cubic précédemmentPASS
+est interrompu. Ce changement de timing n'est ni un gain ni un diagnostic codec.
+Borne inférieure connue1136identités, au moins411 non atteintes ;385du covering
+sont hors globale,383PASS et2PictureFAIL déjà reproduits sur le parent.
+Globale RED/incomplète, pas de preuve exhaustive ni de merge.
+
+Le corpus conserve631/443 et les18invariants : **212rendus(=),189comparés(=),
+44≥99%(+2),60≥95%(+2),médiane75%(=)**. Aucune admission/perte nouvelle ;
+629lignes hors temps identiques,210anciens hashes RGBA/métriques inchangés.
+Seules deux images changent, avec un vrai gain de parité :
+`complexclip2`79.6990504→**100%±2** (exact96.5149744%, maxRGB[2,0,0]),
+`complexclip2_rect_aa`79.6975895→**99.0752374%±2** (exact95.7910884%,
+SSIM0.9939303). Les six variantes partagent désormais le port fidèle, mais
+les quatre Path/RRect restent refusées avec diagnostics inchangés.
+Les deux triples actuel/diff/référence ont été inspectés ; différences résiduelles
+visuellement sur les contours, cause numérique non encore prouvée.
+Les tranches terminent0/1/0 en126s/38s/10s sans timeout externe ; vertices
+garde son watchdog30s et les warnings natifs/Gradle sont conservés.
+Snapshot SHA25651ce49062332208166ac688ef08ba14b3500778fbfbba8c1cc0fd6d10baa3ed2.
+Ce100%à±2 n'est pas l'égalité bit à bit ; les PASS du runner au seuil0
+ne prouvent pas la parité. Les deux PNG sont régénérés byte-identiques au corpus,
+deux scores seuls sont mis à jour (plus datestamp Properties.store) : deux
+sélections natives1PASS/XML1/0/0/0,13s/15s sans skip/timeout. Revue finale Astra
+du lotd958..b56 approuvée pour draft : aucun défaut introduitC/I/M, ancienI1
+du port corrigé, M1warningshérité conservé ; aucun fixwave produit nécessaire.
+Draft[#2433](https://github.com/ygdrasil-io/kanvas/pull/2433) publiée/rattachée,
+basecodex/w7-inverse-filter-convergence exactd958bd26c et headinitial1eef80b79
+vérifiés identiques au distant ; ce reçu ultérieur est documentaire uniquement.
+Aucun merge ni W7clos. Aucune mutation produit/tests
+après092a293be. La priorité suivante est le diagnostic causal borné des quatre
+refus Path/RRect à la frontière normalizedW4d.2, sans relever caps/budgets.
 
 ## Assemblage inverse/hairline — 2 octobre 2026, qualification finale
 
