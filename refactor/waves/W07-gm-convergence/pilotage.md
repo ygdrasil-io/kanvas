@@ -1,5 +1,51 @@
 # Pilotage de la convergence Skia
 
+## Inverse direct / Picture inverse-AA — 2 octobre 2026
+
+Produit/tests `38c75ab120494be5889929a2e7afc9195d3905a3`,
+[snapshot final frais](inverse-inventory-38c75ab12.json),
+[design](inverse-native-authority-design.md),
+[plan](inverse-scene-inventory-plan.md),
+[extension Picture](inverse-aa-picture-plan.md).
+Branche `codex/w7-inverse-scene-inventory`, empilement prévu sur#2430 ;
+revue finale indépendante Astra :1Important/3Minor, tous fermés par une vague
+finale et contre-revue ciblée Sol, aucun nouveauC/I/M ; publication non encore effectuée.
+
+La paire root producer/cover et l'inventaire exact sont authentifiés jusqu'au
+natif. Une capacité source distincte porte l'inverse-AA Geometry/SrcOver
+des vraies Picture vers le graphe W6, sans réutiliser l'autorité root.
+La recette scelle domaine/origine/extent et les deux géométries/clip/payloads
+source-final ; la projection numérique est dans `math`. Sol accepte les
+corrections de ces trois points. Le masked inverse-AA non pris en charge
+refuse avant allocation, avec sentinel/discard/récupération vérifiés.
+
+La preuve target-local/device prend en charge le plain layer décalé, sans
+confondre clip inverse et target complet ni translater les bytes deux fois.
+Recette val, opérations/ordre immutables et unique index root sont qualifiés.
+Au SHA produit :342/343 natifs affectés passent, seul échec W5bNoOp hérité ;
+788 événements math passent (478geometry+310matrix, XML final matrix310seulement).
+JS compile UP-TO-DATE après le candidat byte-identique compilé.
+La globale reste incomplète à240s,687PASS/37FAIL/1SKIP, mêmes725cas/statuts
+et37échecs atteints, sans nouvel échec atteint. Les298tests non atteints
+identifiés ne constituent pas l'univers exhaustif ;272passent séparément
+dans le gate affecté. Pas de claim globale verte ni de merge.
+
+**Aucun gain de parité GM** dans ce lot :207rendus/184comparés,42≥99%,57≥95%,
+médiane74.06067251461988%, exactement comme le corpus précédent.
+Les207hashes/métriques et631lignes hors temps sont inchangés,18invariants
+préservés, références/domaines/exclusions/seuils inchangés,vertices30s conservé.
+Aucune image nouvelle/modifiée, donc pas de régénération de scores/dashboard.
+Le progrès des scènes publiques est réel, mais ne vaut pas un gain corpus.
+
+**Pilotage suivant : une cause mesurée d'un GM bloqué avant une nouvelle
+extension générique.** Les42premiers `unsupported_child` couvrent plusieurs
+familles et ne promettent pas42gains. Astra conseille `inverse_fill_filters`337,
+puis contrôle338 une fois la cause établie : trois cellules puis cercle inverse
+et hairline séparés. Un diagnostic public causal précède toute admission,
+avec un gate sur le corpus, sans retoucher une référence pour masquer un refus.
+Conjonction alpha128 fractionnel sur destination opaque, rendu positif
+masked inverse-AA, globale, autres gaps W7/W6/W0 restent ouverts.
+
 ## Port inverseclip fidèle — 1er octobre 2026
 
 Source/test `e9da0ebd6892419987356e5a8d4803cb1a7a0023`,

@@ -6,13 +6,173 @@ sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
 
-## Diagnostic inverse direct — 1er octobre 2026, en cours
+## Inverse direct et Picture AA — 2 octobre 2026, qualification finale
+
+Source/tests `38c75ab120494be5889929a2e7afc9195d3905a3`, arbre relu
+`a66c1d8a4e5b51a4da651ee93d0b9f62985a3562` : paire producer/cover et
+inventaire root authentifiés ; source inverse-AA Picture propre au graphe W6,
+géométrie/clip/payload source-final canoniques, projection F64→F32 dans `math`.
+La preuve math distingue raster local, clip inverse inclus et domaine target,
+ainsi qu'origine raster zéro et origine device du layer ; le même témoin est
+revalidé par binding/composite/recette/prepared/native, sans double translation.
+
+La revue large Astra au commit c61786ab5 avait relevé1Important/3Minor.
+Une seule vague finale puis une contre-revue ciblée Sol les ferment tous :
+**I1/M1/M2/M3 ADDRESSED, aucune rupture nouvelle Critical/Important/Minor établie**.
+Les listes d'opérations/opérandes sont immutables et ordonnées, la recette
+est un val après validation, l'index packet/pass root est unique sans fusionner
+les admissions pair/safety. Les deux nouveaux témoins memory/wire reproduisent
+d'abord le guard d'origine, puis passent tous les288pixels/native/repeat.
+L'arrêt de compilation et la régression intermédiaire10anciens Picture sont
+archivés ; tous les anciens oracles et les quatre blobs tests restent figés.
+
+Au SHA corrigé exact, **342/343 tests natifs affectés passent** (63s) :40
+inverse/inventaire/scan-span,232 régressions et21 W4e passent ; W5b49PASS/
+1NoOp connu. Aucun skip/abort/timeout, sortie1/1 due au vrai échec conservé.
+**788/788 événements math PASS** (12s) :478 geometry+310 matrix. Les deux
+Test tasks partagent leur sortie XML : seul matrix310/0/0/0 est finalisé,
+pas788XML. Compilation JS commonMain matrix acceptée, UP-TO-DATE au SHA final
+après exécution au candidat byte-identique ; pas de claim clean build.
+
+La globale bornée240s reste **incomplète** :725START/END=687SUCCESS/
+37FAILURE/1SKIPPED, wrapper124/enfant143, XML non finalisé. Exactement les
+mêmes725 cas/statuts que c61786ab5 ;32messages d'échec sont identiques,5ne
+diffèrent que par les adresses RuntimeEffect/Diagnostics explicitement auditées.
+Les298 identités non atteintes connues sont une borne inférieure, pas l'univers
+exhaustif ;272 sont affectées et passent séparément au même SHA. Aucune exclusion
+ni conversion d'échec en succès. Le cas cubic decoded-image est interrompu,
+sans changement de décodage ni assertion d'absence du GPU.
+
+Le [corpus final frais](inverse-inventory-38c75ab12.json) conserve **631/443**,
+**207 rendus /184 comparés**,42 cas≥99%,57≥95%, médiane74.06067251461988%.
+**Aucun gain ni perte GM** :207 hashes/métriques anciens et631lignes hors temps
+identiques à e9da0ebd6,18invariants et présence inchangés. Tranches0/1/0,
+124s/39s/11s, sans timeout externe ; `vertices` garde render30s/Java124.
+Copie du journal agrégé vérifiée SHA256
+`19a3c3a4cb477247b5003d2c35f812bf74ef5bafee3adcf5ea83e4a513b5e407`.
+Les9lignes warning JDK/LWJGL/Gradle par tranche sont identiques et non supprimées.
+Aucune image nouvelle/changée : ensemble d'inspection delta vide, aucune
+régénération de PNG/scores/dashboard justifiée. Le [checkpoint c61786ab5](inverse-inventory-c61786ab5.json)
+reste historique, pas relabelisé en qualification finale.
+
+Gaps conservés : inverse-maskAA positif, alpha128+bord fractionnel sur fond
+opaque, combinaisons affine/layer non exhaustivement qualifiées, globale,
+autres W7/W6/W0 et merge. **Draft acceptable, merge/W7 non qualifiés.**
+Publication empilée sur#2430 encore à effectuer. Prochaine priorité choisie
+avec Astra : diagnostic causal borné `inverse_fill_filters`337, puis contrôle
+338 après cause ; les42unsupported_child ne promettent pas42gains.
+
+## Historique local — correction inverse direct, 1er octobre 2026
+
+État courant du correctif de relecture : **478/478 tests math PASS** (26s),
+**38/38 tests natifs PASS** (26s) et **232/232 régressions PASS** (30s),
+sans abort, timeout, failure, error ou skip dans ces gates verts. Les trois
+fichiers de tests Surface conservent exactement leurs blobs gate15.
+Deux arrêts de compilation et le refus des dix Picture AA ont été archivés.
+Le diagnostic a identifié une mauvaise précondition introduite :
+`InverseDomainSource` représente les intérieurs Zero, hors de cette route ;
+Geometry émet un maillage fini Fill. Le correctif authentifie ce vrai
+maillage source/final complet, ainsi que l'intérieur, le domaine et le
+scissor, sans modifier les attentes de pixels. La contre-relecture Sol
+des trois points Important est en cours. Pas de commit produit/tests,
+qualification globale/corpus nouvelle ou publication de ce lot.
+
+Gate précédent, avant ce correctif : **38/38 PASS**, sans abort ni timeout (19s).
+Les huit nouveaux témoins Picture inverse-AA et les deux Picture AA
+d'inventaire passent leurs pixels indépendants, leurs preuves natives,
+zéro refus/diagnostics et la répétition identique. Le diagnostic Astra a guidé
+le contrat source fermé, l'initialisation de recette et le payload blanc ;
+les handoffs bounds/scissor/blend, V/I/U et DrawIndexed sont qualifiés sur
+ce lot. Les10cas Picture AA exigent désormais le LayerComposite historique
+du compositeur différé en plus de Render/Readback ; aucun pixel/oracle/seuil
+n'a changé. Le covering six suites passe **232/232**, en31s sans abort/timeout/
+failure/error/skip, y compris le seam filter W4d. La revue indépendante Sol
+relève trois points Important malgré ces résultats : sceller domaine/origine/
+extent dans la recette consommée par clés et commandes, vérifier la géométrie
+et le clip/scissor complets au rebinding, et déplacer la projection F64→F32
+dans `math`. Le même implémenteur traite ce premier tour de corrections ;
+le lot n'est pas accepté avant covering frais et contre-relecture.
+Aucun commit produit/tests, corpus/global nouveau ou nouvelle PR pour ce lot
+n'est encore revendiqué.
+Les14tests
+W6scan-span passent, dont le refus typé inverse-maskAA, le sentinel intact,
+le discard et les4097pixels de récupération sur la même Surface deux fois.
+L'inventaire passe désormais16/16, y compris les deux Picture AA.
+La revue Sol a fait fermer le cas d'autorité consumer absente ; le correctif
+garde ces résultats en23s et la contre-relecture est approuvée.
+Le [plan Picture inverse-AA](inverse-aa-picture-plan.md) entre en exécution.
+Ce refus sécurisé
+n'ajoute pas le rendu inverse-maskAA ; aucune qualification globale/corpus
+nouvelle ni publication de ce lot n'est revendiquée.
+
+Huit témoins Picture supplémentaires mémoire/sérialisés × winding/parity
+atteignent désormais tous le refus de source manquante (16s,8/8échecs
+attendus, aucun abort/timeout/error/skip). L'implémentation dédiée démarre.
+Leurs attentes sont figées après un correctif d'oracle validé avec Astra :
+alpha128+AA+application unique sur clear, et séparément C1/destinations
+opaques/rejeux distincts. La conjonction alpha128 fractionnel sur fond opaque
+reste une limite explicite du fixture numérique, pas une capacité déclarée
+impossible ni un résultat positif inventé. Aucun oracle/seuil n'a été relâché.
 
 Branche `codex/w7-inverse-scene-inventory`, base publiée#2430
 `0dce69805c0b441f71279ad520455b4163be9c82`,
-[plan](inverse-scene-inventory-plan.md). Aucun changement produit :
-six témoins Surface8×8 sont encore locaux/non committés et ne constituent
-pas une livraison verte. Ils comparent une géométrie identique, avec/sans AA.
+[plan](inverse-scene-inventory-plan.md). Le diagnostic initial ci-dessous
+ne modifiait pas le produit. Les témoins Surface8×8 sont encore locaux/non
+committés et ne constituent pas une livraison verte ; ils comparent une
+géométrie identique, avec/sans AA.
+
+Le plan d'implémentation est maintenant écrit et en exécution séquentielle.
+État courant : **9/9 tests publics natifs passent**, en33s, sorties
+wrapper/enfant0/0, sans timeout/failure/error/skip ni stdout/stderr JUnit.
+Les scènes ordinary→inverse hard/AA passent désormais les64pixels, les
+preuves Render/Readback et le second rendu identique. Les sept témoins
+inverse-only, alpha, clips et paires AA successives restent verts.
+La paire a été revue par Sol après correction de deux points : refus
+explicite si son autorité manque, et resolve facultatif pour une paire
+AA intermédiaire. Une trace temporaire a également exposé puis permis
+de corriger un faux appariement cover→producer ; elle a été retirée.
+
+L'inventaire root authentifié franchit son premier gate natif. La classe
+élargie donne ensuite **14/16 succès**, en37s, sorties1/1 sans timeout :
+l'ordre inverse→ordinary hard/AA, les Picture hard mémoire/sérialisés et
+le refus avec sentinel/discard/recovery passent. Les deux Picture AA refusent
+encore `w6a.layer.unsupported_child` : leur source W4e rencontre le contrat
+W5b single-sample. Astra recommande une source de couverture inverse AA
+W4e authentifiée, raccordée au compositeur AA différé existant ; ce n'est
+pas une simple suppression de garde ni une migration W5b AA.
+
+Le premier covering élargi s'arrête après70PASS/1FAILURE/1SKIPPED :
+executor134 sur le témoin AA inverse4097+clip hard, pipeline sans format
+stencil opposé à un attachment D24S8. Le SKIPPED est consécutif au crash,
+pas un succès ni une exclusion. La provenance du crash reste à établir.
+Le failure W5b NoOp est confirmé dans l'archive globale historique be813afd7.
+Les cinq suites non atteintes passent séparément : **224/224**, sorties0/0
+en33s, sans timeout/failure/error/skip ni stdout/stderr JUnit. Le fixture de
+refus/recovery a ensuite été corrigé selon Sol pour conserver exactement sa
+perspective, couleur et shader ; les deux cas ciblés passent en17s et la
+contre-relecture est approuvée. L'inventaire est donc accepté comme stage,
+pas comme support Picture AA ou résolution du crash. Aucun covering complet
+n'est revendiqué à ce stade. Produit/tests toujours locaux, non committés ;
+aucune globale ni corpus nouveau revendiqué.
+Les résultats intermédiaires ci-dessous décrivent les étapes précédentes.
+
+Les deux témoins supplémentaires alpha128 donnent le RED attendu :
+**2SUCCESS/6FAILURE/0error/0skip**, huit tests exécutés en29s, sorties1/1,
+aucun timeout, stdout/stderr JUnit vides. Les quatre inverse-only opaques/alpha
+refusent10opérandes/5clés ; les deux mixtes refusent l'inventaire inchangé.
+La correction de la paire a maintenant un résultat natif intermédiaire :
+**6SUCCESS/2FAILURE**, huit tests en30s, aucun timeout/erreur/skip.
+Opaque/alpha128 inverse-only hard/AA et clips hard/AA passent tous les64pixels,
+les preuves natives et les secondes frames identiques. Les deux scènes mixtes
+refusent toujours l'inventaire inchangé. Le lot reste local/non committé,
+en revue Sol ; globale/corpus non requalifiés.
+
+La première tentative avait corrigé les clés mais donnait une mauvaise
+couverture au pixel(0,0). Astra a isolé une erreur concrète : Replace appliqué
+aux triangle fans contour-edge empêche leur annulation winding. Le seul delta
+exécuté ensuite distingue triangle direct→Replace et fan→winding/parity.
+Ce second essai donne les six succès ci-dessus, sans changer les oracles.
+L'hypothèse d'un défaut de chargement stencil read-only n'a pas été retenue.
 
 Premier run frais : compilation réussie, **2SUCCESS/4FAILURE/0error/0skip**,
 sorties wrapper/enfant1/1 en15s, aucun timeout, stderr JUnit vide.
