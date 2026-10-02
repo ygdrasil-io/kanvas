@@ -97,3 +97,28 @@ old render: the parent fresh corpus refused this GM.
 7. Endpoints comparés au helper1e-9 déjà requis avant gel des oracles, mêmes
    points/count/order et deux REDs Ready ; ajouts D53/subnormal ;
    coût : rework TEST_ONLY avant source, aucun epsilon production modifié.
+8. Paquet final sur tout le range parent..HEAD ; lecture code/docs/stat et reçu
+   d'artefacts, JSON brut disponible mais non recopié dans la vue Astra ;
+   coût : un défaut d'audit de données nécessiterait requalification/revue ciblée.
+9. Publication draft locale approuvée par Astra, I1/I2 exposés gardés ouverts
+   plutôt qu'un patch sans cause ; coût : défaut visuel dans une draft explicitement
+   non fusionnable jusqu'au diagnostic/fix suivant, aucun claim de parité.
+
+## Revue finale et priorité suivante
+
+Astra a relu tout le lot ff3cc8398..6423d2b86 : Spec/Quality locales Approved,
+DRAFT Yes, merge No, W7 No. C0/I2/M1 exposés/hérités, aucun défaut introduit
+démontré ; aucun fixwave produit causal demandé avant draft.
+I1 contour presque absent crbug et I2 régions RRect restent OPEN, pas ADDRESSÉES.
+M1warnings conservés. Les preuves contrôleur ne sont pas un second audit du
+reviewer ; JS est compilé, pas testé sur tous backends, et les tests/proof ne
+revendiquent pas une exploration exhaustive des frontières F64.
+Globale, intégration supplémentaire et sixprobe restent ouvertes.
+
+Prochain diagnostic unique : crbug691386, couple public A(unitclosedarc,
+width0.025,scale96+translate1.25)/B(même contour écran,identity,width≈2.4),
+deux spans math littéraux[0,1], puis pixels black/background sur diamètre et
+bas de l'arc. Expliciter les arrondis F32/F64, pas d'égalité bit-exact forcée.
+Hypothèses seulement : espace de largeur/tolérance, outline fermé/topologie,
+ou couverture aval. Pas de patch avant frontière fautive reproductible ;
+RRect différé derrière cette isolation. Publication encore à effectuer.

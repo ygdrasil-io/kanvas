@@ -37,7 +37,10 @@ Les cinq PNG/scores ciblés sont régénérés : cinq sélections1PASS/XML1/0/0/
 sans skip/timeout, PNG byte-identiques au corpus.554anciens scores autres
 inchangés ; PathAA a un arrondi de1.421e-14 entre formules, mêmes pixels.
 Crbug passe du score historique98.4939575 au frais98.3154297, pas une perte
-d'un rendu parent qualifié (ce GM y refusait). Revue finale/publication en cours.
+d'un rendu parent qualifié (ce GM y refusait). Revue finale Astra ff3..6423 :
+Spec/Quality locales Approved, draftYes/mergeNo/W7No ; C0/I2/M1 exposés/hérités,
+introduits démontrés0/0/0. I1crbug et I2RRect restent OPEN, aucun patch causal
+aval approuvé ni gap fermé. Publication en cours, pas de nouvelle PR à ce point.
 
 Gate native élargie481/484PASS,95s sans skip/timeout :456anciens statuts
 identiques et28tests existants supplémentaires sélectionnés PASS.
@@ -56,7 +59,11 @@ aucun XML finalisé. Même725IDs/statuts que le parent ;37types identiques,
 Le SKIP reste cubic Mitchell, sans diagnostic codec nouveau.
 401tests du covering hors globale399PASS2PictureFAIL ; union1126identités,
 non exhaustive. Globale RED/incomplète, warnings hérités non supprimés.
-Pas de nouvelle PR, merge ou W7 clos.
+Prochaine priorité unique Astra : isoler crbug unité transformée versus même
+contour écran à identité/width≈2.4, spans math littéraux et pixels natifs du
+diamètre/bas de l'arc plus fond adjacent. RRect derrière ce témoin ; pas
+de patch deviné, changements de seuil/référence/cap ni parallèle inverse/filter.
+Pas de merge ou W7 clos.
 
 Branche `codex/w7-complexclip2-resource-convergence`, parent draft#2433/ff3cc8398.
 [Plan de diagnostic](complexclip2-resource-diagnostic-plan.md), source locale

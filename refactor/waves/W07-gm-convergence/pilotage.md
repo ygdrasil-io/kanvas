@@ -37,9 +37,16 @@ sélections natives1PASS chacune, cinq scores seuls changent. Le score historiqu
 crbug98.49 n'était pas un rendu parent qualifié ; sa mise à jour98.315 garde
 le gap de contenu visible. La revue finale de branche précède encore la draft.
 
-Priorité suivante à confirmer par la relecture Astra : isoler causalement
-les RRect (opérations de clip/autorité source versus port), et le stroke fin
-transformé de `crbug_691386` ; ne pas traiter ce98% comme une réussite.
+Relecture finale Astra ff3..6423 : Spec/Quality locales approuvées, draftYes,
+mergeNo/W7No, C0/I2/M1 exposés/hérités, introduits démontrés0/0/0.
+Les deux Important ne sont pas corrigés ; le Minor reste suivi.
+**Priorité suivante unique : crbug691386**, plus petit que les25cellules RRect.
+Comparer unité/CTM96+translate1.25,width0.025 à contour écran/identity,width≈2.4,
+deux spans math littéraux et pixels natifs black/background indépendants du
+score global. Arrondis F32/F64 explicites, pas d'égalité bit-exact forcée.
+Départager espace de largeur/tolérance, outline fermé et couverture aval ;
+arrêter à la première frontière fautive avant le patch. RRect différé, ne pas
+traiter ce98% comme une réussite et ne pas lancer les deux chantiers.
 Le chantier inverse/filter337/338 reste ouvert, sans forcer l'admission
 single-sample ni relever caps/epsilons/seuils. Carte blanche permet les
 changements nécessaires, pas une approbation anticipée de cause ou de parité.
