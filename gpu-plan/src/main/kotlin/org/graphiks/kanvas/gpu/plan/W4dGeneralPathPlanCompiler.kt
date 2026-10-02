@@ -299,7 +299,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                         is DrawResult.Gap -> return Recognition.Gap(result.message)
                         is DrawResult.Invalid -> return Recognition.Invalid(result.message)
                         is DrawResult.Horizon -> return Recognition.Horizon(result.message)
-                        is DrawResult.Limit -> return Recognition.Limit(result.message)
+                        is DrawResult.Limit -> return Recognition.Limit(
+                            "commandIndexI32=$commandIndex; ${result.message}",
+                        )
                     }
                 }
                 is SceneCommand.SetTransform -> if (!finite(command.matrix)) return Recognition.Invalid("Transform metadata is non-finite")

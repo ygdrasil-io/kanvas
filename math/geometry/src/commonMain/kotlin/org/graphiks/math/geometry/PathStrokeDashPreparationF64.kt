@@ -4,6 +4,7 @@ import org.graphiks.math.vector.Vector2F64
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 
 /** Immutable source-centerline spans, grouped by their drawable contour. */
 public class PathStrokeCenterlineF64 private constructor(
@@ -274,13 +275,22 @@ private class PathStrokeDashPreparerF64(
         } else {
             policyF64.maximumDashArcLengthErrorF64 / primitiveCountI32
         }
-        val measuredPrimitivesF64 = sourceContourF64.primitivesF64.mapNotNull { primitiveF64 ->
-            measurePrimitiveF64(primitiveF64, measurementErrorPerPrimitiveF64)
-        }
-        if (measuredPrimitivesF64.isNotEmpty()) {
-            if (dashF64 == null) {
-                retainUndashedContour(measuredPrimitivesF64, sourceContourF64.closed)
-            } else {
+        if (dashF64 == null) {
+            val retainedPrimitivesF64 = sourceContourF64.primitivesF64.mapNotNull { primitiveF64 ->
+                if (isCertifiedUndashedSvgArcF64(primitiveF64)) {
+                    primitiveF64
+                } else {
+                    measurePrimitiveF64(primitiveF64, measurementErrorPerPrimitiveF64)?.primitiveF64
+                }
+            }
+            if (retainedPrimitivesF64.isNotEmpty()) {
+                retainUndashedContour(retainedPrimitivesF64, sourceContourF64.closed)
+            }
+        } else {
+            val measuredPrimitivesF64 = sourceContourF64.primitivesF64.mapNotNull { primitiveF64 ->
+                measurePrimitiveF64(primitiveF64, measurementErrorPerPrimitiveF64)
+            }
+            if (measuredPrimitivesF64.isNotEmpty()) {
                 retainDashedContour(measuredPrimitivesF64, sourceContourF64.closed, dashF64)
             }
         }
@@ -288,6 +298,39 @@ private class PathStrokeDashPreparerF64(
         contourStartF64 = null
         contourClosed = false
         sourcePrimitivesF64 = mutableListOf()
+    }
+
+    private fun isCertifiedUndashedSvgArcF64(primitiveF64: PathStrokePrimitiveF64): Boolean {
+        if (primitiveF64 !is PathStrokeSvgArcPrimitiveF64) return false
+        val arcF64 = primitiveF64.arcF64 ?: return false
+        ledgerI64.debitTopologyBeforeEmissionI64(1L)
+
+        val depthI32 = policyF64.limitsI32.maxSubdivisionDepthI32
+        if (depthI32 > 52) return false
+        if (!arcF64.center.isFinite() ||
+            !arcF64.radiusX.isFinite() || !arcF64.radiusY.isFinite() ||
+            !arcF64.rotationRadians.isFinite() || !arcF64.startAngle.isFinite() ||
+            !arcF64.sweepAngle.isFinite() || arcF64.radiusX <= 0.0 || arcF64.radiusY <= 0.0
+        ) return false
+
+        val startAndSweepMagnitudeF64 = abs(arcF64.startAngle) + abs(arcF64.sweepAngle)
+        if (!startAndSweepMagnitudeF64.isFinite()) return false
+
+        val boundXF64 = (abs(arcF64.center.x) + arcF64.radiusX) + arcF64.radiusY
+        val boundYF64 = (abs(arcF64.center.y) + arcF64.radiusX) + arcF64.radiusY
+        if (!boundXF64.isFinite() || !boundYF64.isFinite()) return false
+
+        val coordinateBoundF64 = 2.0 * stableHypotF64(2.0 * boundXF64, 2.0 * boundYF64)
+        if (!coordinateBoundF64.isFinite()) return false
+
+        val sweepLengthBoundF64 = abs(arcF64.sweepAngle) * max(arcF64.radiusX, arcF64.radiusY)
+        if (!sweepLengthBoundF64.isFinite()) return false
+        val perLeafMeasurementBoundF64 =
+            (sweepLengthBoundF64 * 2.0.pow(-depthI32.toDouble())) * 0.5
+        if (!(perLeafMeasurementBoundF64 > 0.0)) return false
+
+        val upperBoundF64 = max(coordinateBoundF64, sweepLengthBoundF64)
+        return (upperBoundF64 * 2.0.pow((depthI32 + 1).toDouble())).isFinite()
     }
 
     private fun measurePrimitiveF64(
@@ -445,12 +488,18 @@ private class PathStrokeDashPreparerF64(
     }
 
     private fun retainUndashedContour(
-        measuredPrimitivesF64: List<MeasuredStrokePrimitiveF64>,
+        primitivesF64: List<PathStrokePrimitiveF64>,
         closed: Boolean,
     ) {
         val spansF64 = mutableListOf<PathStrokePrimitiveSpanF64>()
-        measuredPrimitivesF64.forEach { measuredF64 ->
-            appendSpanF64(spansF64, measuredF64, 0.0, measuredF64.lengthF64)
+        primitivesF64.forEach { primitiveF64 ->
+            ledgerI64.debitBeforeEmissionI64(
+                PathStrokeWorkUsageI64(
+                    attemptedGeometryUnitCountI64 = 1L,
+                    snapshotByteCountI64 = 32L,
+                ),
+            )
+            spansF64 += PathStrokePrimitiveSpanF64(primitiveF64, 0.0, 1.0)
         }
         retainContour(spansF64, closed)
     }

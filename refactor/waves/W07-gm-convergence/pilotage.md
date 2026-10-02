@@ -1,5 +1,61 @@
 # Pilotage de la convergence Skia
 
+## Travail undashed SVG arc et refus ComplexClip2 — 2 octobre 2026, publié
+
+Branche `codex/w7-complexclip2-resource-convergence`, parent draft#2433/ff3cc8398.
+[Plan de diagnostic](complexclip2-resource-diagnostic-plan.md), puis
+[plan math](undashed-arc-work-plan.md), source/tests
+`c0567497f217337012f39284b4701edc74093760`,
+[snapshot complet](undashed-arc-c0567497f.json).
+W4d/W4e retiennent le premier index et les raisons math réelles ;
+les quatre refus initiaux sont FrameWorkLimit, pas une hausse nécessaire du cap.
+Sur avis ciblé Astra, une certification F64 conservatrice élimine la récursion
+de longueur inutilisée uniquement pour les arcs SVG sans tirets.
+Source/order/closure/spans et budgets restent intacts, repli mesuré pour
+chaque cas non prouvé ; pas de refonte Bézier ou de raccourci GM.
+
+RED2/21 puis GREEN21/21,798math JVM PASS et JS effectivement compilé,
+six témoins natifs PASS. Sol Task1 C0/I0/M1 warnings hérités.
+Covering481/484PASS, tous les456statuts parent identiques ;28cas existants
+additionnels PASS. Intégration10/11PASS : le test stroke sélectionné en plus
+attend un vieux diagnostic, déjà contredit par le vrai corpus parent ;
+première assertion FAIL conservée, suivantes non atteintes, aucun oracle changé.
+Globale725END=687PASS37FAIL1interruption à240s, mêmes IDs/types/statuts,
+35messages identiques et2adresses Diagnostics seules ; non exhaustive.
+399PASS/2PictureFAIL supplémentaires hors globale dans le covering.
+Pas de globale verte/merge/W7 clos.
+
+**217rendus(+5),194comparés(+5),46≥99%(+2),63≥95%(+3)** à631/443 constant.
+212anciens hashes/métriques identiques, aucune perte,608cas hors temps
+identiques ;5admissions et18diagnostics enrichis/progressés, pas23gains.
+PathBW99.9123%,PathAA99.0614% ; RRectBW94.7524%,RRectAA94.2213%.
+`crbug_691386`98.3154% mais presque vide : score de fond, contour manquant
+explicitement ouvert. Les cinq triples visuels sont inspectés ; RRect possède
+des écarts de zones remplies et une cellule entière, pas seulement d'AA.
+Les cinq artefacts ciblés sont régénérés byte-identiques au corpus ; cinq
+sélections natives1PASS chacune, cinq scores seuls changent. Le score historique
+crbug98.49 n'était pas un rendu parent qualifié ; sa mise à jour98.315 garde
+le gap de contenu visible. La revue finale Astra approuve la draft locale.
+
+Relecture finale Astra ff3..6423 : Spec/Quality locales approuvées, draftYes,
+mergeNo/W7No, C0/I2/M1 exposés/hérités, introduits démontrés0/0/0.
+Les deux Important ne sont pas corrigés ; le Minor reste suivi.
+**Priorité suivante unique : crbug691386**, plus petit que les25cellules RRect.
+Comparer unité/CTM96+translate1.25,width0.025 à contour écran/identity,width≈2.4,
+deux spans math littéraux et pixels natifs black/background indépendants du
+score global. Arrondis F32/F64 explicites, pas d'égalité bit-exact forcée.
+Départager espace de largeur/tolérance, outline fermé et couverture aval ;
+arrêter à la première frontière fautive avant le patch. RRect différé, ne pas
+traiter ce98% comme une réussite et ne pas lancer les deux chantiers.
+Le chantier inverse/filter337/338 reste ouvert, sans forcer l'admission
+single-sample ni relever caps/epsilons/seuils. Carte blanche permet les
+changements nécessaires, pas une approbation anticipée de cause ou de parité.
+
+Draft [#2434](https://github.com/ygdrasil-io/kanvas/pull/2434) publiée/rattachée
+sur #2433, base ff3cc8398461bb776115ee5d4dcb709f62bc04aa et head initial
+b8d5f9f9ad0f7082899a076336fd1b3c8d64b031 distants vérifiés. Corps conforme ;
+produit/tests inchangés après c0567497f. CI distante non inspectée, pas de merge.
+
 ## Port ComplexClip2 — 2 octobre 2026
 
 Source/tests `092a293be0d37534769b32fa774faa56d1231952`,
