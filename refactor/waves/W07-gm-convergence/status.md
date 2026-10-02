@@ -1,7 +1,8 @@
 # W07 — diagnostic GM provisoire
 
-Dernier lot publié : draft [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430),
-empilée sur [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429), elle-même
+Dernier lot publié : draft [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431),
+empilée sur [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430), elle-même
+sur [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429), elle-même
 sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
@@ -58,7 +59,10 @@ reste historique, pas relabelisé en qualification finale.
 Gaps conservés : inverse-maskAA positif, alpha128+bord fractionnel sur fond
 opaque, combinaisons affine/layer non exhaustivement qualifiées, globale,
 autres W7/W6/W0 et merge. **Draft acceptable, merge/W7 non qualifiés.**
-Publication empilée sur#2430 encore à effectuer. Prochaine priorité choisie
+Draft [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431) publiée et rattachée,
+base codex/w7-inverseclip-port/SHA0dce69805 vérifiée, head distant initial
+af3d41480 identique au checkout. Les seuls commits après38c75ab12 sont documentaires.
+Prochaine priorité choisie
 avec Astra : diagnostic causal borné `inverse_fill_filters`337, puis contrôle
 338 après cause ; les42unsupported_child ne promettent pas42gains.
 

@@ -7,9 +7,11 @@ Produit/tests `38c75ab120494be5889929a2e7afc9195d3905a3`,
 [design](inverse-native-authority-design.md),
 [plan](inverse-scene-inventory-plan.md),
 [extension Picture](inverse-aa-picture-plan.md).
-Branche `codex/w7-inverse-scene-inventory`, empilement prévu sur#2430 ;
+Branche `codex/w7-inverse-scene-inventory`, draft
+[#2431](https://github.com/ygdrasil-io/kanvas/pull/2431) publiée/rattachée sur#2430 ;
 revue finale indépendante Astra :1Important/3Minor, tous fermés par une vague
-finale et contre-revue ciblée Sol, aucun nouveauC/I/M ; publication non encore effectuée.
+finale et contre-revue ciblée Sol, aucun nouveauC/I/M. Parent exact0dce69805
+et head distant initialaf3d41480 vérifiés ; commits de suivi documentaires.
 
 La paire root producer/cover et l'inventaire exact sont authentifiés jusqu'au
 natif. Une capacité source distincte porte l'inverse-AA Geometry/SrcOver
