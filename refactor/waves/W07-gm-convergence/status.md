@@ -1,14 +1,15 @@
 # W07 — diagnostic GM provisoire
 
-Dernier lot publié : draft [#2432](https://github.com/ygdrasil-io/kanvas/pull/2432),
-empilée sur [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431), elle-même
+Dernier lot publié : draft [#2433](https://github.com/ygdrasil-io/kanvas/pull/2433),
+empilée sur [#2432](https://github.com/ygdrasil-io/kanvas/pull/2432), elle-même
+sur [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431), elle-même
 sur [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430), elle-même
 sur [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429), elle-même
 sur [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428).
 La première PR W7 [#2410](https://github.com/ygdrasil-io/kanvas/pull/2410)
 reste la base historique sur la PR W6 #2409.
 
-## Port ComplexClip2 fidèle — 2 octobre 2026, qualification locale
+## Port ComplexClip2 fidèle — 2 octobre 2026, qualification publiée
 
 Branche `codex/w7-complexclip2-port`, parent publié#2432/d958bd26c.
 [Plan exécuté](complexclip2-port-plan.md), source/tests
@@ -66,7 +67,10 @@ deux scores seuls sont mis à jour (plus datestamp Properties.store) : deux
 sélections natives1PASS/XML1/0/0/0,13s/15s sans skip/timeout. Revue finale Astra
 du lotd958..b56 approuvée pour draft : aucun défaut introduitC/I/M, ancienI1
 du port corrigé, M1warningshérité conservé ; aucun fixwave produit nécessaire.
-Publication en cours, aucun merge ni W7clos. Aucune mutation produit/tests
+Draft[#2433](https://github.com/ygdrasil-io/kanvas/pull/2433) publiée/rattachée,
+basecodex/w7-inverse-filter-convergence exactd958bd26c et headinitial1eef80b79
+vérifiés identiques au distant ; ce reçu ultérieur est documentaire uniquement.
+Aucun merge ni W7clos. Aucune mutation produit/tests
 après092a293be. La priorité suivante est le diagnostic causal borné des quatre
 refus Path/RRect à la frontière normalizedW4d.2, sans relever caps/budgets.
 

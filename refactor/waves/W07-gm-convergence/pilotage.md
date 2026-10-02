@@ -4,7 +4,10 @@
 
 Source/tests `092a293be0d37534769b32fa774faa56d1231952`,
 [snapshot](complexclip2-092a293be.json), [plan](complexclip2-port-plan.md),
-branche `codex/w7-complexclip2-port`, empilement prévu sur draft#2432/d958bd26c.
+branche `codex/w7-complexclip2-port`, draft
+[#2433](https://github.com/ygdrasil-io/kanvas/pull/2433) publiée/rattachée sur
+draft#2432/d958bd26c, headinitial1eef80b79 distant identique vérifié.
+Après source092a293be, seuls documents/snapshot/PNG/scores changent.
 Le port primaire corrige RNG/paint sans toucher clip-AA ni références ; les
 témoins natifs révèlent ensuite deux frontières W4e incohérentes. On retient
 les faits compiler-owned du masque binaire non clippé et on les consomme
