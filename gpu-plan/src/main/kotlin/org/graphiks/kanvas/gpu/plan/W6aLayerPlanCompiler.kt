@@ -295,7 +295,8 @@ public class W6aLayerPlanCompiler public constructor(
             // DST is a selected W7 semantic NoOp.  Keep W6 ownership so sibling rendering
             // remains native, but publish no source lane, resource, pass, or destination write.
             if (deferredAa?.blend == BlendPlan.NoOpV1) return@forEach
-            val rootAaRectStroke = ownsMixedRootAaRect && scopeI32 == null &&
+            val rootAaRectStroke = (ownsMixedRootAaRect || ownsW6b) && scopeI32 == null &&
+                originalDraw?.paint?.let { paint -> paint.imageFilter == null && paint.maskFilter == null } == true &&
                 originalDraw?.let(rootAaRectSource::acceptsW6RootAaRectStrokeScope) == true
             val encodedHairline = ownsEncodedHairlineFrame &&
                 (recordedCommand as? SceneCommand.Draw)?.let(CompositionAdmissionV1::isAdmittedEncodedRectHairline) == true
@@ -337,7 +338,25 @@ public class W6aLayerPlanCompiler public constructor(
                 is GpuPlanSelection.NotCandidate -> return if (ownsMixedRootAaRect || ownsEncodedRootSegments)
                     GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild,
                         "Mixed root frame is outside its complete child source lanes.")))
-                else invalid(W6aPlanDiagnostics.UnsupportedChild, "Layer segment is outside the admitted child geometry/source lanes.")
+                else {
+                    val pathFillRule = (originalDraw?.geometry as? GeometryNode.Path)?.path?.fillRule?.name ?: "none"
+                    val filterPayloadPresent = originalDraw?.let { draw ->
+                        draw.paint?.imageFilter != null || draw.paint?.maskFilter != null ||
+                            ((draw.effects as? EffectStack.Entries)?.any {
+                                it is CapturedFilterRootV1 || it is MaskFilterNode
+                            } == true)
+                    } == true
+                    invalid(
+                        W6aPlanDiagnostics.UnsupportedChild,
+                        "Layer segment is outside the admitted child geometry/source lanes. " +
+                            "drawIndexI32=$drawIndexI32; scopeI32=${scopeI32 ?: "root"}; " +
+                            "origin=${originalDraw?.origin?.name ?: "none"}; " +
+                            "coverage=${originalDraw?.coverage?.name ?: "none"}; " +
+                            "pathFillRule=$pathFillRule; ownsW6b=$ownsW6b; " +
+                            "filterPayloadPresent=$filterPayloadPresent; childReasons=" +
+                            selection.diagnostics().joinToString(" | ") { "${it.code.value}: ${it.message}" },
+                    )
+                }
             }
         }
         return GpuPlanSelection.Candidate(Candidate(this, scene, scene.canonicalId, target, immutableScopes, segments.toList()))
