@@ -750,9 +750,10 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
         ): GPUW4ePreparedFrameAuthority {
             require(authority.revalidatesRoot(graph)) { "W4e root resolve requires the validated root graph" }
             val passes = graph.passes()
-            val inversePairOperations = issueRootInversePairOperations(authority, graph, renders)
+            val packetIndex = RootPacketIndex.issue(renders)
+            val inversePairOperations = issueRootInversePairOperations(authority, graph, packetIndex)
             val unsupportedMaskedInverseAaDirectOperations =
-                issueRootUnsupportedMaskedInverseAaDirectOperations(authority, graph, renders)
+                issueRootUnsupportedMaskedInverseAaDirectOperations(authority, graph, packetIndex)
             val resourceInventory = GPUW4ePreparedResourceInventory.issue(graph, refs, preparations, renders)
             val finalScene = passes.dropLast(1).lastOrNull() as? PlanPass.PathRenderPass
             // Direct 1x frames retain their existing admission, including mixed frames ending at 1x.
@@ -843,6 +844,22 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
                 rootIssued = true)
         }
 
+        /** One root-issued packet index shared by the distinct pair and refusal authorities. */
+        private class RootPacketIndex private constructor(val byPassId: Map<String, GPUDrawPacket>) {
+            companion object {
+                fun issue(renders: List<GPUTask.Render>): RootPacketIndex {
+                    val packets = renders.associate { render ->
+                        val packet = requireNotNull(render.drawPackets.singleOrNull()) {
+                            "W4e root authority requires one packet per render pass"
+                        }
+                        packet.passId to packet
+                    }
+                    require(packets.size == renders.size) { "W4e root packet/pass identities are not one-to-one" }
+                    return RootPacketIndex(java.util.Collections.unmodifiableMap(LinkedHashMap(packets)))
+                }
+            }
+        }
+
         /**
          * W4e's root graph alone authenticates this unsupported direct AA mask route. Retain the
          * precise prepared objects, rather than allowing materialization to infer ownership from
@@ -851,20 +868,13 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
         private fun issueRootUnsupportedMaskedInverseAaDirectOperations(
             authority: GPUPlanW4ePreparedAuthority,
             graph: RenderGraph,
-            renders: List<GPUTask.Render>,
+            packetIndex: RootPacketIndex,
         ): Map<String, UnsupportedMaskedInverseAaDirectOperation> {
-            val packetsByPassId = renders.associate { render ->
-                val packet = requireNotNull(render.drawPackets.singleOrNull()) {
-                    "W4e root masked inverse AA authority requires one packet per render pass"
-                }
-                packet.passId to packet
-            }
-            require(packetsByPassId.size == renders.size)
             return graph.passes().filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { pass ->
                 val path = requireNotNull(authority.pathFor(pass.id.value)) {
                     "W4e root path pass lacks its prepared attachment authority"
                 }
-                val packet = requireNotNull(packetsByPassId[pass.id.value]) {
+                val packet = requireNotNull(packetIndex.byPassId[pass.id.value]) {
                     "W4e root path pass is absent from the authenticated render order"
                 }
                 require(packet.w4ePreparedPath === path && packet.passId == path.passId) {
@@ -899,15 +909,8 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
         private fun issueRootInversePairOperations(
             authority: GPUPlanW4ePreparedAuthority,
             graph: RenderGraph,
-            renders: List<GPUTask.Render>,
+            packetIndex: RootPacketIndex,
         ): Map<String, GPUW4ePreparedInversePairOperation> {
-            val packetsByPassId = renders.associate { render ->
-                val packet = requireNotNull(render.drawPackets.singleOrNull()) {
-                    "W4e inverse pair requires one packet per root render pass"
-                }
-                packet.passId to packet
-            }
-            require(packetsByPassId.size == renders.size)
             return graph.passes().zipWithNext().flatMap { (first, second) ->
                 val producer = first as? PlanPass.PathRenderPass ?: return@flatMap emptyList()
                 val cover = second as? PlanPass.PathRenderPass ?: return@flatMap emptyList()
@@ -925,10 +928,10 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
                 if (producerConsumer.interiorCoverage !is GPUW4ePreparedInverseInteriorCoverage.Geometry ||
                     coverConsumer.interiorCoverage !is GPUW4ePreparedInverseInteriorCoverage.Geometry
                 ) return@flatMap emptyList()
-                val producerPacket = requireNotNull(packetsByPassId[producer.id.value]) {
+                val producerPacket = requireNotNull(packetIndex.byPassId[producer.id.value]) {
                     "W4e inverse producer is absent from root render order"
                 }
-                val coverPacket = requireNotNull(packetsByPassId[cover.id.value]) {
+                val coverPacket = requireNotNull(packetIndex.byPassId[cover.id.value]) {
                     "W4e inverse cover is absent from root render order"
                 }
                 GPUW4ePreparedInversePairOperation.issue(

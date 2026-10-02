@@ -14,11 +14,19 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 internal class GPUW4eInverseAaCoveragePreparedAuthority private constructor(
     val owner: PlanPass.AaCoverageSourcePass,
     val binding: PlanW4eInverseAaCoverageSourceBindingV1,
+    private val composite: PlanAaDeferredCompositeV1,
     val prepared: GPUPlanW4ePreparedAuthority,
 ) {
     val phases: List<PlanPass.PathRenderPass> = binding.passes()
     val payload: W4eNativePayloadPlan = binding.payload()
     val recipe: W4eInverseAaCoverageSourceNativeSiteRecipeV1 = binding.recipe
+    val coordinateProvenance = binding.coordinateProvenance()
+
+    fun validatesCoordinateProvenance(): Boolean =
+        composite.coordinateProvenance === coordinateProvenance &&
+            coordinateProvenance === binding.coordinateProvenance() &&
+            coordinateProvenance.matches(composite.copyTargetExtentI32(), composite.copySourceBoundsTargetI32(),
+                binding.copySourceRasterOriginLocalI32(), composite.copyTargetOriginDeviceI32(), composite.mapping)
 
     fun resourceUses(refs: Map<PlanResourceId, GPUFrameResourceRef>): List<GPUFrameResourceUse> = buildList {
         val terminal = phases.last()
@@ -41,6 +49,7 @@ internal class GPUW4eInverseAaCoveragePreparedAuthority private constructor(
     fun validates(render: GPUFrameStep.RenderPassStep?, refs: Map<PlanResourceId, GPUFrameResourceRef>): Boolean {
         val first = phases.first()
         return binding.recipe.binding === binding && binding.validatesNativeOperationFacts() &&
+            validatesCoordinateProvenance() &&
             render != null && render.w6aPassV1 === owner &&
             phases.size == 2 && phases[0].phase == PathRenderPhase.MultisampleStencilProducer &&
             phases[1].phase == PathRenderPhase.MultisampleStencilColorCover &&
@@ -70,13 +79,22 @@ internal class GPUW4eInverseAaCoveragePreparedAuthority private constructor(
             val owner = graph.passes().singleOrNull { pass ->
                 pass is PlanPass.AaCoverageSourcePass && pass.binding === binding && pass.id == binding.ownerPassId
             } as? PlanPass.AaCoverageSourcePass ?: error("W7 inverse-AA binding has no final AaCoverageSource owner")
+            val composite = graph.passes().singleOrNull { pass ->
+                pass is PlanPass.AaDeferredComposite && pass.contract?.coverage === binding
+            } as? PlanPass.AaDeferredComposite ?: error("W7 inverse-AA binding has no final deferred composite owner")
+            val contract = requireNotNull(composite.contract)
+            val provenance = binding.coordinateProvenance()
+            require(contract.coordinateProvenance === provenance && provenance.matches(
+                contract.copyTargetExtentI32(), contract.copySourceBoundsTargetI32(),
+                binding.copySourceRasterOriginLocalI32(), contract.copyTargetOriginDeviceI32(), contract.mapping,
+            )) { "W7 inverse-AA prepared authority lost target-local/device provenance" }
             require(binding.resources().size == 6 && binding.resources().all { row -> graph.resources().any { it === row } })
             val payload = binding.payload()
             require(payload.matchesDeclaredResources(binding.resources()) &&
                 payload.vertexResourceId == binding.passes().last().drawDataResources.vertex &&
                 payload.indexResourceId == binding.passes().last().drawDataResources.index &&
                 payload.uniformResourceId == binding.passes().last().drawDataResources.uniform)
-            return GPUW4eInverseAaCoveragePreparedAuthority(owner, binding,
+            return GPUW4eInverseAaCoveragePreparedAuthority(owner, binding, contract,
                 GPUPlanW4ePreparedAuthority.issueLayered(graph, binding))
         }
     }

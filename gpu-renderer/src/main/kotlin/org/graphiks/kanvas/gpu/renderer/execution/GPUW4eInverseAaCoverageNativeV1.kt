@@ -20,6 +20,7 @@ internal object GPUW4eInverseAaCoverageNativeV1 {
             }
             require(authority.validates(render, frame.refs) &&
                 authority.recipe.binding === authority.binding &&
+                authority.validatesCoordinateProvenance() &&
                 authority.payload.matchesDeclaredResources(authority.binding.resources()) &&
                 authority.phases.zip(render!!.drawPackets).all { (phase, packet) ->
                     packet.w4ePreparedPath === authority.prepared.pathFor(phase.id.value) &&
@@ -38,7 +39,8 @@ internal object GPUW4eInverseAaCoverageNativeV1 {
         generation: GPUDeviceGenerationID,
         owned: W6aOwnedHandles,
     ): Map<Int, GPUPreparedNativeScopeOperand.Render> = frame.w4eInverseAaCoverageAuthorities.values.associate { authority ->
-        require(authority.recipe.binding === authority.binding && authority.binding.validatesNativeOperationFacts())
+        require(authority.recipe.binding === authority.binding && authority.binding.validatesNativeOperationFacts() &&
+            authority.validatesCoordinateProvenance())
         val render = framePlan.steps.withIndex().single { (_, step) ->
             (step as? GPUFrameStep.RenderPassStep)?.w6aPassV1 === authority.owner
         }

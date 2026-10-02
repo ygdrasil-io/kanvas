@@ -30,6 +30,7 @@ import org.graphiks.math.geometry.translateCheckedOrNull
 import org.graphiks.math.vector.Vector2I32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
+import org.graphiks.math.matrix.TargetLocalDeviceProvenanceI32
 import org.graphiks.math.matrix.composeInOrderF64
 import org.graphiks.math.matrix.isFinite
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
@@ -1822,6 +1823,14 @@ internal class W6aLayerGraphConstruction(
                             RectI32(0, 0, targetExtent.width, targetExtent.height), input.mapping),
                         DestinationVersionI64(versions.getValue(target)), lane.passes(), ids, lane.resources(),
                         input.copyDomainDeviceI32(), passes.size, snapshot, sourcePhaseMapping = null,
+                        coordinateProvenance = if (lane.capabilityId ==
+                            W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID) {
+                            requireNotNull(TargetLocalDeviceProvenanceI32.ofOrNull(
+                                targetExtent, RectI32(0, 0, targetExtent.width, targetExtent.height),
+                                RectI32(0, 0, targetExtent.width, targetExtent.height),
+                                input.copyDomainDeviceI32(), Point2I32.Origin, targetOriginDevice(target), input.mapping,
+                            )) { "W7 inverse-AA target-local/device provenance is not representable" }
+                        } else null,
                     )
                     aaDeferredPhases[laneI32] = emitted.phases
                     aaDeferredOwners[laneI32] = emitted.producer
@@ -2852,7 +2861,16 @@ internal class W6aLayerGraphConstruction(
                                 W6AaDeferredOccurrenceEmitterV1.Target(target, targetExtent, targetOriginDevice(target),
                                     RectI32(0, 0, targetExtent.width, targetExtent.height), geometry?.mapping), before,
                                 binding.source.passes(), remapped, binding.source.resources(),
-                                geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32, passes.size, snapshot)
+                                geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32, passes.size, snapshot,
+                                coordinateProvenance = if (binding.source.capabilityId ==
+                                    W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID) {
+                                    requireNotNull(TargetLocalDeviceProvenanceI32.ofOrNull(
+                                        targetExtent, RectI32(0, 0, targetExtent.width, targetExtent.height),
+                                        RectI32(0, 0, targetExtent.width, targetExtent.height),
+                                        geometry?.compositeDomainDeviceI32 ?: rootDomainDeviceI32, Point2I32.Origin,
+                                        targetOriginDevice(target), geometry?.mapping,
+                                    )) { "W7 inverse-AA target-local/device provenance is not representable" }
+                                } else null)
                             aaDeferredPhases[laneI32] = emitted.phases
                             aaDeferredOwners[laneI32] = emitted.producer
                             passes += emitted.producer
@@ -3380,7 +3398,10 @@ internal class W6aLayerGraphConstruction(
                 lanes[laneI32].capabilityId == W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID
             ) PlanW4eInverseAaCoverageSourceBindingV1.issue(lanes[laneI32], owner.id,
                 phases.first().draw.commandIndex, phases, remapping,
-                resources.filter { it.id in remapping.values }, targetExtent(target), targetOriginDevice(target))
+                resources.filter { it.id in remapping.values }, targetExtent(target), targetOriginDevice(target),
+                requireNotNull(aaDeferredDrafts.getValue(laneI32).coordinateProvenance) {
+                    "W7 inverse-AA source binding lost its target-local/device provenance"
+                })
             else PlanW4dAaCoverageSourceBindingV1(owner.id,
                 lanes[laneI32].capabilityId, phases.first().draw.commandIndex,
                 lanes[laneI32].passes().map { it.id }, phases, remapping,
@@ -3571,7 +3592,7 @@ internal class W6aLayerGraphConstruction(
                         contract.commandIndexI32, contract.coverage, materialDraw, contract.target,
                         contract.destinationSnapshot, contract.blend, contract.destinationVersionBefore,
                         contract.destinationVersionAfter, contract.copyTargetExtentI32(), contract.copySourceBoundsTargetI32(),
-                        contract.copyTargetOriginDeviceI32(), contract.mapping))
+                        contract.copyTargetOriginDeviceI32(), contract.mapping, contract.coordinateProvenance))
                 }
                 is PlanPass.PathRenderPass -> {
                     require(pass.phase in setOf(PathRenderPhase.MultisampleDirectColor,

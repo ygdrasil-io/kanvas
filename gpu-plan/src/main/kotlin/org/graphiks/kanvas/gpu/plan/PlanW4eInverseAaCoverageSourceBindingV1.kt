@@ -6,6 +6,7 @@ import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.PathFillGeometryF32
 import org.graphiks.math.geometry.matchesCanonicalPathFillGeometryF32
+import org.graphiks.math.matrix.TargetLocalDeviceProvenanceI32
 
 /** Compiler-issued W4e inverse-domain AA coverage authority; it is never reconstructed from phases. */
 public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
@@ -22,6 +23,7 @@ public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
     origin: Point2I32,
     private val sourcePayload: W4eNativePayloadPlan,
     private val payloadValue: W4eNativePayloadPlan,
+    private val coordinateProvenanceValue: TargetLocalDeviceProvenanceI32,
 ) : PlanAaCoverageSourceBindingV1 {
     /** Immutable original/final attachment and coordinate facts for one closed W7 operation. */
     public class OperationFacts internal constructor(
@@ -80,16 +82,19 @@ public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
     public class InteriorStencil internal constructor(
         override val facts: OperationFacts, geometryF32: PathFillGeometryF32,
         public val sourceSlice: W4eNativeGeometrySlice, public val slice: W4eNativeGeometrySlice,
-        public val mode: InteriorMode, override val operands: List<String> = listOf("Pipeline", "Vertex", "Index"),
+        public val mode: InteriorMode, operands: List<String> = listOf("Pipeline", "Vertex", "Index"),
     ) : Operation {
         private val interiorSnapshot = InverseInteriorCoverageF32.Geometry.of(geometryF32)
+        override val operands: List<String> = immutableList(operands)
         public fun copyInteriorGeometryF32(): PathFillGeometryF32 = interiorSnapshot.copyGeometryF32()
     }
     public class ZeroWhiteCover internal constructor(
         override val facts: OperationFacts,
         public val sourceSlice: W4eNativeUniformSlice, public val slice: W4eNativeUniformSlice,
-        override val operands: List<String> = listOf("Pipeline", "BindGroup"),
-    ) : Operation
+        operands: List<String> = listOf("Pipeline", "BindGroup"),
+    ) : Operation {
+        override val operands: List<String> = immutableList(operands)
+    }
     public enum class InteriorMode { DirectReplaceOne, Winding, Parity }
     /** Renderer operand sequence derived from the sealed two-operation recipe, never phase inference. */
     public enum class NativeOperandV1 {
@@ -107,8 +112,7 @@ public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
     private val extentValue = extent.copy()
     private val sourceOriginValue = Point2I32(sourceOrigin.x, sourceOrigin.y)
     private val originValue = Point2I32(origin.x, origin.y)
-    private lateinit var recipeValue: W4eInverseAaCoverageSourceNativeSiteRecipeV1
-    override val recipe: W4eInverseAaCoverageSourceNativeSiteRecipeV1 get() = recipeValue
+    override val recipe: W4eInverseAaCoverageSourceNativeSiteRecipeV1
     private val operationValues: List<Operation> = run {
         val sourceProducer = sourcePhaseValues.first(); val sourceCover = sourcePhaseValues.last()
         val producer = phaseValues.first(); val cover = phaseValues.last()
@@ -134,8 +138,10 @@ public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
             PathFillStrategy.StencilCover -> if (interior.copyGeometryF32().fillRule in setOf(org.graphiks.math.geometry.FillRule.EVEN_ODD, org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD)) InteriorMode.Parity else InteriorMode.Winding
         }
         require(sourceInverse.geometryF32.interiorCoverageF32 is org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry)
-        listOf(InteriorStencil(facts(sourceProducer, producer), interior.copyGeometryF32(), sourceGeometry, geometry, mode),
-            ZeroWhiteCover(facts(sourceCover, cover), sourceUniform, uniform))
+        immutableList(listOf(
+            InteriorStencil(facts(sourceProducer, producer), interior.copyGeometryF32(), sourceGeometry, geometry, mode),
+            ZeroWhiteCover(facts(sourceCover, cover), sourceUniform, uniform),
+        ))
     }
 
     override fun sourcePassIds(): List<PlanPassId> = sourceIds
@@ -148,6 +154,9 @@ public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
     public fun payload(): W4eNativePayloadPlan = payloadValue
 
     internal fun sourcePayload(): W4eNativePayloadPlan = sourcePayload
+    /** The factory-issued raster-local payload origin; it is intentionally distinct from owner device origin. */
+    public fun copySourceRasterOriginLocalI32(): Point2I32 = sourcePayload.copyOriginDeviceI32()
+    public fun coordinateProvenance(): TargetLocalDeviceProvenanceI32 = coordinateProvenanceValue
     public fun operations(): List<Operation> = operationValues
     public fun nativeOperandSequenceV1(): List<NativeOperandV1> {
         require(validatesNativeOperationFacts()) { "W7 inverse-AA operation record no longer matches its issued source/final facts" }
@@ -172,13 +181,13 @@ public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
     /** Re-check the immutable original/final records at every consumer boundary. */
     public fun validatesNativeOperationFacts(): Boolean {
         if (sourcePhaseValues.size != 2 || phaseValues.size != 2 || operationValues.size != 2 ||
-            !sameSizeI32(sourceExtentValue, extentValue) || !samePointI32(sourceOriginValue, originValue)) return false
+            !sameSizeI32(sourceExtentValue, extentValue)) return false
         if (remappingValues.keys != sourceResourceValues.map { it.id }.toSet() ||
             remappingValues.values.toSet() != resourceValues.map { it.id }.toSet()) return false
         val sourceProducer = sourcePhaseValues[0]; val sourceCover = sourcePhaseValues[1]
         val producer = phaseValues[0]; val cover = phaseValues[1]
-        val interior = operationValues.filterIsInstance<InteriorStencil>().singleOrNull() ?: return false
-        val white = operationValues.filterIsInstance<ZeroWhiteCover>().singleOrNull() ?: return false
+        val interior = operationValues.getOrNull(0) as? InteriorStencil ?: return false
+        val white = operationValues.getOrNull(1) as? ZeroWhiteCover ?: return false
         fun factsMatch(facts: OperationFacts, source: PlanPass.PathRenderPass, final: PlanPass.PathRenderPass): Boolean {
             val sourceInverse = source.draw.inverseDomainClipOrNullV1() ?: return false
             val finalInverse = final.draw.inverseDomainClipOrNullV1() ?: return false
@@ -202,7 +211,12 @@ public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
             InverseInteriorCoverageF32.Geometry)?.copyGeometryF32() ?: return false
         val producerGeometry = (producer.draw.inverseDomainClipOrNullV1()?.geometryF32?.interiorCoverageF32 as?
             InverseInteriorCoverageF32.Geometry)?.copyGeometryF32() ?: return false
-        return sourcePayload.matchesDeclaredResources(sourceResourceValues) &&
+        return coordinateProvenanceValue.matchesBinding(sourceExtentValue,
+            interior.facts.copySourceDomainTargetLocalI32(), sourcePayload.copyOriginDeviceI32(), originValue) &&
+            samePointI32(payloadValue.copyOriginDeviceI32(), sourcePayload.copyOriginDeviceI32()) &&
+            sameRectI32(interior.facts.copySourceDomainTargetLocalI32(), white.facts.copySourceDomainTargetLocalI32()) &&
+            containsRectI32(coordinateProvenanceValue.copyTargetLocalDomainI32(), interior.facts.copyDomainTargetLocalI32()) &&
+            sourcePayload.matchesDeclaredResources(sourceResourceValues) &&
             payloadValue.matchesDeclaredResources(resourceValues) &&
             factsMatch(interior.facts, sourceProducer, producer) && factsMatch(white.facts, sourceCover, cover) &&
             sourceProducerGeometry.matchesCanonicalPathFillGeometryF32(interior.copyInteriorGeometryF32()) &&
@@ -269,20 +283,28 @@ public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
         require(payloadValue.hasCanonicalWhiteUniform(
             requireNotNull(payloadValue.uniformSlice(terminal.id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_UNIFORM)),
         ))
+        require(operationValues.size == 2 && operationValues[0] is InteriorStencil && operationValues[1] is ZeroWhiteCover) {
+            "W7 inverse-AA operations must retain producer then cover order"
+        }
         require(validatesNativeOperationFacts()) { "W7 inverse-AA operation record no longer matches its issued source/final facts" }
-        recipeValue = W4eInverseAaCoverageSourceNativeSiteRecipeV1(this)
+        recipe = W4eInverseAaCoverageSourceNativeSiteRecipeV1(this)
     }
 
     internal companion object {
         fun issue(source: SourceDeferredRenderConstructionV4, ownerPassId: PlanPassId, commandIndexI32: Int,
             passes: List<PlanPass.PathRenderPass>, resourceRemapping: Map<PlanResourceId, PlanResourceId>,
-            resources: List<PlanResource>, extent: SizeI32, origin: Point2I32): PlanW4eInverseAaCoverageSourceBindingV1 {
+            resources: List<PlanResource>, extent: SizeI32, origin: Point2I32,
+            coordinateProvenance: TargetLocalDeviceProvenanceI32): PlanW4eInverseAaCoverageSourceBindingV1 {
             require(source.capabilityId == W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID &&
                 source.topology == DeferredLaneTopologyV4.AaResolvedCoverage)
             val sourcePayload = requireNotNull(source.w4ePayload)
-            require(sameSizeI32(source.targetExtent, extent) && samePointI32(sourcePayload.copyOriginDeviceI32(), origin))
             val originalPhases = source.passes().filterIsInstance<PlanPass.PathRenderPass>()
             require(originalPhases.size == 2 && passes.size == 2)
+            val sourceDomain = requireNotNull(originalPhases.first().draw.inverseDomainClipOrNullV1()).geometryF32.copyDomainI32()
+            require(coordinateProvenance.matchesBinding(source.targetExtent, sourceDomain,
+                sourcePayload.copyOriginDeviceI32(), origin)) {
+                "W7 inverse-AA binding target-local raster/device owner provenance differs"
+            }
             val sourceResourceIds = source.resources().map { it.id }.toSet()
             require(resourceRemapping.keys == sourceResourceIds && resourceRemapping.values.toSet().size == 6 &&
                 resourceRemapping.values.toSet() == resources.map { it.id }.toSet())
@@ -315,12 +337,13 @@ public class PlanW4eInverseAaCoverageSourceBindingV1 private constructor(
                 payload.copyVertexData().contentEquals(sourcePayload.copyVertexData()) &&
                 payload.copyIndexData().contentEquals(sourcePayload.copyIndexData()) &&
                 payload.copyUniformData().contentEquals(sourcePayload.copyUniformData()))
-            require(samePointI32(payload.copyOriginDeviceI32(), origin) && payload.hasCanonicalWhiteUniform(
+            require(samePointI32(payload.copyOriginDeviceI32(), sourcePayload.copyOriginDeviceI32()) &&
+                payload.hasCanonicalWhiteUniform(
                 requireNotNull(payload.uniformSlice(passes.last().id.value, W4eNativePayloadPlan.INVERSE_DOMAIN_UNIFORM)),
             ))
             return PlanW4eInverseAaCoverageSourceBindingV1(ownerPassId, commandIndexI32,
                 originalPhases, passes, resourceRemapping, source.resources(), resources, source.targetExtent, extent,
-                sourcePayload.copyOriginDeviceI32(), origin, sourcePayload, payload)
+                sourcePayload.copyOriginDeviceI32(), origin, sourcePayload, payload, coordinateProvenance)
         }
     }
 }
@@ -330,6 +353,9 @@ private fun sameRectI32(first: RectI32, second: RectI32): Boolean =
 
 private fun sameSizeI32(first: SizeI32, second: SizeI32): Boolean =
     first.width == second.width && first.height == second.height
+
+private fun containsRectI32(outer: RectI32, inner: RectI32): Boolean =
+    outer.left <= inner.left && outer.top <= inner.top && outer.right >= inner.right && outer.bottom >= inner.bottom
 
 private fun samePointI32(first: Point2I32, second: Point2I32): Boolean =
     first.x == second.x && first.y == second.y
@@ -396,6 +422,24 @@ public class W4eInverseAaCoverageSourceNativeSiteRecipeV1 internal constructor(
         text("source-payload", binding.sourcePayloadIdentity()); text("payload", binding.payloadIdentity())
         binding.copyExtentI32().let { extent -> int("extent.width", extent.width); int("extent.height", extent.height) }
         binding.copyOriginDeviceI32().let { origin -> int("origin.x", origin.x); int("origin.y", origin.y) }
+        binding.coordinateProvenance().let { provenance ->
+            provenance.copySourceRasterDomainLocalI32().encodeRecipeRectI32("coordinate.source-raster-local-domain") { name, value -> int(name, value) }
+            provenance.copyTargetLocalDomainI32().encodeRecipeRectI32("coordinate.target-local-domain") { name, value -> int(name, value) }
+            provenance.copySourceDeviceDomainI32().encodeRecipeRectI32("coordinate.source-device-domain") { name, value -> int(name, value) }
+            point("coordinate.source-raster-local-origin", provenance.copySourceRasterOriginLocalI32())
+            point("coordinate.owner-device-origin", provenance.copyOwnerOriginDeviceI32())
+            text("coordinate.mapping.present", (provenance.mappingOrNull() != null).toString())
+            provenance.mappingOrNull()?.let { mapping ->
+                point("coordinate.mapping.origin", mapping.copyLayerOriginDeviceI32())
+                listOf(mapping.copyLocalToDeviceF64(), mapping.copyDeviceToLayerF64(), mapping.copyLocalToLayerF64())
+                    .forEachIndexed { index, matrix ->
+                        listOf(matrix.sxF64, matrix.kxF64, matrix.txF64, matrix.kyF64, matrix.syF64, matrix.tyF64,
+                            matrix.persp0F64, matrix.persp1F64, matrix.persp2F64).forEachIndexed { coefficient, value ->
+                            double("coordinate.mapping.$index.$coefficient", value)
+                        }
+                    }
+            }
+        }
         binding.nativeOperandSequenceV1().forEachIndexed { index, operand -> enum("operand.$index", operand) }
         binding.sourcePassIds().zip(binding.passes()).forEachIndexed { index, (source, pass) ->
             text("phase.$index.source", source.value); text("phase.$index.pass", pass.id.value)

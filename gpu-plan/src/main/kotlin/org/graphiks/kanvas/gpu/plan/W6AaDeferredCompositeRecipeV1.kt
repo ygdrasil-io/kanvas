@@ -18,6 +18,13 @@ public class W6AaDeferredCompositeRecipeV1 internal constructor(
         text("coverage.channel", "ResolveAlphaUnorm8"); text("target", composite.target.value)
         int("width", composite.copyTargetExtentI32().width); int("height", composite.copyTargetExtentI32().height)
         rect("scissor", composite.copySourceBoundsTargetI32()); point("origin", composite.copyTargetOriginDeviceI32())
+        composite.coordinateProvenance?.let { provenance ->
+            rect("coordinate.source-raster-local-domain", provenance.copySourceRasterDomainLocalI32())
+            rect("coordinate.target-local-domain", provenance.copyTargetLocalDomainI32())
+            rect("coordinate.source-device-domain", provenance.copySourceDeviceDomainI32())
+            point("coordinate.source-raster-local-origin", provenance.copySourceRasterOriginLocalI32())
+            point("coordinate.owner-device-origin", provenance.copyOwnerOriginDeviceI32())
+        }
         text("mapping.present", (composite.mapping != null).toString())
         composite.mapping?.let { mapping ->
             point("mapping.origin", mapping.copyLayerOriginDeviceI32())
@@ -54,6 +61,15 @@ public fun freezeW6AaDeferredCompositeRecipesV1(
             W4eClipPlanCompiler.W7_INVERSE_AA_COVERAGE_SOURCE_CAPABILITY_ID &&
             coverageBinding.recipe.family == NativeSiteRecipeFamilyV1.W4eInverseAaCoverageSource
     }) { "W7 deferred composite lost its variant-specific coverage authority" }
+    val coverageBinding = composite.coverage as? PlanW4eInverseAaCoverageSourceBindingV1
+    if (coverageBinding != null) {
+        require(composite.coordinateProvenance === coverageBinding.coordinateProvenance() &&
+            composite.coordinateProvenance.matches(composite.copyTargetExtentI32(),
+                composite.copySourceBoundsTargetI32(), coverageBinding.sourcePayload().copyOriginDeviceI32(),
+                composite.copyTargetOriginDeviceI32(), composite.mapping)) {
+            "W7 deferred composite recipe lost its binding target-local/device provenance"
+        }
+    }
     val materialTable = requireNotNull(table)
     val authority = composite.sourceDraw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1
         ?: error("W7 deferred consumer requires the selected solid MaterialV1 authority")
