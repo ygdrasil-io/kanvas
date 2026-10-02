@@ -1,5 +1,34 @@
 # Pilotage de la convergence Skia
 
+## Port ComplexClip2 — 2 octobre 2026
+
+Source/tests `092a293be0d37534769b32fa774faa56d1231952`,
+[snapshot](complexclip2-092a293be.json), [plan](complexclip2-port-plan.md),
+branche `codex/w7-complexclip2-port`, empilement prévu sur draft#2432/d958bd26c.
+Le port primaire corrige RNG/paint sans toucher clip-AA ni références ; les
+témoins natifs révèlent ensuite deux frontières W4e incohérentes. On retient
+les faits compiler-owned du masque binaire non clippé et on les consomme
+via le même contrat host/native. Ni budget élargi ni nouvelle géométrie.
+
+**Gain pixel réel : complexclip2 79.70→100%±2, rect-AA79.70→99.075%±2**.
+Pas bit-exact : exact96.515%/95.791%. Corpus631/443 inchangé,212rendus/189comparés,
+44≥99%(+2),60≥95%(+2),médiane75%. Deux seuls rendus changent,
+210hashes/métriques et629cas hors temps identiques ; aucune perte.
+Les quatre Path/RRect restent refusées : port fidèle ne signifie pas admission.
+
+Six témoins/10intégrationPASS, Sol C0/I0/M1 ; covering453/456PASS avec les trois
+échecs hérités, globale bornée687PASS/37FAIL/1interruption sur725END.
+Même37échecs atteints, au moins411identités non atteintes sur borne1136 :
+pas de globale verte/merge/W7clos. Deux PNG/scores régénérés byte-identiques au
+corpus, deux sélections natives1PASS chacune, sans skip. Revue finale Astra en cours.
+
+Après publication de ce lot, reprendre une cause mesurée de `inverse_fill_filters`
+337/338 : source-AA single-sample et root PATH/WINDING/AA sousW6b restent ouverts.
+Le contrat doit séparer autorité originale, source/halo, domaine inverse fini,
+clip terminal. Un témoin public causal précède toute extension ; aucune
+relaxation d'oracle. La carte blanche autorise le changement architectural
+nécessaire, pas une revendication ISO sans mesure.
+
 ## Assemblage inverse/hairline — 2 octobre 2026
 
 Source/tests `2e5419afd6501cfc9d09dbed8409324149450a4c`,
