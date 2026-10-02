@@ -366,12 +366,19 @@ object GPUFramePlanner {
         val transition = authority.sampleContinuation?.transitions?.singleOrNull { candidate ->
             candidate.pathPassId == packet.passId && candidate.commandIdValue == packet.commandIdValue
         } ?: return null
+        val logicalColorFormat = authority.multisampleColorFormatForPathPass(packet.passId) ?: return null
+        val (colorFormat, colorInterpretation) = when (logicalColorFormat) {
+            org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ->
+                GPUColorFormat.RGBA8UnormSrgb to GPUColorInterpretation.LinearPremul
+            org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL ->
+                GPUColorFormat.RGBA8Unorm to GPUColorInterpretation.EncodedPremulSrgb
+        }
         val key = GPUSampleContinuationKey(
             target = GPUTargetIdentity(target.value),
             targetGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
             deviceGeneration = deviceGeneration,
-            colorFormat = GPUColorFormat.RGBA8UnormSrgb,
-            colorInterpretation = GPUColorInterpretation.LinearPremul,
+            colorFormat = colorFormat,
+            colorInterpretation = colorInterpretation,
             samplePlan = multisample,
             attachmentAuthority = GPUSampleAttachmentAuthority.PreparedFramePayload,
             colorAttachment = GPUTargetIdentity(

@@ -1,5 +1,50 @@
 # W07 — diagnostic GM provisoire
 
+## Root Path AA encoded — 2 octobre 2026, qualification locale
+
+[Design](root-aa-encoded-design.md), [plan](root-aa-encoded-plan.md),
+[qualification](root-aa-encoded-qualification.md),
+[corpus frais complet](root-aa-encoded-28adb36d3.json).
+Source privée28adb36d3, stack prévue sur#2435/6f059f0dc.
+Nouvelle capacité Surface/Picture root SRGB_ENCODED pour Paths solides AA
+noninverses linéaires/FILL ou finite positive STROKE BUTT/MITER, clip hard,
+CTM axis-aligned. MSAA4 conservé jusqu'au resolve final, format/interprétation
+authentifiés de bout en bout ; anciens domains/routes préservés.
+
+RED causal avant source puis **15/15 nouveaux témoins natifs PASS, XML complets** ;
+Sol Task1/Task2 Approved C0/I0. Contrôles historiques49=48PASS/1PictureFAIL
+strictement identique au parent, pas de suppression d'attendu.
+Globale240s RED/incomplète724END=686PASS/37FAIL/1interruption ;37mêmes
+échecs,32messages raw égaux/5adresses seules et37stacks égaux.
+Les suites gpu-plan/renderer ne commencent pas (tests hérités ne compilant
+pas : signatures product/tests inchangées au parent) ; aucune qualification
+unitaire ni merge déduite. Détails et coûts dans la qualification.
+
+**Corpus631/443 :217rendus/194comparés,47≥99%,63≥95%,médiane77.45815728081598%**.
+Toutes631fiches hors timing,217hashes/métriques/diagnostics/outcomes,
+18invariants et7invariants de run identiques au parent. vertices30s conservé.
+Aucun GM/domain/référence/seuil/budget modifié, aucune image ou score à régénérer.
+Pas de gain Skia revendiqué par cette seule capacité.
+Précision générale du resolve OPEN, backend/driver non exposés, warnings hérités
+conservés. Revue finale Astra C0/I0/M2 ; M1 documentaire corrigé et relu Sol,
+M2 warnings différés. Draft [#2436](https://github.com/ygdrasil-io/kanvas/pull/2436)
+publiée/rattachée sur#2435, base6f059f0dc/head produit initial7d4a1b7f5/body
+distants vérifiés. Code/tests identiques au snapshot natif28adb36d3.
+Suivi documentaire ultérieur seul, CI non inspectée ; W7/globale restent ouverts.
+
+## Autorité couleur — 2 octobre 2026, diagnostic sans changement produit
+
+[Diagnostic et relecture Sol](color-authority-diagnostic.md) : les triplets ICC
+bruts ne prouvaient pas une erreur de paint. Le loader réel convertit déjà les
+références en sRGB ; les plateaux primaires correspondent à ±2. La probe CPU
+de décodage existant reproduit exactement 99.75458333333333% et 99.5228125%,
+sans renderer/fallback ni modification de codec, référence, seuil ou score.
+Les écarts d'intensité restent réels, mais leur attribution couverture/placement,
+AA ou composition/transfert est encore ouverte. Les 129 échantillons sRGB
+localisés sont archivés ; prochaine étape : témoin Surface à attentes
+indépendantes, avant tout patch.
+C0/I0 Sol ; précision Minor appliquée. Globale RED/incomplète, W7 actif.
+
 ## CTM des paths — 2 octobre 2026, lot qualifié localement
 
 Branche `codex/w7-scaled-stroke-diagnostic`, base publiée#2434/7658d902b.
@@ -36,7 +81,8 @@ Tranches0/1/0 en129s/38s/11s, vertices seul garde son watchdog30s,
 aucun timeout externe. SHA256snapshot0ac040efb1f5d2dc9f9699b61f215a97f7c4d5e8914a4cd7c6a0735d62792019.
 
 Quatre triples visuels inspectés ; crbug a encore des écarts de bord,
-ctmpatheffect/teenyStrokes des couleurs de traits différentes, pathops des
+ctmpatheffect/teenyStrokes des intensités de traits différentes (les aperçus
+ICC bruts ne prouvent pas une erreur de couleur pleine), pathops des
 positions/contours différents. sharedcorners actuel/référence inspectés avec
 leur mismatch de tailles/port. Scores élevés ≠ égalité de contenu.
 Cinq PNG régénérés : quatre byte-identiques au corpus, cinq hashes RGBA égaux.
@@ -46,9 +92,9 @@ pathops passe du score historique97.16796875 au frais95.7427978515625,
 déjà mesuré dans le corpus parent ; son SSIM baisse légèrement
 0.7854852194775083→0.7854735497630504, écart réel OPEN, pas masqué.
 sharedcorners ne reçoit aucun score.
-Priorité suivante Astra : diagnostic couleur/port des deux GM ensemble,
-avec vérification du même profil ICC Skia observé dans leurs références ;
-aucune conversion/référence modifiée, cause encore inconnue. AA crbug différé.
+Priorité Astra traitée par le diagnostic couleur ci-dessus : ICC brut ≠ sRGB
+comparé. Attribution des intensités restante encore inconnue ; aucune
+référence modifiée. AA crbug différé pendant cette attribution bornée.
 
 Qualification proportionnée à l'adaptateur seul : pas de nouveau run global
 exhaustif. Globale héritée725END687PASS37FAIL1interruption et intégration10/11

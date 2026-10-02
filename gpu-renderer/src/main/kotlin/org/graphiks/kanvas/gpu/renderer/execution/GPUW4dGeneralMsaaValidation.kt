@@ -68,6 +68,15 @@ internal fun PreparedGPUFrame.validatesW4dGeneralMsaa(
     val resolveId = authority.readbackSourceResourceId
     val resolve = authority.resource(resolveId) ?: return false
     val resolveFact = authority.resourceFact(resolveId) ?: return false
+    val (expectedColorFormat, expectedColorInterpretation) = when (
+        val format = (targetFact.format as? org.graphiks.kanvas.gpu.plan.PlanTextureFormat.Color)?.value
+    ) {
+        org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ->
+            org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat.RGBA8UnormSrgb to GPUColorInterpretation.LinearPremul
+        org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL ->
+            org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat.RGBA8Unorm to GPUColorInterpretation.EncodedPremulSrgb
+        null -> return false
+    }
     if (target == resolve || targetFact.role != PlanResourceRole.MultisampleColorTarget ||
         resolveFact.role != PlanResourceRole.LogicalTarget || targetFact.sampleCountI32 != 4 ||
         resolveFact.sampleCountI32 != 1 || targetFact.format != resolveFact.format ||
@@ -79,7 +88,8 @@ internal fun PreparedGPUFrame.validatesW4dGeneralMsaa(
     val commonKey = msaa.first().first.second.sampleContinuation?.key ?: return false
     if (commonKey.target.value != target.value || commonKey.deviceGeneration != generationSeal.deviceGeneration ||
         commonKey.targetGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
-        commonKey.colorFormat != sceneTarget.format || commonKey.colorInterpretation != GPUColorInterpretation.LinearPremul ||
+        commonKey.colorFormat != expectedColorFormat || sceneTarget.format != expectedColorFormat ||
+        commonKey.colorInterpretation != expectedColorInterpretation ||
         commonKey.samplePlan != GPUSamplePlan.MultisampleFrame(4) ||
         commonKey.attachmentAuthority != GPUSampleAttachmentAuthority.PreparedFramePayload ||
         commonKey.colorAttachment.value != "msaa-color:${target.value}:$PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION" ||

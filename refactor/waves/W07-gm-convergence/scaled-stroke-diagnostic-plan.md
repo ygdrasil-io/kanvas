@@ -150,7 +150,9 @@ pertes d'admission. Pas de déclaration « toutes les raisons inchangées ».
 
 Quatre triples actuel/diff/référence inspectés : crbug retrouve arc et diamètre,
 mais les contours diffèrent encore ; ctmpatheffect et teenyStrokes gardent des
-différences de couleurs sur les traits, pas seulement de l'AA ;
+différences d'intensité sur les traits. Le diagnostic couleur postérieur
+(voir ci-dessous) ne permet pas d'exclure l'AA ni de conclure à des couleurs
+pleines erronées à partir des aperçus ICC bruts ;
 pathops_skbug_10155 garde des écarts de position/contour.
 sharedcorners actuel/référence inspectés séparément, tailles différentes et
 écarts de port visibles ; pas de comparaison forcée. Les scores élevés ne
@@ -211,6 +213,16 @@ rouge/bleu teeny aussi différents. C'est une hypothèse d'autorité de couleur
 à départager du port/renderer, PAS une cause établie. Aucun pixel/référence
 converti ou modifié, aucune normalisation opportuniste de score autorisée.
 La correction AA crbug et RRect restent ouvertes ; pas un nouveau cap à relever.
+
+Calibration postérieure, lecture seule : le
+[diagnostic d'autorité couleur](color-authority-diagnostic.md) établit que le
+loader existant normalise déjà ces ICC avant comparaison. Ses plateaux sRGB
+correspondent aux primaires attendues à ±2, et une probe du chemin réel reproduit
+les deux scores du corpus. L'hypothèse des paint literals erronés, fondée sur les
+triplets bruts, est écartée pour ces deux exemples. Les différences d'intensité
+subsistent ; couverture, placement, AA et composition ne sont pas encore
+départagés. Sol relève seulement une précision de vocabulaire, appliquée.
+Aucun produit, test, pixel, score, référence ou scope modifié par ce diagnostic.
 
 ### Publication vérifiée
 
