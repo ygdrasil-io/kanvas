@@ -11,7 +11,9 @@ un même CTM pour tous les paths nonidentity, pas une largeur scalaire devinée.
 12intégration +4Surface +2math PASS ; la fixture pré-CTM corrigée est rejouée
 12PASS, Sol ferme les Important. Source private4e4b699a6 identique aprèsd5b.
 Revue finale Astra7658..4c3d approuvée pour draft,C0/I0 nouveaux,
-M1warnings hérité/M2pathops ouverts ; publication en attente, aucune fusion.
+M1warnings hérité/M2pathops ouverts ; draft[#2435](https://github.com/ygdrasil-io/kanvas/pull/2435)
+publiée/rattachée sur#2434,base7658d902b et headinitial2e044cd8e distants
+identiques vérifiés ; corps conforme, CI non inspectée, aucune fusion.
 
 **217rendus/194comparés inchangés,47≥99%(+1),63≥95%(=)** à631/443 figé.
 Aucune perte d'admission,212RGBA identiques,cinq changés.

@@ -42,7 +42,7 @@ Fonts, external codecs and jpg-color-cube excluded. No infrastructure/mock/sourc
 
 ### Task 2: Preserve path and paint coordinates through the adapter CTM
 
-**Status:** Source/fixtures complete locally after Sol scoped re-review, private d5bafb278. Qualified12integration+4native+2math PASS; fresh corpus/admission audit completed. Final Astra whole-lot4c3d686e0 approved draft publication, no new Critical/Important; M1warnings/M2pathops remain OPEN. Publication pending, not merge/W7 complete.
+**Status:** Complete local lot and published draft[#2435](https://github.com/ygdrasil-io/kanvas/pull/2435), stacked on#2434. Source/fixtures qualified12integration+4native+2math PASS, Sol scoped re-review clean, fresh corpus audited, Astra whole-lot4c3d686e0 approved draft with no new Critical/Important. M1warnings/M2pathops remain OPEN, not merge/W7 complete.
 
 **Files:** Create `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/GmCanvasPathCtmSurfacePixelTest.kt`; modify only `drawPath` in existing `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/GmCanvas.kt` after SOURCE_GO. Keep Task1 files unchanged.
 **Interfaces:** Public Path DSL, Surface(64,64), Canvas, GmCanvas.save/restore/translate/scale/clipRect/drawPath, Paint/Shader.LinearGradient, Point2F32/RectF32. Existing native RenderResult qualification from Task1. No new product API, geometry formula, style split or width rescaling.
@@ -58,8 +58,8 @@ Fonts, external codecs and jpg-color-cube excluded. No infrastructure/mock/sourc
 - [x] `nestedPathDrawsRestoreClipAndPreexistingInnerTransform`: background first, inner Canvas.translate(3,5), then GmCanvas. Wrapper save, translate(8,8), scale(4,2), clipRect(2,2,6,6), nested save, draw literal closed rectangle(0,0)..(10,10) black FILL, wrapper translate(1,0), draw same rectangle black FILL, restore twice. At identity wrapper, draw sentinel literal rectangle(50,50)..(52,52) with opaque red fromRGBA(1,0,0,1). Black(20,18),(38,18); white(18,18),(20,16),(50,50); red(53,55). Derivation: inherited inner translation moves first device clip to[19,35]x[17,25], second deferred clip to[23,39]x[17,25]; restoring both yields inherited inner T(3,5), no former clip. This pins normal state restoration with pixels, not fake Canvas calls/save-count assertions.
 - [x] Controller freeze and execute new class at unchanged product, actual failures/readback must reach pixels. Preserve every literal if engine/refusal/compile failure occurs; diagnose API or admission separately, never manufacture RED. Original exec terminal then separate audit before next runtime/SOURCE_GO.
 - [x] On SOURCE_GO modify `fun drawPath(path: Path, paint: Paint)` only: retain identity direct branch; every nonidentity branch inside existing withClip uses inner.save, try inner.concat(currentTransform) and inner.drawPath(original path, original paint), finally inner.restore. Remove affine path premapping and redundant perspective split. Temporary concat remains after withClip's device clip capture. No strokeWidth rescaling, custom outlines, other adapter methods or GM port edits.
-- [ ] Controller GREEN runs new7 plus retained GM2, original direct native4/math2, and existing GmCanvasSurfacePixelTest3. Broader suites/corpus qualification remain controller-only, bounded and honest about inherited red/timeouts. Sol task-scoped review of exact Task2 diff; final Astra whole-branch review after evidence/docs. Stacked draft PR based on published#2434, attach it, no merge or W7 completion.
-- [x] Controller GREEN and corpus completed; Sol task/scoped re-review and final Astra whole-lot review approved locally. Publication item above remains pending until remote PR/head/body verified.
+- [x] Controller GREEN runs new7 plus retained GM2, original direct native4/math2, and existing GmCanvasSurfacePixelTest3. Broader suites/corpus qualification remain controller-only, bounded and honest about inherited red/timeouts. Sol task-scoped review of exact Task2 diff; final Astra whole-branch review after evidence/docs. Stacked draft PR based on published#2434, attach it, no merge or W7 completion.
+- [x] Controller GREEN and corpus completed; Sol task/scoped re-review and final Astra whole-lot review approved locally. Remote PR initial head/base/body verified and attachment successful.
 
 ## Corrective design ruling and open boundaries
 
@@ -211,3 +211,15 @@ rouge/bleu teeny aussi différents. C'est une hypothèse d'autorité de couleur
 à départager du port/renderer, PAS une cause établie. Aucun pixel/référence
 converti ou modifié, aucune normalisation opportuniste de score autorisée.
 La correction AA crbug et RRect restent ouvertes ; pas un nouveau cap à relever.
+
+### Publication vérifiée
+
+Draft[#2435](https://github.com/ygdrasil-io/kanvas/pull/2435) OPEN et rattachée,
+basecodex/w7-complexclip2-resource-convergence exacte7658d902bdb848e47d11ffe8072bb1708f039000,
+headinitial2e044cd8e3258f5e631c5810596d28dfb88ced27 sur
+codex/w7-scaled-stroke-diagnostic, distants identiques vérifiés.
+Les quinze fichiers seuls sont commités, probe héritée inchangée non commitée.
+Après snapshot4c3d, seules trois docs changent pour adjudication/publication ;
+source/tests/PNG/scores/corpus sont identiques à la version relue/qualifiée.
+Ce reçu ajoute seulement de la documentation. CI distante non inspectée,
+pas de merge, gates globales toujours rouges/incomplètes, W7 encore actif.

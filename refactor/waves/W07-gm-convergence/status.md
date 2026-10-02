@@ -17,7 +17,10 @@ Sol a fermé les Important des témoins/fixture ; warnings hérités restent ouv
 Source blob676c74e83 à private4e4b699a6 ; fixture privée finale d5bafb278,
 produit identique. Revue large Astra7658..4c3d approuvée pour draft :
 C0/I0 nouveaux,M1warnings hérité/M2pathops ouverts ; mergeNO,W7NO.
-Publication encore à venir.
+Draft[#2435](https://github.com/ygdrasil-io/kanvas/pull/2435) publiée/rattachée,
+base7658d902b exacte#2434,headinitial2e044cd8e distant identique vérifié.
+Corps conforme aux mesures/limites ; ce reçu postérieur ne change que les docs.
+CI distante non inspectée, aucune fusion.
 
 Corpus631/443 :217rendus/194comparés inchangés, **47≥99%(+1),63≥95%(=)**,
 médiane77.45815728081598%. Aucune identité/outcome perdue,212hashes RGBA
