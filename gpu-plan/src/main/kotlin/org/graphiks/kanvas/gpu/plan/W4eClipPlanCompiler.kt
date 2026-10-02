@@ -355,7 +355,10 @@ public class W4eClipPlanCompiler internal constructor(
             is GpuPlanSelection.Candidate -> selected.candidate
             is GpuPlanSelection.NotCandidate -> return gap("W4e draw scope is outside the W4d.2 construction seam")
             is GpuPlanSelection.InvalidScene -> return invalid("W4d.2 rejected normalized W4e draw facts")
-            is GpuPlanSelection.ResourceLimitExceeded -> return limit("W4d.2 rejected normalized W4e draw resources")
+            is GpuPlanSelection.ResourceLimitExceeded -> return limit(
+                "W4d.2 rejected normalized W4e draw resources; constructionDiagnostics=" +
+                    selected.diagnostics().joinToString(" | ") { "${it.code.value}: ${it.message}" },
+            )
         }
         // W4e replaces only W4d's SingleSampleDirectColor pass.  In particular, an AA inverse
         // direct path remains MultisampleDirectColor and must retain both its ordinary route and
