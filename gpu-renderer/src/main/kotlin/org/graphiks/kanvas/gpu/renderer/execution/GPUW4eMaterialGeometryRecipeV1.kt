@@ -7,7 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.*
 import org.graphiks.kanvas.gpu.renderer.recording.*
 
 /** Pure W4e recipes shared by host sealing and native realization. */
-internal enum class GPUW4eMaterialGeometryRecipeV1 { Consumer, BinaryConsumer, MaskedPath, UnmaskedCover, UnmaskedPath }
+internal enum class GPUW4eMaterialGeometryRecipeV1 { Consumer, BinaryConsumer, BinaryPathConsumer, MaskedPath, UnmaskedCover, UnmaskedPath }
 
 internal fun sealW4eMaterialGeometryHostV1(packet: GPUDrawPacket,
     commonFinalSource: Boolean = packet.w5bFinalFrameWitnessV3?.w4eLane != null,
@@ -31,7 +31,11 @@ internal fun sealW4eMaterialGeometryHostV1(packet: GPUDrawPacket,
             if (consumer.interiorCoverage is GPUW4ePreparedInverseInteriorCoverage.Zero && direct)
                 GPUW4eMaterialGeometryRecipeV1.UnmaskedPath else GPUW4eMaterialGeometryRecipeV1.UnmaskedCover
         path.phase == PathRenderPhase.HardEdgeBinaryColorCover ->
-            if (mask) GPUW4eMaterialGeometryRecipeV1.BinaryConsumer else GPUW4eMaterialGeometryRecipeV1.UnmaskedCover
+            when {
+                mask -> GPUW4eMaterialGeometryRecipeV1.BinaryConsumer
+                consumer == null -> GPUW4eMaterialGeometryRecipeV1.BinaryPathConsumer
+                else -> GPUW4eMaterialGeometryRecipeV1.UnmaskedCover
+            }
         direct -> if (mask) GPUW4eMaterialGeometryRecipeV1.MaskedPath else GPUW4eMaterialGeometryRecipeV1.UnmaskedPath
         mask -> GPUW4eMaterialGeometryRecipeV1.Consumer
         else -> GPUW4eMaterialGeometryRecipeV1.UnmaskedCover
@@ -72,6 +76,17 @@ internal fun w4eMaterialGeometrySourceV1(recipe: GPUW4eMaterialGeometryRecipeV1)
                 let pathCoverage = select(rawPath, 1.0 - rawPath, consumer.inverse > 0.5);
                 let clipCoverage = clamp(clipSample.r, 0.0, 1.0);
                 return consumer.color * (pathCoverage * clipCoverage);
+            }
+        """.trimIndent()
+    GPUW4eMaterialGeometryRecipeV1.BinaryPathConsumer -> w4eFullscreenVertexShader() + """
+            struct ColorBlock { color: vec4f };
+            @group(0) @binding(0) var pathMask: texture_2d<f32>;
+            @group(0) @binding(1) var<uniform> consumer: ColorBlock;
+            @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
+                let coordinate = vec2i(position.xy);
+                let pathSample: vec4f = textureLoad(pathMask, coordinate, 0);
+                let coverage = clamp(pathSample.r, 0.0, 1.0);
+                return consumer.color * coverage;
             }
         """.trimIndent()
     GPUW4eMaterialGeometryRecipeV1.MaskedPath -> """
@@ -127,6 +142,16 @@ internal fun w4eMaterialGeometryLayoutV1(recipe: GPUW4eMaterialGeometryRecipeV1)
             binding = 2u,
             visibility = GPUShaderStage.Fragment,
             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform,minBindingSize=32uL),
+        ),
+    )
+    GPUW4eMaterialGeometryRecipeV1.BinaryPathConsumer -> BindGroupLayoutDescriptor(
+        label = "Kanvas.frame.w4e.binaryPathConsumerLayout",
+        entries = listOf(
+            BindGroupLayoutEntry(binding = 0u, visibility = GPUShaderStage.Fragment, texture = TextureBindingLayout(
+                sampleType = GPUTextureSampleType.Float, viewDimension = GPUTextureViewDimension.TwoD, multisampled = false,
+            )),
+            BindGroupLayoutEntry(binding = 1u, visibility = GPUShaderStage.Fragment,
+                buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform, minBindingSize = 16uL)),
         ),
     )
     GPUW4eMaterialGeometryRecipeV1.MaskedPath -> BindGroupLayoutDescriptor(

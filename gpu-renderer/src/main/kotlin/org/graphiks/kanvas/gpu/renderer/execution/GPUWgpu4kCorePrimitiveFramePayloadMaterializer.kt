@@ -443,6 +443,7 @@ internal fun encodeW4eNativePasses(
     val stencilConsumerPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val inverseMaskStencilConsumerPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val binaryConsumerPipelines = mutableMapOf<Pair<GPUTextureFormat, Int>, GPUW4eNativePipeline>()
+    val binaryPathConsumerPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val maskedPathPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val inverseDomainPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
     val inverseWindingDomainPipelines = mutableMapOf<Triple<GPUTextureFormat, Int, GPUBlendPlan?>, GPUW4eNativePipeline>()
@@ -508,6 +509,10 @@ internal fun encodeW4eNativePasses(
     fun binaryConsumerPipeline(format: GPUTextureFormat, sampleCount: Int) =
         binaryConsumerPipelines.getOrPut(format to sampleCount) {
             createW4eBinaryConsumerPipeline(device, format, sampleCount, owned)
+        }
+    fun binaryPathConsumerPipeline(format: GPUTextureFormat, sampleCount: Int, finalBlend: GPUBlendPlan?) =
+        binaryPathConsumerPipelines.getOrPut(Triple(format, sampleCount, finalBlend)) {
+            createW4eBinaryPathConsumerPipeline(device, format, sampleCount, owned, finalBlend)
         }
     fun maskedPathPipeline(format: GPUTextureFormat, sampleCount: Int, finalBlend: GPUBlendPlan?) =
         maskedPathPipelines.getOrPut(Triple(format, sampleCount, finalBlend)) {
@@ -1942,6 +1947,10 @@ internal fun encodeW4eNativePasses(
                             frozenDirectColor.sampleCountI32, owned, finalBlend = entry.packet.blendPlan)
                         else maskedPathPipeline(GPUTextureFormat.RGBA8UnormSrgb, frozenDirectColor.sampleCountI32, entry.packet.blendPlan)
                     }
+                    hardBinaryCover && maskConsumer == null -> binaryPathConsumerPipeline(
+                        GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount,
+                        entry.packet.blendPlan.takeIf { commonSource },
+                    )
                     maskConsumer == null && directPath -> createW4eUnmaskedPathPipeline(
                         device, GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount, owned,
                         finalBlend = entry.packet.blendPlan.takeIf { commonSource },
@@ -1957,7 +1966,12 @@ internal fun encodeW4eNativePasses(
                 val consumerUniform = uniformBinding(entry.packet.passId, W4eNativePayloadPlan.CONSUMER_UNIFORM)
                 val bindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
                     label = "Kanvas.frame.w4e.consumerBindGroup", layout = pipeline.layout,
-                    entries = if (maskConsumer == null) listOf(
+                    entries = if (hardBinaryCover && maskConsumer == null) listOf(
+                        BindGroupEntry(0u, attachment(requireNotNull(path.binarySourceMaskResourceId) {
+                            "W4e hard-edge binary color cover lacks its sealed source mask."
+                        }).view),
+                        BindGroupEntry(1u, consumerUniform),
+                    ) else if (maskConsumer == null) listOf(
                         BindGroupEntry(0u, consumerUniform),
                     ) else if (hardBinaryCover) listOf(
                         BindGroupEntry(0u, attachment(requireNotNull(path.binarySourceMaskResourceId) {
@@ -2264,6 +2278,36 @@ private fun createW4eBinaryConsumerPipeline(
             format = format, blend = w4eSrcOverBlendState(),
         ))),
     ), coordinates = MaterialCoordinateSlotV1.Position, recipe = GPUW4eMaterialGeometryRecipeV1.BinaryConsumer)
+    return GPUW4eNativePipeline(pipeline, bindGroupLayout)
+}
+
+/** A hard-edge path cover consumes its sealed path mask when there is no separate clip mask. */
+private fun createW4eBinaryPathConsumerPipeline(
+    device: GPUDevice,
+    format: GPUTextureFormat,
+    sampleCount: Int,
+    owned: GPUW4eNativeOwnedHandles,
+    finalBlend: GPUBlendPlan?,
+): GPUW4eNativePipeline {
+    val recipe = GPUW4eMaterialGeometryRecipeV1.BinaryPathConsumer
+    val bindGroupLayout = owned.own(device.createBindGroupLayout(w4eMaterialGeometryLayoutV1(recipe)))
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
+        label = "Kanvas.frame.w4e.binaryPathConsumerShader",
+        code = w4eMaterialGeometrySourceV1(recipe),
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
+        label = "Kanvas.frame.w4e.binaryPathConsumerPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
+    ))
+    val pipeline = owned.createRenderPipeline(device, RenderPipelineDescriptor(
+        label = "Kanvas.frame.w4e.binaryPathConsumerPipeline",
+        layout = pipelineLayout,
+        vertex = VertexState(module = shader, entryPoint = "vs_main"),
+        primitive = PrimitiveState(),
+        multisample = MultisampleState(count = sampleCount.toUInt()),
+        fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
+            format = format, blend = w4eFinalBlendState(finalBlend),
+        ))),
+    ), GPUW5bInlineCoverageV3.NativeMask, MaterialCoordinateSlotV1.Position, recipe = recipe)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 

@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.ClipCombineOperation
 import org.graphiks.kanvas.gpu.plan.ClipPlanStrategy
+import org.graphiks.kanvas.gpu.plan.BinaryMaskedPathDraw
 import org.graphiks.kanvas.gpu.plan.ClippedBinaryMaskedPathDraw
 import org.graphiks.kanvas.gpu.plan.ClippedGeneralPathDraw
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
@@ -479,14 +480,17 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
         }
 
         private fun binarySourceMaskId(pass: PlanPass.PathRenderPass): String? = when (val draw = pass.draw) {
+            is BinaryMaskedPathDraw -> draw.mask.value
             is ClippedBinaryMaskedPathDraw -> draw.source.mask.value
             else -> null
         }
         private fun binaryMaskFetch(pass: PlanPass.PathRenderPass): BinaryMaskFetchPlan? = when (val draw = pass.draw) {
+            is BinaryMaskedPathDraw -> draw.maskFetch
             is ClippedBinaryMaskedPathDraw -> draw.source.maskFetch
             else -> null
         }
         private fun binaryBroadcastSamples(pass: PlanPass.PathRenderPass): Int? = when (val draw = pass.draw) {
+            is BinaryMaskedPathDraw -> draw.broadcastSampleCountI32
             is ClippedBinaryMaskedPathDraw -> draw.source.broadcastSampleCountI32
             else -> null
         }
