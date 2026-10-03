@@ -1,5 +1,24 @@
 # Pilotage de la convergence Skia
 
+## Couverture diagonale isolée — 3 octobre 2026
+
+[Diagnostic causal](diagonal-aa-diagnostic.md), parent#2437/d12749b64,
+branche codex/w7-aa-coverage-diagnostic. Produit inchangé : pas de gain corpus.
+Contour tiny CTM math conforme aux quatre sommets indépendants, cinq échelles ;
+source tiny, ligne écran et FILL littéral donnent la même rampe native.
+Alpha64/255 aux cellules106/107 contre aire idéale≈36.57/227.49, indépendant
+du domaine couleur. LINEAR225/0 et encoded191/0 restent différents de223/31–32
+de la référence parent. Le problème n'est pas résolu par un déplacement du
+contour ou par la seule couleur : sampling AA actuel quantifié sur ce témoin.
+Route promue W4d/math F64 confirmée, première inférence legacy corrigée.
+
+1math ciblé et2Surface natives PASS puis311math:matrix PASS, exits0 sans
+timeout/skip ;20rendus natifs avec repeats et full stdout/counters archivés.
+Pas de génération d'images/références/scores, pas de MSAA/budget relevé.
+Next : choix d'une couverture GPU continue générique et revue stratégique
+Astra, avec composition séparée ; la référence n'est pas une aire idéale
+exacte, backend inconnu. W7/globales/Picture/RRect/inverse restent OPEN.
+
 ## Connexion des vrais Rect hard au root-AA encoded — 3 octobre 2026
 
 [Qualification](root-aa-rect-qualification.md) et [corpus](root-aa-rect-8e44f0c8a.json),
