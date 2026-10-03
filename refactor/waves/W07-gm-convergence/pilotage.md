@@ -23,9 +23,12 @@ agrégé. L’ownership du cover point DARKEN reste séparément différé; ses 
 échouent avant pixels. Les quatre dettes `SurfaceSceneSnapshotTest`, warnings
 et exclusions restent documentés.
 
-Statut `READY_FINAL_REVIEW`, pas prêt à publier par présomption : revue Sol
-indépendante et décision de publication en attente. Aucun GREEN global, agrégat
-W7, merge, complétion du lot ou clôture W7 n’est revendiqué; W7 reste actif.
+Revue Sol reçue : `C0 / I1 / M2`, qualité `Needs fixes`. Après correction M1,
+un checkpoint draft explicitement incomplet est défendable `With fixes`, mais la
+publication reste à la décision du contrôleur. I1 reste ouvert et bloque la
+complétion et le merge : aucun test PASS ne démontre le rejet strict d’un
+résultat réussi avec diagnostics. Aucun GREEN global, agrégat W7, complétion du
+lot ou clôture W7 n’est revendiqué; W7 reste actif.
 Les résultats et limites complets sont consignés dans la qualification et le
 reçu local `.superpowers/sdd/child-sampling-port-e39a2be31/controller-evidence.md`.
 
