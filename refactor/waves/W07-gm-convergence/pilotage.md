@@ -1,33 +1,38 @@
 # W7 — port `child_sampling_rt` (3 octobre 2026)
 
-[Qualification ciblée](child-sampling-port-qualification.md), checkpoint
-source `df89f3b4581c146c5e24ec12623c38a5d9d58800`, parent publié
-[#2440](https://github.com/ygdrasil-io/kanvas/pull/2440) au HEAD e39. Le pin
-Skia reste `4f26f22daa4bf124e2999145f5caad4b10625580`; la révision exacte de la
-PNG de référence reste inconnue.
+[Qualification ciblée](child-sampling-port-qualification.md), source qualifiée
+au checkpoint `73fc10a84f0b49edf3365f54793faf254c165f8c`. Le parent publié
+[#2440](https://github.com/ygdrasil-io/kanvas/pull/2440) reste au HEAD e39;
+[#2441](https://github.com/ygdrasil-io/kanvas/pull/2441) est déjà ouvert en
+draft, mais ce checkpoint n’y est pas encore poussé. Le pin Skia reste
+`4f26f22daa4bf124e2999145f5caad4b10625580`; la révision exacte de la PNG de
+référence reste inconnue.
 
-D7 : 4 PASS natifs ciblés, octets du GM et du contrôle historique inchangés.
+D7 : 4 PASS natifs ciblés, octets du GM et du contrôle historique inchangés;
 D8 : capture exhaustive 443 éligibles / 431 capturés / 11 `SetupBlocked` /
-1 `CaptureInvalid`; seul l’ancien blocage de `child_sampling_rt` a disparu.
-L’ancien audit 443/430/12/1 est conservé comme régression historique, sans
-rerun du parent ni changement du plafond 11. D9 : 32 PASS et un échec point
-connu au host preflight, avant pixels; la preuve de rejet strict d’un résultat
-diagnostic-bearing réussi reste non exercée.
+1 `CaptureInvalid`; D9 : 32 PASS et un échec point historique au host
+preflight. F6 a ensuite qualifié les 52 tests ciblés (52 PASS), dont le garde
+strict, le contrôle bleu/rouge/bleu avec replay, la géométrie et les owners
+authentiques; F7 a qualifié 8 tests d’intégration (8 PASS) sans changer le
+plafond 11. L’ancien audit 443/430/12/1 est conservé comme régression
+historique, sans rerun du parent. Une revue Sol indépendante de F8 reste
+attendue; I1 n’est pas déclaré clos et task/W7 restent incomplets.
 
-D10, cas 77 uniquement au nouveau checkpoint : pixels identiques à 681,
-81,96563720703125 % exact, 84,32769775390625 % à ±2, SSIM 0,9806240190874789.
-Aucune régénération PNG/score n’était nécessaire : les 559 scores et les 814
-PNG (dont 813 non-cibles) sont inchangés. Le delta d’intensité/couverture reste
-visible et non attribué; la mesure ne constitue ni un benchmark ni un gain
-agrégé. L’ownership du cover point DARKEN reste séparément différé; ses témoins
-échouent avant pixels. Les quatre dettes `SurfaceSceneSnapshotTest`, warnings
-et exclusions restent documentés.
+D10 et F8, cas 77 uniquement : pixels identiques, 81,96563720703125 % exact,
+84,32769775390625 % à ±2, SSIM 0,9806240190874789; F8 utilise le checkpoint
+source `73fc10a`. Le scellement F8 des 814 PNG repo-relatifs vaut
+`142b7f05265919d08d5a1471b9cd09e9bae2aded083ad705fd45ae1d0737ae4d`; celui des
+813 PNG non-cibles avec chemins relatifs à la racine générée reste
+`a6bf35b1ace3748b2cf16a27d28c04629a75ecb4e83c5e91ac63b4bedb9e0d5f`. Les
+559 scores et octets cibles n’ont pas changé; aucune régénération n’était
+nécessaire. Le delta d’intensité/couverture reste visible et non attribué; la
+mesure ne constitue ni un benchmark ni un gain agrégé. Le gap général
+d’ownership stencil reste hors périmètre. Les dettes `SurfaceSceneSnapshotTest`,
+warnings et exclusions restent documentés.
 
-Revue Sol reçue : `C0 / I1 / M2`, qualité `Needs fixes`. Après correction M1,
-un checkpoint draft explicitement incomplet est défendable `With fixes`, mais la
-publication reste à la décision du contrôleur. I1 reste ouvert et bloque la
-complétion et le merge : aucun test PASS ne démontre le rejet strict d’un
-résultat réussi avec diagnostics. Aucun GREEN global, agrégat W7, complétion du
+La revue Sol antérieure `C0 / I1 / M2`, qualité `Needs fixes`, reste historique;
+une revue indépendante ciblée du checkpoint actuel est attendue. I1 n’est pas
+déclaré clos avant cette revue. Aucun GREEN global, agrégat W7, complétion du
 lot ou clôture W7 n’est revendiqué; W7 reste actif.
 Les résultats et limites complets sont consignés dans la qualification et le
 reçu local `.superpowers/sdd/child-sampling-port-e39a2be31/controller-evidence.md`.
