@@ -111,4 +111,3 @@ provider minimal → 16 contrôles GPU → contexte52/B−1 → nettoyage/requal
 publication/relecture sont suivies par le ledger et la PR, pas assimilées
 à une clôture W7. Prochains écarts : contrats W5e hérités, fidélité des GMs,
 AA/couverture/flous et provenance des références déjà suivis dans le pilotage.
-
