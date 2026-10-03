@@ -196,6 +196,17 @@ Dispositions des comportements laissés hors verdict par Astra :
 PR draft empilée sur#2436 après ces gates, pas merge/W7clos/globaleGREEN.
 Fonts, codecs externes et jpg-color-cube hors périmètre conservés.
 
+Draft [#2437](https://github.com/ygdrasil-io/kanvas/pull/2437) publiée et rattachée
+sur#2436. OPEN/draft, base codex/w7-color-authority-diagnostic/
+53bf9c55b8950c36eb14a40eb44626cb02d6020c et head initial
+codex/w7-root-aa-rect-admission/28e2f8dbfe923fe1362422d328402bed46c8f2de,
+deux refs distantes vérifiées. Corps distant byte-identique au corps prévu.
+Commit produit1b24a6e12163436c926051e77754d53d9237fb11 : sept blobs
+source/tests Task2+H exactement égaux à8e44 ; protégé96cd reste untracked
+exclu du commit. Seuls trois documents de reçus diffèrent du candidat final
+relu d832 ; snapshot inchangé. Ce reçu post-publication ne change que le suivi.
+CI non inspectée, aucune fusion, workspaces et raw evidence conservés.
+
 Prochain chantier utile : couverture/placement AA à géométrie et domaine
 explicitement contrôlés. Ne pas attribuer le191 diagonal à la seule couleur,
 ni migrer un GM vers encoded en espérant corriger ses masques. Wrapper Picture,

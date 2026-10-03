@@ -26,6 +26,11 @@ Astra finale C0/I0/M2, draft acceptable/mergeNO, cohérence des seams statiques
 confirmée et JSON intégral audité. Warnings et trois textes imprécis différés
 explicitement pour préserver la source native gelée ; publication draft à vérifier.
 
+Draft [#2437](https://github.com/ygdrasil-io/kanvas/pull/2437) publiée/rattachée
+sur#2436 ; base53bf9c55b et head initial28e2f8dbf/body exacts distants vérifiés.
+Produit1b24a6e12 byte-identique au candidat qualifié8e44, sept blobs Task2+H.
+Suivi post-publication documentaire uniquement, CI non inspectée, aucune fusion.
+
 ## Root Path AA encoded — 2 octobre 2026, qualification locale
 
 [Design](root-aa-encoded-design.md), [plan](root-aa-encoded-plan.md),
