@@ -39,6 +39,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
@@ -592,14 +593,41 @@ internal object GPUPreparedSurfaceFrameBuilder {
                                 mapping.commandIdsByOperationIndex,
                             ),
                         )
+                    val mappedVerticesByCommandId = verticesInventory.mappedCommands.associateBy { it.commandId }
+                    val survivingVerticesOperationIndices = splitTaskList.tasks
+                        .asSequence()
+                        .filterIsInstance<GPUTask.Render>()
+                        .flatMap { render -> render.drawPackets.asSequence() }
+                        .filter { packet -> packet.role == GPUDrawPacketRole.Shading }
+                        .mapNotNull { packet ->
+                            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.Vertices
+                                ?: return@mapNotNull null
+                            val mapped = mappedVerticesByCommandId[packet.commandIdValue]
+                                ?: return@mapNotNull null
+                            if (semantic.payloadRef.commandIdValue != packet.commandIdValue ||
+                                semantic.w5bFinalBlendPlan == BlendPlan.NoOpV1 ||
+                                packet.blendPlan is GPUBlendPlan.NoOp ||
+                                mapped.commandId in layerChildrenCommandIds
+                            ) {
+                                return@mapNotNull null
+                            }
+                            mapped.operationIndex
+                        }
+                        .toSet()
+                    val legacyVisualOperationCount = preparedMapping.visualCommands.count { visual ->
+                        val commandId = visual.normalized.commandId.value
+                        commandId !in layerChildrenCommandIds &&
+                            !(mapping.hasSynthesizedSceneClear && commandId == 0) &&
+                            (zeroProjection == null || commandId in admittedSemantics)
+                    }
                     GPUPreparedSurfaceFrameBuildResult.Ready(
                         taskList = splitTaskList,
                         readbackRequestId = splitTaskList.tasks.filterIsInstance<GPUTask.Readback>()
                             .singleOrNull()?.request?.requestId ?: request.readbackRequestId,
-                        visualOperationCount = preparedMapping.visualCommands.count { visual ->
-                            visual.normalized.commandId.value !in layerChildrenCommandIds &&
-                                (zeroProjection == null || visual.normalized.commandId.value in admittedSemantics)
-                        },
+                        visualOperationCount = Math.addExact(
+                            legacyVisualOperationCount,
+                            survivingVerticesOperationIndices.size,
+                        ),
                         stateEventCount = mapping.stateEvents.count { event ->
                             event.kind == GPUFramePathStateKind.Transform ||
                                 event.kind == GPUFramePathStateKind.Clip ||

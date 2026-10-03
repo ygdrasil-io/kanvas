@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSession
+import org.graphiks.kanvas.gpu.renderer.execution.GPUEncoderOperationKind
 import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameImmediateState
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneFrameSession
@@ -31,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralTelemetrySnapshot
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.PaintStyle
@@ -112,6 +114,8 @@ internal data class GPUPreparedSurfaceExecutionEvidence(
     val preparedImageFrameBindGroupCreations: Long = 0L,
     val preparedImageFrameTextureWriteTextureCalls: Long = 0L,
     val preparedImageFrameTextureUploadScopesEncoded: Long = 0L,
+    val encodedScopeKinds: List<GPUEncoderOperationKind>? = null,
+    val structuralTelemetry: GPUFrameStructuralTelemetrySnapshot? = null,
 )
 
 internal sealed interface GPUPreparedSurfaceExecutionResult {
@@ -300,9 +304,14 @@ internal class GPUPreparedSurfaceCompletion(
     val outputKind: GPUPreparedSurfaceOutputKind,
     val readbackId: GPUReadbackRequestID?,
     rgba: ByteArray?,
+    encodedScopeKinds: List<GPUEncoderOperationKind>? = null,
+    val telemetry: GPUFrameStructuralTelemetrySnapshot? = null,
 ) {
     private val ownedRgba = rgba?.copyOf()
     val rgba: ByteArray? get() = ownedRgba?.copyOf()
+    val encodedScopeKinds: List<GPUEncoderOperationKind>? = encodedScopeKinds?.let {
+        java.util.Collections.unmodifiableList(ArrayList(it))
+    }
 }
 
 private data class GPUPreparedSurfaceSessionKey(
@@ -709,6 +718,22 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 mapOf("expected" to submission.attemptId.value, "actual" to completion.attemptId.value),
             )
         }
+        val completionTelemetry = completion.telemetry
+        if (completionTelemetry != null &&
+            (completionTelemetry.attemptId != completion.attemptId ||
+                completionTelemetry.outcome != completion.outcome)
+        ) {
+            return terminal(
+                "invalid.surface.prepared.telemetry-identity",
+                "Prepared Surface structural telemetry belongs to a different attempt or outcome.",
+                mapOf(
+                    "attempt" to completion.attemptId.value,
+                    "telemetryAttempt" to completionTelemetry.attemptId.value,
+                    "outcome" to completion.outcome.name,
+                    "telemetryOutcome" to completionTelemetry.outcome.name,
+                ),
+            )
+        }
         validateImmediateCompletion(submission.immediateState, completion)?.let { return it }
         if (completion.outcome != GPUFrameStructuralOutcome.Succeeded) {
             val diagnostic = completion.diagnostic
@@ -796,6 +821,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 build.destinationReadTextCommandIds,
                 build.destinationReadEvidence,
                 build.taskList.evidenceStructuralSteps(),
+                completion.encodedScopeKinds,
+                completion.telemetry,
                 beforeSubmit,
                 afterCompletion,
                 telemetryBefore,
@@ -871,6 +898,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     postFrameCounters.distinctRetentionTickets,
                 ),
                 structuralSteps = pending.structuralSteps,
+                encodedScopeKinds = pending.encodedScopeKinds,
+                structuralTelemetry = pending.structuralTelemetry,
                 preparedImageFrameTextureCreations = delta(
                     pending.beforeSubmit.preparedImageFrameTextureCreations,
                     pending.afterCompletion.preparedImageFrameTextureCreations,
@@ -1085,6 +1114,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
         val destinationReadTextCommandIds: Set<Int>,
         val destinationReadEvidence: List<GPUPreparedSurfaceDestinationReadEvidence>,
         val structuralSteps: List<String>,
+        val encodedScopeKinds: List<GPUEncoderOperationKind>?,
+        val structuralTelemetry: GPUFrameStructuralTelemetrySnapshot?,
         val beforeSubmit: GPUPreparedSceneNativeCounters,
         val afterCompletion: GPUPreparedSceneNativeCounters,
         val telemetryBefore: GPUBackendRuntimeTelemetry,
@@ -1243,6 +1274,8 @@ private class GPUPreparedSurfaceNativeSessionPort(
                     },
                     readbackId = output?.requestId,
                     rgba = output?.bytes,
+                    encodedScopeKinds = completed.encodedScopeKinds,
+                    telemetry = completed.telemetry,
                 )
             },
         )
@@ -1277,6 +1310,8 @@ private class GPUPreparedSurfaceNativeSessionPort(
                     },
                     readbackId = null,
                     rgba = null,
+                    encodedScopeKinds = completed.encodedScopeKinds,
+                    telemetry = completed.telemetry,
                 )
             },
         )

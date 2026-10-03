@@ -3,8 +3,11 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.SceneRecordingLimitException
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
@@ -28,12 +31,18 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval as I
 
 class W5eImageShaderSurfacePixelTest {
+    companion object {
+        @AfterAll @JvmStatic fun cleanupGpu() = GPUBackendRuntimeFactory.dispose()
+    }
+
     @Test fun invalidCubicParametersRefuseAndRecoverOnSameRuntime() {
         // Routing a malformed image shader through legacy or swallowing its numeric
         // refusal changes the public diagnostic; both Rect and Path must be owned.
@@ -262,19 +271,62 @@ class W5eImageShaderSurfacePixelTest {
         assertEquals(0, result.stats.opsRefused)
     }
 
-    @Test fun rrectImageShaderRetainsExistingPublicRefusal() = deferred {
-        drawRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 4f, 4f), CornerRadiiF32.of(1f)),
-            paint(Shader.Image(image())).copy(antiAlias = true))
+    @Test fun rrectImageShaderAdmissionAndNonTopLeftPixelProbe() {
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 4f, 4f), CornerRadiiF32.of(1f)),
+                paint(Shader.Image(image())).copy(antiAlias = true))
+        }
+        assertPromotedImageRender("rrect/non-TL", surface, mapOf(
+            1 to blue, 2 to blue, 3 to blue,
+            4 to red, 5 to blue, 6 to blue, 7 to blue,
+            8 to red, 9 to blue, 10 to blue, 11 to blue,
+            12 to red, 13 to blue, 14 to blue, 15 to blue,
+        ))
     }
 
-    @Test fun pathStrokeImageShaderRetainsExistingPublicRefusal() = deferred {
-        drawPath(Path().apply { moveTo(0f, 2f); lineTo(4f, 2f) },
-            paint(Shader.Image(image())).copy(style = PaintStyle.STROKE, strokeWidth = 2f))
+    @Test fun pathStrokeImageShaderAdmissionAndFullPixels() {
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawPath(Path().apply { moveTo(0f, 2f); lineTo(4f, 2f) },
+                paint(Shader.Image(image())).copy(style = PaintStyle.STROKE, strokeWidth = 2f))
+        }
+        val expected = listOf(clear, clear, clear, clear,
+            red, blue, blue, blue, red, blue, blue, blue,
+            clear, clear, clear, clear)
+        assertPromotedImageRender("path-stroke", surface, expected.indices.associateWith { expected[it] },
+            exactPixels = expected.flatMap { it }.toUByteArray())
     }
 
-    @Test fun pathHairlineImageShaderRetainsExistingPublicRefusal() = deferred {
-        drawPath(Path().apply { moveTo(0f, 2f); lineTo(4f, 2f) },
-            paint(Shader.Image(image())).copy(style = PaintStyle.STROKE, strokeWidth = 0f))
+    @Test fun pathHairlineImageShaderAdmissionAndDiagnosticBoundaryRows() {
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawPath(Path().apply { moveTo(0f, 2f); lineTo(4f, 2f) },
+                paint(Shader.Image(image())).copy(style = PaintStyle.STROKE, strokeWidth = 0f))
+        }
+        assertPromotedImageRender("path-hairline/boundary-diagnostic", surface, mapOf(
+            0 to clear, 1 to clear, 2 to clear, 3 to clear,
+            12 to clear, 13 to clear, 14 to clear, 15 to clear,
+        ))
+    }
+
+    @Test fun hairlineImageShaderTieFreeCompanionsHaveExactPixels() {
+        for ((yF32, coveredRowI32) in listOf(1.75f to 1, 2.25f to 2)) {
+            val surface = Surface(4, 4)
+            surface.canvas {
+                drawPath(Path().apply { moveTo(0f, yF32); lineTo(4f, yF32) },
+                    paint(Shader.Image(image())).copy(style = PaintStyle.STROKE, strokeWidth = 0f))
+            }
+            val expected = if (coveredRowI32 == 1) {
+                listOf(clear, clear, clear, clear, red, blue, blue, blue,
+                    clear, clear, clear, clear, clear, clear, clear, clear)
+            } else {
+                listOf(clear, clear, clear, clear, clear, clear, clear, clear,
+                    red, blue, blue, blue, clear, clear, clear, clear)
+            }
+            assertPromotedImageRender("path-hairline/y=$yF32", surface,
+                expected.indices.associateWith { expected[it] }, exactPixels = expected.flatMap { it }.toUByteArray())
+        }
     }
 
     @Test fun pointsImageShaderRetainsExistingPublicRefusal() = deferred("unsupported.material.source_unimplemented") {
@@ -282,9 +334,37 @@ class W5eImageShaderSurfacePixelTest {
             paint(Shader.Image(image())).copy(strokeWidth = 2f))
     }
 
-    @Test fun verticesImageShaderRetainsExistingPublicRefusal() = deferred("unsupported.vertices.material") {
-        drawVertices(Vertices(VertexMode.TRIANGLES,
-            listOf(Point2F32(0f, 0f), Point2F32(4f, 0f), Point2F32(0f, 4f))), paint(Shader.Image(image())))
+    @Test fun verticesImageShaderAdmissionAndDiagnosticDiagonal() {
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawVertices(Vertices(VertexMode.TRIANGLES,
+                listOf(Point2F32(0f, 0f), Point2F32(4f, 0f), Point2F32(0f, 4f))), paint(Shader.Image(image())))
+        }
+        val strictPixels = buildMap {
+            for (yI32 in 0..3) for (xI32 in 0..3) when {
+                xI32 + yI32 < 3 -> put(yI32 * 4 + xI32, if (xI32 == 0) red else blue)
+                xI32 + yI32 > 3 -> put(yI32 * 4 + xI32, clear)
+            }
+        }
+        assertPromotedImageRender("vertices/diagonal-diagnostic", surface, strictPixels)
+    }
+
+    @Test fun verticesImageShaderTieFreeCompanionsHaveExactPixels() {
+        for ((interceptF32, expected) in listOf(
+            3.75f to listOf(red, blue, blue, clear, red, blue, clear, clear,
+                red, clear, clear, clear, clear, clear, clear, clear),
+            4.25f to listOf(red, blue, blue, blue, red, blue, blue, clear,
+                red, blue, clear, clear, red, clear, clear, clear),
+        )) {
+            val surface = Surface(4, 4)
+            surface.canvas {
+                drawVertices(Vertices(VertexMode.TRIANGLES,
+                    listOf(Point2F32(0f, 0f), Point2F32(interceptF32, 0f), Point2F32(0f, interceptF32))),
+                    paint(Shader.Image(image())))
+            }
+            assertPromotedImageRender("vertices/intercept=$interceptF32", surface,
+                expected.indices.associateWith { expected[it] }, exactPixels = expected.flatMap { it }.toUByteArray())
+        }
     }
 
     @Test fun rectImageShaderUsesIndependentLocalCoordinates() {
@@ -482,11 +562,88 @@ class W5eImageShaderSurfacePixelTest {
 
     private fun image() = Image.fromPixels(2, 1, byteArrayOf(-1, 0, 0, -1, 0, 0, -1, -1), alphaType = AlphaType.PREMUL)
     private fun deferred(code: String = "unsupported.material.w5a.kind", draw: Canvas.() -> Unit) {
-        // Promoting this deferred origin would replace its exact prepared-material refusal.
+        // This still-deferred Point operation keeps its exact public diagnostic.
         val surface = Surface(4, 4)
         surface.canvas(draw)
         val failure = assertThrows<IllegalStateException> { surface.render() }
         assertEquals(code, failure.message.orEmpty().substringBefore(':'))
+
+        val sentinel = UByteArray(64) { 0x5au }
+        val readbackFailure = assertThrows<IllegalStateException> {
+            surface.readPixels(RectF32.ofLTRB(0f, 0f, 4f, 4f), sentinel)
+        }
+        assertEquals(code, readbackFailure.message.orEmpty().substringBefore(':'))
+        assertContentEquals(UByteArray(64) { 0x5au }, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), paint(Shader.Image(image())))
+        }
+        val expected = List(4) { listOf(red, blue, blue, blue) }.flatten().flatMap { it }.toUByteArray()
+        assertPromotedImageRender("point-refusal/imageRect-recovery", surface,
+            expected.indices.step(4).associate { it / 4 to expected.copyOfRange(it, it + 4).toList() },
+            exactPixels = expected)
+    }
+
+    private fun assertPromotedImageRender(
+        name: String,
+        surface: Surface,
+        strictPixels: Map<Int, List<UByte>>,
+        exactPixels: UByteArray? = null,
+    ) {
+        val recordedOps = surface.snapshotOps()
+        assertEquals(1, recordedOps.size, "$name should retain its one public draw operation")
+        var firstPixels: UByteArray? = null
+        repeat(2) { replayI32 ->
+            val result = surface.render()
+            println("$name replay=${replayI32 + 1} completeRGBA=${result.pixels.toList()} scopes=${result.nativeEvidenceScopeKinds} " +
+                "counters=${result.nativeEvidenceCounters} stats=${result.stats} structuralSteps=${result.structuralSteps}")
+            assertEquals(4, result.width, "$name width")
+            assertEquals(4, result.height, "$name height")
+            assertEquals(PixelFormat.RGBA8, result.format, "$name format")
+            assertEquals(64, result.pixels.size, "$name complete RGBA buffer")
+            result.assertClean()
+            assertEquals(1, result.stats.opsDispatched, "$name dispatched")
+            assertEquals(0, result.stats.opsRefused, "$name refused")
+            assertTrue(result.stats.pipelineCount > 0, "$name must use a native pipeline: ${result.stats}")
+            assertTrue(result.stats.drawCallCount > 0, "$name must issue a native draw: ${result.stats}")
+            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "$name native scopes=${result.nativeEvidenceScopeKinds}")
+            assertTrue(result.nativeEvidenceCounters.isNotEmpty(), "$name native counters are missing")
+            strictPixels.forEach { (pixelI32, expected) ->
+                val offsetI32 = pixelI32 * 4
+                assertEquals(expected, result.pixels.copyOfRange(offsetI32, offsetI32 + 4).toList(),
+                    "$name pixel (${pixelI32 % 4},${pixelI32 / 4})")
+            }
+            exactPixels?.let { assertContentEquals(it, result.pixels, "$name full RGBA pixels") }
+            val previousPixels = firstPixels
+            if (previousPixels == null) firstPixels = result.pixels.copyOf()
+            else assertContentEquals(previousPixels, result.pixels, "$name complete replay buffer")
+            assertRecordedOpsEquivalent(recordedOps, surface.snapshotOps(),
+                "$name recording changed after replay ${replayI32 + 1}")
+        }
+    }
+
+    private fun assertRecordedOpsEquivalent(expected: List<DisplayOp>, actual: List<DisplayOp>, message: String) {
+        assertEquals(expected.size, actual.size, "$message operation count")
+        expected.zip(actual).forEachIndexed { indexI32, (expectedOp, actualOp) ->
+            assertEquals(expectedOp::class, actualOp::class, "$message operation type at index $indexI32")
+            if (expectedOp is DisplayOp.DrawPath) {
+                val actualPathOp = actualOp as DisplayOp.DrawPath
+                assertEquals(expectedOp.path.toPathF32(), actualPathOp.path.toPathF32(),
+                    "$message path geometry at index $indexI32")
+                assertEquals(expectedOp.sourceOperation, actualPathOp.sourceOperation,
+                    "$message DrawPath source operation at index $indexI32")
+                val neutralPath = Path()
+                assertEquals(
+                    expectedOp.copyPreservingSourceOperation(path = neutralPath),
+                    actualPathOp.copyPreservingSourceOperation(path = neutralPath),
+                    "$message DrawPath fields apart from path geometry at index $indexI32",
+                )
+            } else {
+                assertEquals(expectedOp, actualOp, "$message operation at index $indexI32")
+            }
+        }
     }
     private fun paint(shader: Shader) = Paint(color = ColorARGB.White, shader = shader, antiAlias = false, blendMode = BlendMode.SRC)
     private fun pixel(pixels: UByteArray, widthI32: Int, xI32: Int, yI32: Int, expected: List<UByte>) {

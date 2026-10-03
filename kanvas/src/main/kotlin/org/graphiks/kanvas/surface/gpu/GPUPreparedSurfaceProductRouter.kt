@@ -2,6 +2,7 @@
 
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.Collections
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
@@ -117,8 +118,34 @@ internal object GPUPreparedSurfaceProductRouter {
                     coverage = if (execution.visualOperationCount == 0) 0f else 1f,
                     coverageMeasured = false,
                 ),
-                structuralSteps = execution.evidence.structuralSteps,
+                structuralSteps = Collections.unmodifiableList(
+                    ArrayList(
+                        execution.evidence.structuralSteps +
+                            execution.evidence.structuralTelemetry?.events.orEmpty().map { event -> event.kind.name },
+                    ),
+                ),
                 nativeEvidenceCounters = mapOf(
+                    "targetCreations" to execution.evidence.targetCreations,
+                    "targetCloses" to execution.evidence.targetCloses,
+                    "frameCoordinatorCreations" to execution.evidence.frameCoordinatorCreations,
+                    "encoders" to execution.evidence.encoders,
+                    "commandBuffers" to execution.evidence.commandBuffers,
+                    "submits" to execution.evidence.submits,
+                    "readbackCopies" to execution.evidence.readbackCopies,
+                    "destinationSnapshotCreations" to execution.evidence.destinationSnapshotCreations,
+                    "destinationReadbackSnapshots" to execution.evidence.destinationReadbackSnapshots,
+                    "renderPasses" to execution.evidence.renderPasses,
+                    "draws" to execution.evidence.draws,
+                    "drawIndexed" to execution.evidence.drawIndexed,
+                    "pipelineBinds" to execution.evidence.pipelineBinds,
+                    "destinationCopies" to execution.evidence.destinationCopies,
+                    "activeNativePayloads" to execution.evidence.activeNativePayloads.toLong(),
+                    "outputOwnedNativePayloads" to execution.evidence.outputOwnedNativePayloads.toLong(),
+                    "quarantinedNativePayloads" to execution.evidence.quarantinedNativePayloads.toLong(),
+                    "retentionRegistrations" to execution.evidence.retentionRegistrations,
+                    "retentionCompletions" to execution.evidence.retentionCompletions,
+                    "retentionQuarantines" to execution.evidence.retentionQuarantines,
+                    "distinctRetentionTickets" to execution.evidence.distinctRetentionTickets.toLong(),
                     "preparedImage.textureUploadScope" to
                         execution.evidence.preparedImageFrameTextureUploadScopesEncoded,
                     "preparedImage.frameTextureCreations" to
@@ -130,9 +157,9 @@ internal object GPUPreparedSurfaceProductRouter {
                     "preparedImage.queueWriteTextureCalls" to
                         execution.evidence.preparedImageFrameTextureWriteTextureCalls,
                 ),
-                nativeEvidenceScopeKinds = if (
-                    execution.evidence.preparedImageFrameTextureUploadScopesEncoded > 0L
-                ) listOf("Upload") else emptyList(),
+                nativeEvidenceScopeKinds = Collections.unmodifiableList(
+                    ArrayList(execution.evidence.encodedScopeKinds.orEmpty().map { scopeKind -> scopeKind.name }),
+                ),
                 premultiplication = config.resolvedCompositionPremultiplication(),
             ),
             evidence = execution.evidence,
