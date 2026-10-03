@@ -45,6 +45,7 @@ import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.geometry.PathStrokeWorkUsageI64
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.toExactRectI32OrNull
 import org.graphiks.math.geometry.rectHairlineCoverageBandsI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -262,12 +263,11 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
     private fun isPublicEncodedRootAaPathFrame(scene: SceneSnapshot, target: RenderTargetDescriptor): Boolean =
         requiresPublicEncodedAdmission &&
-            target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
-            scene.any { command -> command is SceneCommand.Draw && command.node.origin == DrawOrigin.PATH &&
-                command.node.geometry is GeometryNode.Path && command.node.coverage == CoverageRequest.ANTIALIASED } &&
-            scene.filterIsInstance<SceneCommand.Draw>().all { command ->
-                command.node.origin == DrawOrigin.PATH && command.node.geometry is GeometryNode.Path
-            }
+            (admitsStandaloneRectPathFrames || scene.none { command ->
+                command is SceneCommand.Draw && command.node.origin == DrawOrigin.RECT &&
+                    command.node.geometry is GeometryNode.Rect
+            }) &&
+            CompositionAdmissionV1.isAdmittedEncodedRootAaPathFrame(scene, target)
 
     private fun recognize(scene: SceneSnapshot, target: RenderTargetDescriptor): Recognition {
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
@@ -1621,10 +1621,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         return a.size == b.size && a.indices.all { a[it].toRawBits() == b[it].toRawBits() }
     }
 
-    private fun integral(bounds: RectF32): RectI32? = if (!finite(bounds)) null else listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
-        .map { value -> value.toLong().takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() && it.toFloat() == value } }
-        .takeIf { it.none { value -> value == null } }
-        ?.let { RectI32(it[0]!!.toInt(), it[1]!!.toInt(), it[2]!!.toInt(), it[3]!!.toInt()).takeUnless(RectI32::isEmpty64) }
+    private fun integral(bounds: RectF32): RectI32? = bounds.toExactRectI32OrNull()
 
     private fun intersect(first: RectI32, second: RectI32): RectI32? = first.copy().takeIf { it.intersect(second) }
 

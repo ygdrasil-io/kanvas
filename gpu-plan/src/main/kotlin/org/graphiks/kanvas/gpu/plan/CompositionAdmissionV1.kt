@@ -22,6 +22,8 @@ import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.PathSegmentF32
+import org.graphiks.math.geometry.coordinateF32ToExactI32OrNull
+import org.graphiks.math.geometry.toExactRectI32OrNull
 import org.graphiks.math.matrix.PathTransformClass
 import org.graphiks.math.matrix.classifyPathTransform
 import org.graphiks.math.matrix.invertFiniteOrNull
@@ -56,8 +58,22 @@ public object CompositionAdmissionV1 {
         return emptyList()
     }
 
+    /** Shared contextual admission for the public encoded root AA Path family. */
+    internal fun isAdmittedEncodedRootAaPathFrame(
+        scene: SceneSnapshot,
+        target: RenderTargetDescriptor,
+    ): Boolean {
+        if (target.compositionDomain != CompositionDomain.SRGB_ENCODED || topologyRefusal(scene) != null) return false
+        if (scene.none { command -> command is SceneCommand.Draw && command.node.origin == DrawOrigin.PATH &&
+                command.node.geometry is GeometryNode.Path && command.node.coverage == CoverageRequest.ANTIALIASED
+            }) return false
+        return scene.withIndex().all { (index, command) -> rootAaPathFrameRefusal(command, index) == null }
+    }
+
     private fun rootAaPathFrameRefusal(command: SceneCommand, index: Int): RenderDiagnostic? = when (command) {
-        is SceneCommand.Draw -> rootAaPathDrawRefusal(command, index)
+        is SceneCommand.Draw -> if (command.node.origin == DrawOrigin.RECT && command.node.geometry is GeometryNode.Rect)
+            rootAaRectDrawRefusal(command, index)
+        else rootAaPathDrawRefusal(command, index)
         is SceneCommand.SetTransform -> if (command.matrix.isRootAaPathTransform()) null
             else diagnostic("geometry", index, "Encoded root AA Path requires finite invertible identity or axis-aligned affine transforms.")
         is SceneCommand.SetClip -> if (command.clip.isHardIntegerRectOrEmpty()) null
@@ -98,6 +114,26 @@ public object CompositionAdmissionV1 {
             paint.pathEffect != null || paint.imageFilter != null || node.effects !=
             org.graphiks.kanvas.render.ir.EffectStack.Empty || node.resource != null
         ) return diagnostic("source", index, "Encoded root AA Path requires direct solid paint without effects.")
+        return null
+    }
+
+    private fun rootAaRectDrawRefusal(command: SceneCommand.Draw, index: Int): RenderDiagnostic? {
+        val node = command.node
+        val paint = node.paint
+        val bounds = (node.geometry as GeometryNode.Rect).copyBounds()
+        if (paint?.style != PaintStyleNode.FILL || paint.antiAlias || node.coverage != CoverageRequest.HARD_EDGE ||
+            bounds.toExactRectI32OrNull() == null || !node.transform.isIdentityOrIntegerI32Translation() ||
+            !node.clip.isHardIntegerRectOrEmpty()
+        ) return diagnostic("geometry", index,
+            "Encoded root AA Path Rect siblings require finite non-empty I32 bounds, non-AA FILL, integer translation, and hard integer clip.")
+        if (node.material !is MaterialNode.Solid || paint.shader != null || paint.blender != null ||
+            paint.colorFilter != null || paint.maskFilter != null || paint.pathEffect != null ||
+            paint.imageFilter != null || node.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty ||
+            node.resource != null
+        ) return diagnostic("geometry", index, "Encoded root AA Path Rect siblings require direct solid paint without effects.")
+        if (!node.blend.isSrcOver() || paint.blendMode != BlendMode.SRC_OVER || node.operationBlendMode != null) {
+            return diagnostic("geometry", index, "Encoded root AA Path Rect siblings require direct solid SrcOver paint.")
+        }
         return null
     }
 
@@ -296,6 +332,10 @@ public object CompositionAdmissionV1 {
 
     private fun org.graphiks.math.geometry.RectF32.isIntegerRect(): Boolean =
         left.isIntegerFinite() && top.isIntegerFinite() && right.isIntegerFinite() && bottom.isIntegerFinite()
+
+    private fun Matrix3x3F32.isIdentityOrIntegerI32Translation(): Boolean =
+        sx == 1f && kx == 0f && ky == 0f && sy == 1f && persp0 == 0f && persp1 == 0f && persp2 == 1f &&
+            coordinateF32ToExactI32OrNull(tx) != null && coordinateF32ToExactI32OrNull(ty) != null
 
     private fun Float.isIntegerFinite(): Boolean = isFinite() && toDouble() == kotlin.math.floor(toDouble())
 

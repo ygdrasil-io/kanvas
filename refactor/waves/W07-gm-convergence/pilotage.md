@@ -1,5 +1,32 @@
 # Pilotage de la convergence Skia
 
+## Connexion des vrais Rect hard au root-AA encoded — 3 octobre 2026
+
+[Qualification](root-aa-rect-qualification.md) et [corpus](root-aa-rect-8e44f0c8a.json),
+branche codex/w7-root-aa-rect-admission sur#2436/53bf9c55b, candidate8e44f0c8a.
+La vraie scène fondRect+Paths est maintenant admise explicitement, sans Path
+de fond artificiel ni lane privée empruntée.25témoins natifs10+15PASS et
+498mathPASS, historiques48/49 comme parent et globale RED/incomplète conservés.
+Deux limites sorties du diagnostic, pas masquées : drawPicture wrappers OPEN
+(playback exact C seul positif), budget de fixture omettait hardstencil256.
+Autorité de conversion exacte I/F32/I32 dans math, grands spans préservés.
+
+Mesure réelle H : domaine encoded corrige188→128 vertical mais191diagonal
+reste différent de223. Gain±2 minime0.0065625point, pas de couverture corrigée.
+GM déclaré LINEAR et toutes631fiches corpus hors temps restent inchangés :
+217rendus/194comparés,47≥99/63≥95, zéro gain/perte GM. Ne pas compter une
+capacité ouverte comme convergence visuelle. Prochain axe : couverture/placement
+AA avec témoins indépendants, pas migration de domaine sans preuve.
+Sol Task2 Approved C0/I0/M1 ; Astra whole-branch C0/I0/M2, draft acceptable,
+mergeNO, source/graph/facts/physical keys/preflight statiquement cohérents.
+Warnings et trois libellés imprécis différés, source native gelée inchangée.
+Draft stack après vérification distante ; aucun merge/globalGREEN/W7clos.
+
+Draft [#2437](https://github.com/ygdrasil-io/kanvas/pull/2437) publiée/rattachée
+sur#2436, base53bf9c55b et head initial28e2f8dbf/body distants exacts vérifiés.
+Source/tests commit1b24a6e12 exactement qualifiés8e44 ; reçu ultérieur docs-only,
+CI non inspectée, aucune fusion. Prochain lot AA indépendant, sans gain présumé.
+
 ## Capacité root Path AA encoded — 2 octobre 2026
 
 [Qualification locale](root-aa-encoded-qualification.md) et
