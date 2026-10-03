@@ -10,7 +10,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
@@ -20,6 +23,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
@@ -36,6 +41,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
@@ -56,11 +62,13 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
@@ -73,6 +81,90 @@ import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameBuilderTest {
+    @Test
+    fun `public standalone square point authenticates scene initialization and destination ownership`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            drawPoint(16f, 16f, squareDestinationReadPointPaint())
+        }
+        val operations = surface.snapshotOps()
+        val result = GPUPreparedSurfaceFrameBuilder.build(squarePointRequest(operations))
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)?.diagnostic?.let { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.facts} ${diagnostic.message}"
+            }.orEmpty(),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val packet = packets.single()
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveSourceFamily.PointLine, semantic.sourceFamily)
+        assertEquals(GPUCorePrimitiveGeometryMode.DirectTriangles, geometry.geometryMode)
+        assertEquals(listOf(0f, 0f, 32f, 0f, 32f, 32f, 0f, 32f), geometry.vertices)
+        assertEquals(listOf(0, 1, 2, 0, 2, 3), geometry.indices)
+        assertTrue(packet.commandIdValue > 0, "only the authentic public point should remain a draw packet")
+        val blend = assertIs<GPUBlendPlan.ShaderBlendWithDstRead>(packet.blendPlan)
+        assertEquals(GPUBlendMode.DARKEN, blend.mode)
+        assertEquals("darken@v1", blend.formulaId)
+        assertTrue(ready.taskList.tasks.any { it is GPUTask.DestinationSnapshots }, "destination read must own a snapshot")
+        assertTrue(ready.destinationReadEvidence.any { evidence ->
+            evidence.operationFamily.contains("point", ignoreCase = true) && evidence.action == "copy-then-formula"
+        }, "prepared route evidence must retain the public point consumer")
+    }
+
+    @Test
+    fun `mixed blue rect and square point retain both material sources and destination version`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 32f, 32f),
+                Paint(color = ColorARGB.Blue, antiAlias = false),
+            )
+            drawPoint(16f, 16f, squareDestinationReadPointPaint())
+        }
+        val operations = surface.snapshotOps()
+        val result = GPUPreparedSurfaceFrameBuilder.build(squarePointRequest(operations))
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)?.diagnostic?.let { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.facts} ${diagnostic.message}"
+            }.orEmpty(),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        assertEquals(2, ready.visualOperationCount)
+        assertEquals(2, packets.size)
+        val semanticsByFamily = packets.associateBy { packet ->
+            assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload).sourceFamily
+        }
+        assertEquals(setOf(GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveSourceFamily.PointLine), semanticsByFamily.keys)
+
+        val rectPacket = requireNotNull(semanticsByFamily[GPUCorePrimitiveSourceFamily.Rect])
+        val pointPacket = requireNotNull(semanticsByFamily[GPUCorePrimitiveSourceFamily.PointLine])
+        val rectSemantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(rectPacket.semanticPayload)
+        val pointSemantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(pointPacket.semanticPayload)
+        val rectMaterial = assertIs<GPUCorePrimitiveMaterialPayload.SolidColor>(rectSemantic.material)
+        val pointMaterial = assertIs<GPUCorePrimitiveMaterialPayload.SolidColor>(pointSemantic.material)
+        val rectAuthority = assertNotNull(rectMaterial.materialSourceAuthority, "blue background must retain its authentic W5a source owner")
+        val pointAuthority = assertNotNull(pointMaterial.materialSourceAuthority, "red point must retain its authentic W5a source owner")
+        assertEquals(rectPacket.commandIdValue, rectAuthority.commandIdI32)
+        assertEquals(pointPacket.commandIdValue, pointAuthority.commandIdI32)
+        assertTrue(rectAuthority.validates(rectPacket.commandIdValue))
+        assertFalse(rectAuthority.validates(pointPacket.commandIdValue), "blue owner must reject the point command")
+        assertTrue(pointAuthority.validates(pointPacket.commandIdValue))
+        assertFalse(pointAuthority.validates(rectPacket.commandIdValue), "point owner must reject the blue command")
+        assertNotEquals(rectAuthority.ref, pointAuthority.ref, "blue background and red point need distinct retained material refs")
+        assertNotEquals(rectAuthority.sourceRef, pointAuthority.sourceRef, "blue background and red point need distinct source refs")
+        assertSame(rectAuthority.sourcePlanTable, pointAuthority.sourcePlanTable, "both authentic owners must retain the frame's shared source table")
+        assertTrue(rectPacket.originalPaintOrder < pointPacket.originalPaintOrder, "original draw order must survive bridge capture")
+        val pointBlend = assertIs<GPUBlendPlan.ShaderBlendWithDstRead>(pointPacket.blendPlan)
+        assertEquals(GPUBlendMode.DARKEN, pointBlend.mode)
+        assertTrue(ready.taskList.tasks.any { it is GPUTask.DestinationSnapshots }, "mixed frame must snapshot the actual destination version")
+        assertTrue(ready.destinationReadEvidence.any { it.operationFamily.contains("point", ignoreCase = true) })
+    }
+
     @Test
     fun `matrix transform facts classify coherent pure scales as Scale`() {
         val cases = listOf(
@@ -1634,6 +1726,59 @@ class GPUPreparedSurfaceFrameBuilderTest {
         ).forEach { forbidden ->
             assertTrue(forbidden !in source, forbidden)
         }
+    }
+
+    private fun squareDestinationReadPointPaint() = Paint(
+        color = ColorARGB.of(128, 255, 0, 0),
+        antiAlias = false,
+        style = PaintStyle.FILL,
+        strokeWidth = 32f,
+        strokeCap = StrokeCap.SQUARE,
+        blendMode = BlendMode.DARKEN,
+    )
+
+    private fun squarePointRequest(operations: List<DisplayOp>): GPUPreparedSurfaceFrameBuildRequest {
+        val baseRequest = request(operations)
+        val baseCapabilities = baseRequest.capabilities
+        val requiredPhysicalUsages = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.TextureBinding or
+            GPUTextureUsage.CopySrc or
+            GPUTextureUsage.CopyDst
+        val baseSrgbSampleSupport = baseCapabilities.textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
+        val srgbSampleSupport = GPUTextureSampleCountSupport(
+            renderAttachmentSampleCounts = baseSrgbSampleSupport?.renderAttachmentSampleCounts.orEmpty() + 1,
+            resolveSourceSampleCounts = baseSrgbSampleSupport?.resolveSourceSampleCounts.orEmpty(),
+        )
+        val capabilities = baseCapabilities.copy(
+            snapshotId = "${baseCapabilities.snapshotId}:square-point-w5b-physical-v1",
+            limits = requireNotNull(baseCapabilities.limits).copy(
+                maxBindGroupsI32 = 3,
+                maxBindingsPerBindGroupI32 = 2,
+                maxSampledTexturesPerShaderStageI32 = 1,
+                maxSamplersPerShaderStageI32 = 1,
+                maxUniformBuffersPerShaderStageI32 = 2,
+                maxUniformBufferBindingSizeBytesI64 = 32L,
+            ),
+            supportedTextureFormats = baseCapabilities.supportedTextureFormats + GPUTextureFormat.RGBA8UnormSrgb,
+            supportedTextureUsage = baseCapabilities.supportedTextureUsage?.let { it or requiredPhysicalUsages }
+                ?: requiredPhysicalUsages,
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                baseCapabilities.textureFormatSampleSupport + mapOf(
+                    GPUTextureFormat.RGBA8UnormSrgb to srgbSampleSupport,
+                ),
+            ),
+            rendererFeatures = baseCapabilities.rendererFeatures + setOf(
+                GPURendererFeature.RenderPass,
+                GPURendererFeature.CopyUpload,
+                GPURendererFeature.UniformBuffer,
+                GPURendererFeature.Readback,
+            ),
+        )
+        return baseRequest.copy(
+            targetFacts = GPUTargetFacts(32, 32, "rgba8unorm-srgb"),
+            targetBounds = GPUPixelBounds(0, 0, 32, 32),
+            capabilities = capabilities,
+        )
     }
 
     private fun request(

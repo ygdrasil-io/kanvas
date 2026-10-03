@@ -86,6 +86,78 @@ class W7PreparedPointDestinationReadSurfacePixelTest {
         assertContentEquals(results[0].second.pixels, results[1].second.pixels, "first frame/replay RGBA")
     }
 
+    @Test
+    fun preparedSquarePointHalfAlphaDarkenBlendsOnceAndRefreshesDestination() {
+        val surface = Surface(32, 32)
+        val pointPaint = Paint(
+            color = ColorARGB.of(128, 255, 0, 0),
+            antiAlias = false,
+            style = PaintStyle.FILL,
+            strokeWidth = 32f,
+            strokeCap = StrokeCap.SQUARE,
+            blendMode = BlendMode.DARKEN,
+        )
+
+        fun recordFrame(background: ColorARGB) {
+            surface.discardRecordedOperations()
+            surface.canvas {
+                drawRect(
+                    RectF32.ofLTRB(0f, 0f, 32f, 32f),
+                    Paint(color = background, antiAlias = false),
+                )
+                drawPoint(16f, 16f, pointPaint)
+            }
+        }
+
+        fun assertFrameAndReplay(label: String, expected: List<Int>) {
+            val first = surface.render()
+            printRenderEvidence("$label-first", first)
+            val replay = surface.render()
+            printRenderEvidence("$label-replay", replay)
+            assertHalfAlphaDarkenPixels("$label-first", first, expected)
+            assertHalfAlphaDarkenPixels("$label-replay", replay, expected)
+            assertContentEquals(first.pixels, replay.pixels, "$label full RGBA replay")
+        }
+
+        recordFrame(ColorARGB.Blue)
+        assertFrameAndReplay("blue-destination", listOf(0, 0, 187, 255))
+
+        recordFrame(ColorARGB.Red)
+        assertFrameAndReplay("red-destination-refresh", listOf(255, 0, 0, 255))
+
+        recordFrame(ColorARGB.Blue)
+        assertFrameAndReplay("blue-destination-refresh", listOf(0, 0, 187, 255))
+    }
+
+    private fun assertHalfAlphaDarkenPixels(label: String, result: RenderResult, expected: List<Int>) {
+        val diagnosticText = result.diagnostics.entries.joinToString {
+            "${it.code}:${it.operation}:${it.reason}"
+        }
+        assertEquals(32, result.width, label)
+        assertEquals(32, result.height, label)
+        assertEquals(PixelFormat.RGBA8, result.format, label)
+        assertEquals(0, result.diagnostics.fatalCount, "$label $diagnosticText")
+        assertEquals(0, result.stats.opsRefused, "$label ${result.stats}")
+        assertTrue(result.diagnostics.entries.any { diagnostic ->
+            diagnostic.code.startsWith("route:destination-read:DrawPoint") &&
+                diagnostic.operation.startsWith("DrawPoint") &&
+                diagnostic.reason == "gpu-copy-then-formula"
+        }, "$label $diagnosticText")
+        assertTrue(result.stats.opsDispatched > 0, "$label ${result.stats}")
+        assertTrue(result.stats.drawCallCount > 0, "$label ${result.stats}")
+        assertTrue(result.stats.pipelineCount > 0, "$label ${result.stats}")
+
+        for (offset in result.pixels.indices step 4) {
+            for (channel in 0..2) {
+                val actual = result.pixels[offset + channel].toInt() and 0xff
+                assertTrue(abs(actual - expected[channel]) <= 2,
+                    "$label channel=$channel pixel=${offset / 4}: expected=${expected[channel]} actual=$actual")
+            }
+            assertEquals(expected[3], result.pixels[offset + 3].toInt() and 0xff,
+                "$label alpha at ${offset / 4}")
+        }
+    }
+
     private fun printRenderEvidence(label: String, result: RenderResult) {
         val diagnosticText = result.diagnostics.entries.joinToString {
             "${it.code}:${it.operation}:${it.reason}"

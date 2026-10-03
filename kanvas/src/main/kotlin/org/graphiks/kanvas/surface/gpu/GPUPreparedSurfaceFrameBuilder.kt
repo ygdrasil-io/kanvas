@@ -498,8 +498,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         val ref = materials?.refsByCommandId?.get(commandId)
                         val source = admittedPointSources[commandId]
                         val blend = source?.blend ?: corePlansByCommandId[commandId]?.blend
-                        // Only W5b's existing DirectTriangles lane acquires this join. Wider
-                        // W5a Points keep their original stencil geometry and prepared route.
+                        // Only W5b's exact DirectTriangles point lane acquires this join. Other
+                        // W5a Points keep their original geometry and prepared route.
                         val directPoint = (original?.geometry as?
                             org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath)
                             ?.geometryMode == org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode.DirectTriangles

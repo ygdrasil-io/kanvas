@@ -24,13 +24,20 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
@@ -38,6 +45,127 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.PointMode
 
 class GPUCorePrimitiveSemanticBuilderTest {
+    @Test
+    fun `public square points retain exact mapped geometry capture and blend identity`() {
+        val cases = listOf(
+            Triple(16f, 16f, 32f) to listOf(0f, 0f, 32f, 0f, 32f, 32f, 0f, 32f),
+            Triple(7.25f, 8.5f, 2.5f) to listOf(6f, 7.25f, 8.5f, 7.25f, 8.5f, 9.75f, 6f, 9.75f),
+        )
+
+        for ((point, expectedVertices) in cases) {
+            val (x, y, width) = point
+            val paint = Paint(
+                color = ColorARGB.Red,
+                antiAlias = false,
+                style = PaintStyle.FILL,
+                strokeWidth = width,
+                strokeCap = StrokeCap.SQUARE,
+                blendMode = BlendMode.DARKEN,
+            )
+            val surface = Surface(32, 32)
+            surface.canvas { drawPoint(x, y, paint) }
+            val recordedOperations = surface.snapshotOps()
+            val recordedPoint = assertIs<DisplayOp.DrawPoint>(
+                recordedOperations.single(),
+            )
+            val inventory = inventoryForPublicPointOperations(recordedOperations)
+            val normalized = assertIs<NormalizedDrawCommand.FillPath>(inventory.visualCommands.single().normalized)
+            assertEquals("drawPoint", normalized.source.operation)
+            assertEquals(width, recordedPoint.paint.strokeWidth)
+            assertEquals(StrokeCap.SQUARE, recordedPoint.paint.strokeCap)
+            assertEquals(BlendMode.DARKEN, recordedPoint.paint.blendMode)
+
+            val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+                GPUCorePrimitiveSemanticBuilder.gather(
+                    visualCommands = inventory.visualCommands,
+                    recording = inventory.recording,
+                    targetBounds = GPUPixelBounds(0, 0, 32, 32),
+                    blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+                ),
+            )
+            val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(
+                gathered.semantics.getValue(normalized.commandId.value),
+            )
+            val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+            assertEquals(GPUCorePrimitiveSourceFamily.PointLine, semantic.sourceFamily)
+            assertEquals(GPUCorePrimitiveGeometryMode.DirectTriangles, geometry.geometryMode)
+            assertEquals(GPUCorePrimitiveCoverageMode.FullOrScissor, semantic.coverageMode)
+            assertEquals(expectedVertices, geometry.vertices)
+            assertEquals(listOf(0, 1, 2, 0, 2, 3), geometry.indices)
+            assertEquals(listOf(0), geometry.sourceContourStarts)
+        }
+    }
+
+    @Test
+    fun `point hairline and excluded square inputs keep their existing geometry contracts`() {
+        val hairline = publicPointInventory(
+            7.25f,
+            8.5f,
+            Paint(color = ColorARGB.Red, antiAlias = false, style = PaintStyle.FILL, strokeWidth = 0f),
+        )
+        val hairlineNormalized = assertIs<NormalizedDrawCommand.FillPath>(hairline.visualCommands.single().normalized)
+        val hairlineGathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUCorePrimitiveSemanticBuilder.gather(
+                hairline.visualCommands,
+                hairline.recording,
+                GPUPixelBounds(0, 0, 32, 32),
+                GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+            ),
+        )
+        val hairlineGeometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(
+            assertIs<GPUDrawSemanticPayload.CorePrimitive>(
+                hairlineGathered.semantics.getValue(hairlineNormalized.commandId.value),
+            ).geometry,
+        )
+        assertEquals(GPUCorePrimitiveGeometryMode.DirectTriangles, hairlineGeometry.geometryMode)
+        assertEquals(listOf(7f, 8f, 8f, 8f, 8f, 9f, 7f, 9f), hairlineGeometry.vertices)
+
+        val aaPaint = Paint(
+            color = ColorARGB.Red,
+            antiAlias = true,
+            style = PaintStyle.FILL,
+            strokeWidth = 2.5f,
+            strokeCap = StrokeCap.SQUARE,
+        )
+        val aa = publicPointInventory(7.25f, 8.5f, aaPaint)
+        assertEquals(GPUCoverageConsumption.StencilCoverage1x, aa.visualCommands.single().geometryCoverage)
+        val aaGathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUCorePrimitiveSemanticBuilder.gather(
+                aa.visualCommands,
+                aa.recording,
+                GPUPixelBounds(0, 0, 32, 32),
+                GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+            ),
+        )
+        val aaGeometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(
+            assertIs<GPUDrawSemanticPayload.CorePrimitive>(aaGathered.semantics.values.single()).geometry,
+        )
+        assertEquals(GPUCorePrimitiveGeometryMode.StencilEdgeFan, aaGeometry.geometryMode)
+        assertEquals(
+            GPUCorePrimitiveCoverageMode.StencilAA,
+            assertIs<GPUDrawSemanticPayload.CorePrimitive>(aaGathered.semantics.values.single()).coverageMode,
+        )
+
+        val refused = listOf(
+            "round cap" to Paint(color = ColorARGB.Red, antiAlias = false, style = PaintStyle.FILL,
+                strokeWidth = 32f, strokeCap = StrokeCap.ROUND) to "unsupported.core_primitive.point.round_cap_exact_lowering",
+            "negative width" to Paint(color = ColorARGB.Red, antiAlias = false, style = PaintStyle.FILL,
+                strokeWidth = -1f, strokeCap = StrokeCap.SQUARE) to "unsupported.core_primitive.point.invalid_width",
+            "non-finite width" to Paint(color = ColorARGB.Red, antiAlias = false, style = PaintStyle.FILL,
+                strokeWidth = Float.NaN, strokeCap = StrokeCap.SQUARE) to "unsupported.core_primitive.point.invalid_width",
+            "path effect" to Paint(color = ColorARGB.Red, antiAlias = false, style = PaintStyle.FILL,
+                strokeWidth = 32f, strokeCap = StrokeCap.SQUARE, pathEffect = PathEffect.Dash(floatArrayOf(2f, 2f))) to
+                "unsupported.core_primitive.point.path_effect_exact_lowering",
+        )
+        for ((labelAndPaint, expectedCode) in refused) {
+            val (label, paint) = labelAndPaint
+            val inventory = publicPointInventory(16f, 16f, paint)
+            val refusal = assertNotNull(inventory.preparedRefusal, label)
+            assertEquals(expectedCode, refusal.code, label)
+            assertEquals(0, refusal.operationIndex, label)
+        }
+    }
+
     @Test
     fun `point sources cannot impersonate a public direct triangle drawPath`() {
         val inventory = GPUFramePathApiInventory.plan(
@@ -558,6 +686,20 @@ class GPUCorePrimitiveSemanticBuilderTest {
             assertNotNull(refusal.facts["materialHash"])
         }
     }
+
+    private fun publicPointInventory(x: Float, y: Float, paint: Paint): GPUFramePathInventoryPlan {
+        val surface = Surface(32, 32)
+        surface.canvas { drawPoint(x, y, paint) }
+        return inventoryForPublicPointOperations(surface.snapshotOps())
+    }
+
+    private fun inventoryForPublicPointOperations(operations: List<DisplayOp>): GPUFramePathInventoryPlan =
+        GPUFramePathApiInventory.plan(
+            operations = operations,
+            target = GPUTargetFacts(32, 32, "rgba8unorm-srgb"),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
 
     private fun inventory(
         paint: Paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),

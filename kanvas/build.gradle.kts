@@ -22,6 +22,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     testImplementation(libs.wgslCoreJvm)
     testImplementation(libs.wgslParserJvm)
+    testImplementation(libs.wgpu4kToolkit)
 }
 
 sourceSets {
