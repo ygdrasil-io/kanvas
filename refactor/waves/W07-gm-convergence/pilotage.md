@@ -10,9 +10,19 @@ fixes. Résultat : 220 rendus / 197 comparés (baseline 217/194), 3 statuts
 native `vertices` à l’indice 607 reste RED (tranche/Gradle exit 1). Une baisse
 de SSIM demeure sur l’ancien comparé `child_sampling_rt` (index 77), avec
 cause non attribuée ; sept diagnostics changent sur des cas toujours refusés.
-Aucune affirmation sans régression, de fidélité complète, de suite globale
-verte ou de clôture W7. Gate frais, revue large et éventuelle draft PR restent
-à faire ; reçus privés et détails des pertes dans la qualification.
+La gate de mesure Task2 Sol est approuvée C0/I0/M1. La revue large Astra du
+full40 `befdceaa4e167ac52c67d162913f3031789caa9b` (1872..befdceaa4) juge la
+publication en draft prête C0/I0/M1 ; les bytes source sont inchangés. Cette
+revue ultérieure ne modifie pas l’état historique de mesure au HEAD7360. La
+publication reste en attente du contrôleur. Aucun claim sans régression, de
+fidélité complète, de global GREEN, de merge ou de W7 clos ; reçus privés et
+détails des pertes dans la qualification.
+
+M1 différé au prochain edit qualifié : safe call W6a superflu (`W6aLayerPlanCompiler.kt:305`),
+fixture sans opt-in explicite (`W7W6OrdinaryAaPathSourceIntegrationTest.kt:118`),
+warnings Java native-access / `sun.misc.Unsafe` LWJGL et dépréciations Gradle.
+Ils restent visibles comme dette technique : sortie sans warnings non revendiquée,
+données non invalidées et suites globales toujours non vertes.
 
 # W7 — checkpoint de qualification RRectBlur (3 octobre 2026)
 

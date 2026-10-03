@@ -10,6 +10,27 @@ restent ouverts. Cette qualification mesure l’admission retenue ; elle ne
 démontre ni l’absence de régression ni la fidélité complète de la Task2
 historique.
 
+## État des revues après la mesure
+
+La mesure reste celle du HEAD mesuré `7360c5f94e3fcaa2f68d4375d8cdd7ad12295460`
+et conserve tous les résultats et limites détaillés ci-dessous. La gate de
+mesure Task2 Sol est approuvée C0/I0/M1. La revue large Astra de la branche
+`1872d31cb..befdceaa4e167ac52c67d162913f3031789caa9b` (HEAD full40
+`befdceaa4e167ac52c67d162913f3031789caa9b`) juge la publication en draft prête,
+C0/I0/M1 ; les bytes source sont inchangés. Cette disposition de revue est
+postérieure à la mesure, elle ne change pas son HEAD ou ses résultats. La
+publication reste en attente du contrôleur ; ceci ne vaut ni merge readiness,
+ni global GREEN, ni clôture W7.
+
+Le M1 conservé est une dette de nettoyage technique différée au prochain edit
+qualifié : safe call superflu dans `W6aLayerPlanCompiler.kt:305`, fixture sans
+opt-in explicite dans `W7W6OrdinaryAaPathSourceIntegrationTest.kt:118`, et
+warnings natifs Java (`native-access`, `sun.misc.Unsafe` via LWJGL) et de
+dépréciations Gradle consignés dans les logs. Ces dettes ne sont pas corrigées
+dans cette qualification. Leur présence signifie que la sortie de test n’est
+pas sans warnings ; elle n’invalide pas les données du corpus et ne rend pas
+les suites globales vertes.
+
 ## Provenance et intégrité
 
 La référence physique (baseline) est [`root-aa-rect-8e44f0c8a.json`](root-aa-rect-8e44f0c8a.json),
