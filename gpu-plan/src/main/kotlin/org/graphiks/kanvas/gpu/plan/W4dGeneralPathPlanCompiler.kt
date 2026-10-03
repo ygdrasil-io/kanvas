@@ -104,12 +104,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private val rectProjectionMode: RectProjectionMode = RectProjectionMode.None,
     /** W4e-only construction permission: retain already-normalized plain solid AA material. */
     private val resolvePlainAaSolids: Boolean = false,
+    /** W6-owned root PATH source; extends only the historical solid AA fill to solid strokes. */
+    private val w7W6OrdinaryAaPathColorSource: Boolean = false,
 ) : GpuPlanCompiler {
     internal enum class RectProjectionMode { None, PictureHardFill }
     internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, w6RootAaRectStrokeSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode,resolvePlainAaSolids)
+        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, admitsStandaloneRectPathFrames, allowAaColorSource, w6RootAaRectStrokeSource, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode,resolvePlainAaSolids,w7W6OrdinaryAaPathColorSource)
     internal fun withImageOriginProjection(projection: ImageOriginGeometryProjectionV6?): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,w6RootAaRectStrokeSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode,resolvePlainAaSolids)
+        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,admitsStandaloneRectPathFrames,allowAaColorSource,w6RootAaRectStrokeSource,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection,w6AaCoverageSource,w7AaDeferredSource,requiresPublicEncodedAdmission,rectProjectionMode,resolvePlainAaSolids,w7W6OrdinaryAaPathColorSource)
     public constructor() : this(PathStrokePolicyF64(), requiresPublicEncodedAdmission = true)
 
     /**
@@ -505,6 +507,13 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     internal fun acceptsW6AaColorSourceScope(node: DrawNode): Boolean =
         allowAaColorSource && classifyDrawScope(node) is DrawScope.Ready
 
+    /** Closed Task 1 source scope: only an ordinary AA solid SrcOver PATH FILL or STROKE. */
+    internal fun acceptsW7W6OrdinaryAaPathColorSourceScope(node: DrawNode): Boolean =
+        w7W6OrdinaryAaPathColorSource && node.origin == DrawOrigin.PATH && node.geometry is GeometryNode.Path &&
+            node.coverage == CoverageRequest.ANTIALIASED &&
+            node.paint?.style?.let { it == PaintStyleNode.FILL || it == PaintStyleNode.STROKE } == true &&
+            classifyDrawScope(node) is DrawScope.Ready
+
     /** Closed W7 predicate shared by root and layer ownership; it does not select a backend. */
     internal fun acceptsW7AaDeferredSourceScope(node: DrawNode): Boolean =
         w7AaDeferredSource && classifyDrawScope(node) is DrawScope.Ready
@@ -551,7 +560,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val rootRectStroke = w6RootAaRectStrokeSource && rectProjection
         if (allowAaColorSource && !rootRectStroke &&
             (node.coverage != CoverageRequest.ANTIALIASED || node.material !is MaterialNode.Solid || paint.colorFilter != null ||
-                paint.style != PaintStyleNode.FILL || paint.pathEffect != null ||
+                (if (w7W6OrdinaryAaPathColorSource) paint.style !in setOf(PaintStyleNode.FILL, PaintStyleNode.STROKE)
+                else paint.style != PaintStyleNode.FILL) || paint.pathEffect != null ||
                 node.effects != EffectStack.Empty || when (val blend = node.blend) {
                     BlendNode.SrcOver -> false
                     is BlendNode.Mode -> blend.mode != BlendMode.SRC_OVER
@@ -1786,6 +1796,17 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             acceptsNarrowTransforms = true,
             allowAaColorSource = true,
             runtimeCatalog = catalog,
+        )
+
+        /** W6-owned root source for ordinary PATH AA solids; color resolve, not filter coverage. */
+        internal fun w7W6OrdinaryAaPathColorSource(
+            catalog: RuntimeEffectSemanticCatalogSnapshot,
+        ): W4dGeneralPathPlanCompiler = W4dGeneralPathPlanCompiler(
+            PathStrokePolicyF64(),
+            acceptsNarrowTransforms = true,
+            allowAaColorSource = true,
+            runtimeCatalog = catalog,
+            w7W6OrdinaryAaPathColorSource = true,
         )
 
         /** Closed W6 source for a recorded general-affine/perspective hard Rect Picture fill. */
