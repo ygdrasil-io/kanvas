@@ -1,3 +1,24 @@
+# W7 — source `tinybitmap` et image shader encoded (3 octobre 2026)
+
+[Qualification ciblée](tinybitmap-source-fidelity.md), branche
+`codex/w7-tinybitmap-source-fidelity`, source
+`78ee0ee0870fb2387eddbfedb819bb358f1f0690`, base e5069ccb54, parent draft #2442.
+Source PREMUL corrigée et feuille image encoded admise sur RECT hard entière
+non-AA/SrcOver/nearest, domaine transmis depuis l'autorité existante.
+14/14 témoins natifs indépendants PASS ; revue source Sol Approved C0/I0/M0.
+La parité historique reste exact 0 % / ±2 0 %, malgré SSIM
+0.9845261966447928 → 0.9949447881896182. Le runner standard PASS grâce au
+seuil historique inchangé 0 %, pas grâce à une parité atteinte. GM toujours
+LINEAR ; proxy drawPaint, alpha quantifié et producteur PNG inconnu restent
+des limites. Générateur : 1 rendu/0 échec ; 813 PNG non-cibles et 558 autres
+valeurs de scores inchangées, score cible 0.0.
+
+Suite publique ciblée RED 47/52 : quatre refus W5e hérités prouvés sur baseline,
+plus un refus de budget exact 888 en contexte de suite, cause non attribuée
+malgré le PASS isolé inchangé. Gap ouvert avant validation globale/merge.
+Revue finale du lot/documentation en attente. Aucun merge, GREEN global,
+gain de corpus agrégé ou clôture : W7 ACTIVE.
+
 # W7 — fidélité source `DrawBitmapRect3` (3 octobre 2026)
 
 [Qualification ciblée](bitmaprect3-source-fidelity.md), branche
