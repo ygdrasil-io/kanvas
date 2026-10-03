@@ -131,8 +131,18 @@ Relecture de tâche Sol du lot075405…820c05 : spec compliant, qualité Approve
 Critical0/Important0. Minor hérité : warnings native-access/LWJGL suivis dans
 les logs. Main a résolu les points non vérifiables par diff (audits natifs,
 pré/post-seals séparés,47fichiers conservés avec chemins/bytes/SHA exacts et
-diagnostic inverse inchangé). Publication Step9 et review finale restent
-en attente ; ces obligations ne sont pas déclarées achevées.
+diagnostic inverse inchangé).
+
+Relecture finale indépendante Sol du lot075405…f93d64 : publication draft
+approuvée, Critical0/Important0/nouveauMinor0 ; warnings hérités reportés.
+Le reviewer a vérifié les47archives,69seals, XML/events, JSONL et pixels
+décodés. La chronologie passée d'exclusivité des writes et de lecture
+intégrale reste une attestation du contrôleur. Sources Skia distantes
+inaccessibles dans son environnement : octets upstream non authentifiés
+indépendamment ; l'inférence bare8888 reste bornée, producteur PNG inconnu.
+Pas de nouveau correctif requis. Main a rescéllé69/814PNG/559scores sans
+dérive avant publication ; aucun rerun natif ni changement de code.
+Publication et vérification distante Step9 restent en attente.
 Fonts, codecs externes et jpg-color-cube restent exclus. Les tests AA aux
 frontières, admission off-target sans clip, compteur hétérogène,
 SceneSnapshot/ownership stencil et fidélité des autres GM restent ouverts.
@@ -228,4 +238,3 @@ exit.json | 111 bytes | ef14e76ba548a1a7b3c35fde56e6ebc35602bfb9af650b672bedfe38
 process.log | 13826 bytes | 0b5c9c9adeef753c23434a289da6e391af7decfbb481c5c34aa6f328c59cbcfb
 xml/TEST-org.graphiks.kanvas.skia.SkiaGmRunner.xml | 551 bytes | 951f1a931c661f563a9ddace5409b70def05563cb6f60714ca131c63ac4f2217
 ```
-

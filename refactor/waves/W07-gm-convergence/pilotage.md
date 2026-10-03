@@ -12,7 +12,10 @@ Seuls targetPNG/score changent ;813autresPNG/558autrescores/référence gelés.
 La PNG de référence contient un ICC Rec.2020 : stockage brut distinct des
 canaux sRGB comparés ; producteur/révision inconnus, quantification/proxy suivis.
 Relecture de tâche Sol Approved C0/I0 ; warnings hérités suivis.
-Review finale et draft stackée en préparation. W7 ACTIVE, pas de merge/globalGREEN.
+Review finale indépendante Sol Approved pour draft C0/I0/nouveauM0 ;
+sources upstream non authentifiées indépendamment par le reviewer (réseau
+indisponible), inférence bornée et origine historique inconnue conservées.
+Draft stackée en préparation. W7 ACTIVE, pas de merge/globalGREEN.
 
 # W7 — contrats image promus et preuve native Surface (4 octobre 2026)
 
