@@ -8,7 +8,6 @@ import org.graphiks.kanvas.skia.gm.composite.TestExtractAlphaGm
 import org.graphiks.kanvas.skia.gm.image.ChildSamplingRTGm
 import org.graphiks.kanvas.surface.SceneRecordingScope
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -110,7 +109,7 @@ internal fun captureEligibleGmScenes(gms: List<SkiaGm>): GmSceneCaptureReport {
             SceneRecordingScope.recordingOnly {
                 canvas.drawRect(
                     RectF32(0f, 0f, gm.width.toFloat(), gm.height.toFloat()),
-                    Paint(color = ColorARGB.White, antiAlias = false),
+                    Paint(color = gm.backgroundColor, antiAlias = false),
                 )
                 gm.onOnceBeforeDraw(canvas)
                 gm.draw(canvas, gm.width, gm.height)

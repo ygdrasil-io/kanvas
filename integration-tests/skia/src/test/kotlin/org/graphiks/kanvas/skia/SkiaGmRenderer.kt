@@ -8,7 +8,6 @@ import org.graphiks.kanvas.surface.DebugLevel
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 object SkiaGmRenderer {
@@ -26,7 +25,7 @@ object SkiaGmRenderer {
         surface.renderOpListener = tracer
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
+            Paint(color = gm.backgroundColor, antiAlias = false))
         val gmCanvas = GmCanvas(canvas, width, height)
         gm.onOnceBeforeDraw(gmCanvas)
         gm.draw(gmCanvas, width, height)
@@ -59,7 +58,7 @@ object SkiaGmRenderer {
         val canvas = surface.canvas()
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false),
+            Paint(color = gm.backgroundColor, antiAlias = false),
         )
         val gmCanvas = GmCanvas(canvas, width, height)
         gm.onOnceBeforeDraw(gmCanvas)
@@ -121,7 +120,7 @@ internal fun captureInventoryEvidence(
     try {
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, gm.width.toFloat(), gm.height.toFloat()),
-            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
+            Paint(color = gm.backgroundColor, antiAlias = false))
         val createdCanvas = GmCanvas(canvas, gm.width, gm.height)
         gmCanvas = createdCanvas
         gm.onOnceBeforeDraw(createdCanvas)

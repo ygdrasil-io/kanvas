@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.math.color.ColorARGB
 
 enum class RenderFamily {
     PATH,
@@ -40,6 +41,7 @@ interface SkiaGm {
     val width: Int get() = 800
     val height: Int get() = 600
     val compositionDomain: CompositionDomain get() = CompositionDomain.LINEAR
+    val backgroundColor: ColorARGB get() = ColorARGB.White
 
     fun onOnceBeforeDraw(canvas: GmCanvas) {}
 
