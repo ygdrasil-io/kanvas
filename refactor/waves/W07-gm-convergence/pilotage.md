@@ -1,3 +1,17 @@
+# W7 — fidélité source `DrawBitmapRect3` (3 octobre 2026)
+
+[Qualification ciblée](bitmaprect3-source-fidelity.md), branche
+`codex/w7-bitmaprect3-source-fidelity`, source `f6c041d8d8088648e70850f60d00dc5c3e0c8192`,
+base `f9bd8fae23cf2a15af235e61dc9c6096661ad740`, sur le parent draft #2441.
+11/11 tests ciblés PASS, sans skip/erreur. Parité PNG historique : exact
+4.069010416666666 % → 98.37239583333334 %, ±2 5.696614583333333 % → 100 %,
+SSIM 0.03333736469852865 → 0.9999996522494206. Les 813 PNG non-cibles
+`1dfc6fe2b56f175eadeadf66be1c5960a7d7e6675cd6509985ad4954ffa9f171` et les
+558 scores hors cible `34f4c04ce043a3194e963203cb0efb2874f0d52e65479948e2da02c864187533`
+restent inchangés. Révision de la PNG de référence inconnue ; résultat exact
+source distinct de la parité historique. Revue Sol pending ; W7 ACTIVE, aucun
+GREEN global, merge ou clôture revendiqués.
+
 # W7 — port `child_sampling_rt` (3 octobre 2026)
 
 [Qualification ciblée](child-sampling-port-qualification.md). Source `73fc10a84f0b49edf3365f54793faf254c165f8c`; tests F12 au commit `0d456121143a3104575d7ca82040be652f2345bb`. Le parent publié [#2440](https://github.com/ygdrasil-io/kanvas/pull/2440) reste au HEAD e39; [#2441](https://github.com/ygdrasil-io/kanvas/pull/2441) est un draft ouvert. Le pin Skia reste `4f26f22daa4bf124e2999145f5caad4b10625580`; la révision exacte de la PNG de référence reste inconnue.
