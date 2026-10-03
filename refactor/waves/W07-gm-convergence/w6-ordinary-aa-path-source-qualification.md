@@ -177,10 +177,10 @@ exit 0, 1 PASS, sans skip, timeout ou rouge processus. Ses 50 formes et
 quatre lignes sont présentes, quoique les régions floues plus claires que la
 référence. Aucune cause couleur, kernel ou AA n’est attribuée.
 
-Les deux runs Task2 ont des audits séparés complets. Pour RRect, 22 PNG/crops
+Les deux runs Task2 ont des audits séparés complets. Pour RRect, 21 PNG/crops
 sont conservés; le contrôleur a inspecté les vues entières actual/reference/
 diff±2 et les triplets première/dernière rangée, x200 inclus. Pour BlurCircles2,
-30 PNG sont conservés et seules les vues entières actual/reference/diff±2 ont
+29 PNG sont conservés et seules les vues entières actual/reference/diff±2 ont
 été inspectées. Leurs archives sont respectivement
 `/private/tmp/kanvas-w7-inverse-inventory.hbWqUb/rrect-blur-port-full-gm-1/`
 et `/private/tmp/kanvas-w7-inverse-inventory.hbWqUb/rrect-blur-port-blur-control-1/`.

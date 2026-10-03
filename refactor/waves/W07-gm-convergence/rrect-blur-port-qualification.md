@@ -42,8 +42,8 @@ n’a expiré, reçu de signal, été skippé ou fini en rouge.
 
 | Cas | Processus et audit natif | PNG / ancres |
 | --- | --- | --- |
-| RRectBlur complet | enfant 81326, session 6606, exit 0, BUILD 12 s, 1 PASS / 0 skip / 0 erreur; 15 ops, 0 refus, 77 draw calls, 92 pipelines, 82 render passes, 1 submit, 1 readback, `Render+Readback`, `CompletionSucceeded`, alpha 255 | 25 ancres pass; RGBA réel et replay `8138738456382c12ac5f26cfa2b938d420f660d0a91148071ed85e7774b6eef2`; 22 PNG/crops conservés; vues entières actual/reference/diff±2 et triplets première/dernière rangée inspectés, incluant x200 |
-| BlurCircles2 complet, contrôle inchangé | enfant 81652, session 61077, exit 0, BUILD 14 s, 1 PASS / 0 skip / 0 erreur; 55 ops, 0 refus, 413 draw calls, 468 pipelines, 414 render passes, 1 submit, 1 readback, `Render+Readback`, `CompletionSucceeded`, alpha 255 | 7 ancres pass; RGBA réel et replay `2c239fabc210472e7a6aa3942190800796ac9f9d6a81463184d4589cc3f10c92`; 30 PNG conservés; seules les vues entières actual/reference/diff±2 inspectées; 50 formes et quatre lignes présentes |
+| RRectBlur complet | enfant 81326, session 6606, exit 0, BUILD 12 s, 1 PASS / 0 skip / 0 erreur; 15 ops, 0 refus, 77 draw calls, 92 pipelines, 82 render passes, 1 submit, 1 readback, `Render+Readback`, `CompletionSucceeded`, alpha 255 | 25 ancres pass; RGBA réel et replay `8138738456382c12ac5f26cfa2b938d420f660d0a91148071ed85e7774b6eef2`; 21 PNG/crops conservés; vues entières actual/reference/diff±2 et triplets première/dernière rangée inspectés, incluant x200 |
+| BlurCircles2 complet, contrôle inchangé | enfant 81652, session 61077, exit 0, BUILD 14 s, 1 PASS / 0 skip / 0 erreur; 55 ops, 0 refus, 413 draw calls, 468 pipelines, 414 render passes, 1 submit, 1 readback, `Render+Readback`, `CompletionSucceeded`, alpha 255 | 7 ancres pass; RGBA réel et replay `2c239fabc210472e7a6aa3942190800796ac9f9d6a81463184d4589cc3f10c92`; 29 PNG conservés; seules les vues entières actual/reference/diff±2 inspectées; 50 formes et quatre lignes présentes |
 
 Pour RRectBlur, l’archive immuable est
 `/private/tmp/kanvas-w7-inverse-inventory.hbWqUb/rrect-blur-port-full-gm-1/`;

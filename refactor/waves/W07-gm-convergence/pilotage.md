@@ -19,9 +19,9 @@ cause couleur/kernel/AA n’est attribuée. Les deux audits natifs complets,
 empreintes, chemins d’archives et décision figurent dans
 [la qualification RRectBlur](rrect-blur-port-qualification.md).
 
-Les 22 PNG/crops RRect sont conservés; l’inspection couvre les vues entières
+Les 21 PNG/crops RRect sont conservés; l’inspection couvre les vues entières
 actual/reference/diff±2 et les triplets première/dernière rangée, x200 inclus.
-Les 30 PNG du contrôle sont conservés; seules ses vues entières
+Les 29 PNG du contrôle sont conservés; seules ses vues entières
 actual/reference/diff±2 ont été inspectées.
 
 Retenir l’admission qualifiée et le correctif réversible autorise à planifier
