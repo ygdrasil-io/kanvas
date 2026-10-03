@@ -315,7 +315,9 @@ class W7RootAaEncodedCapabilitySurfacePixelTest {
             Triple("round-join", "geometry") { drawPath(Path().apply {
                 moveTo(2f, 2f); lineTo(6f, 2f); lineTo(6f, 6f)
             }, blackStrokePaint(2f, join = StrokeJoin.ROUND)) },
-            Triple("hard-draw-rect", "geometry") { drawRect(full, Paint(black, antiAlias = false)) },
+            Triple("fractional-hard-draw-rect", "geometry") {
+                drawRect(RectF32.ofLTRB(0.5f, 0f, 12f, 12f), Paint(black, antiAlias = false))
+            },
             Triple("nearest-image", "geometry") { drawImage(image, RectF32.ofLTRB(0f, 0f, 1f, 1f), SamplingOptions.NEAREST, Paint(antiAlias = false)) },
             Triple("rect-gradient", "geometry") { drawRect(full, Paint(shader = shader, antiAlias = false)) },
             Triple("path-gradient", "source") { drawPath(line, Paint(shader = shader, antiAlias = true)) },

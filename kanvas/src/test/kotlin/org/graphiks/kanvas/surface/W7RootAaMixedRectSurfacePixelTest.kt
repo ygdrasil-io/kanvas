@@ -160,8 +160,8 @@ class W7RootAaMixedRectSurfacePixelTest {
             drawRect(full, hard(white)); drawPath(line(), stroke())
             drawRect(RectF32.ofLTRB(4f, 0f, 12f, 12f), hard(white)); drawPath(line(), stroke())
         }
-        val fromPicture = scene(CompositionDomain.SRGB_ENCODED) { drawPicture(picture) }
-        val fromArchive = scene(CompositionDomain.SRGB_ENCODED) { drawPicture(archived) }
+        val fromPicture = scene(CompositionDomain.SRGB_ENCODED) { picture.playback(this) }
+        val fromArchive = scene(CompositionDomain.SRGB_ENCODED) { archived.playback(this) }
         for ((label, surface) in listOf("direct" to direct, "picture" to fromPicture, "archive" to fromArchive)) {
             assertExpectedRepeated(surface, expectations, "encoded $label")
         }
@@ -169,8 +169,36 @@ class W7RootAaMixedRectSurfacePixelTest {
         assertContentEquals(direct.render().pixels, fromArchive.render().pixels)
     }
 
+    @Test fun encodedMixedRectPictureWrapperRemainsTransactional() {
+        val points = (0 until SIZE).flatMap { y -> (0 until SIZE).map { x -> Pixel(x, y) } }
+        val expectations = points.associateWith { point -> expected(point, CompositionDomain.SRGB_ENCODED, white,
+            listOf(pathMask(point) to black, boxMask(point, 4f, 0f, 12f, 12f) to white, pathMask(point) to black)) }
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(full).apply {
+                drawRect(full, hard(white)); drawPath(line(), stroke())
+                drawRect(RectF32.ofLTRB(4f, 0f, 12f, 12f), hard(white)); drawPath(line(), stroke())
+            }
+        }.finishRecordingAsPicture()
+        val archived = requireNotNull(Picture.fromByteArray(picture.toByteArray()))
+        for ((label, wrapper) in listOf("memory" to picture, "archive" to archived)) {
+            val surface = scene(CompositionDomain.SRGB_ENCODED) { drawPicture(wrapper) }
+            val sentinel = UByteArray(SIZE * SIZE * 4) { 0x5au }
+            val failure = assertFailsWith<IllegalStateException>(label) {
+                surface.readPixels(full, sentinel)
+            }
+            assertEquals("unsupported.surface.composition.geometry", failure.message.orEmpty().substringBefore(':'), label)
+            assertContentEquals(UByteArray(SIZE * SIZE * 4) { 0x5au }, sentinel, label)
+            surface.discardRecordedOperations()
+            surface.canvas {
+                drawRect(full, hard(white)); drawPath(line(), stroke())
+                drawRect(RectF32.ofLTRB(4f, 0f, 12f, 12f), hard(white)); drawPath(line(), stroke())
+            }
+            assertExpectedRepeated(surface, expectations, "$label wrapper direct-C recovery")
+        }
+    }
+
     @Test fun encodedMixedRectBudgetBoundaryIsTransactional() {
-        val budget = 27_136L
+        val budget = 27_392L
         val points = listOf(Pixel(1, 4), Pixel(6, 4), Pixel(3, 4), Pixel(0, 4), Pixel(7, 4))
         val expectations = points.associateWith { point -> expected(point, CompositionDomain.SRGB_ENCODED, white,
             listOf(pathMask(point) to black)) }
@@ -178,7 +206,7 @@ class W7RootAaMixedRectSurfacePixelTest {
             compositionDomain = CompositionDomain.SRGB_ENCODED, frameLocalBudgetBytes = limit,
         )).also { it.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 8f, 8f), hard(white)); drawPath(
             Path().apply { moveTo(4f, 2f); lineTo(4f, 6f) }, stroke()) } }
-        assertEquals(27_136L, 256L + 24_576L + 1_024L + 1_024L + 256L)
+        assertEquals(27_392L, 256L + 24_576L + 1_024L + 1_024L + 256L + 256L)
         assertExpectedRepeated(fixture(budget), expectations, "budget admitted")
         val refused = fixture(budget - 1)
         val sentinel = UByteArray(8 * 8 * 4) { 0x5au }
