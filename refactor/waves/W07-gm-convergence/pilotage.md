@@ -1,3 +1,34 @@
+# W7 — port `child_sampling_rt` (3 octobre 2026)
+
+[Qualification ciblée](child-sampling-port-qualification.md), checkpoint
+source `df89f3b4581c146c5e24ec12623c38a5d9d58800`, parent publié
+[#2440](https://github.com/ygdrasil-io/kanvas/pull/2440) au HEAD e39. Le pin
+Skia reste `4f26f22daa4bf124e2999145f5caad4b10625580`; la révision exacte de la
+PNG de référence reste inconnue.
+
+D7 : 4 PASS natifs ciblés, octets du GM et du contrôle historique inchangés.
+D8 : capture exhaustive 443 éligibles / 431 capturés / 11 `SetupBlocked` /
+1 `CaptureInvalid`; seul l’ancien blocage de `child_sampling_rt` a disparu.
+L’ancien audit 443/430/12/1 est conservé comme régression historique, sans
+rerun du parent ni changement du plafond 11. D9 : 32 PASS et un échec point
+connu au host preflight, avant pixels; la preuve de rejet strict d’un résultat
+diagnostic-bearing réussi reste non exercée.
+
+D10, cas 77 uniquement au nouveau checkpoint : pixels identiques à 681,
+81,96563720703125 % exact, 84,32769775390625 % à ±2, SSIM 0,9806240190874789.
+Aucune régénération PNG/score n’était nécessaire : les 559 scores et les 814
+PNG (dont 813 non-cibles) sont inchangés. Le delta d’intensité/couverture reste
+visible et non attribué; la mesure ne constitue ni un benchmark ni un gain
+agrégé. L’ownership du cover point DARKEN reste séparément différé; ses témoins
+échouent avant pixels. Les quatre dettes `SurfaceSceneSnapshotTest`, warnings
+et exclusions restent documentés.
+
+Statut `READY_FINAL_REVIEW`, pas prêt à publier par présomption : revue Sol
+indépendante et décision de publication en attente. Aucun GREEN global, agrégat
+W7, merge, complétion du lot ou clôture W7 n’est revendiqué; W7 reste actif.
+Les résultats et limites complets sont consignés dans la qualification et le
+reçu local `.superpowers/sdd/child-sampling-port-e39a2be31/controller-evidence.md`.
+
 # W7 — diagnostic causal natif case 77 (3 octobre 2026)
 
 [Qualification](child-sampling-causal-qualification.md), branche
