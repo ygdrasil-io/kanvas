@@ -134,3 +134,63 @@ seront ni remplacés par un rectangle noir, ni réalisés via un CPU diff.
 
 Task2 Sol, revue finale Astra, draft empilée, CI et merge restent pending.
 Aucun merge ni W7 complet autorisé par ces gates locales.
+
+### Disposition W7 RRectBlur — qualification d’admission conservée
+
+Le lot ultérieur corrige uniquement les entrées du port RRectBlur et ses
+séparateurs spécifiés. Le défaut certain était dans l’appelant :
+`RRectF32.of(rect, CornerRadii)` renseigne le coin top-left seulement. Les
+paramètres nommés pour TL/TR/BR/BL rétablissent les coins sur les deux routes
+sans modifier l’API, les références, les seuils ni les objets géométriques
+math I/F32/64. La correction de `drawLine` STROKE qualifiée par W6 est
+conservée.
+
+Le contrôle causal Task1 RED2 a une API native positive (par contrôle : 2 ops,
+0 refus, 3 draw calls, 6 pipelines; scopes vides conformes à la route prepared)
+et les deux échecs pixels du GM réel : `(75,24)` 106 au lieu de 68 et
+`(199,50)` 68 au lieu de 192±1. Les vraies scènes GM gardent la preuve
+`Render+Readback`. GREEN1 passe 3/3 sans refus, skip ou erreur, avec 15 ops,
+77 draw calls, 92 pipelines et 82 render passes sur chaque rendu GM. Les
+contrôles API gardent leurs pixels littéraux. Ce sont les compteurs GPU réels
+qui qualifient la route API, jamais des scopes synthétiques.
+
+Le plein cadre corrigé `rrect_blurs` (300×400, LINEAR, référence SHA-256
+`3327fa6254d219f5a23c5bdcdab30f0f363da1834353ff246f7e0b5ce66beaaa`) obtient
+exact 52.21916666666667 %, ±2 55.0775 %, SSIM 0.6624135636987509, erreur
+moyenne normalisée 0.07241883986928105 exacte / 0.07233138888888889 à ±2,
+max RGB 187, alpha 0. Avant correction : 51.58583333333333 % exact,
+54.42 % à ±2, SSIM 0.621383424754948. Les 25 ancres passent, replay
+RGBA `8138738456382c12ac5f26cfa2b938d420f660d0a91148071ed85e7774b6eef2`
+identique, 15 ops / 0 refus, 77 draw calls / 92 pipelines / 82 render passes;
+exit 0, 1 PASS, 0 skip, pas de timeout ni rouge processus. Les coins de la
+première ligne et les coins bleus bas sont visiblement corrigés; le panneau
+central et les labels manquent encore, et les bordures/flous divergent.
+
+Le contrôle inchangé `blurcircles2` (730×1350, LINEAR, référence SHA-256
+`57680c49964fa6989acebf8526498cf799f9eaf07ad3d5c3cd8dfd7f87146964`) reste
+identique au relevé précédent : 48.97108066971081 % exact, 60.84485032978184 %
+à ±2, SSIM 0.913971350294999, erreur moyenne normalisée 0.03557988181574 /
+0.03512099859730802, max RGB 82, alpha 0. Les 7 ancres passent, replay RGBA
+`2c239fabc210472e7a6aa3942190800796ac9f9d6a81463184d4589cc3f10c92` exact;
+55 ops / 0 refus, 413 draw calls / 468 pipelines / 414 render passes;
+exit 0, 1 PASS, sans skip, timeout ou rouge processus. Ses 50 formes et
+quatre lignes sont présentes, quoique les régions floues plus claires que la
+référence. Aucune cause couleur, kernel ou AA n’est attribuée.
+
+Les deux runs Task2 ont des audits séparés complets. Pour RRect, 22 PNG/crops
+sont conservés; le contrôleur a inspecté les vues entières actual/reference/
+diff±2 et les triplets première/dernière rangée, x200 inclus. Pour BlurCircles2,
+30 PNG sont conservés et seules les vues entières actual/reference/diff±2 ont
+été inspectées. Leurs archives sont respectivement
+`/private/tmp/kanvas-w7-inverse-inventory.hbWqUb/rrect-blur-port-full-gm-1/`
+et `/private/tmp/kanvas-w7-inverse-inventory.hbWqUb/rrect-blur-port-blur-control-1/`.
+Les reçus natifs détaillés sont dans
+`.superpowers/sdd/rrect-blur-port-correction-plan/controller-evidence.md`.
+La Task2 originale de fidélité reste falsifiée et incomplète. Retenir le
+correctif n’autorise qu’à planifier une qualification distincte de l’admission
+retenue (neuf opportunités, puis corpus complet avec tous les échecs visibles),
+sans lancement ni publication automatique. Le registre 631/443, ses exclusions
+133 fonts / 54 codecs / 1 `jpg-color-cube`, budgets et réglages restent fixes;
+aucun gain corpus n’a encore été mesuré. Source Skia 8d5cb2e vérifiée, cible
+8019 et provenance exacte des PNG non vérifiées. Aucun nouveau PR/push/merge,
+global GREEN ou clôture W7.

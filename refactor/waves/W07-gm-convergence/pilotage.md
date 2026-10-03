@@ -1,3 +1,36 @@
+# W7 — checkpoint de qualification RRectBlur (3 octobre 2026)
+
+Le correctif d’appelant RRectBlur est retenu avec l’admission W6 : le GM réel
+nomme les quatre rayons au lieu de compter sur `RRectF32.of(rect, CornerRadii)`
+pour renseigner les quatre coins. Les mathématiques I/F32/64, l’AA, le domaine,
+les budgets, les références et les seuils restent inchangés.
+
+Après correction, `rrect_blurs` passe de 54,42 % à 55,0775 % à ±2, avec SSIM
+de 0,621383424754948 à 0,6624135636987509. Les 25 ancres passent, replay
+identique, 15 ops / 0 refus, 77 draw calls, 92 pipelines, 82 render passes;
+run exit 0, 1 PASS, sans skip ni timeout. Les coins de la scène sont corrigés,
+mais le panneau central et ses labels manquent toujours et les bordures/flous
+divergent : la fidélité complète de Task2 reste falsifiée.
+
+Le contrôle inchangé `blurcircles2` garde 60,84485032978184 % à ±2 et SSIM
+0,913971350294999, identiques au relevé précédent. Les 50 formes et quatre
+lignes sont présentes, mais les régions floues restent trop claires; aucune
+cause couleur/kernel/AA n’est attribuée. Les deux audits natifs complets,
+empreintes, chemins d’archives et décision figurent dans
+[la qualification RRectBlur](rrect-blur-port-qualification.md).
+
+Les 22 PNG/crops RRect sont conservés; l’inspection couvre les vues entières
+actual/reference/diff±2 et les triplets première/dernière rangée, x200 inclus.
+Les 30 PNG du contrôle sont conservés; seules ses vues entières
+actual/reference/diff±2 ont été inspectées.
+
+Retenir l’admission qualifiée et le correctif réversible autorise à planifier
+une qualification d’admission distincte sur neuf cas puis le corpus fixe
+631/443; cette étape n’est ni exécutée ni publiée automatiquement. Aucun gain
+corpus mesuré, nouveau PR, merge, global GREEN ou clôture W7. La provenance
+Skia 8d5cb2e est vérifiée; target 8019 et origine exacte des PNG inconnues.
+Les exclusions 133 fonts / 54 codecs / 1 `jpg-color-cube` restent inchangées.
+
 # Pilotage de la convergence Skia
 
 ## Couverture diagonale isolée — 3 octobre 2026
