@@ -1,5 +1,31 @@
 # W07 — diagnostic GM provisoire
 
+## Rect hard + root Path AA encoded — 3 octobre 2026
+
+[Design](root-aa-rect-design.md), [plan amendé](root-aa-rect-plan.md),
+[qualification](root-aa-rect-qualification.md), [snapshot frais](root-aa-rect-8e44f0c8a.json).
+Branche codex/w7-root-aa-rect-admission, parent#2436/53bf9c55b,
+source/tests privée8e44f0c8a. Admission commune root-AA/W4d avec ownership Rect
+standalone, géométrie exacte I/F32/I32 dans math, MSAA4 final-only conservé.
+25témoins natifs ciblés PASS en deux exits propres10+15 ; le premier combiné
+25PASS/wrapper124-enfant0 reste consigné. Math global498PASS, H2PASS.
+C prouve Picture.playback memory/archive ; wrappers drawPicture restent refusés
+transactionnellement, pas de support opaque/nested/painted/état qualifié.
+Budget27392/27391 corrigé statiquement par hardstencil256, policy inchangée.
+
+H LINEAR99.5228125% exactement parent, encoded99.529375% à±2. Vertical188→128
+référence128, diagonale191 contre223 et0 contre31/32 : couverture OPEN.
+Corpus631/443 :217/194,47≥99%,63≥95%, médiane77.45815728081598%,
+toutes631fiches hors temps/217RGBA/diagnostics/outcomes/métriques inchangés.
+Aucun gain Skia ou migration GM revendiqués ;381PNG privés identiques parent.
+Historique48PASS1PictureFAIL exact parent. Globale724END=686PASS37FAIL1interruption
+exact parent atteint, pas suite complète ; gpu-plan30/gpu-renderer17 erreurs
+compile héritées inchangées. Warnings/precision resolve/backend CannotVerify
+documentés ; pas de globale GREEN/merge/W7clos. Sol Task2 Approved C0/I0/M1 ;
+Astra finale C0/I0/M2, draft acceptable/mergeNO, cohérence des seams statiques
+confirmée et JSON intégral audité. Warnings et trois textes imprécis différés
+explicitement pour préserver la source native gelée ; publication draft à vérifier.
+
 ## Root Path AA encoded — 2 octobre 2026, qualification locale
 
 [Design](root-aa-encoded-design.md), [plan](root-aa-encoded-plan.md),
