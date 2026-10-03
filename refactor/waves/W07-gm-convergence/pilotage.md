@@ -15,9 +15,15 @@ Route promue W4d/math F64 confirmée, première inférence legacy corrigée.
 1math ciblé et2Surface natives PASS puis311math:matrix PASS, exits0 sans
 timeout/skip ;20rendus natifs avec repeats et full stdout/counters archivés.
 Pas de génération d'images/références/scores, pas de MSAA/budget relevé.
-Next : choix d'une couverture GPU continue générique et revue stratégique
-Astra, avec composition séparée ; la référence n'est pas une aire idéale
-exacte, backend inconnu. W7/globales/Picture/RRect/inverse restent OPEN.
+Revue Astra finale conforme/Approved,C0/I0/M2 hérités. Elle diffère l'AA
+convexe : aire correcte LINEAR peut empirer Teeny99.5228%, et les layers
+comptent36refus partagés. [Décision](diagonal-aa-strategy-review.md),
+[design](w6-ordinary-aa-path-source-design.md) et
+[plan](w6-ordinary-aa-path-source-plan.md) écrits : source PATH AA ordinaire
+FILL/STROKE solide SrcOver sousW6, livraison sur rrect_blurs/blurcircles2
+complets, contours/isolation AA4→1x existants. Deux groupes de9 ne garantissent
+pas18gains ; neuf draws filtrés hors première extension. Pas de nouvelle
+capacité AA ni de domaine migré ; W7/globales/Picture/RRect/inverse OPEN.
 
 ## Connexion des vrais Rect hard au root-AA encoded — 3 octobre 2026
 

@@ -96,12 +96,18 @@ disposés par contrôle du watchdog/commands, logs complets, identités events/X
 hashes des deux tests/exclusion du protégé et diff explicite docs/tests-only.
 Backend, identités natives d'attachments et précision universelle restent UNKNOWN.
 
-## Prochain changement à choisir
+## Revue stratégique et prochain changement
 
-Ne pas multiplier les réglages MSAA/CTM pour reproduire un PNG. Le candidat
-architectural est une couverture continue GPU pour une famille géométrique
-générique certifiée dans math, en conservant le MSAA pour les familles non
-encore couvertes. La composition reste une dimension séparée, explicitement
-mesurée : une aire correcte composée en LINEAR ne devient pas automatiquement
-une image Skia encoded correcte. Une revue stratégique Astra doit fixer la
-plus petite étape produit utile et ses critères d'arrêt avant implémentation.
+Astra approuve le diagnostic C0/I0/M2 hérités, mais recommande de différer
+la nouvelle couverture convexe : une aire idéale composée en LINEAR pourrait
+dégrader Teeny, déjà99.5228%, et le corpus révèle des blocages partagés plus
+importants. Aucun domaine GM/default ou sampling n'est changé ici.
+
+Le [compte rendu stratégique](diagonal-aa-strategy-review.md) fixe le prochain
+lot : source PATH AA ordinaire FILL/STROKE solide SrcOver dans une frame W6,
+avec contours et isolation AA4→1x existants. Deux témoins réels rrect_blurs et
+blurcircles2 complets doivent vérifier le contenu, pas seulement l'admission.
+[Design](w6-ordinary-aa-path-source-design.md) et
+[plan](w6-ordinary-aa-path-source-plan.md) sont écrits après la revue ; les
+neuf draws réellement filtrés voisins sont hors lot. L'AA convexe, Picture,
+inverse, suites globales et W7 restent OPEN.
