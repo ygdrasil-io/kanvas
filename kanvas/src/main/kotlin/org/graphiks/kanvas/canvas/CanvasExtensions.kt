@@ -6,6 +6,7 @@ import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.types.*
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
@@ -50,9 +51,9 @@ fun Canvas.drawArc(rect: RectF32, startAngle: Float, sweepAngle: Float, useCente
     drawPath(path, paint)
 }
 
-/** Draw a line from (x0, y0) to (x1, y1) with the given stroke [paint]. */
+/** Draw a line from (x0, y0) to (x1, y1), always stroking regardless of [Paint.style]. */
 fun Canvas.drawLine(x0: Float, y0: Float, x1: Float, y1: Float, paint: Paint) {
-    this.drawPath(Path().apply { moveTo(x0, y0); lineTo(x1, y1) }, paint)
+    this.drawPath(Path().apply { moveTo(x0, y0); lineTo(x1, y1) }, paint.copy(style = PaintStyle.STROKE))
 }
 
 /** Draw a rectangle with rounded corners using corner radii (rx, ry). */

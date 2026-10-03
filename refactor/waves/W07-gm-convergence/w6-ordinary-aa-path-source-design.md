@@ -13,13 +13,42 @@ Ces9 sont une opportunité, pas9 gains promis ; les9 draws filtrés sont exclus.
 
 La revue Astra a identifié deux gardes distinctes : rootAaSource exclut
 ownsW6b et la source W6 historique exige FILL. Les séparateurs drawLine de
-rrect_blurs et blurcircles2 sont des suspects concrets PATH/STROKE.
-Le premier draw capturé/refusé doit confirmer cette cause avant tout patch.
+rrect_blurs et blurcircles2 étaient des suspects concrets PATH/STROKE.
+Les captures natives RED confirment rrect draw10 STROKEwidth1 mais blurcircles
+draw22 FILLwidth0 sur un path ouvert, CTMtranslation65,65. Les deux sont
+solides AA SrcOver sans filtre/effet. GmCanvas.drawLine et Canvas.drawLine
+omettent la sémantique implicite STROKE de Skia : une admission FILL vide
+ne livrerait pas les séparateurs. Ce défaut API devient un préalable borné.
 
 Approches considérées : supprimer la seule garde de propriété est insuffisant
 pour STROKE ; refaire l'AA géométrique ajouterait un algorithme sans ROI corpus
 établi ; **une source couleur ordinaire nommée**, consommant les contours et
 l'isolation AA4 existants, cible les deux frontières sans nouveau sampling.
+
+## Préalable drawLine — décision après capture et avis Astra
+
+Le contrat [SkCanvas.drawLine](https://api.skia.org/classSkCanvas.html) ignore
+le style de paint comme STROKE ; [SkCanvas.cpp](https://github.com/google/skia/blob/main/src/core/SkCanvas.cpp)
+passe par drawPoints puis impose strokePaint.setStyle(kStroke_Style).
+Sources primaires vérifiées le3octobre2026. Le planner ne doit jamais
+reclasser arbitrairement un drawPath FILL pour compenser un bug API.
+
+Ajouter Task0 avant source W6 : Canvas.drawLine copie seulement style=STROKE,
+préserve largeur/cap/couleur/AA/effets ; GmCanvas.drawLine délègue au helper
+partagé avec l'enveloppe clip/CTM de drawPath exactement conservée. Aucun
+changement de GM ni de largeur0 en1. La préparation math Hairline existante
+reste l'autorité. Deux témoins natifs indépendants, publicCanvas et GmCanvas,
+fixent pixels visibles/extérieurs avant run et comparaison au drawPath
+explicitement STROKE (égalité seule insuffisante), width0/width2,
+FILL/STROKE/STROKE_AND_FILL et translation adapter. DrawPath FILL ouvert reste
+vide. RED API→correctiflocal→GREEN→Sol, puis recapture blurcircles inchangé
+attend STROKEwidth0/mêmescoordonnées/CTM/refusW6 et REDhairlineW6 dédié.
+
+Approches écartées : poursuivre source seule risque une frame admise mais
+incomplète ; attendre le rendu complet pour découvrir ce défaut ajoute du
+travail sans information. Extension bornée à ces helpers/témoins ; tout
+autre filtre/clip/famille substantielle reste un falsifier et impose
+re-priorisation. Pas d'élargissement à drawPoints/arc/autres APIs ici.
 
 ## Contrat sélectionné
 
@@ -76,6 +105,23 @@ le fond. Ensuite mesurer les9 cas et les contrôles touchés, puis le corpus
 si le produit est retenu ; aucun gain déduit d'une capability seule.
 
 ## Arrêt et limites
+
+Dette native distincte découverte dans les témoins drawLine : un open FILL
+à deux points horizontaux, traduit/clippé sur y entier, peut être refusé
+avant pixels par `unsupported.core_primitive.geometry.invalid`. La garde
+générique impose des cover bounds de hauteur positive ; l'attribution exacte
+reste à discriminer, pas une cause native prouvée par le message générique.
+Le témoin conserve une vraie ligne FILL de surface nulle à y demi-entier,
+avec mêmes attentes transparentes, et revalide RED/GREEN du helper. Aucun
+relâchement de bounds ni correction générale de no-op dans ce lot ; ce cas
+reste un gap de sémantique native à traiter séparément s'il touche les GMs.
+
+La route canonique préparée n'exporte pas les mêmes scopes Render/Readback
+que la route planifiée : seuls les scopes Upload d'image sont exposés dans
+ce champ. Les témoins GM drawLine vérifient les vrais compteurs positifs
+draw/pipeline, l'exécution Surface native avec guards submit/readback et les
+ancres pixels ; ils ne fabriquent pas de scopes ni de fallback. Un export
+public commun de ces preuves est une dette d'observabilité distincte.
 
 Falsifier avant extension si capture hors famille, nouveau vrai filtre/clip/
 matériau nécessaire, consumptionReady non prouvée, coût hors budget, l'un

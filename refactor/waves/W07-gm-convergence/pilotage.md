@@ -1,3 +1,62 @@
+# W7 — qualification du corpus ordinary-AA retenu — 3 octobre 2026
+
+[Qualification](ordinary-aa-retained-corpus-qualification.md), snapshot
+[631/443](ordinary-aa-retained-corpus.json), baseline
+[8e44f0c8a](root-aa-rect-8e44f0c8a.json). HEAD mesuré
+`7360c5f94e3fcaa2f68d4375d8cdd7ad12295460` ; identités, config et références
+fixes. Résultat : 220 rendus / 197 comparés (baseline 217/194), 3 statuts
+`render_failed` → `compared` (64, 210, 472), aucun nouveau seuil ≥99 % ou
+≥95 % ; médiane 76,24387741088867 % (−1,21427986992731 point). Le timeout
+native `vertices` à l’indice 607 reste RED (tranche/Gradle exit 1). Une baisse
+de SSIM demeure sur l’ancien comparé `child_sampling_rt` (index 77), avec
+cause non attribuée ; sept diagnostics changent sur des cas toujours refusés.
+La gate de mesure Task2 Sol est approuvée C0/I0/M1. La revue large Astra du
+full40 `befdceaa4e167ac52c67d162913f3031789caa9b` (1872..befdceaa4) juge la
+publication en draft prête C0/I0/M1 ; les bytes source sont inchangés. Cette
+revue ultérieure ne modifie pas l’état historique de mesure au HEAD7360. La
+publication reste en attente du contrôleur. Aucun claim sans régression, de
+fidélité complète, de global GREEN, de merge ou de W7 clos ; reçus privés et
+détails des pertes dans la qualification.
+
+M1 différé au prochain edit qualifié : safe call W6a superflu (`W6aLayerPlanCompiler.kt:305`),
+fixture sans opt-in explicite (`W7W6OrdinaryAaPathSourceIntegrationTest.kt:118`),
+warnings Java native-access / `sun.misc.Unsafe` LWJGL et dépréciations Gradle.
+Ils restent visibles comme dette technique : sortie sans warnings non revendiquée,
+données non invalidées et suites globales toujours non vertes.
+
+# W7 — checkpoint de qualification RRectBlur (3 octobre 2026)
+
+Le correctif d’appelant RRectBlur est retenu avec l’admission W6 : le GM réel
+nomme les quatre rayons au lieu de compter sur `RRectF32.of(rect, CornerRadii)`
+pour renseigner les quatre coins. Les mathématiques I/F32/64, l’AA, le domaine,
+les budgets, les références et les seuils restent inchangés.
+
+Après correction, `rrect_blurs` passe de 54,42 % à 55,0775 % à ±2, avec SSIM
+de 0,621383424754948 à 0,6624135636987509. Les 25 ancres passent, replay
+identique, 15 ops / 0 refus, 77 draw calls, 92 pipelines, 82 render passes;
+run exit 0, 1 PASS, sans skip ni timeout. Les coins de la scène sont corrigés,
+mais le panneau central et ses labels manquent toujours et les bordures/flous
+divergent : la fidélité complète de Task2 reste falsifiée.
+
+Le contrôle inchangé `blurcircles2` garde 60,84485032978184 % à ±2 et SSIM
+0,913971350294999, identiques au relevé précédent. Les 50 formes et quatre
+lignes sont présentes, mais les régions floues restent trop claires; aucune
+cause couleur/kernel/AA n’est attribuée. Les deux audits natifs complets,
+empreintes, chemins d’archives et décision figurent dans
+[la qualification RRectBlur](rrect-blur-port-qualification.md).
+
+Les 21 PNG/crops RRect sont conservés; l’inspection couvre les vues entières
+actual/reference/diff±2 et les triplets première/dernière rangée, x200 inclus.
+Les 29 PNG du contrôle sont conservés; seules ses vues entières
+actual/reference/diff±2 ont été inspectées.
+
+Retenir l’admission qualifiée et le correctif réversible autorise à planifier
+une qualification d’admission distincte sur neuf cas puis le corpus fixe
+631/443; cette étape n’est ni exécutée ni publiée automatiquement. Aucun gain
+corpus mesuré, nouveau PR, merge, global GREEN ou clôture W7. La provenance
+Skia 8d5cb2e est vérifiée; target 8019 et origine exacte des PNG inconnues.
+Les exclusions 133 fonts / 54 codecs / 1 `jpg-color-cube` restent inchangées.
+
 # Pilotage de la convergence Skia
 
 ## Couverture diagonale isolée — 3 octobre 2026
