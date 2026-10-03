@@ -11,7 +11,8 @@ Générateur1rendu/0échec ; runnerstandard1PASS/score100.0, seuil0/tol2 inchang
 Seuls targetPNG/score changent ;813autresPNG/558autrescores/référence gelés.
 La PNG de référence contient un ICC Rec.2020 : stockage brut distinct des
 canaux sRGB comparés ; producteur/révision inconnus, quantification/proxy suivis.
-Relectures Sol et draft stackée en préparation. W7 ACTIVE, pas de merge/globalGREEN.
+Relecture de tâche Sol Approved C0/I0 ; warnings hérités suivis.
+Review finale et draft stackée en préparation. W7 ACTIVE, pas de merge/globalGREEN.
 
 # W7 — contrats image promus et preuve native Surface (4 octobre 2026)
 

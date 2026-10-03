@@ -127,7 +127,12 @@ intégrale via get_flattened_data, sans modification d'image.
 
 ## Relecture et limites restantes
 
-Relecture de tâche Sol (spec + qualité) et review finale du lot en attente.
+Relecture de tâche Sol du lot075405…820c05 : spec compliant, qualité Approved,
+Critical0/Important0. Minor hérité : warnings native-access/LWJGL suivis dans
+les logs. Main a résolu les points non vérifiables par diff (audits natifs,
+pré/post-seals séparés,47fichiers conservés avec chemins/bytes/SHA exacts et
+diagnostic inverse inchangé). Publication Step9 et review finale restent
+en attente ; ces obligations ne sont pas déclarées achevées.
 Fonts, codecs externes et jpg-color-cube restent exclus. Les tests AA aux
 frontières, admission off-target sans clip, compteur hétérogène,
 SceneSnapshot/ownership stencil et fidélité des autres GM restent ouverts.
@@ -223,5 +228,4 @@ exit.json | 111 bytes | ef14e76ba548a1a7b3c35fde56e6ebc35602bfb9af650b672bedfe38
 process.log | 13826 bytes | 0b5c9c9adeef753c23434a289da6e391af7decfbb481c5c34aa6f328c59cbcfb
 xml/TEST-org.graphiks.kanvas.skia.SkiaGmRunner.xml | 551 bytes | 951f1a931c661f563a9ddace5409b70def05563cb6f60714ca131c63ac4f2217
 ```
-
 
