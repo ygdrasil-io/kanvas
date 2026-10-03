@@ -6,7 +6,10 @@ import java.security.MessageDigest
 import kotlin.math.abs
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
@@ -127,6 +130,43 @@ class W7PreparedPointDestinationReadSurfacePixelTest {
 
         recordFrame(ColorARGB.Blue)
         assertFrameAndReplay("blue-destination-refresh", listOf(0, 0, 187, 255))
+    }
+
+    @Test
+    fun publicBlueClearAndPreparedSquarePointRefuseWithoutConsumingOperations() {
+        val surface = Surface(32, 32)
+        val pointPaint = Paint(
+            color = ColorARGB.Red,
+            antiAlias = false,
+            style = PaintStyle.FILL,
+            strokeWidth = 8f,
+            strokeCap = StrokeCap.SQUARE,
+            blendMode = BlendMode.DARKEN,
+        )
+        surface.canvas {
+            clear(ColorARGB.Blue)
+            drawPoint(16f, 16f, pointPaint)
+        }
+
+        val originalOperations = surface.snapshotOps()
+        assertEquals(2, originalOperations.size)
+        assertEquals(ColorARGB.Blue, assertIs<DisplayOp.Clear>(originalOperations[0]).color)
+        val point = assertIs<DisplayOp.DrawPoint>(originalOperations[1])
+        assertEquals(16f, point.x)
+        assertEquals(16f, point.y)
+        assertEquals(pointPaint, point.paint)
+
+        repeat(2) { attempt ->
+            val failure = assertFailsWith<org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException> {
+                surface.render()
+            }
+            assertEquals("invalid.w5b.prepared-points", failure.diagnostic.code.value)
+            println(
+                "W7_PUBLIC_BLUE_CLEAR_POINT_REFUSAL attempt=${attempt + 1} " +
+                    "code=${failure.diagnostic.code.value} facts=${failure.diagnostic.facts}",
+            )
+            assertEquals(originalOperations, surface.snapshotOps(), "terminal refusal must retain the public operations")
+        }
     }
 
     private fun assertHalfAlphaDarkenPixels(label: String, result: RenderResult, expected: List<Int>) {

@@ -27,6 +27,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSuppo
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -50,10 +51,17 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameTaskListBuilder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+import org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2
+import org.graphiks.kanvas.gpu.plan.BlendTargetClampV1
+import org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner
+import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.image.AlphaType
@@ -163,6 +171,44 @@ class GPUPreparedSurfaceFrameBuilderTest {
         assertEquals(GPUBlendMode.DARKEN, pointBlend.mode)
         assertTrue(ready.taskList.tasks.any { it is GPUTask.DestinationSnapshots }, "mixed frame must snapshot the actual destination version")
         assertTrue(ready.destinationReadEvidence.any { it.operationFamily.contains("point", ignoreCase = true) })
+    }
+
+    @Test
+    fun `authentic captures refuse mismatched initializer requests across real recordings`() {
+        val pointOnly = pointOperations(width = 32f)
+        val pointRequest = authenticPointRequest(pointOnly, synthesizeSceneClear = true)
+        assertDestinationReadBaseline(pointRequest, "authentic leading-point baseline")
+        val pointCommandId = pointRequest.w5bPointCaptures.keys.single()
+
+        assertTypedRefusal(
+            "wrong-initializer-command",
+            pointRequest.copy(synthesizedSceneClearCommandIdI32 = pointCommandId),
+        )
+        assertTypedRefusal(
+            "partial-target-bounds",
+            pointRequest.copy(targetBounds = GPUPixelBounds(0, 0, 31, 32)),
+        )
+
+        val changedGeometryRequest = authenticPointRequest(pointOperations(width = 24f), synthesizeSceneClear = true)
+        assertDestinationReadBaseline(changedGeometryRequest, "the changed-width public point is independently valid")
+        assertTypedRefusal(
+            "stale-point-capture-changed-geometry",
+            changedGeometryRequest.copy(w5bPointCaptures = pointRequest.w5bPointCaptures),
+        )
+
+        val blueFirst = authenticPointRequest(blueRectAndPointOperations(pointFirst = false), synthesizeSceneClear = false)
+        assertDestinationReadBaseline(blueFirst, "authentic user-material-first baseline")
+        assertTypedRefusal(
+            "source-owned-blue-draw-falsely-claimed-as-initializer",
+            blueFirst.copy(synthesizedSceneClearCommandIdI32 = 0),
+        )
+
+        val pointFirst = authenticPointRequest(blueRectAndPointOperations(pointFirst = true), synthesizeSceneClear = true)
+        assertDestinationReadBaseline(pointFirst, "authentic reversed-order baseline")
+        assertTypedRefusal(
+            "stale-point-capture-opposite-draw-order",
+            pointFirst.copy(w5bPointCaptures = blueFirst.w5bPointCaptures),
+        )
     }
 
     @Test
@@ -1736,6 +1782,169 @@ class GPUPreparedSurfaceFrameBuilderTest {
         strokeCap = StrokeCap.SQUARE,
         blendMode = BlendMode.DARKEN,
     )
+
+    private fun pointOperations(width: Float): List<DisplayOp> = Surface(32, 32).also { surface ->
+        surface.canvas {
+            drawPoint(16f, 16f, squareDestinationReadPointPaint().copy(strokeWidth = width))
+        }
+    }.snapshotOps()
+
+    private fun blueRectAndPointOperations(pointFirst: Boolean): List<DisplayOp> = Surface(32, 32).also { surface ->
+        surface.canvas {
+            fun drawBlueBackground() = drawRect(
+                RectF32.ofLTRB(0f, 0f, 32f, 32f),
+                Paint(color = ColorARGB.Blue, antiAlias = false),
+            )
+            fun drawSquarePoint() = drawPoint(16f, 16f, squareDestinationReadPointPaint())
+            if (pointFirst) {
+                drawSquarePoint()
+                drawBlueBackground()
+            } else {
+                drawBlueBackground()
+                drawSquarePoint()
+            }
+        }
+    }.snapshotOps()
+
+    /** Assemble a low-level request from real mapper, recorder, registry, and capture owners. */
+    private fun authenticPointRequest(
+        operations: List<DisplayOp>,
+        synthesizeSceneClear: Boolean,
+    ): GPUPreparedSurfaceFrameRequest {
+        val target = GPUTargetFacts(32, 32, "rgba8unorm-srgb")
+        val targetBounds = GPUPixelBounds(0, 0, 32, 32)
+        val capabilities = squarePointRequest(operations).capabilities
+        val candidates = W5aPreparedFrameMaterialRegistry.captureCoreCandidates(
+            operations = operations,
+            width = 32,
+            height = 32,
+            targetClamp = BlendTargetClampV1.UnitInterval,
+        )
+        val mapping = GPUOpMapper.mapOperations(
+            operations = operations,
+            target = target,
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            w5aPointMaterialRefs = candidates.mapValues { it.value.root },
+            synthesizeSceneClear = synthesizeSceneClear,
+        )
+        assertNull(mapping.preparedRefusal, "the real mapper must accept this fixture")
+
+        val recorder = org.graphiks.kanvas.gpu.renderer.recording.GPURecorder(
+            recordingId = GPURecordingID("w7-initializer-${operations.hashCode()}-$synthesizeSceneClear"),
+            frameId = GPUFrameID(0),
+            capabilities = capabilities,
+            deviceGeneration = GPUDeviceGenerationID(0),
+        )
+        mapping.visualCommands.forEach { recorder.record(it.normalized) }
+        val recording = recorder.close()
+        val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUCorePrimitiveSemanticBuilder.gather(
+                visualCommands = mapping.visualCommands,
+                recording = recording,
+                targetBounds = targetBounds,
+            ),
+        )
+
+        val corePlansByCommandId = linkedMapOf<Int, EffectiveMaterialPlanner.Result.Ready>()
+        mapping.commandIdsByOperationIndex.forEach { (operationIndex, commandIds) ->
+            val candidate = candidates[operationIndex] ?: return@forEach
+            commandIds.forEach { commandId -> corePlansByCommandId[commandId] = candidate }
+        }
+        val materials = requireNotNull(
+            W5aPreparedFrameMaterialRegistry.seal(gathered.semantics, corePlansByCommandId),
+        )
+        val materialRefs = materials.refsByCommandId.filterKeys { commandId ->
+            (gathered.semantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive)?.material is
+                GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
+        }
+        val materialAuthority = requireNotNull(
+            W5aCorePrimitiveMaterialAuthorityV2.issue(
+                materials.table,
+                materialRefs,
+                authoritiesByCommandIdI32 = materialRefs.mapValues { (commandId, ref) ->
+                    when (val authority = corePlansByCommandId.getValue(commandId).materialAuthority) {
+                        is PlanDrawMaterialAuthority.MaterialV1 -> authority.copy(ref = ref)
+                        is PlanDrawMaterialAuthority.MaterialV2 -> authority.copy(ref = ref)
+                        else -> error("unexpected authentic solid material authority: $authority")
+                    }
+                },
+                sourcePlansByCommandIdI32 = materialRefs.keys.associateWith { commandId ->
+                    corePlansByCommandId.getValue(commandId).let { it.table to it.root }
+                },
+                finalBlendsByCommandIdI32 = materialRefs.keys.associateWith { commandId ->
+                    corePlansByCommandId.getValue(commandId).blend
+                },
+            ),
+        )
+
+        val pointClipsByOperation = W5aPreparedFrameMaterialRegistry.capturePointClips(operations)
+        val pointClipsByCommandId = linkedMapOf<Int, org.graphiks.kanvas.render.ir.ClipStackNode>()
+        mapping.commandIdsByOperationIndex.forEach { (operationIndex, commandIds) ->
+            val clip = pointClipsByOperation[operationIndex] ?: return@forEach
+            commandIds.forEach { commandId -> pointClipsByCommandId[commandId] = clip }
+        }
+        val pointCaptures = recording.pointAuthorities.mapNotNull { (commandId, authority) ->
+            val semantic = gathered.semantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive ?: return@mapNotNull null
+            val blend = corePlansByCommandId[commandId]?.blend ?: return@mapNotNull null
+            val ref = materials.refsByCommandId[commandId] ?: return@mapNotNull null
+            commandId to authority.capturePrepared(
+                semantic = semantic,
+                blend = blend,
+                clip = pointClipsByCommandId[commandId],
+                table = materials.table,
+                ref = ref,
+            )
+        }.toMap()
+        check(pointCaptures.size == 1) { "fixture must contain exactly one authentic prepared-point capture" }
+
+        return GPUPreparedSurfaceFrameRequest(
+            baseTaskList = recording.taskList,
+            capabilities = capabilities,
+            target = GPUFrameTargetRef("w7.initializer"),
+            targetBounds = targetBounds,
+            semanticsByCommandId = gathered.semantics,
+            readbackRequestId = GPUReadbackRequestID("w7.initializer.readback"),
+            targetFormat = GPUColorFormat(target.colorFormat),
+            w5aCoreMaterialAuthority = materialAuthority,
+            w5bPointBlends = corePlansByCommandId.mapValues { it.value.blend },
+            w5bPointClips = pointClipsByCommandId,
+            w5bPointCaptures = pointCaptures,
+            synthesizedSceneClearCommandIdI32 = 0.takeIf { synthesizeSceneClear },
+        )
+    }
+
+    private fun consume(request: GPUPreparedSurfaceFrameRequest): GPUPreparedSurfaceFrameResult =
+        GPUPreparedSurfaceFrameTaskListBuilder().build(request)
+
+    private fun assertDestinationReadBaseline(
+        request: GPUPreparedSurfaceFrameRequest,
+        label: String,
+    ): GPUPreparedSurfaceFrameResult.Recorded {
+        val recorded = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(consume(request), label)
+        assertTrue(
+            recorded.taskList.tasks.any { it is GPUTask.DestinationSnapshots },
+            "$label must assemble a real destination snapshot task",
+        )
+        val destinationReadBlend = recorded.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .mapNotNull { it.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead }
+            .single()
+        assertEquals(GPUBlendMode.DARKEN, destinationReadBlend.mode, "$label must consume the actual DARKEN point blend")
+        return recorded
+    }
+
+    private fun assertTypedRefusal(
+        label: String,
+        request: GPUPreparedSurfaceFrameRequest,
+    ): GPUPreparedSurfaceFrameResult.Refused {
+        val refused = assertIs<GPUPreparedSurfaceFrameResult.Refused>(consume(request), label)
+        println(
+            "W7_TYPED_INITIALIZER_REFUSAL label=$label code=${refused.diagnostic.code.value} " +
+                "message=${refused.diagnostic.message} facts=${refused.diagnostic.facts}",
+        )
+        return refused
+    }
 
     private fun squarePointRequest(operations: List<DisplayOp>): GPUPreparedSurfaceFrameBuildRequest {
         val baseRequest = request(operations)
