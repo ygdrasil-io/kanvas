@@ -1,3 +1,17 @@
+# W7 — admission readback après warmup (3 octobre 2026)
+
+[Qualification ciblée](readback-budget-admission.md), branche
+`codex/w7-readback-budget-admission`, base60ce1489, parent draft #2443.
+Défaut causal démontré : purge du staging réutilisable, puis arrêt prématuré
+malgré d'autres bytes libérables. Correctif provider-only, retry uniquement
+après baisse réelle de résidence ; budgets, LRU et ownership inchangés.
+16/16 contrôles GPU PASS ; témoin cosmétique requalifié 2/2.
+Dans le contexte52 original, Composition25/25 dont B888/B−1/sentinel/recovery
+PASS ; résultat total48/52, quatre anciens refus W5e toujours RED.
+Ce relevé remplace le gap de budget non attribué du lot précédent pour ce
+contexte précis, sans reconstruction de son précurseur exact ni GREEN global.
+814 PNG/559scores inchangés, aucun gain corpus mesuré. W7 ACTIVE, aucun merge.
+
 # W7 — source `tinybitmap` et image shader encoded (3 octobre 2026)
 
 [Qualification ciblée](tinybitmap-source-fidelity.md), branche
