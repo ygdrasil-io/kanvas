@@ -2,7 +2,7 @@
 
 3 octobre 2026. Qualification ciblée du GM `3x3bitmaprect`, basé sur la source Skia épinglée à `4f26f22daa4bf124e2999145f5caad4b10625580`. La révision exacte de la PNG de référence locale demeure inconnue.
 
-Source au commit `f6c041d8d8088648e70850f60d00dc5c3e0c8192`, branche `codex/w7-bitmaprect3-source-fidelity`, base `f9bd8fae23cf2a15af235e61dc9c6096661ad740`, empilée sur la PR draft #2441. La tâche attend la revue Sol ; W7 reste ACTIVE.
+Source au commit `f6c041d8d8088648e70850f60d00dc5c3e0c8192`, branche `codex/w7-bitmaprect3-source-fidelity`, base `f9bd8fae23cf2a15af235e61dc9c6096661ad740`, empilée sur la PR draft #2441. Revue Sol approuvée C0/I0/M0new, verdict scoped à cette tâche ; aucun merge. W7 reste ACTIVE.
 
 Le GM déclare un fond noir et utilise `ColorARGB.Gray` pour la cellule grise. Le fond par défaut des autres GM reste blanc. Quatre rendus GPU bitmaprect concordent à 100 % avec l’oracle RGBA littéral indépendant ; 11/11 tests ciblés passent (trois nouveaux tests, ChildPort3, Historical1 et SceneCapture4), sans skip ni erreur.
 

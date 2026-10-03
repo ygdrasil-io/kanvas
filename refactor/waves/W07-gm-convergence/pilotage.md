@@ -9,8 +9,9 @@ SSIM 0.03333736469852865 → 0.9999996522494206. Les 813 PNG non-cibles
 `1dfc6fe2b56f175eadeadf66be1c5960a7d7e6675cd6509985ad4954ffa9f171` et les
 558 scores hors cible `34f4c04ce043a3194e963203cb0efb2874f0d52e65479948e2da02c864187533`
 restent inchangés. Révision de la PNG de référence inconnue ; résultat exact
-source distinct de la parité historique. Revue Sol pending ; W7 ACTIVE, aucun
-GREEN global, merge ou clôture revendiqués.
+source distinct de la parité historique. Revue Sol approuvée C0/I0/M0new,
+verdict scoped à cette tâche. Pas de merge ; W7 ACTIVE, aucun GREEN global ni
+clôture revendiqués.
 
 # W7 — port `child_sampling_rt` (3 octobre 2026)
 
