@@ -191,6 +191,9 @@ public object CompositionAdmissionV1 {
     private fun drawRefusal(command: SceneCommand.Draw, index: Int): RenderDiagnostic? {
         val node = command.node
         if (node.origin == DrawOrigin.IMAGE) return imagePatchRefusal(node, index)
+        if (node.origin == DrawOrigin.RECT && node.geometry is GeometryNode.Rect &&
+            node.material is MaterialNode.ImageSample
+        ) return imageShaderRefusal(node, index)
         if (node.origin in setOf(DrawOrigin.IMAGE_NINE, DrawOrigin.IMAGE_LATTICE, DrawOrigin.ATLAS)) {
             return diagnostic("image", index, "Encoded composition admits only direct ImagePatch image draws.")
         }
@@ -216,6 +219,39 @@ public object CompositionAdmissionV1 {
         if (gradient.interpolation != ColorInterpolation.SRGB ||
             gradient.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP
         ) return diagnostic("source", index, "Encoded composition LinearGradient requires sRGB interpolation and CLAMP tile mode.")
+        return null
+    }
+
+    /** The encoded Rect shader leaf keeps RECT provenance and the existing owned-image authority. */
+    private fun imageShaderRefusal(
+        node: org.graphiks.kanvas.render.ir.DrawNode,
+        index: Int,
+    ): RenderDiagnostic? {
+        val sample = node.material as MaterialNode.ImageSample
+        val paint = node.paint ?: return diagnostic("source", index,
+            "Encoded image shader requires a direct Shader.Image paint source.")
+        val bounds = (node.geometry as GeometryNode.Rect).copyBounds()
+        if (paint.style != PaintStyleNode.FILL || paint.antiAlias || node.coverage != CoverageRequest.HARD_EDGE ||
+            !node.transform.isIdentityOrIntegerTranslation() || !node.clip.isHardIntegerRectOrEmpty() ||
+            !bounds.isIntegerRect() || sample.sampling != org.graphiks.kanvas.render.ir.ImageSampling.Nearest
+        ) return diagnostic("geometry", index,
+            "Encoded image shader requires a non-AA integer nearest Rect FILL draw with an integer transform and hard clip.")
+        if (!node.blend.isSrcOver() || paint.blendMode != BlendMode.SRC_OVER || node.operationBlendMode != null) {
+            return diagnostic("blend", index, "Encoded image shader requires SrcOver blending.")
+        }
+        if (paint.shader?.canonicalId != sample.canonicalId || paint.blender != null || paint.colorFilter != null ||
+            paint.maskFilter != null || paint.pathEffect != null || paint.imageFilter != null ||
+            node.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty || node.resource != null
+        ) return diagnostic("source", index,
+            "Encoded image shader admits only a direct Shader.Image leaf without paint effects.")
+        val pixels = sample.image as? ImageResourceSnapshot.Pixels
+            ?: return diagnostic("image", index, "Encoded image shader requires owned pixels.")
+        if (pixels.pixelFormat !in setOf(ImagePixelFormat.RGBA_8888, ImagePixelFormat.BGRA_8888) ||
+            pixels.alphaType != org.graphiks.kanvas.render.ir.ImageAlphaType.PREMUL ||
+            pixels.colorSpace != org.graphiks.kanvas.color.ColorSpace.SRGB ||
+            pixels.premultiplication != ImagePremultiplicationV1.SOURCE_SPACE
+        ) return diagnostic("image", index,
+            "Encoded image shader requires SOURCE_SPACE PREMUL SRGB RGBA/BGRA pixels.")
         return null
     }
 

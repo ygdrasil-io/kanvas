@@ -155,7 +155,8 @@ internal class W5aMaterialSourceStage private constructor(
             val requirements = RawMaterialRequirementsV2.of(table, root)
             return W5aMaterialSourceStage(requirements, W5eImageTexelEvaluatorV1.declarations(execution, child,
                 requireNotNull(requirements.imageLayoutV3)),
-                requirements.bindingCountI32, false, child?.gradientStopSlab, "w5e_device_point", execution)
+                requirements.bindingCountI32, false, child?.gradientStopSlab, "w5e_device_point", execution,
+                compositionDomain = execution.colorAlpha.compositionDomain)
         }
         fun lower(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: MaterialCoordinatePlanV1? = null,
             layout: W5aSourceEmissionLayoutV1 = W5aSourceEmissionLayoutV1.Standalone): W5aMaterialSourceStage? {
