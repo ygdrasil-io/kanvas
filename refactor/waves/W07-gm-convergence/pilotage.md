@@ -1,3 +1,19 @@
+# W7 — qualification du corpus ordinary-AA retenu — 3 octobre 2026
+
+[Qualification](ordinary-aa-retained-corpus-qualification.md), snapshot
+[631/443](ordinary-aa-retained-corpus.json), baseline
+[8e44f0c8a](root-aa-rect-8e44f0c8a.json). HEAD mesuré
+`7360c5f94e3fcaa2f68d4375d8cdd7ad12295460` ; identités, config et références
+fixes. Résultat : 220 rendus / 197 comparés (baseline 217/194), 3 statuts
+`render_failed` → `compared` (64, 210, 472), aucun nouveau seuil ≥99 % ou
+≥95 % ; médiane 76,24387741088867 % (−1,21427986992731 point). Le timeout
+native `vertices` à l’indice 607 reste RED (tranche/Gradle exit 1). Une baisse
+de SSIM demeure sur l’ancien comparé `child_sampling_rt` (index 77), avec
+cause non attribuée ; sept diagnostics changent sur des cas toujours refusés.
+Aucune affirmation sans régression, de fidélité complète, de suite globale
+verte ou de clôture W7. Gate frais, revue large et éventuelle draft PR restent
+à faire ; reçus privés et détails des pertes dans la qualification.
+
 # W7 — checkpoint de qualification RRectBlur (3 octobre 2026)
 
 Le correctif d’appelant RRectBlur est retenu avec l’admission W6 : le GM réel
