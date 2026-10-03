@@ -1,6 +1,6 @@
 # W7 — qualification des contrats image promus
 
-Lot borné, base `84a7c8a3f31ac35c6b53e692f408f5a6db230d03`, branche `codex/w7-promoted-image-contracts`, parent [draft #2444](https://github.com/ygdrasil-io/kanvas/pull/2444). Décisions déléguées par la carte blanche W7 ; pas d'approbation humaine inventée. Review de tâches approuvée ; review finale et publication encore en attente à ce checkpoint. W7 ACTIVE, ni merge ni GREEN global.
+Lot borné, base `84a7c8a3f31ac35c6b53e692f408f5a6db230d03`, branche `codex/w7-promoted-image-contracts`, [draft #2445](https://github.com/ygdrasil-io/kanvas/pull/2445) stackée sur [draft #2444](https://github.com/ygdrasil-io/kanvas/pull/2444). Décisions déléguées par la carte blanche W7 ; pas d'approbation humaine inventée. Reviews de tâches et finale approuvées pour publication draft. W7 ACTIVE, ni merge ni GREEN global.
 
 ## Résultat qualifié
 
@@ -13,7 +13,14 @@ Qualification ciblée : **10/10 PASS**, puis contexte exact **57/57 PASS** (Comp
 
 ## Review de tâches
 
-Review indépendante Sol du checkpoint `61ae9d813a4f1db0d6845ad6b746f63f1d1216df` : Task1 spec compliant/quality Approved ; Task2 spec compliant/quality Approved, Critical0/Important0. Un minor hérité : warnings décrits ci-dessus. Les points « cannot verify from diff » concernent les preuves main-only et la publication ultérieure, pas un défaut produit : main a effectué les audits et post-seals décrits, recontrôlé69chemins/814PNG/559scores et conservé les46preuves privées. Review finale du lot et PR encore en attente. Rapport privé `.superpowers/sdd/promoted-image-contracts-plan/task-coupled-review.md`, pas de build/Git/native par le reviewer.
+Review indépendante Sol du checkpoint `61ae9d813a4f1db0d6845ad6b746f63f1d1216df` : Task1 spec compliant/quality Approved ; Task2 spec compliant/quality Approved, Critical0/Important0. Un minor hérité : warnings décrits ci-dessus. Les points « cannot verify from diff » concernent les preuves main-only et la publication ultérieure, pas un défaut produit : main a effectué les audits et post-seals décrits, recontrôlé69chemins/814PNG/559scores et conservé les46preuves privées. Rapport privé `.superpowers/sdd/promoted-image-contracts-plan/task-coupled-review.md`, pas de build/Git/native par le reviewer.
+
+
+## Review finale et publication
+
+Review finale indépendante Sol du lot `84a7c8a3..e0d4e834f5415c18174198ede62763de6a50509b` : Critical0/Important0, publication draft approuvée, merge non approuvé. Seul minor différé : warnings hérités. Les quatre comportements laissés ouverts par le reviewer restent suivis : cellules originales ambiguës, admission sans clip/négatifs singuliers, compteur homogène toutes familles, corpus/font/codecs exclus. Main confirme ces périmètres avec leurs coûts : qualification visuelle et global GREEN non établis ; aucune dette effacée par le PASS ciblé.
+
+[PR draft #2445](https://github.com/ygdrasil-io/kanvas/pull/2445) créée et attachée, stack sur #2444/`codex/w7-readback-budget-admission`. Le reçu de publication ajouté après le gate final ne change que documentation/suivi ; les cinq SHA Kotlin du checkpoint et les69chemins/814PNG/559scores restent inchangés. Les rapports privés de tâches/final et les46preuves sont conservés. Aucun merge, rebase, force-push ou nettoyage destructif.
 
 ## Empreintes du checkpoint natif
 
