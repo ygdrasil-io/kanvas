@@ -1,3 +1,20 @@
+# W7 — diagnostic causal natif case 77 (3 octobre 2026)
+
+[Qualification](child-sampling-causal-qualification.md), branche
+`codex/w7-child-sampling-causal`, empilée sur le parent [#2439](https://github.com/ygdrasil-io/kanvas/pull/2439), déjà publié en draft au HEAD
+`5bfa05e28a1697c57ad36dc6cfb0e8e786e36451`. Le diagnostic et la publication
+de cette nouvelle pile sont en attente de revue. Une exécution native bornée :
+1 PASS, aucun skip, échec, refus ou diagnostic, six rendus/relectures sur trois
+variantes. Le `FILL` ouvert historique reproduit le RGBA historique ;
+`ChildSamplingRTGm` actuel est identique au `STROKE` explicite. Le changement de
+sémantique `FILL`→`STROKE` explique cette variation sur la scène locale
+actuelle. Il ne qualifie pas la fidélité du port : l’implémentation locale
+reste simplifiée par rapport au GM upstream de sampling enfant et à sa
+référence. Témoin historique à préserver littéralement lors d’un futur
+portage ; nouvelle scène upstream à qualifier séparément. Tolérance 2,
+métriques du corpus, dette de fidélité et état global RED restent inchangés.
+Aucun corpus complet, global GREEN ou W7 clos revendiqué.
+
 # W7 — qualification du corpus ordinary-AA retenu — 3 octobre 2026
 
 [Qualification](ordinary-aa-retained-corpus-qualification.md), snapshot
