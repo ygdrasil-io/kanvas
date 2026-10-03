@@ -1,3 +1,22 @@
+# W7 — recensement transversal complet (4 octobre 2026)
+
+[Qualification](transversal-corpus-qualification.md),
+[snapshot gelé2485cfb](transversal-corpus-2485cfb.json), parent draft #2446,
+branche `codex/w7-transversal-corpus-census`. 631 fiches /443 éligibles,
+392 tentatives /220 rendus /197 comparés : aucun gain d'admission depuis7360c5.
+Pixels±2 ≥95 % :63→65 ; ≥99 % :47→49. Trois deltas pixels confirmés :
+3x3bitmaprect→100 %, child_sampling_rt→84,3277 %, tinybitmap→100 % ;
+huit compteurs Mesh changent sans variation pixels. 195 PASS historiques,
+343 seuils0, ne prouvent pas la gate de parité W7. vertices607 reste timeout
+30 s/exit1, conservé dans443 ; aucune nouvelle exclusion/cap/budget modifié.
+Cinq audits natifs complets et postseals séparés ; refs/PNG/scores/protected
+inverse inchangés. Premiers refus communs :layerchild32/pathbudget19,
+strokedRectAA10 ; causes hétérogènes, gains non promis.
+Prochain diagnostic : normalisation AA strokedRect vers géométrie commune,
+comparée à l'admission enfant compositionnelle et au domaine encoded.
+Review/publication en attente ; pas de review Astra revendiquée après limite
+de sous-agents. W7 ACTIVE, aucun merge/globalGREEN/clôture.
+
 # W7 — tinybitmap : composition encoded du port (4 octobre 2026)
 
 [Qualification ciblée](tinybitmap-encoded-qualification.md), branche
