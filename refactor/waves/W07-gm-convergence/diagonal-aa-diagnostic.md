@@ -83,6 +83,19 @@ byte-identiques au parent. Le diagnostic inverse-filter untracked SHA96cd8349
 reste intact/exclu. Les suites parent globales RED/incomplètes restent suivies
 dans la qualification #2437 ; aucune réussite globale ou W7 terminé déduits ici.
 
+## Review indépendante
+
+Sol Task1 : conformité et quality Approved, C0/I0/M2. Deux helpers des mêmes
+trois ancres sont à consolider au prochain changement comportemental ; différé
+pour conserver le blob natif exécuté. Les warnings hérités restent explicites :
+`WARNING: A restricted method in java.lang.System has been called` ;
+`WARNING: A terminally deprecated method in sun.misc.Unsafe has been called` ;
+`Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.`
+Leurs messages complets sont dans les raw receipts. CannotVerify de la review
+disposés par contrôle du watchdog/commands, logs complets, identités events/XML,
+hashes des deux tests/exclusion du protégé et diff explicite docs/tests-only.
+Backend, identités natives d'attachments et précision universelle restent UNKNOWN.
+
 ## Prochain changement à choisir
 
 Ne pas multiplier les réglages MSAA/CTM pour reproduire un PNG. Le candidat
