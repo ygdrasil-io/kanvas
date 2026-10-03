@@ -16,8 +16,9 @@ valeurs de scores inchangées, score cible 0.0.
 Suite publique ciblée RED 47/52 : quatre refus W5e hérités prouvés sur baseline,
 plus un refus de budget exact 888 en contexte de suite, cause non attribuée
 malgré le PASS isolé inchangé. Gap ouvert avant validation globale/merge.
-Revue finale du lot/documentation en attente. Aucun merge, GREEN global,
-gain de corpus agrégé ou clôture : W7 ACTIVE.
+Revue finale Sol du lot e5069ccb…f7b445f8 Approved pour publication draft,
+aucun nouveau C/I/M ; les deux points Important hérités/non attribués restent
+ouverts. Aucun merge, GREEN global, gain de corpus agrégé ou clôture : W7 ACTIVE.
 
 # W7 — fidélité source `DrawBitmapRect3` (3 octobre 2026)
 

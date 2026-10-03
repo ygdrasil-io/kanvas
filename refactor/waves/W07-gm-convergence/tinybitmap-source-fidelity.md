@@ -54,6 +54,14 @@ Ils n'ont pas été adaptés après RED. Revue source Sol Approved, C0/I0/M0,
 limitée à cette tâche ; les preuves natives ont été auditées par le contrôleur,
 non réexécutées par le reviewer.
 
+Revue finale Sol du lot `e5069ccb…f7b445f8` : Approved pour publication draft
+stackée, aucun nouveau défaut Critical/Important/Minor. Le reviewer a aussi
+décodé le PNG livré : 100×100 uniformément `[230,194,194,255]`, SHA RGBA
+`a1d14b…` conforme. Les deux points Important ouverts sont la suite W5e héritée
+et le budget en contexte de suite, détaillés ci-dessous ; merge et validation
+globale restent non qualifiés. Cette mention de verdict est administrative,
+postérieure au commit revu, sans changement source/test/artifact.
+
 ## Comparaison à la référence historique
 
 Mesure du seul cas `[592,593)`, registry 631 inchangée. Les deux mesures
