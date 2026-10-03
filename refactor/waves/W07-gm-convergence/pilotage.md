@@ -1,5 +1,30 @@
 # Pilotage de la convergence Skia
 
+## Couverture diagonale isolée — 3 octobre 2026
+
+[Diagnostic causal](diagonal-aa-diagnostic.md), parent#2437/d12749b64,
+branche codex/w7-aa-coverage-diagnostic. Produit inchangé : pas de gain corpus.
+Contour tiny CTM math conforme aux quatre sommets indépendants, cinq échelles ;
+source tiny, ligne écran et FILL littéral donnent la même rampe native.
+Alpha64/255 aux cellules106/107 contre aire idéale≈36.57/227.49, indépendant
+du domaine couleur. LINEAR225/0 et encoded191/0 restent différents de223/31–32
+de la référence parent. Le problème n'est pas résolu par un déplacement du
+contour ou par la seule couleur : sampling AA actuel quantifié sur ce témoin.
+Route promue W4d/math F64 confirmée, première inférence legacy corrigée.
+
+1math ciblé et2Surface natives PASS puis311math:matrix PASS, exits0 sans
+timeout/skip ;20rendus natifs avec repeats et full stdout/counters archivés.
+Pas de génération d'images/références/scores, pas de MSAA/budget relevé.
+Revue Astra finale conforme/Approved,C0/I0/M2 hérités. Elle diffère l'AA
+convexe : aire correcte LINEAR peut empirer Teeny99.5228%, et les layers
+comptent36refus partagés. [Décision](diagonal-aa-strategy-review.md),
+[design](w6-ordinary-aa-path-source-design.md) et
+[plan](w6-ordinary-aa-path-source-plan.md) écrits : source PATH AA ordinaire
+FILL/STROKE solide SrcOver sousW6, livraison sur rrect_blurs/blurcircles2
+complets, contours/isolation AA4→1x existants. Deux groupes de9 ne garantissent
+pas18gains ; neuf draws filtrés hors première extension. Pas de nouvelle
+capacité AA ni de domaine migré ; W7/globales/Picture/RRect/inverse OPEN.
+
 ## Connexion des vrais Rect hard au root-AA encoded — 3 octobre 2026
 
 [Qualification](root-aa-rect-qualification.md) et [corpus](root-aa-rect-8e44f0c8a.json),
