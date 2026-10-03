@@ -1,6 +1,6 @@
 # W7 — qualification des contrats image promus
 
-Lot borné, base `84a7c8a3f31ac35c6b53e692f408f5a6db230d03`, branche `codex/w7-promoted-image-contracts`, parent [draft #2444](https://github.com/ygdrasil-io/kanvas/pull/2444). Décisions déléguées par la carte blanche W7 ; pas d'approbation humaine inventée. Revues indépendantes et publication encore en attente à ce checkpoint. W7 ACTIVE, ni merge ni GREEN global.
+Lot borné, base `84a7c8a3f31ac35c6b53e692f408f5a6db230d03`, branche `codex/w7-promoted-image-contracts`, parent [draft #2444](https://github.com/ygdrasil-io/kanvas/pull/2444). Décisions déléguées par la carte blanche W7 ; pas d'approbation humaine inventée. Review de tâches approuvée ; review finale et publication encore en attente à ce checkpoint. W7 ACTIVE, ni merge ni GREEN global.
 
 ## Résultat qualifié
 
@@ -9,6 +9,11 @@ Le lot conserve les quatre scènes originales W5e, remplace leurs attentes de re
 Trois adaptateurs Surface corrigés : comptage des propriétaires Vertices/Mesh survivants depuis les packets Render de shading finaux ; exclusion du seul clear synthétique authentifié ; transport de scopes et telemetry typed de la completion native, vérification attempt/outcome, publication des deltas natifs réels. Les rôles de packets puis les événements lifecycle conservent chacun leur ordre relatif ; cette concaténation n'est pas un entrelacement chronologique. Les gardes output/readback/bytes/rétention restent présentes. Runtime, planner, math, sampling/AA, budgets et politiques d'admission inchangés.
 
 Qualification ciblée : **10/10 PASS**, puis contexte exact **57/57 PASS** (Composition25 + Image29 + Evidence3), zéro skip/erreur, exit0, pas de timeout ni signal ni runner133. Le contrôle inchangé `encodedPlainLayerBudgetIsExactAndOneByteLessRecovers` conserve B888/B−1, sentinel et récupération. Aucun corpus global exécuté ou gain de parité revendiqué.
+
+
+## Review de tâches
+
+Review indépendante Sol du checkpoint `61ae9d813a4f1db0d6845ad6b746f63f1d1216df` : Task1 spec compliant/quality Approved ; Task2 spec compliant/quality Approved, Critical0/Important0. Un minor hérité : warnings décrits ci-dessus. Les points « cannot verify from diff » concernent les preuves main-only et la publication ultérieure, pas un défaut produit : main a effectué les audits et post-seals décrits, recontrôlé69chemins/814PNG/559scores et conservé les46preuves privées. Review finale du lot et PR encore en attente. Rapport privé `.superpowers/sdd/promoted-image-contracts-plan/task-coupled-review.md`, pas de build/Git/native par le reviewer.
 
 ## Empreintes du checkpoint natif
 

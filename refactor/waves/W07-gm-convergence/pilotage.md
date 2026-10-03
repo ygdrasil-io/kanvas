@@ -9,7 +9,8 @@ comptage Vertices/Mesh survivants et transmettent scopes/telemetry/deltas de
 la completion GPU réelle, sans changer runtime/sampling/AA/admission/budgets.
 10/10 ciblés puis57/57 de contexte PASS, dont B888/B−1/sentinel/récupération.
 RED causaux et runner133 initial explicités dans la qualification ; pas de133
-après disposal AfterAll. Reviews Sol et publication encore en attente.
+après disposal AfterAll. Review de tâches Sol Approved C0/I0 ; warnings
+hérités suivis. Review finale et publication encore en attente.
 69 chemins pré/post-scellés ;814PNG/559scores inchangés, aucun gain corpus.
 Hairline8cellules, triangle4diagonales, TL RRect restent non qualifiés ;
 compteur hétérogène historique et off-target sans clip restent des dettes.
