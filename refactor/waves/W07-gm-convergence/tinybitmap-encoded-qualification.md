@@ -4,6 +4,8 @@
 `075405b7a5f195c6b3b0d2742bd480874506e9f1`, parent draft
 [#2445](https://github.com/ygdrasil-io/kanvas/pull/2445).
 Source qualifiée : `735d96af465a131fe5f6f992ce1d85588dbcf027`.
+[Draft #2446](https://github.com/ygdrasil-io/kanvas/pull/2446) publiée,
+empilée sur la branche de #2445, OPEN/draft et attachée au chat.
 W7 reste ACTIVE ; pas de merge, GREEN global ou clôture de la parité.
 
 ## Correctif et décision déléguée
@@ -140,9 +142,13 @@ décodés. La chronologie passée d'exclusivité des writes et de lecture
 intégrale reste une attestation du contrôleur. Sources Skia distantes
 inaccessibles dans son environnement : octets upstream non authentifiés
 indépendamment ; l'inférence bare8888 reste bornée, producteur PNG inconnu.
-Pas de nouveau correctif requis. Main a rescéllé69/814PNG/559scores sans
+Pas de nouveau correctif requis. Main a scellé de nouveau69/814PNG/559scores sans
 dérive avant publication ; aucun rerun natif ni changement de code.
-Publication et vérification distante Step9 restent en attente.
+Step9 : publication initiale vérifiée au commit distant
+`d25099a8c59ac5919445a0726e31f5661f891f8d`, base
+`codex/w7-promoted-image-contracts`, description comparée octet pour octet
+au fichier publié et attachement vérifié. Mise à jour documentaire finale
+seulement après ces vérifications ; code/artifacts restent ceux qualifiés.
 Fonts, codecs externes et jpg-color-cube restent exclus. Les tests AA aux
 frontières, admission off-target sans clip, compteur hétérogène,
 SceneSnapshot/ownership stencil et fidélité des autres GM restent ouverts.

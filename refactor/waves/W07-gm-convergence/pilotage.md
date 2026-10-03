@@ -1,7 +1,8 @@
 # W7 — tinybitmap : composition encoded du port (4 octobre 2026)
 
 [Qualification ciblée](tinybitmap-encoded-qualification.md), branche
-`codex/w7-tinybitmap-encoded-parity`, source735d96af, parent draft #2445.
+`codex/w7-tinybitmap-encoded-parity`, [draft #2446](https://github.com/ygdrasil-io/kanvas/pull/2446),
+source735d96af, parent draft #2445.
 GM explicitement SRGB_ENCODED/non-AA, source/fond/alpha/tile/sampling inchangés.
 RED2échecs encoded/2contrôles PASS ; GREEN17/17 ciblés PASS, vrais buffers
 entiers/replay/completion native ; contrôle LINEAR strict conservé.
@@ -15,7 +16,8 @@ Relecture de tâche Sol Approved C0/I0 ; warnings hérités suivis.
 Review finale indépendante Sol Approved pour draft C0/I0/nouveauM0 ;
 sources upstream non authentifiées indépendamment par le reviewer (réseau
 indisponible), inférence bornée et origine historique inconnue conservées.
-Draft stackée en préparation. W7 ACTIVE, pas de merge/globalGREEN.
+Draft stackée publiée/attachée ; base/head/description vérifiés.
+W7 ACTIVE, pas de merge/globalGREEN.
 
 # W7 — contrats image promus et preuve native Surface (4 octobre 2026)
 
