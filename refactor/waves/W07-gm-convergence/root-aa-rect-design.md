@@ -88,7 +88,13 @@ opaque [4,12)x[0,12), même Path A. À y5, x1/6 restent demi-couverts (encoded
 127..128, LINEAR187..188), x3 noir, x0/7 blancs. À x1 le Rect n'efface pas
 l'historique ; à x6 il réinitialise les quatre samples. Montrer avant le GPU
 que le modèle erroné resolve-per-draw est disjoint à x1. Rejouer exactement C
-par Picture réel memory/archive, aux mêmes attentes indépendantes.
+par le vrai Picture.playback memory/archive, aux mêmes attentes indépendantes.
+Cette preuve concerne exactement C sans état interne complexe ni clip/CTM extérieur,
+pas le wrapper Canvas.drawPicture. Conserver séparément les wrappers memory/archive
+comme gap W7 transactionnel : chacun refuse avec composition.geometry sans modifier
+la sentinelle, puis permet discard/recovery vers les pixels directs C. Nested/painted
+wrappers, occurrences et continuité MSAA autour de drawPicture ne sont pas qualifiés
+ici ; leur expansion publique exige un lot dédié, pas une admission sans consommateur.
 
 Alpha D figé : fond transparent, Rect entier RGBA(64,128,192,128), Path A noir.
 À y5, x0/7 sont Rect seul alpha128, x1/6 combinent masque2/4 noir opaque
@@ -111,11 +117,25 @@ restent figés, sans fitting, notamment rect-gradient conserve
 unsupported.surface.composition.geometry. L'intégralité finie seule ne
 prouve pas I32 ; la restriction I32 est locale à la nouvelle famille, sans
 modifier les helpers historiques Rect/image/layer.
-Budget 8x8 dérivé statiquement : target256 + V/I/U floors24576 + MSAA
-color1024 + depth1024 + hard mask Rect256 =27136 B au pic ; readback2048
-est une autre phase. Quad/indices/uniforms tiennent dans ces floors ; pas
-d'allocation de matériau/resolve supplémentaire. Qualifier B27136 et B-1
-27135, pas le B26880 Path-only. Ne jamais rechercher le budget par essais GPU.
+Budget 8x8 dérivé statiquement du graphe/policy existants : target256 + V/I/U
+floors24576 + MSAA color1024 + depth AA4 1024 + hard mask Rect256 + hard
+depth-stencil256 =27392 B au pic ; readback2048 est une autre phase. Le Rect
+à quatre arêtes est StencilCover : hard mask et PathHardEdgeDepthStencil
+samples1 coexistent avec les attachements AA4 pendant ses producer/cover passes.
+Quad/indices/uniforms tiennent dans ces floors ; pas d'allocation de matériau/resolve
+supplémentaire. Qualifier B27392 et B-1 27391, pas le B26880 Path-only.
+Le montant initial27136 omettait le stencil hard256, démontré statiquement après
+son refus natif ; ni hausse de policy ni B ajusté par recherche GPU. Ne modifier
+aucune allocation/durée de vie pour satisfaire l'ancien calcul erroné.
+
+Autorité numérique exacte : math:geometry/RectProjectionF32.kt fournit
+coordinateF32ToExactI32OrNull(valueF32: Float): Int? et
+RectF32.toExactRectI32OrNull(): RectI32?. Rejeter non-finite, vérifier I64 dans I32
+puis retour exact F32 ; composer quatre bords et rejeter ordre vide/inversé via
+isEmpty64, sans ajouter width/height<=Int.MAX_VALUE de RectI32.isEmpty. La nouvelle
+admission Rect et tx/ty consomment cette autorité ; W4d.integral délègue strictement
+sans modifier son callsite/clip historique. Tests math de valeurs réelles/bornes/
+grands spans ; aucun changement des arrondis F64/image/layer/Path.
 
 ## Mesure de la vraie scène
 
@@ -145,6 +165,13 @@ pour éviter d'effacer la corrélation avec un Rect opaque ou de masquer l'alpha
 avec un fond blanc. Ces entrées/ordres/points sont maintenant explicites.
 La stabilité de rect-gradient et la preuve I32 sont également précisées.
 La revue n'a exécuté aucun runtime et ne ferme aucune preuve native.
+
+Amendement Task2 du 3 octobre après diagnostic et support Astra : budget27392
+corrige une omission ; C qualifie explicitement playback avec wrapper gap conservé ;
+l'autorité exacte sort de gpu-plan vers math. Preuves RED originales/témoins archivés,
+aucun attendu pixel/oracle/tolérance/sampling changé. Le replay positif wrapper
+initialement visé n'est pas résolu : réduction explicite de portée de preuve,
+pas réparation de drawPicture. Décisions et coûts consignés dans le ledger.
 
 ## Livraison et vérification
 
