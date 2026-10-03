@@ -338,8 +338,10 @@ class GPUConcreteResourceProvider(
         request: GPUReadbackStagingReservationRequest,
     ): GPUReadbackStagingReservationResult {
         var result = readbackStagingPool.reserve(request)
-        if (result.isAggregateBudgetRefusal()) {
-            purgeForAdmission((result as GPUReadbackStagingReservationResult.Refused).diagnostic)
+        while (
+            result.isAggregateBudgetRefusal() &&
+                purgeForAdmission((result as GPUReadbackStagingReservationResult.Refused).diagnostic)
+        ) {
             result = readbackStagingPool.reserve(request)
         }
         if (result is GPUReadbackStagingReservationResult.Accepted) {
@@ -1161,15 +1163,18 @@ class GPUConcreteResourceProvider(
         )
     }
 
-    private fun purgeForAdmission(diagnostic: org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic) {
-        val aggregate = diagnostic.facts["aggregatePeakBytes"]?.toBigIntegerOrNull() ?: return
-        val configured = diagnostic.facts["configuredAggregateBudgetBytes"]?.toBigIntegerOrNull() ?: return
+    private fun purgeForAdmission(diagnostic: org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic): Boolean {
+        val aggregate = diagnostic.facts["aggregatePeakBytes"]?.toBigIntegerOrNull() ?: return false
+        val configured = diagnostic.facts["configuredAggregateBudgetBytes"]?.toBigIntegerOrNull() ?: return false
         val bytesToFree = (aggregate - configured).max(BigInteger.ZERO)
-        if (bytesToFree == BigInteger.ZERO) return
-        val managedResident = physicalPoolBudgetLedger.managedResidentBytes().toBigInteger()
+        if (bytesToFree == BigInteger.ZERO) return false
+        val residentBefore = physicalPoolBudgetLedger.managedResidentBytes()
+        val managedResident = residentBefore.toBigInteger()
         val target = (managedResident - bytesToFree).max(BigInteger.ZERO).toLong()
-        val plan = planSharedEviction(target) ?: return
-        applySharedEviction(plan)
+        val plan = planSharedEviction(target) ?: return false
+        // Eviction may invalidate a reuse candidate; retry only after residency decreases.
+        val summary = applySharedEviction(plan)
+        return summary.remainingResidentBytes < residentBefore
     }
 
     private fun journalPhysicalReservation(reservation: GPUProviderPhysicalReservation) {
