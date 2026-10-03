@@ -1,3 +1,13 @@
+# W7 — port `child_sampling_rt` (3 octobre 2026)
+
+[Qualification ciblée](child-sampling-port-qualification.md). Source `73fc10a84f0b49edf3365f54793faf254c165f8c`; tests F12 au commit `0d456121143a3104575d7ca82040be652f2345bb`. Le parent publié [#2440](https://github.com/ygdrasil-io/kanvas/pull/2440) reste au HEAD e39; [#2441](https://github.com/ygdrasil-io/kanvas/pull/2441) est un draft ouvert. Le pin Skia reste `4f26f22daa4bf124e2999145f5caad4b10625580`; la révision exacte de la PNG de référence reste inconnue.
+
+D7 : 4 PASS natifs ciblés; D8 : 443 éligibles / 431 capturés / 11 `SetupBlocked` / 1 `CaptureInvalid`; D9 et D5/D6 pré-correctif restent des RED historiques. F6 : 52/52 tests ciblés; F7 : 8/8 intégration; F8 : case77 identique aux octets antérieurs; F12C : 54/54 tests PASS (52 contrôles existants + deux nouveaux tests). Clear bleu avant le point DARKEN refuse deux fois avec `invalid.w5b.prepared-points` et conserve les opérations. Les mutations typed refusent avec diagnostics correspondant au marker, bounds et identité de capture; les quatre baselines consomment un vrai snapshot destination et un packet DARKEN. Cela ne donne pas à Clear une source-material authority et n’ajoute pas son admission. Clip/scissor et ordre isolé restent des limites explicites.
+
+D10 et F8, cas77 uniquement : 81,96563720703125 % exact, 84,32769775390625 % à ±2, SSIM 0,9806240190874789; F8 utilise le checkpoint source `73fc10a`. Le scellement F8 des 814 PNG repo-relatifs est `142b7f05265919d08d5a1471b9cd09e9bae2aded083ad705fd45ae1d0737ae4d`; celui des 813 PNG non-cibles avec chemins relatifs à la racine générée reste `a6bf35b1ace3748b2cf16a27d28c04629a75ecb4e83c5e91ac63b4bedb9e0d5f`. Les 559 scores et octets cibles n’ont pas changé; aucune régénération n’était nécessaire. Le delta d’intensité/couverture reste non attribué; ni benchmark ni gain agrégé. Le gap général d’ownership stencil, les dettes `SurfaceSceneSnapshotTest`, warnings et exclusions restent documentés.
+
+La revue Sol originale (avant F6) avait I1; la correction round1 l’a marqué `ADDRESSED` et signalé un nouvel I2 Important (`C0 / new I2 / M0 new`, M2 hérité). La revue round2 approuve le périmètre (I1/I2 clos, `C0 / I0 / M0 new`); Task1 est complete scoped reviewclean et aucun nouveau minor n’est signalé. M2 hérité reste suivi. La PR #2441 reste draft; aucun merge, GREEN global, agrégat W7 ou clôture n’est revendiqué. Résultats détaillés : [qualification](child-sampling-port-qualification.md), [addendum](child-sampling-capture-addendum.md) et reçu privé `.superpowers/sdd/child-sampling-port-e39a2be31/point-square-controller-evidence.md`.
+
 # W7 — diagnostic causal natif case 77 (3 octobre 2026)
 
 [Qualification](child-sampling-causal-qualification.md), branche

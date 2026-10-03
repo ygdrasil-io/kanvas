@@ -72,7 +72,51 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                 "W5h source packet IDs must be unique"
             }
             require(frame.w5aGeometryHostTemplatesV1.map { it.packetId }.toSet() == packets.map { it.packetId.value }.toSet()) {
-                "Every material packet must have its sealed geometry host template"
+                val materialPacketIds = packets.map { it.packetId.value }.toSet()
+                val sealedHostIds = frame.w5aGeometryHostTemplatesV1.map { it.packetId }.toSet()
+                val missingIds = (materialPacketIds - sealedHostIds).sorted()
+                val unexpectedIds = (sealedHostIds - materialPacketIds).sorted()
+                buildString {
+                    append("Every material packet must have its sealed geometry host template; ")
+                    append("expectedMaterialPacketIds=${materialPacketIds.sorted()}, ")
+                    append("sealedGeometryHostIds=${sealedHostIds.sorted()}, ")
+                    append("missingIds=$missingIds, unexpectedIds=$unexpectedIds")
+                    val missingPackets = packets.filter { it.packetId.value in missingIds }
+                        .sortedBy { it.packetId.value }
+                    missingPackets.forEach { packet ->
+                        val authority = packet.corePrimitivePreparedAuthority
+                        val structuralKey = authority?.structuralPipelineKey
+                        val w4dGeneralAuthority = authority?.w4dGeneralPreparedAuthority != null
+                        val nativeMaterialization = authority?.w4dGeneralFrameMaterializationAuthority
+                        val usesW4dGeneralMapping = structuralKey != null && w4dGeneralAuthority &&
+                            nativeMaterialization != null &&
+                            nativeMaterialization.pathPass(packet.passId) != null &&
+                            nativeMaterialization.structuralPipelineKey(packet.passId) == structuralKey
+                        val mapping = when {
+                            structuralKey == null -> null
+                            usesW4dGeneralMapping -> mapW4dGeneralStructuralKeyToWgpu4kPipelineIdentity(structuralKey)
+                            else -> mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(structuralKey)
+                        }
+                        val mapped = mapping as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
+                        val geometryWgslAvailable = mapped?.let {
+                            corePrimitiveMaterialGeometryWgslV1(it.componentIdentity) != null
+                        }
+                        append("\nmissingMaterialPacket{")
+                        append("packetId=${packet.packetId.value}, commandId=${packet.commandIdValue}, ")
+                        append("originalPaintOrder=${packet.originalPaintOrder}, ")
+                        append("semanticPayloadKind=${packet.semanticPayload?.javaClass?.simpleName ?: "absent"}, ")
+                        append("preparedCorePrimitiveAuthority=${if (authority == null) "absent" else "present"}, ")
+                        append("structuralPipelineKey=${structuralKey ?: "absent"}, ")
+                        append("pureMappingOutcome=${when (mapping) {
+                            is GPUWgpu4kCorePrimitivePipelineMapping.Mapped ->
+                                "Mapped(identity=${mapping.identity}, componentIdentity=${mapping.componentIdentity})"
+                            is GPUWgpu4kCorePrimitivePipelineMapping.Refused -> "Refused(reason=${mapping.reason})"
+                            null -> "unavailable-without-prepared-CorePrimitive-authority"
+                        }}, ")
+                        append("geometryOnlyWgslAvailableForMappedComponent=${geometryWgslAvailable ?: "not-mapped"}")
+                        append('}')
+                    }
+                }
             }
             val stages = packets.map { requireNotNull(it.materialSourcePartitionV3()).stage }
             val stops = stages.mapNotNull { it.gradientStopSlab }.distinct()

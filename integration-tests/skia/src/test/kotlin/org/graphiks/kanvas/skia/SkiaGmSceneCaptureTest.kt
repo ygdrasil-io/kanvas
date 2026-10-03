@@ -5,6 +5,7 @@ import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.kanvas.render.ir.GraphLimits
 import org.graphiks.kanvas.skia.gm.composite.TestExtractAlphaGm
+import org.graphiks.kanvas.skia.gm.image.ChildSamplingRTGm
 import org.graphiks.kanvas.surface.SceneRecordingScope
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.color.ColorARGB
@@ -15,8 +16,20 @@ import org.junit.jupiter.api.Test
 
 class SkiaGmSceneCaptureTest {
     @Test
+    fun `child sampling source snapshot captures without setup failure`() {
+        val report = captureEligibleGmScenes(listOf(ChildSamplingRTGm()))
+        println(report.diagnosticSummary())
+
+        assertEquals(listOf("child_sampling_rt"), report.eligible, report.diagnosticSummary())
+        assertEquals(listOf("child_sampling_rt"), report.captured, report.diagnosticSummary())
+        assertTrue(report.setupBlocked.isEmpty(), report.diagnosticSummary())
+        assertTrue(report.captureInvalid.isEmpty(), report.diagnosticSummary())
+    }
+
+    @Test
     fun `exhaustive W0 scene capture audit partitions every eligible GM`() {
         val report = captureEligibleGmScenes(SkiaGmRegistry.all())
+        println(report.diagnosticSummary())
 
         assertEquals(report.eligible.size, report.eligible.toSet().size, report.diagnosticSummary())
         assertEquals(report.eligible.size, report.outcomeNames.size, report.diagnosticSummary())

@@ -6,6 +6,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.SaveLayerRec
@@ -13,6 +14,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
@@ -23,11 +25,14 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.render.ir.CompositionDomain
+import org.graphiks.kanvas.render.ir.ExternalImageReference
 import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
+import org.graphiks.kanvas.render.ir.ResourceSceneAdapter
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.color.ColorARGB
@@ -36,6 +41,7 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Test
+import java.security.MessageDigest
 
 class W7SurfaceCompositionPixelTest {
     companion object {
@@ -869,19 +875,132 @@ class W7SurfaceCompositionPixelTest {
     }
 
     @Test
-    fun recordingOnlyEncodedSnapshotsRefuseWithoutRenderingWhileSceneCaptureRemainsValid() {
+    fun recordingOnlyEncodedSnapshotsKeepExternalDomainIdentityWithoutRendering() {
         for (subset in listOf<RectF32?>(null, pixel)) {
-            val surface = Surface(1, 1, config = RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
-            surface.canvas { drawRect(pixel, Paint(ColorARGB.Red, antiAlias = false)) }
-            val capture = SceneRecordingScope.recordingOnly { surface.snapshotScene() }
-            assertTrue(capture is SceneCaptureResult.Captured)
-            val failure = assertFailsWith<IllegalStateException> {
-                SceneRecordingScope.recordingOnly {
-                    if (subset == null) surface.makeImageSnapshot() else requireNotNull(surface.makeImageSnapshot(subset))
+            val captures = CompositionDomain.entries.map { domain ->
+                val surface = Surface(1, 1, config = RenderConfig(compositionDomain = domain))
+                surface.canvas { drawRect(pixel, Paint(ColorARGB.Red, antiAlias = false)) }
+                val (scene, image) = SceneRecordingScope.recordingOnly {
+                    val capture = surface.snapshotScene() as SceneCaptureResult.Captured
+                    val snapshot = if (subset == null) surface.makeImageSnapshot()
+                    else requireNotNull(surface.makeImageSnapshot(subset))
+                    capture.scene to snapshot
                 }
+                assertEquals(1, image.width)
+                assertEquals(1, image.height)
+                assertEquals(ColorType.RGBA_8888, image.colorType)
+                assertEquals(ColorSpace.SRGB, image.colorSpace)
+                assertEquals(AlphaType.PREMUL, image.alphaType)
+                assertEquals(ImagePremultiplicationV1.SOURCE_SPACE, image.premultiplication)
+                assertEquals(null, image.pixels)
+                val resource = ResourceSceneAdapter.captureImage(image)
+                assertTrue(resource is ExternalImageReference)
+                domain to (scene.canonicalId.value to resource)
             }
-            assertEquals("unsupported.surface.composition.recording-snapshot", failure.message.orEmpty().substringBefore(':'))
+            assertEquals(captures[0].second.first, captures[1].second.first)
+            assertNotEquals(captures[0].second.second.canonicalId, captures[1].second.second.canonicalId)
         }
+    }
+
+    @Test
+    fun cleanImageSnapshotRejectsDestinationReadDiagnosticsWithoutChangingOrdinarySnapshots() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            drawPoint(
+                16f,
+                16f,
+                Paint(
+                    color = ColorARGB.Red,
+                    antiAlias = false,
+                    style = PaintStyle.FILL,
+                    strokeWidth = 32f,
+                    strokeCap = StrokeCap.SQUARE,
+                    blendMode = BlendMode.DARKEN,
+                ),
+            )
+        }
+
+        val result = surface.render()
+        val diagnosticText = result.diagnostics.entries.joinToString { "${it.code}:${it.operation}:${it.reason}" }
+        val sha256 = MessageDigest.getInstance("SHA-256")
+            .digest(result.pixels.map { it.toByte() }.toByteArray())
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        println(
+            "W7_CLEAN_IMAGE_SNAPSHOT_DESTINATION_READ stats=${result.stats} diagnostics=$diagnosticText " +
+                "scopes=${result.nativeEvidenceScopeKinds} counters=${result.nativeEvidenceCounters} sha256=$sha256",
+        )
+
+        assertEquals(32, result.width)
+        assertEquals(32, result.height)
+        assertEquals(PixelFormat.RGBA8, result.format)
+        assertEquals(0, result.diagnostics.fatalCount, diagnosticText)
+        assertTrue(result.diagnostics.entries.isNotEmpty(), diagnosticText)
+        assertTrue(result.stats.opsRefused == 0, "stats=${result.stats}")
+        assertTrue(result.stats.opsDispatched > 0, "stats=${result.stats}")
+        assertTrue(result.stats.drawCallCount > 0, "stats=${result.stats}")
+        assertTrue(result.stats.pipelineCount > 0, "stats=${result.stats}")
+        assertTrue(result.diagnostics.entries.any { diagnostic ->
+            diagnostic.code.startsWith("route:destination-read:DrawPoint") &&
+                diagnostic.operation.startsWith("DrawPoint") &&
+                diagnostic.reason == "gpu-copy-then-formula"
+        }, diagnosticText)
+        for (offset in result.pixels.indices step 4) {
+            assertTrue(kotlin.math.abs((result.pixels[offset].toInt() and 0xff) - 255) <= 2,
+                "red at ${offset / 4}=${result.pixels[offset]}")
+            assertTrue(kotlin.math.abs((result.pixels[offset + 1].toInt() and 0xff) - 0) <= 2,
+                "green at ${offset / 4}=${result.pixels[offset + 1]}")
+            assertTrue(kotlin.math.abs((result.pixels[offset + 2].toInt() and 0xff) - 0) <= 2,
+                "blue at ${offset / 4}=${result.pixels[offset + 2]}")
+            assertEquals(255, result.pixels[offset + 3].toInt() and 0xff, "alpha at ${offset / 4}")
+        }
+
+        val ordinaryFull = surface.makeImageSnapshot()
+        val ordinarySubset = requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(0f, 0f, 1f, 1f)))
+        assertContentEquals(result.pixels.toUByteArray(), requireNotNull(ordinaryFull.pixels).toUByteArray())
+        assertEquals(ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL, ordinaryFull.premultiplication)
+        assertEquals(AlphaType.PREMUL, ordinaryFull.alphaType)
+        assertEquals(1, ordinarySubset.width)
+        assertEquals(1, ordinarySubset.height)
+        assertEquals(ColorType.RGBA_8888, ordinarySubset.colorType)
+        assertEquals(ColorSpace.SRGB, ordinarySubset.colorSpace)
+        assertEquals(AlphaType.PREMUL, ordinarySubset.alphaType)
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), requireNotNull(ordinarySubset.pixels).toUByteArray())
+        assertEquals(ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL, ordinarySubset.premultiplication)
+
+        val failure = assertFailsWith<IllegalStateException> { surface.makeCleanImageSnapshot() }
+        assertTrue(failure.message.orEmpty().contains("image.snapshot.not-clean"), failure.message)
+    }
+
+    @Test
+    fun cleanImageSnapshotRefusesUnresolvedImageAndRecovers() {
+        val source = Surface(1, 1, config = RenderConfig(compositionDomain = CompositionDomain.SRGB_ENCODED))
+        source.canvas { drawRect(pixel, Paint(ColorARGB.Red, antiAlias = false)) }
+        val externalImage = SceneRecordingScope.recordingOnly { source.makeImageSnapshot() }
+        assertEquals(null, externalImage.pixels)
+        assertTrue(ResourceSceneAdapter.captureImage(externalImage) is ExternalImageReference)
+
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(pixel, Paint(ColorARGB.Blue, antiAlias = false))
+            drawImage(externalImage, pixel, SamplingOptions.NEAREST, Paint(antiAlias = false))
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.makeCleanImageSnapshot() }
+        assertTrue(failure.message.orEmpty().contains("unsupported.image.pixels_missing"), failure.message)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(pixel, Paint(ColorARGB.Red, antiAlias = false)) }
+        val clean = surface.makeCleanImageSnapshot()
+        assertEquals(1, clean.width)
+        assertEquals(1, clean.height)
+        assertEquals(ColorType.RGBA_8888, clean.colorType)
+        assertEquals(ColorSpace.SRGB, clean.colorSpace)
+        assertEquals(AlphaType.PREMUL, clean.alphaType)
+        assertEquals(ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL, clean.premultiplication)
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), requireNotNull(clean.pixels).toUByteArray())
+
+        val ordinary = surface.makeImageSnapshot()
+        assertContentEquals(requireNotNull(clean.pixels).toUByteArray(), requireNotNull(ordinary.pixels).toUByteArray())
     }
 
     @Test

@@ -71,18 +71,19 @@ internal object W5bPreparedPointBridgeV3 {
                 require(semantic.clipExecutionPlanIdentity?.let { it == execution.canonicalIdentity() } != false) { "W5b semantic clip execution changed" }
                 require(packet.diagnostics.isEmpty()) { "W5b cannot discard packet diagnostics" }
             }
-            val sourceSemantics = if (request.w5hPointSources.isEmpty()) semantics else {
-                // The mapper's clear has no public operation/source. Authenticate it through
-                // the existing initialization authority, never fabricate a material sibling.
-                val clearId = request.synthesizedSceneClearCommandIdI32
-                if (clearId == null) semantics else {
-                    require(clearId == 0 && packets.first().commandIdValue == clearId &&
-                        renders.first().drawPackets.size == 1 && clearId !in request.w5hPointSources &&
+            // The mapper's clear has no public operation/source. Authenticate it through the
+            // existing initialization authority, never fabricate a material sibling. This
+            // exact handoff applies to both W5h-captured sources and the legacy material table.
+            val sourceSemantics = request.synthesizedSceneClearCommandIdI32?.let { clearId ->
+                require(clearId == 0 && packets.firstOrNull()?.commandIdValue == clearId &&
+                    renders.firstOrNull()?.drawPackets?.size == 1 && clearId !in request.w5hPointSources &&
+                    semantics.firstOrNull()?.let { first ->
                         org.graphiks.kanvas.gpu.renderer.passes.isW5bPreparedSceneInitialization(
-                            packets.first(), semantics.first(), request.targetBounds)) { "W5b scene initialization changed" }
-                    semantics.drop(1)
-                }
-            }
+                            packets.first(), first, request.targetBounds,
+                        )
+                    } == true) { "W5b scene initialization changed" }
+                semantics.drop(1)
+            } ?: semantics
             // Every packet/capture above is authenticated before elision. Compact the source
             // and semantic together, before constructing any draw or assigning frame refs.
             val pending = if (request.w5hPointSources.isEmpty()) null else sourceSemantics.map { semantic ->

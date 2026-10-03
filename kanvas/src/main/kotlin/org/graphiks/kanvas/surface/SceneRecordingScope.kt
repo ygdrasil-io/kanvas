@@ -5,10 +5,11 @@ import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
 /**
  * Delimits synchronous recording that must not materialize pixel snapshots.
  *
- * Within [recordingOnly], [Surface.makeImageSnapshot] captures the recorded
- * scene and returns an external image reference. Direct renderer submission is
- * rejected, so callers can safely record nested off-screen surfaces for a
- * backend-neutral scene capture.
+ * Within [recordingOnly], [Surface.makeImageSnapshot] and
+ * [Surface.makeCleanImageSnapshot] capture the recorded scene and return an
+ * external image reference. Direct renderer submission is rejected, so callers
+ * can safely record nested off-screen surfaces for a backend-neutral scene
+ * capture.
  */
 public object SceneRecordingScope {
     private val depth: ThreadLocal<Int> = ThreadLocal.withInitial { 0 }

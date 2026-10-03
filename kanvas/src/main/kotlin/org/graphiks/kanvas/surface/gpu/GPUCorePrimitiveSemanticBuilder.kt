@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.isPositiveUniformScaleTranslateGradientLocalMatrix
 import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
@@ -57,6 +58,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.math.geometry.PointSquaresF32
+import org.graphiks.math.geometry.RectI32
 
 internal sealed interface GPUCorePrimitiveSemanticGatherResult {
     data class Gathered(val semantics: Map<Int, GPUDrawSemanticPayload>) :
@@ -925,7 +928,7 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveGeometryFacts(
         // The canonical hairline point square is hard DirectTriangles geometry, so its
         // coverage is full-or-scissor even though the FillPath command derives stencil
         // coverage for general path fills.
-        coverageMode = coreCoverageMode(directStrokeUnderHardPathClip),
+        coverageMode = coreCoverageMode(targetBounds, directStrokeUnderHardPathClip),
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
         rrectGeometryAuthority = rrectGeometryAuthority,
@@ -1158,7 +1161,7 @@ internal fun GPUFramePathVisualCommand.isInPreparedPointDomain(targetBounds: GPU
     if (normalized !is NormalizedDrawCommand.FillRect && normalized !is NormalizedDrawCommand.FillPath) return false
     return try {
         val family = normalized.toCoreSourceFamily()
-        W5bPreparedPointDomainV3.acceptsCoverage(family, coreCoverageMode(), clipCoverage, hasPointClip) &&
+        W5bPreparedPointDomainV3.acceptsCoverage(family, coreCoverageMode(targetBounds), clipCoverage, hasPointClip) &&
             when (val geometry = normalized.toDeviceGeometry(targetBounds)) {
                 is GPUCorePrimitiveGeometryInput.Rect -> W5bPreparedPointDomainV3.acceptsRect(
                     geometry.left, geometry.top, geometry.right, geometry.bottom)
@@ -1180,8 +1183,12 @@ internal fun GPUFramePathVisualCommand.preparedRectDestinationBounds(target: GPU
         requireNotNull(clipCoverage.toPreparedScissorBounds(target)), target)
 }
 
-private fun GPUFramePathVisualCommand.coreCoverageMode(directStrokeUnderHardPathClip: Boolean = false): GPUCorePrimitiveCoverageMode =
-    if (directStrokeUnderHardPathClip || normalized is NormalizedDrawCommand.FillPath && normalized.isHairlinePointCommand())
+private fun GPUFramePathVisualCommand.coreCoverageMode(
+    targetBounds: GPUPixelBounds,
+    directStrokeUnderHardPathClip: Boolean = false,
+): GPUCorePrimitiveCoverageMode =
+    if (directStrokeUnderHardPathClip || normalized is NormalizedDrawCommand.FillPath &&
+        (normalized.isHairlinePointCommand() || normalized.exactPositiveWidthSquarePointDeviceGeometryOrNull(targetBounds) != null))
         GPUCorePrimitiveCoverageMode.FullOrScissor else coverageMode()
 
 private fun GPUFramePathVisualCommand.coverageMode(): GPUCorePrimitiveCoverageMode = when (geometryCoverage) {
@@ -1248,6 +1255,7 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
     if (source.operation == "drawPoint" || source.operation == "drawPoints.points") {
         corePointGeometryRefusalOrNull()?.let { refuseGeometry(it.code, it.refusalFacts) }
         if (strokeWidth == 0f) return hairlinePointDeviceGeometry(targetBounds)
+        exactPositiveWidthSquarePointDeviceGeometryOrNull(targetBounds)?.let { return it }
     }
     if (stroke) return strokeDeviceGeometry(targetBounds)
     if (tessellatedVertices.isEmpty()) {
@@ -1280,6 +1288,70 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
         geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
         fillRule = pathDescriptor.fillRule.toCoreFillRule(),
         inverseFill = pathDescriptor.inverseFill,
+        sourceAuthority = pathDescriptor.sourceAuthority,
+    )
+}
+
+/**
+ * Proves the exact captured source shape before it can use hard direct coverage. The square is
+ * checked against the original point width and canonical vertex order; no arbitrary quad or
+ * bounding-box replacement is admitted.
+ */
+private fun NormalizedDrawCommand.FillPath.exactPositiveWidthSquarePointVerticesOrNull(): FloatArray? {
+    if (source.operation != "drawPoint" || stroke || antiAlias || maskFilter != null ||
+        !strokeWidth.isFinite() || strokeWidth <= 0f || strokeCap != "square" ||
+        pathEffectKind != null || dashIntervals?.isNotEmpty() == true || dashPhase != 0f ||
+        transform != GPUTransformFacts.identity() || clip.kind != GPUClipKind.WideOpen ||
+        clip.coveragePlan != GPUClipCoveragePlan.NoClip || clip.executionPlan != GPUClipExecutionPlan.NoClip ||
+        clip.perspectiveCaptureRefusal || clip.clipTransformRefusal != null ||
+        pathDescriptor.inverseFill || pathDescriptor.fillRule !in setOf("NonZero", "winding") ||
+        contourStarts != listOf(0) || totalVertexCount != 5 || edgeCount != 5 ||
+        pathDescriptor.pointCount != 5 || pathDescriptor.edgeCount != 5 || tessellatedVertices.size != 10
+    ) return null
+
+    val vertices = tessellatedVertices.toFloatArray()
+    if (vertices.any { !it.isFinite() }) return null
+    val left = vertices[0]
+    val top = vertices[1]
+    val right = vertices[2]
+    val bottom = vertices[5]
+    if (!(left < right && top < bottom) || right - left != strokeWidth || bottom - top != strokeWidth) return null
+
+    val halfWidth = strokeWidth * 0.5f
+    val centerX = left + (right - left) * 0.5f
+    val centerY = top + (bottom - top) * 0.5f
+    if (!halfWidth.isFinite() ||
+        left != centerX - halfWidth || right != centerX + halfWidth ||
+        top != centerY - halfWidth || bottom != centerY + halfWidth
+    ) return null
+
+    val canonicalClosed = floatArrayOf(
+        left, top,
+        right, top,
+        right, bottom,
+        left, bottom,
+        left, top,
+    )
+    return canonicalClosed.takeIf { vertices.contentEquals(it) }?.copyOfRange(0, 8)
+}
+
+/** Converts only the fully proved single square using the existing immutable math carrier. */
+private fun NormalizedDrawCommand.FillPath.exactPositiveWidthSquarePointDeviceGeometryOrNull(
+    targetBounds: GPUPixelBounds,
+): GPUCorePrimitiveGeometryInput.TriangulatedPath? {
+    val vertices = exactPositiveWidthSquarePointVerticesOrNull() ?: return null
+    val target = RectI32(targetBounds.left, targetBounds.top, targetBounds.right, targetBounds.bottom)
+    val squares = PointSquaresF32.fromDeviceQuadsF32OrNull(vertices, target) ?: return null
+    val bounds = squares.copyBoundsI32()
+    return GPUCorePrimitiveGeometryInput.TriangulatedPath(
+        vertices = squares.copyVerticesF32().toList(),
+        indices = squares.copyIndicesI32().toList(),
+        sourceContourStarts = squares.copyContourStartsI32().toList(),
+        sourceVertexCount = 4,
+        coverBounds = GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom),
+        geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        fillRule = GPUCorePrimitiveFillRule.Winding,
+        inverseFill = false,
         sourceAuthority = pathDescriptor.sourceAuthority,
     )
 }

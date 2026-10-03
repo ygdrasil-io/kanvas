@@ -6,9 +6,9 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
-import org.graphiks.kanvas.skia.gm.image.ChildSamplingRTGm
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.surface.PixelFormat
+import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.test.ComparisonUtils
@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 import java.security.MessageDigest
 
-/** Native causal comparison of the historical open FILL and the current GM drawLine route. */
+/** Native causal comparison of the historical open FILL and public drawLine routes. */
 class W7ChildSamplingCausalSurfacePixelTest {
     companion object {
         @AfterAll
@@ -34,17 +34,15 @@ class W7ChildSamplingCausalSurfacePixelTest {
 
     @Test
     fun drawLineExplainsHistoricalChildSamplingPixelDelta() {
-        RuntimeEffectWgsl4kWiring.install()
-
         val width = 256
         val height = 256
-        val gm = ChildSamplingRTGm()
+        val linearConfig = RenderConfig.DEFAULT.copy(compositionDomain = CompositionDomain.LINEAR)
         val white = Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false)
         val background = Paint(color = ColorARGB.fromRGBA(0.9f, 0.9f, 0.9f, 1f))
         val red = Paint(color = ColorARGB.fromRGBA(1f, 0f, 0f, 0.8f), antiAlias = true)
 
         fun newSurface(): Pair<Surface, GmCanvas> {
-            val surface = Surface(width = width, height = height, config = gm.compositionConfig())
+            val surface = Surface(width = width, height = height, config = linearConfig)
             val canvas = surface.canvas()
             canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), white)
             return surface to GmCanvas(canvas, width, height)
@@ -55,9 +53,10 @@ class W7ChildSamplingCausalSurfacePixelTest {
         legacyCanvas.drawPath(openLine(10f, 10f, 100f, 100f), red)
         legacyCanvas.drawPath(openLine(10f, 100f, 100f, 10f), red)
 
-        val (currentSurface, currentCanvas) = newSurface()
-        gm.onOnceBeforeDraw(currentCanvas)
-        gm.draw(currentCanvas, width, height)
+        val (publicDrawLineSurface, publicDrawLineCanvas) = newSurface()
+        publicDrawLineCanvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), background)
+        publicDrawLineCanvas.drawLine(10f, 10f, 100f, 100f, red)
+        publicDrawLineCanvas.drawLine(10f, 100f, 100f, 10f, red)
 
         val (strokeSurface, strokeCanvas) = newSurface()
         strokeCanvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()), background)
@@ -88,42 +87,42 @@ class W7ChildSamplingCausalSurfacePixelTest {
 
         val legacyFrame = capture("LEGACY_OPEN_FILL", legacySurface, "frame")
         val legacyReplay = capture("LEGACY_OPEN_FILL", legacySurface, "replay")
-        val currentFrame = capture("CURRENT_GM", currentSurface, "frame")
-        val currentReplay = capture("CURRENT_GM", currentSurface, "replay")
+        val publicDrawLineFrame = capture("PUBLIC_DRAW_LINE", publicDrawLineSurface, "frame")
+        val publicDrawLineReplay = capture("PUBLIC_DRAW_LINE", publicDrawLineSurface, "replay")
         val strokeFrame = capture("EXPLICIT_STROKE", strokeSurface, "frame")
         val strokeReplay = capture("EXPLICIT_STROKE", strokeSurface, "replay")
 
         val legacy = legacyFrame.pixels.map { it.toByte() }.toByteArray()
         val legacyReplayBytes = legacyReplay.pixels.map { it.toByte() }.toByteArray()
-        val current = currentFrame.pixels.map { it.toByte() }.toByteArray()
-        val currentReplayBytes = currentReplay.pixels.map { it.toByte() }.toByteArray()
+        val publicDrawLine = publicDrawLineFrame.pixels.map { it.toByte() }.toByteArray()
+        val publicDrawLineReplayBytes = publicDrawLineReplay.pixels.map { it.toByte() }.toByteArray()
         val stroke = strokeFrame.pixels.map { it.toByte() }.toByteArray()
         val strokeReplayBytes = strokeReplay.pixels.map { it.toByte() }.toByteArray()
 
         assertArrayEquals(legacy, legacyReplayBytes, "legacy full-buffer replay")
-        assertArrayEquals(current, currentReplayBytes, "current GM full-buffer replay")
+        assertArrayEquals(publicDrawLine, publicDrawLineReplayBytes, "public drawLine full-buffer replay")
         assertArrayEquals(stroke, strokeReplayBytes, "explicit stroke full-buffer replay")
 
         assertLiteralFlatGray(legacy, width, height)
         assertOpaque(legacy, "legacy")
-        assertOpaque(current, "current GM")
+        assertOpaque(publicDrawLine, "public drawLine")
         assertOpaque(stroke, "explicit stroke")
-        assertBackgroundPixel(current, width, 200, 20)
-        assertBackgroundPixel(current, width, 20, 200)
-        assertBackgroundPixel(current, width, 200, 200)
+        assertBackgroundPixel(publicDrawLine, width, 200, 20)
+        assertBackgroundPixel(publicDrawLine, width, 20, 200)
+        assertBackgroundPixel(publicDrawLine, width, 200, 200)
         assertBackgroundPixel(stroke, width, 200, 20)
         assertBackgroundPixel(stroke, width, 20, 200)
         assertBackgroundPixel(stroke, width, 200, 200)
-        assertTrue(visibleRedLinePixelCount(current, width) > 0, "current GM has visible red line pixels")
+        assertTrue(visibleRedLinePixelCount(publicDrawLine, width) > 0, "public drawLine has visible red line pixels")
         assertTrue(visibleRedLinePixelCount(stroke, width) > 0, "explicit stroke has visible red line pixels")
-        assertArrayEquals(stroke, current, "current drawLine must match explicit STROKE")
-        assertTrue(!current.contentEquals(legacy), "current GM must differ from historical open FILL")
+        assertArrayEquals(stroke, publicDrawLine, "public drawLine must match explicit STROKE")
+        assertTrue(!publicDrawLine.contentEquals(legacy), "public drawLine must differ from historical open FILL")
 
         val evidenceRoot = System.getProperty("w7.ordinaryAaEvidenceDir")
         if (evidenceRoot != null) {
             val outputs = listOf(
                 File(evidenceRoot, "w7-child-sampling-legacy-open-fill.png") to legacy,
-                File(evidenceRoot, "w7-child-sampling-current-gm.png") to current,
+                File(evidenceRoot, "w7-child-sampling-public-draw-line.png") to publicDrawLine,
                 File(evidenceRoot, "w7-child-sampling-explicit-stroke.png") to stroke,
             )
             outputs.forEach { (file, _) -> check(!file.exists()) { "Refusing to overwrite evidence image: $file" } }
