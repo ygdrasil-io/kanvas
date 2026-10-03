@@ -46,6 +46,30 @@
 - [ ] **Step 2: Small semantic fix after authentic RED.** Samewriter sets paint.copy(style=STROKE) in shared Canvas.drawLine. GmCanvas.drawLine delegates to shared helper, preserving exactly drawPath's current withClip+save/concat/restore handling (factor tiny helper if necessary, no unrelated API edits). No style conversion in planner, no GM/reference/budget/domain edit, no width0→1. Report READY_VALIDATION; controller runs both tests plus existing GmCanvasPathCtmSurfacePixelTest covering wrapper changes, each separately audited. Explicit commit then one Sol spec+quality gate, originalwriter fixes C/I.
 - [ ] **Step 3: Refresh causal W6 RED.** On unchanged W6 source, controller reruns exact blurCircles2RendersCompleteOrdinarySeparators capture; confirm STROKEwidth0, samepath/CTM/solidSrcOver/noeffect and authentic W6 boundary. Resume original Task1 writer to add reduced width0 hairline under same native-admitted filtered sibling before source; independently pin coverage bytes and run RED. All retained reduced controls remain accounted. No source patch until this refreshed family gate is audited.
 
+**Qualified fixture correction:** The GM empty-FILL lane at integer device y14
+hits a separate candidate generic zero-height cover-bounds refusal, before
+pixels. Move only that zero-area control to local y12.5; all clear-lane,
+visible-STROKE, drawLine, clip/CTM and Paint expectations remain identical.
+An open two-point FILL has zero area at either coordinate, independently of
+renderer output. Controller first discriminates against unchanged corrected
+helpers, then writer restores exact old helpers for re-RED, then reapplies
+the exact reviewed semantic patch for unchanged-fixture GREEN. Each stage
+has pinned bytes and separate full runtime audit. Never treat this adjustment
+as a fix of integer empty-FILL behavior; preserve that native debt and old
+receipts. No blanket bounds-contract relaxation in this prerequisite.
+Native proof in this GM fixture uses positive actual drawCallCount and
+pipelineCount with clean result/refused0, native Surface port and all literal
+readback pixels. Render/Readback scope names are not a universal export:
+the existing canonical prepared router exports only image Upload scopes;
+its execution nevertheless validates native submit/readback before success.
+Preserve that public evidence-export limitation, no fabricated markers.
+Step3 reduced hairline uses Surface64x64 LINEAR, standalone positive then
+same path under existing blue blurred Rect sibling: local(4,5.5)→(20,5.5),
+save/scale(2,3)/restore, AA STROKEwidth0 BUTT. Device line(8,16.5)→(40,16.5)
+must stay one pixel wide: opaque red(16,16), exact clear(16,15)/(16,17)/
+(6,16)/(42,16). This discriminates width0 from localwidth1 scaled to3.
+If standalone route refuses, record that boundary before source expansion.
+
 ### Task 1: Cause, témoins RED et source ordinaire authentifiée
 
 **Files:**

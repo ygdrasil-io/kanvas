@@ -106,6 +106,23 @@ si le produit est retenu ; aucun gain déduit d'une capability seule.
 
 ## Arrêt et limites
 
+Dette native distincte découverte dans les témoins drawLine : un open FILL
+à deux points horizontaux, traduit/clippé sur y entier, peut être refusé
+avant pixels par `unsupported.core_primitive.geometry.invalid`. La garde
+générique impose des cover bounds de hauteur positive ; l'attribution exacte
+reste à discriminer, pas une cause native prouvée par le message générique.
+Le témoin conserve une vraie ligne FILL de surface nulle à y demi-entier,
+avec mêmes attentes transparentes, et revalide RED/GREEN du helper. Aucun
+relâchement de bounds ni correction générale de no-op dans ce lot ; ce cas
+reste un gap de sémantique native à traiter séparément s'il touche les GMs.
+
+La route canonique préparée n'exporte pas les mêmes scopes Render/Readback
+que la route planifiée : seuls les scopes Upload d'image sont exposés dans
+ce champ. Les témoins GM drawLine vérifient les vrais compteurs positifs
+draw/pipeline, l'exécution Surface native avec guards submit/readback et les
+ancres pixels ; ils ne fabriquent pas de scopes ni de fallback. Un export
+public commun de ces preuves est une dette d'observabilité distincte.
+
 Falsifier avant extension si capture hors famille, nouveau vrai filtre/clip/
 matériau nécessaire, consumptionReady non prouvée, coût hors budget, l'un
 des deux GM bloqué par une autre famille substantielle, contenu manquant ou

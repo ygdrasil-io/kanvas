@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.canvas.drawLine
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
@@ -229,14 +230,18 @@ class GmCanvas(
     }
 
     fun drawPath(path: Path, paint: Paint) {
+        withPathTransform { inner.drawPath(path, paint) }
+    }
+
+    private inline fun withPathTransform(block: () -> Unit) {
         withClip {
             if (currentTransform.isIdentity()) {
-                inner.drawPath(path, paint)
+                block()
             } else {
                 inner.save()
                 try {
                     inner.concat(currentTransform)
-                    inner.drawPath(path, paint)
+                    block()
                 } finally {
                     inner.restore()
                 }
@@ -289,7 +294,7 @@ class GmCanvas(
     }
 
     fun drawLine(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint) {
-        drawPath(Path { moveTo(x1, y1); lineTo(x2, y2) }, paint)
+        withPathTransform { inner.drawLine(x1, y1, x2, y2, paint) }
     }
 
     fun drawArc(rect: RectF32, startAngle: Float, sweepAngle: Float, useCenter: Boolean, paint: Paint) {
