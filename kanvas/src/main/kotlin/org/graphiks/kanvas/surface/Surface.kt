@@ -11,7 +11,6 @@ import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.kanvas.render.ir.SceneExtent
-import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.surface.gpu.renderViaGpu
 import org.graphiks.math.geometry.RectF32
 
@@ -99,6 +98,36 @@ class Surface(
         else render().toImage("surface-snapshot")
 
     /**
+     * Capture a full-surface image only when rendering completed without diagnostics
+     * or refused operations. In a recording-only scope, return the same unresolved
+     * external image reference used by [makeImageSnapshot] without submitting work.
+     * That recording-only reference has no pixels and makes no claim of rendered
+     * cleanliness or autonomous replay.
+     *
+     * @throws IllegalStateException if rendering is not clean or the scene is invalid
+     */
+    fun makeCleanImageSnapshot(): Image {
+        if (SceneRecordingScope.isRecordingOnly()) {
+            return requireNotNull(recordingImageSnapshot())
+        }
+        val result = render()
+        check(
+            result.isClean &&
+                result.diagnostics.isEmpty &&
+                result.stats.opsRefused == 0 &&
+                result.width == width &&
+                result.height == height &&
+                result.format == format,
+        ) {
+            "image.snapshot.not-clean: ${result.diagnostics.summary()}; " +
+                "refused=${result.stats.opsRefused}; " +
+                "output=${result.width}x${result.height}/${result.format}; " +
+                "expected=${width}x${height}/$format"
+        }
+        return result.toImage("surface-snapshot")
+    }
+
+    /**
      * Render and capture a sub-rectangle as an [Image].
      *
      * Equivalent to Skia's `surface.makeImageSnapshot(subset)`.
@@ -166,9 +195,6 @@ class Surface(
     }
 
     private fun recordingImageSnapshot(subset: RectF32? = null): Image? {
-        check(config.compositionDomain != CompositionDomain.SRGB_ENCODED) {
-            "unsupported.surface.composition.recording-snapshot: encoded Surface snapshots require rendered pixels"
-        }
         val (snapshotWidth, snapshotHeight, sourceSuffix) = if (subset == null) {
             Triple(width, height, "full")
         } else {
@@ -196,7 +222,7 @@ class Surface(
             width = snapshotWidth,
             height = snapshotHeight,
             colorType = colorType,
-            sourceId = "scene-recording:${captured.scene.canonicalId.value}:$sourceSuffix",
+            sourceId = "scene-recording:v2:${config.compositionDomain.name}:${captured.scene.canonicalId.value}:$sourceSuffix",
             pixels = null,
             colorSpace = captured.scene.colorSpace,
             alphaType = AlphaType.PREMUL,

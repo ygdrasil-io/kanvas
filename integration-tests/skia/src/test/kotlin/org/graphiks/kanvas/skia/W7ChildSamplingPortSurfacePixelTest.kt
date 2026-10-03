@@ -4,7 +4,9 @@ package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.canvas.drawLine
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
@@ -15,6 +17,7 @@ import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.render.ir.CompositionDomain
+import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 import org.graphiks.kanvas.skia.gm.image.ChildSamplingRTGm
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
@@ -143,6 +146,15 @@ class W7ChildSamplingPortSurfacePixelTest {
             val offset = (y * first.width + x) * 4
             assertTrue((pixels[offset + 3].toInt() and 0xff) > 0, "diagonal source alpha at ($x,$y)")
         }
+
+        val snapshot = surface.makeCleanImageSnapshot()
+        assertEquals(100, snapshot.width)
+        assertEquals(100, snapshot.height)
+        assertEquals(ColorType.RGBA_8888, snapshot.colorType)
+        assertEquals(ColorSpace.SRGB, snapshot.colorSpace)
+        assertEquals(AlphaType.PREMUL, snapshot.alphaType)
+        assertEquals(ImagePremultiplicationV1.SOURCE_SPACE, snapshot.premultiplication)
+        assertArrayEquals(rgba(first), requireNotNull(snapshot.pixels), "strict source snapshot preserves rendered RGBA")
     }
 
     @Test
