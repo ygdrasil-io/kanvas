@@ -10,6 +10,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.render.ir.CompositionDomain
+import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
@@ -32,7 +33,8 @@ class W7TinyBitmapSourceSurfacePixelTest {
     }
 
     @Test
-    fun registeredTinyBitmapUsesPinnedLinearPixelAndFreshSurfaceRepeatability() {
+    // Mutation: the registered GM now has to match the independent encoded-domain pixel model.
+    fun registeredTinyBitmapUsesPinnedEncodedPixelAndFreshSurfaceRepeatability() {
         val first = SkiaGmRenderer.render(TinyBitmapGm())
         logRegistered("registered-tinybitmap-first", first)
         val second = SkiaGmRenderer.render(TinyBitmapGm())
@@ -51,13 +53,18 @@ class W7TinyBitmapSourceSurfacePixelTest {
         assertTrue(first.diagnostics.isEmpty(), first.diagnostics.toString())
         assertTrue(second.diagnostics.isEmpty(), second.diagnostics.toString())
         assertArrayEquals(first.rgba, second.rgba, "independent fresh-surface full RGBA repeatability")
-        assertUniformRgba(first.rgba, 100, 100, LINEAR_PIXEL, "registered tinybitmap")
+        assertUniformRgba(first.rgba, 100, 100, ENCODED_PIXEL, "registered tinybitmap")
     }
 
     @Test
+    // Mutation: pin the existing literal witness to LINEAR so it remains an independent control.
     fun actualTinyBitmapReplaysOnOneLinearSurfaceOverDeclaredGray() {
         val gm = TinyBitmapGm()
-        val surface = Surface(100, 100, config = gm.compositionConfig())
+        val surface = Surface(
+            100,
+            100,
+            config = RenderConfig.DEFAULT.copy(compositionDomain = CompositionDomain.LINEAR),
+        )
         val canvas = surface.canvas()
         canvas.drawRect(
             RectF32(0f, 0f, 100f, 100f),
@@ -83,6 +90,34 @@ class W7TinyBitmapSourceSurfacePixelTest {
         assertArrayEquals(first.rgba, replay.rgba, "same-surface complete RGBA replay")
         assertUniformRgba(first.rgba, 100, 100, LINEAR_PIXEL, "same-surface first frame")
         assertUniformRgba(replay.rgba, 100, 100, LINEAR_PIXEL, "same-surface replay")
+    }
+
+    @Test
+    // New witness: replay the real TinyBitmap recording on one encoded Surface and require completed native evidence.
+    fun actualTinyBitmapReplaysOnOneEncodedSurfaceWithCompletedNativeEvidence() {
+        val gm = TinyBitmapGm()
+        val surface = Surface(100, 100, config = gm.compositionConfig())
+        val canvas = surface.canvas()
+        canvas.drawRect(
+            RectF32(0f, 0f, 100f, 100f),
+            Paint(color = GRAY_221, antiAlias = false),
+        )
+        val gmCanvas = GmCanvas(canvas, 100, 100)
+        gm.onOnceBeforeDraw(gmCanvas)
+        gm.draw(gmCanvas, 100, 100)
+        val operationCount = surface.snapshotOps().size
+
+        val first = captureSurface("same-surface-encoded-tinybitmap-first", surface, operationCount)
+        val replay = captureSurface("same-surface-encoded-tinybitmap-replay", surface, operationCount)
+        val replayOperationCount = surface.snapshotOps().size
+
+        assertEquals(2, operationCount, "literal gray background and TinyBitmap image rectangle")
+        assertEquals(operationCount, replayOperationCount, "recording remains stable across full-frame replay")
+        for ((label, capture) in listOf("first" to first, "replay" to replay)) {
+            assertEncodedNativeEvidence(label, capture)
+            assertUniformRgba(capture.rgba, 100, 100, ENCODED_PIXEL, "same-surface encoded $label")
+        }
+        assertArrayEquals(first.rgba, replay.rgba, "same-surface complete encoded RGBA replay")
     }
 
     @Test
@@ -143,8 +178,39 @@ class W7TinyBitmapSourceSurfacePixelTest {
     private fun logSurface(label: String, operations: Int, result: RenderResult, rgba: ByteArray) {
         println(
             "W7_TINYBITMAP_SOURCE_NATIVE label=$label operations=$operations " +
-                "stats=${result.stats} diagnostics=${result.diagnostics.summary()} sha256=${sha256(rgba)}",
+                "stats=${result.stats} diagnostics=${result.diagnostics.summary()} sha256=${sha256(rgba)} " +
+                "uniqueRGBA=${uniqueRgbaCount(rgba)} scopes=${result.nativeEvidenceScopeKinds} " +
+                "nativeCounters=${result.nativeEvidenceCounters} structuralSteps=${result.structuralSteps}",
         )
+    }
+
+    private fun assertEncodedNativeEvidence(label: String, capture: SurfaceCapture) {
+        val result = capture.result
+        val counters = result.nativeEvidenceCounters
+        assertEquals(100, result.width, "$label width")
+        assertEquals(100, result.height, "$label height")
+        assertEquals(PixelFormat.RGBA8, result.format, "$label RGBA8 readback format")
+        assertEquals(40_000, capture.rgba.size, "$label complete 100x100 RGBA buffer")
+        assertEquals(2, result.stats.opsDispatched, "$label dispatched operation count")
+        assertEquals(0, result.stats.opsRefused, "$label refusal count")
+        assertEquals(0, result.diagnostics.fatalCount, "$label fatal diagnostics")
+        assertTrue(result.diagnostics.isEmpty, "$label ${result.diagnostics.summary()}")
+        assertTrue(result.stats.drawCallCount > 0, "$label issues a draw call")
+        assertTrue(result.stats.pipelineCount > 0, "$label binds a pipeline")
+        assertTrue("Render" in result.nativeEvidenceScopeKinds, "$label native render scope")
+        assertTrue("Readback" in result.nativeEvidenceScopeKinds, "$label native readback scope")
+        for (counter in listOf("frameCoordinatorCreations", "encoders", "commandBuffers", "submits", "readbackCopies")) {
+            assertEquals(1L, counters[counter], "$label native $counter")
+        }
+        val draws = requireNotNull(counters["draws"]) { "$label native draw counter is absent" }
+        val drawIndexed = requireNotNull(counters["drawIndexed"]) { "$label native indexed draw counter is absent" }
+        assertEquals(Math.addExact(draws, drawIndexed), result.stats.drawCallCount.toLong(), "$label native draw coherence")
+        val pipelineBinds = requireNotNull(counters["pipelineBinds"]) { "$label native pipeline counter is absent" }
+        assertEquals(result.stats.pipelineCount.toLong(), pipelineBinds, "$label native pipeline coherence")
+        val queueSubmitted = result.structuralSteps.indexOf("QueueSubmitted")
+        val completionSucceeded = result.structuralSteps.indexOf("CompletionSucceeded")
+        assertTrue(queueSubmitted >= 0, "$label submitted queue evidence: ${result.structuralSteps}")
+        assertTrue(completionSucceeded > queueSubmitted, "$label completed after queue submission: ${result.structuralSteps}")
     }
 
     private fun assertUniformRgba(rgba: ByteArray, width: Int, height: Int, expected: IntArray, label: String) {
@@ -160,6 +226,8 @@ class W7TinyBitmapSourceSurfacePixelTest {
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
         .digest(bytes)
         .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+    private fun uniqueRgbaCount(rgba: ByteArray): Int = rgba.asList().chunked(4).toSet().size
 
     private data class SurfaceCapture(val result: RenderResult, val rgba: ByteArray)
 }

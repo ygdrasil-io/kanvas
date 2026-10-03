@@ -1,3 +1,24 @@
+# W7 — tinybitmap : composition encoded du port (4 octobre 2026)
+
+[Qualification ciblée](tinybitmap-encoded-qualification.md), branche
+`codex/w7-tinybitmap-encoded-parity`, [draft #2446](https://github.com/ygdrasil-io/kanvas/pull/2446),
+source735d96af, parent draft #2445.
+GM explicitement SRGB_ENCODED/non-AA, source/fond/alpha/tile/sampling inchangés.
+RED2échecs encoded/2contrôles PASS ; GREEN17/17 ciblés PASS, vrais buffers
+entiers/replay/completion native ; contrôle LINEAR strict conservé.
+Cas592 frais : exact0% inchangé, ±2 0%→100%, SSIM0.9949447882→0.9999928051,
+maxRGBA[0,28,28,0]→[0,1,1,0]. Pas de parité bit-exacte ni gain agrégé.
+Générateur1rendu/0échec ; runnerstandard1PASS/score100.0, seuil0/tol2 inchangés.
+Seuls targetPNG/score changent ;813autresPNG/558autrescores/référence gelés.
+La PNG de référence contient un ICC Rec.2020 : stockage brut distinct des
+canaux sRGB comparés ; producteur/révision inconnus, quantification/proxy suivis.
+Relecture de tâche Sol Approved C0/I0 ; warnings hérités suivis.
+Review finale indépendante Sol Approved pour draft C0/I0/nouveauM0 ;
+sources upstream non authentifiées indépendamment par le reviewer (réseau
+indisponible), inférence bornée et origine historique inconnue conservées.
+Draft stackée publiée/attachée ; base/head/description vérifiés.
+W7 ACTIVE, pas de merge/globalGREEN.
+
 # W7 — contrats image promus et preuve native Surface (4 octobre 2026)
 
 [Qualification ciblée](promoted-image-contracts-qualification.md), [draft #2445](https://github.com/ygdrasil-io/kanvas/pull/2445), branche
