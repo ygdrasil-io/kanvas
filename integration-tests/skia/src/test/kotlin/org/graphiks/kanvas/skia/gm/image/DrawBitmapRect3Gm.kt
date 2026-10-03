@@ -13,7 +13,7 @@ import org.graphiks.math.geometry.RectF32
  * Port of Skia's `gm/bitmaprect.cpp` (`DrawBitmapRect3`).
  * Probes drawImageRect with a partial source rect: a 3x3 bitmap drawn
  * with srcR = (0.5, 0.5, 2.5, 2.5) into a 200x100 device rect.
- * @see https://github.com/google/skia/blob/main/gm/bitmaprect.cpp
+ * @see https://github.com/google/skia/blob/4f26f22daa4bf124e2999145f5caad4b10625580/gm/bitmaprect.cpp
  */
 class DrawBitmapRect3Gm : SkiaGm {
     override val name = "3x3bitmaprect"
@@ -22,6 +22,7 @@ class DrawBitmapRect3Gm : SkiaGm {
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 480
+    override val backgroundColor = ColorARGB.Black
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val bitmap = make3x3Bitmap()
@@ -34,7 +35,7 @@ class DrawBitmapRect3Gm : SkiaGm {
     private fun make3x3Bitmap(): Bitmap {
         val bitmap = Bitmap(3, 3)
         val YELLOW = ColorARGB.fromRGBA(1f, 1f, 0f)
-        val GRAY = ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f)
+        val GRAY = ColorARGB.Gray
         val CYAN = ColorARGB.fromRGBA(0f, 1f, 1f)
         val MAGENTA = ColorARGB.fromRGBA(1f, 0f, 1f)
         val data = arrayOf(
