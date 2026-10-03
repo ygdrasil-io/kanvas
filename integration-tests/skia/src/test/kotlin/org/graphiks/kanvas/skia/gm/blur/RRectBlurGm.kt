@@ -34,7 +34,13 @@ class RRectBlurGm : SkiaGm {
             cellY = 0,
             mf = MaskFilter.Blur(BlurStyle.NORMAL, 1.0f),
             color = ColorARGB.White,
-            rr = RRectF32.of(RectF32(0f, 0f, 50f, 50f), CornerRadiiF32.of(10f, 15f)),
+            rr = RRectF32.of(
+                rect = RectF32(0f, 0f, 50f, 50f),
+                topLeft = CornerRadiiF32.of(10f, 15f),
+                topRight = CornerRadiiF32.of(10f, 15f),
+                bottomRight = CornerRadiiF32.of(10f, 15f),
+                bottomLeft = CornerRadiiF32.of(10f, 15f),
+            ),
         )
 
         drawBlurryRrect(
@@ -42,7 +48,13 @@ class RRectBlurGm : SkiaGm {
             cellY = 100,
             mf = MaskFilter.Blur(BlurStyle.NORMAL, 0.5f),
             color = ColorARGB.fromRGBA(1f, 1f, 0f, 1f),
-            rr = RRectF32.of(RectF32(0f, 0f, 60f, 80f), CornerRadiiF32.of(3.1f, 1.5f)),
+            rr = RRectF32.of(
+                rect = RectF32(0f, 0f, 60f, 80f),
+                topLeft = CornerRadiiF32.of(3.1f, 1.5f),
+                topRight = CornerRadiiF32.of(3.1f, 1.5f),
+                bottomRight = CornerRadiiF32.of(3.1f, 1.5f),
+                bottomLeft = CornerRadiiF32.of(3.1f, 1.5f),
+            ),
         )
 
         val ninePatch = RRectF32.of(
@@ -64,8 +76,8 @@ class RRectBlurGm : SkiaGm {
             rect = RectF32(0f, 0f, 90f, 90f),
             topLeft = CornerRadiiF32.of(0f, 0f),
             topRight = CornerRadiiF32.of(20f, 1f),
-            bottomRight = CornerRadiiF32.of(30f, 30f),
-            bottomLeft = CornerRadiiF32.of(10f, 30f),
+            bottomRight = CornerRadiiF32.of(10f, 30f),
+            bottomLeft = CornerRadiiF32.of(30f, 30f),
         )
         drawBlurryRrect(
             canvas,
@@ -78,9 +90,11 @@ class RRectBlurGm : SkiaGm {
         val linePaint = Paint(
             color = ColorARGB.White,
             style = org.graphiks.kanvas.paint.PaintStyle.STROKE,
-            strokeWidth = 1f,
+            strokeWidth = 0f,
+            antiAlias = true,
         )
         canvas.drawLine(100f, 0f, 100f, kHeight.toFloat(), linePaint)
+        canvas.drawLine(200f, 0f, 200f, kHeight.toFloat(), linePaint)
         canvas.drawLine(0f, 100f, kWidth.toFloat(), 100f, linePaint)
         canvas.drawLine(0f, 200f, kWidth.toFloat(), 200f, linePaint)
         canvas.drawLine(0f, 300f, kWidth.toFloat(), 300f, linePaint)
@@ -102,8 +116,7 @@ class RRectBlurGm : SkiaGm {
         val paddingY = ((kCellSize - rr.rect.height()) / 2f).toInt()
 
         val leftRRect = offsetRRect(rr, paddingX.toFloat(), paddingY.toFloat() + cellY)
-        val leftPath = Path { }.apply { addRRect(leftRRect) }
-        canvas.drawPath(leftPath, paint)
+        canvas.drawRRect(leftRRect, paint)
 
         val rightRRect = offsetRRect(rr, 2f * kCellSize + paddingX, paddingY.toFloat() + cellY)
         val rightPath = Path { }.apply { addRRect(rightRRect) }
