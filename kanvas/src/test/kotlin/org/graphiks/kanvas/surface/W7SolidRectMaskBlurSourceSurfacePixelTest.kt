@@ -131,6 +131,67 @@ class W7SolidRectMaskBlurSourceSurfacePixelTest {
         }
     }
 
+    @Test
+    fun disjointNestedMaskSourceRefusesWithoutWideningAndSameSurfaceRecovers() {
+        val refused = Surface(SIZE, SIZE)
+        refused.canvas {
+            save()
+            clipRect(EDGE_CLIP, antiAlias = false)
+            saveLayer(paint = null)
+            drawRect(
+                RectF32.ofLTRB(16f, 16f, 24f, 24f),
+                Paint(BLUE, maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f), antiAlias = false),
+            )
+            restore()
+            restore()
+        }
+
+        val sentinel = UByteArray(FULL_RGBA_BYTES) { 0x5au }
+        val sentinelBefore = sentinel.copyOf()
+        var readbackResult: Boolean? = null
+        var readbackFailure: Exception? = null
+        try {
+            readbackResult = refused.readPixels(
+                RectF32.ofLTRB(0f, 0f, SIZE.toFloat(), SIZE.toFloat()), sentinel,
+            )
+        } catch (failure: Exception) {
+            readbackFailure = failure
+        }
+        println(
+            "W7_SOLID_RECT_MASK scene=disjoint-nested-source " +
+                "readPixels=$readbackResult exception=${readbackFailure?.javaClass?.name}:" +
+                "${readbackFailure?.message} sentinelUnchanged=${sentinel.contentEquals(sentinelBefore)}",
+        )
+
+        refused.discardRecordedOperations()
+        refused.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, SIZE.toFloat(), SIZE.toFloat()), Paint(BLUE, antiAlias = false))
+        }
+        val recoveryCaptures = listOf("recovery-first", "recovery-replay").map { replay ->
+            refused.render().also { printEvidence("disjoint-nested-recovery", replay, it) }
+        }
+        recoveryCaptures.forEachIndexed { index, result ->
+            val replay = if (index == 0) "recovery-first" else "recovery-replay"
+            assertNativeCompletion(result, "disjoint-nested-recovery", replay)
+            assertFullBufferOracle(result, solidBuffer(BLUE_PIXEL), "disjoint-nested-recovery", replay)
+        }
+        recoveryCaptures.drop(1).forEach { result ->
+            assertContentEquals(recoveryCaptures.first().pixels, result.pixels, "same-Surface disjoint recovery replay")
+        }
+
+        assertTrue(
+            readbackFailure is IllegalStateException,
+            "expected InvalidBounds refusal after two recovery renders; " +
+                "readPixels=$readbackResult exception=${readbackFailure?.javaClass?.name}:" +
+                "${readbackFailure?.message}",
+        )
+        assertTrue(
+            readbackFailure.message?.startsWith("w6b.filter.invalid_bounds:") == true,
+            readbackFailure.message ?: "missing W6b invalid-bounds diagnostic",
+        )
+        assertContentEquals(sentinelBefore, sentinel, "InvalidBounds refusal must preserve the readback sentinel")
+    }
+
     private fun verifyFourRenders(
         scene: String,
         expected: UByteArray,

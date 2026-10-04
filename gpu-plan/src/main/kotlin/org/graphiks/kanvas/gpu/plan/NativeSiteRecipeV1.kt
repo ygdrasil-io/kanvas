@@ -1720,7 +1720,7 @@ public fun freezeW6FullscreenCoverageSolidRectRecipesV1(
         val format = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 CoverageSolidRect requires a color attachment.")
         val extent = requireNotNull(target.copyExtent())
         require(target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
-        val sourceRaster = (binding.draw as SolidRectDraw).copySourceRasterBoundsI32()
+        val sourceRaster = binding.draw.copySourceRasterBoundsI32()
         require(put(pass.id, W6FullscreenCoverageSolidRectRecipeV1(pass.id, pass.output, extent,
             org.graphiks.math.geometry.RectI32(0, 0, extent.width, extent.height), sourceRaster, targetFormat = format,
             sampleCountI32 = target.sampleCountI32)) == null)

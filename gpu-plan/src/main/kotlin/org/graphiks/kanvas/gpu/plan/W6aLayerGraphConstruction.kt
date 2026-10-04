@@ -922,7 +922,17 @@ internal class W6aLayerGraphConstruction(
                         val mapping = requireNotNull(LayerMappingF64.ofOrNull(sourceLocalToDevice,
                             Point2I32(raster.left, raster.top)))
                         val recipe = W6bFilterGraphConstruction.bindOccurrenceRecipe(direct, effectiveDesired, mapping)
-                        val sourceDomain = intersect(raster, recipe.copyRequiredInputDeviceI32() ?: raster) ?: raster
+                        val requiredInput = recipe.copyRequiredInputDeviceI32() ?: raster
+                        val sourceIntersection = intersect(raster, requiredInput)
+                        var sourceDraw: PlanDraw = draw
+                        while (sourceDraw is ClippedPlanDraw) sourceDraw = sourceDraw.source
+                        if (direct.mask is MaskFilterNode.Blur && sourceDraw is SolidRectDraw && sourceIntersection == null) {
+                            throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                                W6bFilterDiagnostics.InvalidBounds,
+                                "Direct mask blur SolidRect source does not intersect its required input bounds.",
+                            ))
+                        }
+                        val sourceDomain = sourceIntersection ?: raster
                         val facts = W6bFilterSourceFactsV1(sourceDomain, sourceDomain, effectiveDesired, mapping,
                             { bound, context -> prepareFilterPicture(direct, bound, context) })
                         val masked = direct.mask?.let { recipe.evaluateMask(facts).also {

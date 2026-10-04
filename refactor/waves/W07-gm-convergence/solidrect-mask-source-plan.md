@@ -52,6 +52,18 @@
 
 - [ ] **Step 4: Main GREEN/context/review.** Same focusedfixture all4PASS; run unchangedoldgate rootandfilteredcontrol methods, bothPASS atwidths2/1 allreplays. Plainlayer oldmethod remainsRED until separatecommonAAfix, no fullclassGREENclaim. Exercise existingW6abounds/restore/composition/mask contexts +publicbudgetrefusal/sentinel/discard/nativeblue recovery samSurface with budget unchanged, explicitdiagnosticpinnedbefore run. Fullaudit/separatepostseal each. Commit qualified files only; rangepackagefromTask1BASE, independent spec+qualityreview, fix C/I then scopedre-review. No globalGREEN. Solfreshseat ifavailable; Astra exceptionalreview of thisarchitecturaldiagnosis/fix ifSolcapacitystillunavailable, no selfreviewcountedasindependent.
 
+**Review fix1 (C0/I1/M1, head1759669bf):** source∩inverse-demand vide atteignable
+dans un saveLayer au clip parent non vide. Cinquième fixture RED seulement,
+scène/prefix/sentinel/recovery exacts dans la spec ; quatre témoins et budgets
+figés. Après audit/postseal RED, guard seulement direct MaskBlur + SolidRect
+déballé : intersection vide → ConstructionFailure InvalidBounds existant,
+avant evaluation/allocation ; autres familles/fallbacks inchangés. Supprimer
+le cast redondant NativeSiteRecipeV1. Main qualifie cinq tests + contexte,
+commit range1759669bf→fixhead puis re-review indépendante I1/M1. Aucun corpus
+avant C/I résolus. Agent original/fresh replacement réellement bloqués par
+la limite du harnais : reprise Luna existante bornée, rapport fix1 séparé,
+pas d'implémentation produit/test dans le contrôleur.
+
 ### Task 2: Corpus et draft stackée
 
 **Files:** Create `refactor/waves/W07-gm-convergence/solidrect-mask-source-qualification.md`, fresh `solidrect-mask-source-corpus.json` seulement si produit retenu ; modify `pilotage.md`.

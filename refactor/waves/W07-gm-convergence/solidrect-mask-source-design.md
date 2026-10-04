@@ -102,6 +102,32 @@ non corrigée/relâchée dans ce sous-lot ; ne pas la présenter comme inexistan
 Un source entièrement hors consumer mais dans le halo reste une admission
 séparée : W3 peut le rejeter avant publication. Le suivre explicitement,
 pas débloquer silencieusement tous les filtres/geometry/materials/domaines.
+
+### Intersection source/demande vide — correction de review
+
+La review Task1 a identifié le fallback `intersection ?: raster` conservé
+dans W6a. Le diagnostic public statique confirme un cas atteignable :
+Surface32, clip parent[0,0,4,4], saveLayer sans paint, rectangle bleu
+non-AA[16,16,24,24] avec NORMALsigma1. saveLayer diffère le clip au restore,
+donc W3 admet l'enfant sans clip ; le consumer demande[-3,-3,7,7], disjoint
+de la vraie source. Aucun invariant d'admission ne rend le fallback sûr.
+
+Décision de pilotage : pour direct MaskBlur dont le draw déballé est
+SolidRect, ne jamais restaurer la source entière lorsque shape∩requiredInput
+est vide. Refuser avant evaluate/allocation avec le diagnostic existant
+`w6b.filter.invalid_bounds`. Ne pas inventer un nouveau no-op ni modifier
+les autres familles de source. C'est une limite conservatrice transitoire,
+pas la sémantique Skia définitive du dessin entièrement hors halo.
+
+Cinquième test public : scène exacte ci-dessus, avec save/restore extérieur
+équilibré (discard conserve le clip Canvas), refus typé, sentinel RGBA
+4096 octets inchangée, discard puis bleu plein sur la même Surface avec
+deux renders natifs et oracle intégral. Collecter le refus et la récupération
+avant le verdict afin que le RED de diagnostic ne cache pas la récupération.
+Les quatre témoins, B/B−1 et tous leurs oracles restent strictement inchangés.
+Main qualifie RED avant toute modification produit ; worker corrige ensuite
+le seul guard contextuel et le cast redondant signalé par la review.
+
 Si RED intérieur ne présente pas le déficit de clip prévu, arrêter source
 et revenir au diagnostic. Après correction, ancien témoin doit devenir
 fullbuffer/native/replay PASS ; layer common AA peut rester RED attendu.
