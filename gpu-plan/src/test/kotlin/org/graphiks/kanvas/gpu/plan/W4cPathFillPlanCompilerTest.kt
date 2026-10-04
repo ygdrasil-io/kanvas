@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.plan
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -13,6 +14,7 @@ import org.graphiks.kanvas.render.ir.ClipEntry
 import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.kanvas.render.ir.EffectStack
@@ -241,6 +243,101 @@ class W4cPathFillPlanCompilerTest {
             "w4c.path.resource_limit",
             assertIs<GpuPlanSelection.ResourceLimitExceeded>(result).diagnostics().single().code.value,
         )
+    }
+
+    @Test
+    fun mixedOriginalFrameAttemptedEdgesCannotResetAcrossColors() {
+        val evenOdd515 = pathNode(regularPolygon(515, FillRule.EVEN_ODD))
+        val darken = SceneCommand.Draw(evenOdd515.copy(
+            blend = BlendNode.Mode(BlendMode.DARKEN),
+            paint = paint().copy(blendMode = BlendMode.DARKEN),
+        ))
+        val dst = SceneCommand.Draw(evenOdd515.copy(
+            blend = BlendNode.Mode(BlendMode.DST),
+            paint = paint().copy(blendMode = BlendMode.DST),
+        ))
+        val commands = listOf(SceneCommand.DrawColor(ColorARGB.White, BlendMode.SRC_OVER)) +
+            listOf(darken) + List(254) { dst } +
+            listOf(SceneCommand.DrawColor(ColorARGB.Red, BlendMode.SRC_OVER)) + List(255) { dst }
+        val scene = sceneOf(commands)
+
+        val result = compiler.select(scene, target(scene))
+
+        assertEquals(
+            "w4c.path.resource_limit",
+            assertIs<GpuPlanSelection.ResourceLimitExceeded>(result).diagnostics().single().code.value,
+        )
+    }
+
+    @Test
+    fun mixedOriginalCommandLimitPreservesHistoricalContinuation() {
+        val darkenPath = SceneCommand.Draw(pathNode(trianglePath()).copy(
+            blend = BlendNode.Mode(BlendMode.DARKEN),
+            paint = paint().copy(blendMode = BlendMode.DARKEN),
+        ))
+        val commands512 = List(510) { SceneCommand.DrawColor(ColorARGB.White, BlendMode.SRC_OVER) } +
+            listOf(darkenPath, darkenPath)
+        val scene512 = sceneOf(commands512)
+        val selected512 = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene512, target(scene512)))
+        val planned512 = compiler.plan(
+            selected512.candidate,
+            capabilities(),
+            PlanBudget(1L shl 20),
+        )
+        val graph512 = assertIs<RenderPlanResult.Ready<RenderGraph>>(planned512).plan
+        val scene513 = sceneOf(commands512 + SceneCommand.DrawColor(ColorARGB.Blue, BlendMode.SRC_OVER))
+
+        assertEquals("w7.w4c.root-drawcolor-path.v1", selected512.candidate.capabilityId)
+        assertEquals("w7.w4c.root-drawcolor-path.v1", graph512.capabilityId)
+        assertIs<GpuPlanSelection.NotCandidate>(compiler.select(scene513, target(scene513)))
+    }
+
+    @Test
+    fun mixedForeignFamiliesAreNotOwned() {
+        val darkenNode = pathNode(trianglePath()).copy(
+            blend = BlendNode.Mode(BlendMode.DARKEN),
+            paint = paint().copy(blendMode = BlendMode.DARKEN),
+        )
+        val darken = SceneCommand.Draw(darkenNode)
+        val common = listOf(SceneCommand.DrawColor(ColorARGB.White, BlendMode.SRC_OVER), darken)
+        val encodedScene = SceneSnapshot.of(SceneExtent(4, 4), ColorSpace.SRGB, common)
+        val shaderScene = sceneOf(listOf(
+            common.first(),
+            SceneCommand.Draw(darkenNode.copy(paint = paint().copy(
+                blendMode = BlendMode.DARKEN,
+                shader = MaterialNode.Solid(COLOR),
+            ))),
+        ))
+        val strokeScene = sceneOf(listOf(
+            common.first(),
+            SceneCommand.Draw(darkenNode.copy(paint = paint(
+                style = PaintStyleNode.STROKE,
+                strokeWidth = 1f,
+            ).copy(blendMode = BlendMode.DARKEN))),
+        ))
+        val complexClip = ClipStackNode.Operations.of(listOf(
+            ClipEntry(GeometryNode.Path(trianglePath()), ClipOperation.INTERSECT),
+        ))
+        val complexClipScene = sceneOf(listOf(
+            common.first(),
+            SceneCommand.Draw(darkenNode.copy(clip = complexClip)),
+        ))
+        val encodedSelection = compiler.select(
+            encodedScene,
+            RenderTargetDescriptor(
+                encodedScene.extent,
+                encodedScene.colorSpace,
+                compositionDomain = CompositionDomain.SRGB_ENCODED,
+            ),
+        )
+        val selections = listOf(shaderScene, strokeScene, complexClipScene).map { scene ->
+            compiler.select(scene, target(scene))
+        } + encodedSelection
+
+        assertFalse(selections.any { selection ->
+            selection is GpuPlanSelection.Candidate &&
+                selection.candidate.capabilityId == "w7.w4c.root-drawcolor-path.v1"
+        })
     }
 
     @Test
