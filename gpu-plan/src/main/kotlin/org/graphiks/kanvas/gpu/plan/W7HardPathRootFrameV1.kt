@@ -243,21 +243,70 @@ public class W7HardPathRootFrameV1 internal constructor(
 
         public fun commandSlots(): List<CommandSlot> = commandSlots
         public fun physicalPartitions(): List<PhysicalPartition> = listOf(storedPathPartition, storedColorPartition)
-        public fun authenticates(graph: RenderGraph): Boolean =
-            graph.hardPathRootPublicationInternal() === this &&
-                graph.hardPathRootSealTokenInternal() === sealToken && graphFactsMatch(
-                    graph.id,
-                    graph.capabilityId,
-                    graph.targetExtent,
-                    graph.capabilities,
-                    graph.budget,
-                    graph.visualCommandCount,
-                    graph.resources(),
-                    graph.passes(),
-                    graph.dependencies(),
-                    graph.peakFrameLocalBytes,
-                    graph.materialPlanTableOrNull(),
+        public fun authenticates(graph: RenderGraph): Boolean {
+            if (!issuerAuthenticated || !frame.authenticates(frame.owner) ||
+                graph.hardPathRootPublicationInternal() !== this ||
+                graph.hardPathRootSealTokenInternal() !== sealToken ||
+                !graph.verifyW5bGeometryCompilerWitness() || !graphFactsMatch(
+                    graph.id, graph.capabilityId, graph.targetExtent, graph.capabilities, graph.budget,
+                    graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
+                    graph.peakFrameLocalBytes, graph.materialPlanTableOrNull(),
+                )) return false
+            val lanes = graph.w5bGeometryLanes()
+            if (lanes.size != 2) return false
+            val rootSnapshot = lanes.first().sourceGraph
+            return rootSnapshot !== graph && authenticatesRootSnapshot(rootSnapshot) &&
+                authenticatesPartitionLanes(rootSnapshot, lanes)
+        }
+
+        /** Private transport check for the lane-less root snapshot before final graph issuance. */
+        internal fun authenticatesRootSnapshot(graph: RenderGraph): Boolean =
+            issuerAuthenticated && frame.authenticates(frame.owner) &&
+                graph.hardPathRootPublicationInternal() === this &&
+                graph.hardPathRootSealTokenInternal() === sealToken &&
+                graph.verifyW5bGeometryCompilerWitness() && graph.w5bGeometryLanes().isEmpty() &&
+                graphFactsMatch(
+                    graph.id, graph.capabilityId, graph.targetExtent, graph.capabilities, graph.budget,
+                    graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
+                    graph.peakFrameLocalBytes, graph.materialPlanTableOrNull(),
                 )
+
+        /** Checks the exact proved lane bijection before final issuance; public authentication repeats it. */
+        internal fun authenticatesPartitionTransport(
+            rootSnapshot: RenderGraph,
+            lanes: List<W5bGeometryLanePlanV3>,
+        ): Boolean = authenticatesRootSnapshot(rootSnapshot) && authenticatesPartitionLanes(rootSnapshot, lanes)
+
+        private fun authenticatesPartitionLanes(
+            rootSnapshot: RenderGraph,
+            lanes: List<W5bGeometryLanePlanV3>,
+        ): Boolean {
+            val partitions = physicalPartitions()
+            val expectedKinds = setOf(PartitionKind.Path, PartitionKind.DrawColor)
+            if (partitions.size != 2 || partitions.map { it.kind }.toSet() != expectedKinds ||
+                lanes.size != 2 || lanes.any { it.sourceGraph !== rootSnapshot } ||
+                lanes.mapNotNull { it.hardPathPartitionKind }.toSet() != expectedKinds) return false
+            return partitions.all { partition ->
+                val lane = lanes.singleOrNull { it.hardPathPartitionKind == partition.kind } ?: return@all false
+                val laneData = lane.drawDataResources ?: return@all false
+                val laneResourceIds = listOf(laneData.vertex, laneData.index, laneData.uniform) +
+                    listOfNotNull(lane.depthStencil)
+                val laneResourceRoles = listOf(
+                    laneData.vertex to PlanResourceRole.VertexData,
+                    laneData.index to PlanResourceRole.IndexData,
+                    laneData.uniform to PlanResourceRole.UniformData,
+                ) + listOfNotNull(lane.depthStencil?.let { it to PlanResourceRole.DepthStencil })
+                val partitionResourceIds = partition.resourceIds()
+                lane.commandIndicesI32() == partition.commandIndicesI32() &&
+                    laneData == partition.drawDataResources && lane.depthStencil == partition.depthStencil &&
+                    laneResourceIds.size == laneResourceIds.toSet().size &&
+                    partitionResourceIds.size == partitionResourceIds.toSet().size &&
+                    laneResourceIds.toSet() == partitionResourceIds.toSet() &&
+                    laneResourceRoles.all { (id, role) ->
+                        storedResources.singleOrNull { it.id == id }?.role == role
+                    }
+            }
+        }
 
         internal fun authenticatesConstruction(
             candidateId: PlanId,

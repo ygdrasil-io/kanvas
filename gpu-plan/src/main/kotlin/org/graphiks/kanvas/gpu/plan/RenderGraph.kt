@@ -224,7 +224,7 @@ public class RenderGraph private constructor(
             lanes: List<W5bGeometryLanePlanV3>,
         ): RenderGraph {
             require(graph.capabilityId == W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID &&
-                publication.frameIsAuthentic() && lanes.size == 2 &&
+                publication.authenticatesPartitionTransport(graph, lanes) && lanes.size == 2 &&
                 lanes.map { it.hardPathPartitionKind }.toSet() == setOf(
                     W7HardPathRootFrameV1.PartitionKind.Path,
                     W7HardPathRootFrameV1.PartitionKind.DrawColor,
@@ -255,7 +255,7 @@ public class RenderGraph private constructor(
                 graph.materialPlanTableOrNull(), w5bGeometryIssued = true,
                 packedSourcesV4 = graph.storedPackedSourcesV4,
                 hardPathRootPublicationV1 = publication, hardPathRootSealTokenV1 = publication.sealToken())
-            require(publication.authenticates(snapshot)) { W5fPlanDiagnostics.Schema }
+            require(publication.authenticatesRootSnapshot(snapshot)) { W5fPlanDiagnostics.Schema }
             return snapshot
         }
         /** Only the composite compiler can issue this distinct, lane-owned graph representation. */
@@ -628,7 +628,8 @@ public class RenderGraph private constructor(
                 }) { W5gPlanDiagnostics.Schema }
             }
             validateConstructionTopology(capabilityId, targetExtent, colorFormat, capabilities, budget,
-                visualCommandCount, resources, passes, dependencies, peakFrameLocalBytes, w5bW4eSource,w5bW4eFacts)
+                visualCommandCount, resources, passes, dependencies, peakFrameLocalBytes, w5bW4eSource,
+                w5bW4eFacts, hardPathRootAdmission = hardPathRootAdmission)
             return RenderGraphConstruction(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
                 resources, passes, dependencies, peakFrameLocalBytes, materialPlanTable)
         }
@@ -641,8 +642,13 @@ public class RenderGraph private constructor(
             peakFrameLocalBytes: Long, w5bW4eSource: RenderGraph? = null,
             w5bW4eFacts: W4eGeometryFactsV6? = null,
             w7InverseAaCoveragePayload: W4eNativePayloadPlan? = null,
+            hardPathRootAdmission: W7HardPathRootFrameV1? = null,
         ) {
             require(w5bW4eSource == null || w5bW4eFacts == null)
+            require((capabilityId == W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID) ==
+                (hardPathRootAdmission?.authenticates(hardPathRootAdmission.owner) == true)) {
+                W5fPlanDiagnostics.Schema
+            }
             val clipFacts = w5bW4eFacts ?: w5bW4eSource?.let(W4eGeometryFactsV6::from)
             require(clipFacts == null || capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID &&
                 clipFacts.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID)
@@ -752,7 +758,10 @@ public class RenderGraph private constructor(
                 validateClipMaskContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             }
             if (clipFacts == null) validateClipConsumers(passes, dependencies, resourcesById, targetExtent, usesClipMasks)
-            if (clipFacts != null) {
+            if (hardPathRootAdmission != null) {
+                validateW7HardPathGeometryPasses(passes, resourcesById, visualCommandCount,
+                    hardPathRootAdmission)
+            } else if (clipFacts != null) {
                 validateW5bW4eGeometrySource(clipFacts, passes, resources, targetExtent, capabilities, budget)
                 validateW5bGeometryPasses(passes, resourcesById, visualCommandCount, clipFacts)
             } else if (usesExplicitAa4PathPasses) {
@@ -766,9 +775,8 @@ public class RenderGraph private constructor(
                     colorFormat,
                     visualCommandCount,
                 )
-            } else if (capabilityId in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID)) {
-                validateW5bGeometryPasses(passes, resourcesById, visualCommandCount,
-                    allowLegacyDrawColor = capabilityId == W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID)
+            } else if (capabilityId in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) {
+                validateW5bGeometryPasses(passes, resourcesById, visualCommandCount)
             } else {
                 validateStencilAtomicContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             }

@@ -226,23 +226,70 @@ internal fun nativeCompositeGeometryLayoutV4(inputs: List<NativeGeometryInputV4>
 
 /** Exact color/geometry split for the successor; historical W4 path validation stays closed. */
 internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<PlanResourceId, PlanResource>,
-    visualCommandCountI32: Int, w4eSource: W4eGeometryFactsV6? = null,
-    allowLegacyDrawColor: Boolean = false) {
-    val colors = passes.flatMap { pass -> when (pass) {
+    visualCommandCountI32: Int, w4eSource: W4eGeometryFactsV6? = null) {
+    val colors = geometryPassDraws(passes)
+    require(colors.all { it.sample == SamplePlan.SingleSample && (
+        it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 ||
+            it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 ||
+            (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw ||
+                it is GeneralPathDraw || it is W5bW4ePathDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||
+            (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw ||
+                it is PathStrokeDraw || it is GeneralPathDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4
+        ) && it.blend != BlendPlan.NoOpV1 })
+    validateW5bGeometryPassStructure(passes, resources, visualCommandCountI32, w4eSource)
+}
+
+/** W7 admits LegacyColor only when each retained draw is bound to its issuer-owned original slot. */
+internal fun validateW7HardPathGeometryPasses(passes: List<PlanPass>,
+    resources: Map<PlanResourceId, PlanResource>, visualCommandCountI32: Int,
+    frame: W7HardPathRootFrameV1) {
+    require(frame.authenticates(frame.owner)) { W5fPlanDiagnostics.Schema }
+    val colors = geometryPassDraws(passes)
+    val retainedSlots = frame.slots().filter { it.kind != W7HardPathSlotKindV1.NoOp }
+    require(colors.size == visualCommandCountI32 && colors.size == retainedSlots.size &&
+        colors.indices.all { indexI32 ->
+            val draw = colors[indexI32]
+            val slot = retainedSlots[indexI32]
+            draw.commandIndex == slot.commandIndexI32 && when (slot.kind) {
+                W7HardPathSlotKindV1.DrawColor -> slot.color === draw &&
+                    draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
+                W7HardPathSlotKindV1.Path -> {
+                    val sealed = requireNotNull(slot.path)
+                    val path = draw as? PathFillDraw
+                    path != null && path.commandIndex == sealed.commandIndex &&
+                        path.copyGeometryF32() == sealed.geometryF32 && path.strategy == sealed.strategy &&
+                        path.copyScissorI32() == sealed.scissorI32 &&
+                        matchesSelectedW7Blend(path.blend, sealed.blend) &&
+                        (path.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1)?.ref == sealed.material
+                }
+                W7HardPathSlotKindV1.NoOp -> false
+            }
+        } && colors.all { it.sample == SamplePlan.SingleSample && it.blend != BlendPlan.NoOpV1 }) {
+        W5fPlanDiagnostics.Schema
+    }
+    validateW5bGeometryPassStructure(passes, resources, visualCommandCountI32, null)
+}
+
+/** Destination topology binds only its physical snapshot/version; selected blend semantics stay exact. */
+private fun matchesSelectedW7Blend(actual: BlendPlan, selected: BlendPlan): Boolean =
+    if (selected is BlendPlan.DestinationReadV1) {
+        actual is BlendPlan.DestinationReadV1 && actual.mode == selected.mode &&
+            actual.formulaIdentity == selected.formulaIdentity && actual.coverage == selected.coverage &&
+            actual.coverageLaw == selected.coverageLaw && actual.compositionAbiI32 == selected.compositionAbiI32
+    } else actual == selected
+
+private fun geometryPassDraws(passes: List<PlanPass>): List<PlanDraw> =
+    passes.flatMap { pass -> when (pass) {
         is PlanPass.RenderPass -> pass.draws()
         is PlanPass.StencilCover -> listOf(pass.draw)
         else -> emptyList()
     } }
+
+private fun validateW5bGeometryPassStructure(passes: List<PlanPass>,
+    resources: Map<PlanResourceId, PlanResource>, visualCommandCountI32: Int,
+    w4eSource: W4eGeometryFactsV6?) {
+    val colors = geometryPassDraws(passes)
     require(colors.size == visualCommandCountI32 && colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
-    require(colors.all { it.sample == SamplePlan.SingleSample && (allowLegacyDrawColor &&
-        it is SolidRectDraw && it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 ||
-        it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 ||
-        (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw ||
-            it is GeneralPathDraw || it is W5bW4ePathDraw) &&
-            it.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||
-        (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw ||
-            it is PathStrokeDraw || it is GeneralPathDraw) &&
-            it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) && it.blend != BlendPlan.NoOpV1 })
     fun data(value: PlanDrawDataResources) {
         for ((id, role, usage) in listOf(Triple(value.vertex, PlanResourceRole.VertexData, PlanResourceUsage.Vertex),
             Triple(value.index, PlanResourceRole.IndexData, PlanResourceUsage.Index),
