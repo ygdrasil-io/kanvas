@@ -18,10 +18,17 @@ Census frais Task2 : snapshot 740716 octets, SHA-256
 2485cfb ; zéro gain GM ou delta d’admission/pixels. Scope 443, 393 entrés,
 220 rendus, 197 comparés ; 65 cas ≥95 % et 49 ≥99 % à ±2 ; médiane
 77.91666666666667 %. Timeout vertices607 conservé. Cinq tranches auditées et
-postscellées séparément. Step1[x] ; revue documentaire Step2 et publication
-Step3 en attente. Parent existant draft #2447 ; push rejeté avant création,
-aucun retry/nouvelle PR et accord explicite toujours manquant. W7 reste actif :
-pas de global GREEN, merge, publication ni clôture revendiqués.
+postscellées séparément. Step1[x], Step2[x] : revue Sol Task2 après fix1
+C0/I0/M0 ; revue indépendante Astra BASE
+`5df3c9e8c22f5b5e4de9e23739113bb4a678b026` → HEAD
+`22655c21be3aefc6277e9bb48d98d514cd5a1a56`, C0/I0/M0. Fondation retenue
+malgré zéro gain ; techniquement prête pour draft, merge NON. Step3 reste [ ]
+en attente d’accord explicite pour publication. Parent existant draft #2447 ;
+push rejeté avant création, aucun retry/nouvelle PR. Prochaine priorité
+diagnostique unique : GM111 `colorfilterimagefilter_layer`, domaine couleur,
+cause non prouvée ; référence canonique via decoder existant, pas raw PNG38.
+W7 reste actif : pas de Task2 entièrement livrée, global GREEN, merge, nouvelle
+PR ou clôture revendiqués.
 
 ## Historique — W7 SolidRect mask blur, corpus sans gain (4 octobre 2026)
 

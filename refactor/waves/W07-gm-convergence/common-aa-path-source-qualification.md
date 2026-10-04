@@ -1,6 +1,6 @@
 # Qualification common AA PATH source — corpus sans gain
 
-État au 4 octobre 2026 : Task1 est qualifiée sur son périmètre natif focalisé ; le census complet Task2 est terminé, audité et postscellé. Le résultat du corpus est nul en admission et en pixels. Ce constat n’invalide pas la fondation native, mais ne lui attribue aucun ROI GM. La relecture documentaire et la publication restent en attente. W7 reste actif : aucun global GREEN, merge, ni W7 terminé n’est revendiqué.
+État au 4 octobre 2026 : Task1 est qualifiée sur son périmètre natif focalisé ; le census complet Task2 est terminé, audité et postscellé. Le résultat du corpus est nul en admission et en pixels. Ce constat n’invalide pas la fondation native, mais ne lui attribue aucun ROI GM. La relecture documentaire indépendante est terminée ; la publication reste en attente. W7 reste actif : aucun global GREEN, merge, ni W7 terminé n’est revendiqué.
 
 ## Contrat et preuves natives
 
@@ -48,4 +48,8 @@ Conclusion de mesure : une fondation native réelle a été obtenue sans retour 
 
 Deux branches restent locales : `codex/w7-common-aa-path-source` à `5df3c9e8c22f5b5e4de9e23739113bb4a678b026` (SolidRect), puis `codex/w7-common-aa-layer-source` basée sur cette première. Le parent existant est le draft #2447 : https://github.com/ygdrasil-io/kanvas/pull/2447. Le push public a été rejeté avant création ; aucun retry ni nouvelle PR n’a été effectué, et l’accord explicite requis reste absent. Il n’y a pas de livraison revendiquée.
 
-**État :** Step1 terminée et documentée ; revue indépendante Step2 en attente ; publication Step3 en attente. W7 reste actif, sans global GREEN, merge ni clôture.
+## Revue indépendante et suite retenue
+
+La revue Sol de Task2 spec/quality après fix1 conclut C0/I0/M0. La revue indépendante Astra couvre la branche `codex/w7-common-aa-layer-source` de BASE `5df3c9e8c22f5b5e4de9e23739113bb4a678b026` à HEAD `22655c21be3aefc6277e9bb48d98d514cd5a1a56` : C0/I0/M0. Astra recommande de retenir la fondation malgré zéro gain corpus ; elle est techniquement prête pour une draft, mais pas prête à merger. Cette provenance concerne cette plage de branche ; elle ne prétend pas examiner un nouveau commit de suivi documentaire. La publication reste bloquée par l’absence d’accord explicite pour l’export public. Step1 et Step2 sont documentées ; Step3 reste pending. Task2 n’est donc pas entièrement livrée. W7 reste actif, sans global GREEN, merge, nouvelle PR ou clôture revendiqués.
+
+Prochaine priorité unique : diagnostiquer `colorfilterimagefilter_layer` (index111), à la frontière du domaine couleur. La cause pixel reste non prouvée ; obtenir la référence canonique via le decoder existant, pas depuis raw PNG38. Pas d’extension de guard ni de patch shader spéculatif.

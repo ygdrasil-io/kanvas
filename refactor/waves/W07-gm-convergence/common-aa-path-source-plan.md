@@ -16,8 +16,9 @@ focal9/9 et contexte119/120 (un FAIL historique), fixtures inchangées.
 La globale antérieure f152/1fcb est interrompue690PASS/36FAIL/1skip,
 non répétée après nettoyage ; aucun globalGREEN. Le census frais Task2
 est terminé : 631 champs hors elapsedMs/renderMs identiques aux deux
-snapshots précédents, zéro gain GM ou delta d’admission/pixels. Revue
-documentaire Step2 et publication Step3 restent pending. Aucun globalGREEN.
+snapshots précédents, zéro gain GM ou delta d’admission/pixels. Step2 est
+revue C0/I0/M0 par Sol et Astra ; Step3 publication reste pending. Aucun
+globalGREEN.
 Branche locale codex/w7-common-aa-layer-source, base5df3c9e8 figée pour
 SolidRect. Publication en attente d'accord explicite.
 
@@ -77,6 +78,6 @@ SolidRect. Publication en attente d'accord explicite.
 
 - [x] **Step 1: Main frozen fresh corpus.** Snapshot `common-aa-path-source-corpus.json` créé : 740716 bytes, SHA-256 `e8528b81c9167ac693f83de4348262434573ff71351e0ad2921f7a9a8af732ad`. Cinq slices [0,200), [200,400), [400,607), [607,608), [608,631), renderer `bf38d08be20edaa487ae2fddab43dda03fd4f268`, registry631/SHA `4ca8eea61451b1143fd3d15634d2c34e0c9ec31b74fd351ca30a69ee36f565d7`, perGM30s/outer240s, images=false. Tous les champs/présences des631 lignes hors elapsedMs/renderMs sont identiques à SolidRect et transversal2485cfb : zéro gain GM/delta d’admission/pixels. Scope443 ; 393 entrés (392 attempted=true + vertices607 timeout sans flag), 220 rendus, 197 comparés ; 172 render_failed, 50 setup_failed, 15 rendered_uncompared, 8 dimension_mismatch, 1 timeout ; 65≥95%/49≥99% à ±2, médiane77.91666666666667%. Timeout vertices607 conservé, exit wrapper1. Les17 refus initiaux PATH/AA restent14root/3child,12filteredroot/5unfiltered ; aucun gain candidat déduit. Détails, hashes d’archives et limites dans `common-aa-path-source-qualification.md`.
 
-- [ ] **Step 2: Evidence review and delivery.** Qualification et pilotage documentent hashes des archives, preuves natives, delta corpus nul et limites. Revue documentaire/quality gate Sol puis revue indépendante de branche complète sur base locale `5df3c9e8c22f5b5e4de9e23739113bb4a678b026` pending ; la revue SolidRect existante et ses limites restent explicites. Revue Astra uniquement si disponible et utile pour un diagnostic non résolu. Une éventuelle vague de correction/revue reste à décider après findings. Archives/workspaces conservés.
+- [x] **Step 2: Evidence review and delivery.** Revue Sol Task2 spec/quality après fix1 : C0/I0/M0. Revue indépendante Astra de la branche entière `codex/w7-common-aa-layer-source`, BASE `5df3c9e8c22f5b5e4de9e23739113bb4a678b026` → HEAD `22655c21be3aefc6277e9bb48d98d514cd5a1a56` : C0/I0/M0 ; la fondation est retenue malgré zéro gain corpus, techniquement prête pour draft, merge NON. Cette provenance n’implique pas la revue d’un nouveau commit de suivi documentaire. Reçus et limites dans `task-2-sol-review-report.md` et `branch-astra-review-report.md`.
 
-- [ ] **Step 3: Draft stack.** Pending explicit publication authorization. Deux branches locales en attente (`codex/w7-common-aa-path-source` à SolidRect et `codex/w7-common-aa-layer-source` empilée dessus). Parent draft #2447 : https://github.com/ygdrasil-io/kanvas/pull/2447. Push public rejeté avant création ; aucun retry ni PR nouvelle. Aucun head/base/body distant vérifié, publication non revendiquée. Pas de merge/globalGREEN/W7complete.
+- [ ] **Step 3: Draft stack.** Publication explicitement pending, aucun accord d’export public acquis. Deux branches locales en attente (`codex/w7-common-aa-path-source` à SolidRect et `codex/w7-common-aa-layer-source` empilée dessus). Parent draft #2447 : https://github.com/ygdrasil-io/kanvas/pull/2447. Push public rejeté avant création ; aucun retry ni PR nouvelle. Aucun head/base/body distant vérifié, publication non revendiquée. Pas de merge/globalGREEN/W7complete ; Task2 n’est pas entièrement livrée.
