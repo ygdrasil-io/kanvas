@@ -1,4 +1,27 @@
-# W7 — gate PATH AA : témoin filtré incorrect (4 octobre 2026)
+# W7 — source SolidRect mask blur qualifiée, corpus sans gain (4 octobre 2026)
+
+[Qualification](solidrect-mask-source-qualification.md),
+[snapshot631/443](solidrect-mask-source-corpus.json), produit867cd2146,
+branche codex/w7-common-aa-path-source sur draft parent #2447.
+W3 conserve la géométrie source RectI32 avant clip ; W6 la consomme seulement
+pour direct mask blur, intersectée avec la demande inverse et authentifiée
+dans la recette native. Cropping ordinaire et vrai falloff conservés.
+5/5 ciblés PASS, 24 renders/readbacks natifs/fullbuffer/replay ; budget
+indépendant B17456/B−1, sentinel/récupération même Surface qualifiés.
+Ancienne gate inchangée : les deux positifs widths2/1 passent désormais leurs
+16 buffers/replays ; plain-layer toujours non qualifié. Contexte53/54,
+échec backdrop historique conservé. Globale pré-fix1 timeout240s : aucune
+qualification globale ou comparaison complète parent revendiquée.
+Review Sol ciblée après fix1 C0/I0/M0. Corpus complet frais : ALL631 champs
+hors elapsedMs/renderMs identiques à2485cfb ;393 entrés/220 rendus/197 comparés,
+65≥95%/49≥99% à±2, aucun gain GM mesuré. vertices607 reste timeout30s dans443.
+Les cinq runs sont audités/postscellés séparément ; PNG/scores/refs/inverse
+inchangés. Disjoint SolidRect/source-demand refuse InvalidBounds avant
+allocation : limite conservatrice transitoire, pas sémantique Skia finale.
+Review large/publication draft encore en attente. Suite : common PATH AA
+source plain-layer, pas17 gains promis. W7 ACTIVE, pas de merge/globalGREEN.
+
+# Historique W7 — gate PATH AA : témoin filtré incorrect avant SolidRect (4 octobre 2026)
 
 [Gate native](common-aa-path-source-gate.md),
 [spec](common-aa-path-source-design.md), [plan](common-aa-path-source-plan.md).
