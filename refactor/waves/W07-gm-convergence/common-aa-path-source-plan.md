@@ -10,6 +10,11 @@
 
 **Spec:** refactor/waves/W07-gm-convergence/common-aa-path-source-design.md
 
+**État courant:** Step1 fixture écrite et Step2 exécutée/auditée ; gate
+falsifiée par le témoin filtré, voir common-aa-path-source-gate.md.
+Step3/4 non autorisées tant que ce contrôle n'est pas qualifié et I1/I2
+re-reviewés. Aucune task complète ni code produit modifié.
+
 ## Global Constraints
 
 - Fonts/codecs externes/jpg-color-cube exclus, aucune nouvelle exclusion.

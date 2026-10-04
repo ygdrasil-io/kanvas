@@ -1,3 +1,18 @@
+# W7 — gate PATH AA : témoin filtré incorrect (4 octobre 2026)
+
+[Gate native](common-aa-path-source-gate.md),
+[spec](common-aa-path-source-design.md), [plan](common-aa-path-source-plan.md).
+Probe exécuté : root widths2/1 fullbuffer/completion/replay PASS16tentatives ;
+plain layer refuse8fois unsupported_child scope0/no ownfilter. Le témoin
+W6 maskblur complète nativement mais échoue au pixel(0,0), bleu[0,0,186,125]
+au lieu d'opaque[0,0,255,255]. JUnit1PASS/2FAIL/0skip, Gradle17s, borne240s.
+Audit complet/postseal séparé exact, produit/références/scores/inverse inchangés.
+Extension de source STOP avant produit : pas d'oracle ajusté, pas de gain GM
+déduit du refus layer. Astra diagnostic limité source/clip/support/domain en
+cours ; re-review Sol des discriminants I1/I2 non démarrée (agent thread limit).
+Root plain-layer-owned sans W6b différé ;17anciens préfixes14root/3child ne
+constituent pas17gains candidats. W7 ACTIVE, pas de merge/globalGREEN/clôture.
+
 # W7 — recensement transversal complet (4 octobre 2026)
 
 [Qualification](transversal-corpus-qualification.md),
@@ -18,7 +33,7 @@ Stratégie relue indépendamment par Sol : B→A→C. La simple normalisation
 Rect→Path est insuffisante (stroke fermé/AA4 absents du Core commun).
 Prochain probe : même PATH AA STROKE solide sans filtre propre, au root puis
 dans un saveLayer plain, contrôle W6 existant ; aucune extension avant preuve
-scope/pixels/completion/replay. Probe non exécuté.
+scope/pixels/completion/replay. Probe désormais exécuté : disposition ci-dessus.
 Review Sol du lot documentaire : I1/M1 ADDRESSED, C0/I0/M0, prêt pour draft uniquement.
 Pas de review Astra revendiquée après limite
 de sous-agents. W7 ACTIVE, aucun merge/globalGREEN/clôture.

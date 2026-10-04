@@ -3,6 +3,10 @@
 4 octobre 2026. Base : draft #2447, renderer produit2485cfb. Lot
 architectural limité à un contrat existant, sans nouvel algorithme AA.
 
+État courant : gate exécutée, témoin filtré incorrect ; voir
+common-aa-path-source-gate.md. Extension produit STOP, contrat ci-dessous
+conditionnel. Aucune preuve GREEN source layer ou budget nouveau.
+
 ## Autorité et intention
 
 L'utilisateur délègue le pilotage et les changements W7, breaking changes
