@@ -10,14 +10,14 @@
 
 **Spec:** refactor/waves/W07-gm-convergence/common-aa-path-source-design.md
 
-**État courant:** Steps1/2/3 faites ; gate fraîche après SolidRect et
-expanded RED qualifiés/audités/postsealed. Root, contrôle filtré et encoded
-root PASS ; négatifs et recovery PASS ; cinq méthodes layer RED attendu.
-I1/I2/M1/M2 re-reviewés C0/I0/M0. Step4 implémentée et GREEN focal9/9 ;
-contexte119/120 (un FAIL historique), globale interrompue690PASS/36FAIL/1skip.
-Revue produit Task1 et corpus frais encore requis ; aucune task complète.
+**État courant:** Task1 complète, review Sol spec/quality Approved et
+nettoyage M1/M2 re-reviewé C0/I0/M0. Produit W6a6ed673/W4d1fcb qualifié
+focal9/9 et contexte119/120 (un FAIL historique), fixtures inchangées.
+La globale antérieure f152/1fcb est interrompue690PASS/36FAIL/1skip,
+non répétée après nettoyage ; aucun globalGREEN. Le census frais Task2
+et sa livraison restent à traiter.
 Branche locale codex/w7-common-aa-layer-source, base5df3c9e8 figée pour
-SolidRect. Publication en attente d'accord explicite ; aucune task complète.
+SolidRect. Publication en attente d'accord explicite.
 
 ## Global Constraints
 
@@ -62,7 +62,7 @@ SolidRect. Publication en attente d'accord explicite ; aucune task complète.
 
 - [x] **Step 4: Factor/reuse ordinary source after causal gate.** Rename existing ordinary factory/predicate/flag consistently; predicate retains PATH/AA/FILL-or-STROKE, solidSrcOver/noeffects plus current transform/clip/geometry guards. W6 selection requires originalDraw==unfilteredDraw and admitted scope; keep existing root ownership condition for root, add compatible child scope without extra flag/family. Root in frame plain-layer-owned without ownsW6b is explicitly DEFERRED, not covered by standalone correlated root control. Preserve priority of historical FILL/deferred positives where possible; original DrawNode identity/order/clip/material immutable. Reuse AA4 geometry/resolve consumer and resource/lifetime/seal authorities. No renderer geometry construction or guard clearing. If new consumer needed beyond the established AA4 color contract, report NEEDS_CONTEXT, not speculative broad rewrite. Report READY_VALIDATION with exact sources/test hashes, self-review and behavior facts.
 
-- [ ] **Step 5: Main GREEN and review.** Both focused classes unchanged must all PASS (`--tests '*W7CommonAaPathSource*SurfacePixelTest*'`) with fullaudit/postseal. Context run old ordinary root test, AA FILLlayer including B/B−1, bounds/restore classes, once each or one controlled single-fork task; retain legacy exact capability-refusal branches as such, not proof those positives ran. New class cannot skip or accept capability refusal. If scope exported proof missing, report actual adapter issue rather than fabricate markers. Main commits only qualified files, generates range review package from task BASE, Sol spec+quality gate; original writer fixes C/I with scoped re-review. No globalGREEN claim.
+- [x] **Step 5: Main GREEN and review.** Both focused classes unchanged must all PASS (`--tests '*W7CommonAaPathSource*SurfacePixelTest*'`) with fullaudit/postseal. Context run old ordinary root test, AA FILLlayer including B/B−1, bounds/restore classes, once each or one controlled single-fork task; retain legacy exact capability-refusal branches as such, not proof those positives ran. New class cannot skip or accept capability refusal. If scope exported proof missing, report actual adapter issue rather than fabricate markers. Main commits only qualified files, generates range review package from task BASE, Sol spec+quality gate; original writer fixes C/I with scoped re-review. No globalGREEN claim.
 
 ### Task 2: Corpus delta, qualified delivery and stacked draft
 
