@@ -498,29 +498,7 @@ public class GpuPlanTaskListLowerer {
         val stopBytesI64 = graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L
         val noiseBytesI64 = graph.declaredNoiseSlabV1()?.byteCountI64 ?: 0L
         val storageBytesI64 = try { Math.addExact(stopBytesI64,noiseBytesI64) } catch (_: ArithmeticException) { return null }
-        val rectScratchPools = if (graph.capabilityId == W3SolidRectPlanCompiler.W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID) try {
-            val alignmentI64 = graph.capabilities.minUniformBufferOffsetAlignment.toLong()
-            val strideI64 = Math.addExact(32L, (alignmentI64 - 32L % alignmentI64) % alignmentI64)
-            listOf(
-                org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Vertex to 32L,
-                org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Index to 24L,
-                org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Uniform to strideI64,
-            ).map { (kind, perDraw) ->
-                val bytes = requireNotNull(graph.capabilities.bufferAllocationPolicy.reserve(
-                    kind, Math.multiplyExact(graph.visualCommandCount.toLong(), perDraw)))
-                if (bytes > graph.capabilities.maxBufferSizeBytes) return null
-                kind to bytes
-            }
-        } catch (_: IllegalArgumentException) {
-            return null
-        } catch (_: ArithmeticException) {
-            return null
-        } else emptyList()
-        val rectScratchBytesI64 = try { rectScratchPools.fold(0L) { total, pool -> Math.addExact(total, pool.second) } }
-            catch (_: ArithmeticException) { return null }
-        val transientBytesI64 = try {
-            Math.addExact(Math.addExact(Math.addExact(shape.staging.byteSize, snapshotBytes), storageBytesI64), rectScratchBytesI64)
-        } catch (_: ArithmeticException) { return null }
+        val transientBytesI64 = try { Math.addExact(Math.addExact(shape.staging.byteSize, snapshotBytes), storageBytesI64) } catch (_: ArithmeticException) { return null }
         val totalBytesI64 = try { Math.addExact(shape.target.byteSize, transientBytesI64) } catch (_: ArithmeticException) { return null }
         if (totalBytesI64 != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
         val identity = compositeSessionIdentity ?: "w3.session.${generation.value}.${bounds.width}x${bounds.height}.${nativeFormat.value}"
@@ -533,11 +511,7 @@ public class GpuPlanTaskListLowerer {
         val noise = if(noiseBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
             graph.noiseAllocationLabelV1(),GPUFrameMemoryCategory.ReusableScratch,noiseBytesI64,
             GPUFrameMemoryResourceKind.Buffer,null,0,graph.passes().size))
-        val rectScratch = rectScratchPools.map { (kind, bytes) -> GPUFrameMemoryAllocation(
-            "$identity.w3.$kind", GPUFrameMemoryCategory.ReusableScratch, bytes,
-            GPUFrameMemoryResourceKind.Buffer, null)
-        }
-        return GPUFrameMemoryBudgetPlan(transientBytesI64, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; GPUFrameMemoryCategory.DestinationSnapshot -> snapshotBytes; GPUFrameMemoryCategory.ReusableScratch -> Math.addExact(storageBytesI64,rectScratchBytesI64); else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging) + snapshots + stops + noise + rectScratch)
+        return GPUFrameMemoryBudgetPlan(transientBytesI64, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; GPUFrameMemoryCategory.DestinationSnapshot -> snapshotBytes; GPUFrameMemoryCategory.ReusableScratch -> storageBytesI64; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging) + snapshots + stops + noise)
     }
 
     private fun validateW3Graph(graph: RenderGraph): W3Graph? {
@@ -612,26 +586,8 @@ public class GpuPlanTaskListLowerer {
         if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || (draws.size !in 1..512 && !(draws.isEmpty() && render.destinationVersionAfter?.valueI64 == 0L && graph.materialPlanTableOrNull() == null))) return null
         val targetRect = org.graphiks.math.geometry.RectI32(0, 0, graph.targetExtent.width, graph.targetExtent.height)
         if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
-        val rectScratchI64 = if (graph.capabilityId == W3SolidRectPlanCompiler.W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID) try {
-            val alignmentI64 = graph.capabilities.minUniformBufferOffsetAlignment.toLong()
-            val strideI64 = Math.addExact(32L, (alignmentI64 - 32L % alignmentI64) % alignmentI64)
-            listOf(
-                org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Vertex to 32L,
-                org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Index to 24L,
-                org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Uniform to strideI64,
-            ).fold(0L) { bytes, (kind, perDraw) ->
-                val reserved = requireNotNull(graph.capabilities.bufferAllocationPolicy.reserve(
-                    kind, Math.multiplyExact(graph.visualCommandCount.toLong(), perDraw)))
-                if (reserved > graph.capabilities.maxBufferSizeBytes) return null
-                Math.addExact(bytes, reserved)
-            }
-        } catch (_: IllegalArgumentException) {
-            return null
-        } catch (_: ArithmeticException) {
-            return null
-        } else 0L
         if (graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging +
-            (graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L) + noiseBytesI64 + rectScratchI64) return null
+            (graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L) + noiseBytesI64) return null
         val table = graph.materialPlanTableOrNull()
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
