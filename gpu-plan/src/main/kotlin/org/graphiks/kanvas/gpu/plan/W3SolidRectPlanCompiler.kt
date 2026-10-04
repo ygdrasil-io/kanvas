@@ -273,7 +273,10 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
         val mixedColorMaterial = hasLegacyColors && hasMaterialDraws
         val mixedCapability = mixedColorMaterial &&
             compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR && hasV4Source &&
-            draws.all { it.blend == BlendPlan.SrcOver }
+            draws.all { draw ->
+                draw.blend == BlendPlan.SrcOver ||
+                    (draw.blend as? BlendPlan.FixedFunctionV1)?.mode == BlendMode.SRC_OVER
+            }
         return if (draws.isEmpty() && elidedNoOpsI32 == 0 && !allowMetadataOnly) Recognition.Gap(
             diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 requires at least one visible draw"),
         ) else if (mixedColorMaterial && !mixedCapability) {
