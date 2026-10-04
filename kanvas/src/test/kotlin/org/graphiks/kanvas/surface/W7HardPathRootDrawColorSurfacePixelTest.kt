@@ -28,6 +28,8 @@ class W7HardPathRootDrawColorSurfacePixelTest {
     companion object {
         private const val SIZE = 32
         private const val BYTE_COUNT = SIZE * SIZE * 4
+        private const val HISTORICAL_PATH_STENCIL_REFUSAL =
+            "invalid.preflight.core_primitive_path_stencil: Path stencil CorePrimitive requires exactly one prepared render pass."
         private val FULL = RectF32.ofLTRB(0f, 0f, SIZE.toFloat(), SIZE.toFloat())
 
         @AfterAll
@@ -162,7 +164,6 @@ class W7HardPathRootDrawColorSurfacePixelTest {
     @Test
     fun mixedCommandBoundaryKeepsHistoricalContinuation() {
         val expected512 = orderedPathsBuffer(middle = null, after = false)
-        val expected513 = orderedPathsBuffer(middle = null, after = false)
         val recoveryExpected = solidBuffer(Rgba(0, 0, 255))
         assertAll(listOf(
             {
@@ -173,7 +174,7 @@ class W7HardPathRootDrawColorSurfacePixelTest {
             {
                 val surface = Surface(SIZE, SIZE)
                 recordBoundaryScene(surface, colorCount = 511)
-                characterizeConditionalOutcome(surface, "boundary-513", expected513, recoveryExpected)
+                assertHistoricalPathStencilRefusalAndRecover(surface, "boundary-513", recoveryExpected)
             },
         ))
     }
@@ -213,7 +214,6 @@ class W7HardPathRootDrawColorSurfacePixelTest {
     @Test
     fun foreignRootFamiliesRefuseAndRecover() {
         val recoveryExpected = solidBuffer(Rgba(0, 0, 255))
-        val shaderPathExpected = orderedPathsBuffer(middle = null, after = false)
         assertAll(listOf(
             {
                 val surface = Surface(SIZE, SIZE)
@@ -249,7 +249,7 @@ class W7HardPathRootDrawColorSurfacePixelTest {
                         antiAlias = false,
                     ))
                 }
-                characterizeConditionalOutcome(surface, "foreign-shader-path", shaderPathExpected, recoveryExpected)
+                assertHistoricalPathStencilRefusalAndRecover(surface, "foreign-shader-path", recoveryExpected)
             },
         ))
     }
@@ -266,40 +266,26 @@ class W7HardPathRootDrawColorSurfacePixelTest {
         drawPath(greenPath(), darken(ColorARGB.Green))
     }
 
-    private fun characterizeConditionalOutcome(
+    private fun assertHistoricalPathStencilRefusalAndRecover(
         surface: Surface,
         label: String,
-        expected: UByteArray,
         recoveryExpected: UByteArray,
     ) {
         val callerBuffer = UByteArray(BYTE_COUNT) { 0x5au }
         val before = callerBuffer.copyOf()
-        var refusal: IllegalStateException? = null
-        try {
-            surface.readPixels(FULL, callerBuffer)
-        } catch (failure: IllegalStateException) {
-            refusal = failure
-        }
-        println("w7.hard-path-root.characterization label=$label outcome=${if (refusal == null) "success" else "refusal"} " +
-            "type=${refusal?.javaClass?.name} diagnostic=${refusal?.message}")
-        if (refusal == null) {
-            retainCallerBuffer(callerBuffer, "$label-caller-output")
-            assertAll(listOf(
-                { assertFullPixels(expected, callerBuffer, "$label readPixels") },
-                { renderAndAssert(surface, label, expected) },
-            ))
-        } else {
-            retainCallerBuffer(callerBuffer, "$label-caller-sentinel")
-            assertContentEquals(before, callerBuffer, "$label refusal must leave the caller sentinel unchanged")
-            assertEquals(
-                "org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException",
-                refusal.javaClass.name,
-                "$label refusal exception type",
-            )
-            surface.discardRecordedOperations()
-            surface.canvas { drawColor(ColorARGB.Blue) }
-            renderAndAssert(surface, "$label-recovery", recoveryExpected)
-        }
+        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(FULL, callerBuffer) }
+        retainCallerBuffer(callerBuffer, "$label-caller-sentinel")
+        println("w7.hard-path-root.refusal label=$label type=${failure.javaClass.name} diagnostic=${failure.message}")
+        assertEquals(
+            "org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException",
+            failure.javaClass.name,
+            "$label refusal exception type",
+        )
+        assertEquals(HISTORICAL_PATH_STENCIL_REFUSAL, failure.message, "$label refusal message")
+        assertContentEquals(before, callerBuffer, "$label refusal must leave all caller sentinel bytes unchanged")
+        surface.discardRecordedOperations()
+        surface.canvas { drawColor(ColorARGB.Blue) }
+        renderAndAssert(surface, "$label-recovery", recoveryExpected)
     }
 
     private fun darken(color: ColorARGB) = Paint(color, blendMode = CanvasBlendMode.DARKEN, antiAlias = false)
@@ -373,15 +359,9 @@ class W7HardPathRootDrawColorSurfacePixelTest {
     private fun assertFullBuffer(expected: UByteArray, result: RenderResult, label: String) {
         assertEquals(BYTE_COUNT, expected.size, "$label oracle must cover the full RGBA8 target")
         assertEquals(BYTE_COUNT, result.pixels.size, "$label returned full RGBA8 target")
-        assertFullPixels(expected, result.pixels, label)
-    }
-
-    private fun assertFullPixels(expected: UByteArray, actual: UByteArray, label: String) {
-        assertEquals(BYTE_COUNT, expected.size, "$label oracle must cover the full RGBA8 target")
-        assertEquals(BYTE_COUNT, actual.size, "$label returned full RGBA8 target")
         for (offset in expected.indices) {
             val want = expected[offset].toInt()
-            val got = actual[offset].toInt()
+            val got = result.pixels[offset].toInt()
             if (offset % 4 == 3) assertEquals(want, got, "$label alpha pixel=${offset / 4}")
             else assertTrue(abs(want - got) <= 2, "$label RGB byte=$offset expected=$want actual=$got")
         }
