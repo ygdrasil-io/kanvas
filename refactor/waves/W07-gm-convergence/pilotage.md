@@ -1,4 +1,29 @@
-# W7 — source SolidRect mask blur qualifiée, corpus sans gain (4 octobre 2026)
+# W7 — common AA PATH layer source : fondation native, corpus sans gain (4 octobre 2026)
+
+[Qualification Task2](common-aa-path-source-qualification.md), branche locale
+`codex/w7-common-aa-layer-source`, base SolidRect
+`5df3c9e8c22f5b5e4de9e23739113bb4a678b026`. Produit W6a
+`6ed6737599673a442f576593fdeaae868f44bf89e0157deaffb57da6ee0ba562` / W4d
+`1fcb3a87283a58be8a97d8ee83271e3b2121eb32d60042ce4f59b3ed4f04ff62` ; contrat
+AA ordinary partagé, avec root `ownsW6b` préservé et child plain admis par le
+même contrat si `original == unfiltered`. Les filtres propres, shader/blend/AA
+étrangers, fractional clip et encoded layer restent refusés ; aucune lane
+nouvelle. Preuve focale après nettoyage : 9/9 PASS, 108 buffers natifs
+complets, 10 refus exacts, B=25312 et B−1=25311 W5g qualifiés. Revue Sol
+Task1 Approved, M1/M2 C0/I0/M0.
+
+Census frais Task2 : snapshot 740716 octets, SHA-256
+`e8528b81c9167ac693f83de4348262434573ff71351e0ad2921f7a9a8af732ad`.
+631/631 champs hors elapsedMs/renderMs identiques à SolidRect et au transversal
+2485cfb ; zéro gain GM ou delta d’admission/pixels. Scope 443, 393 entrés,
+220 rendus, 197 comparés ; 65 cas ≥95 % et 49 ≥99 % à ±2 ; médiane
+77.91666666666667 %. Timeout vertices607 conservé. Cinq tranches auditées et
+postscellées séparément. Step1[x] ; revue documentaire Step2 et publication
+Step3 en attente. Parent existant draft #2447 ; push rejeté avant création,
+aucun retry/nouvelle PR et accord explicite toujours manquant. W7 reste actif :
+pas de global GREEN, merge, publication ni clôture revendiqués.
+
+## Historique — W7 SolidRect mask blur, corpus sans gain (4 octobre 2026)
 
 [Qualification](solidrect-mask-source-qualification.md),
 [snapshot631/443](solidrect-mask-source-corpus.json), produit867cd2146,
