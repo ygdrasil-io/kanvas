@@ -279,12 +279,47 @@ class W4cPathFillPlanCompilerTest {
             listOf(darkenPath, darkenPath)
         val scene512 = sceneOf(commands512)
         val selected512 = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene512, target(scene512)))
+        val mixedCapabilities = PlanCapabilitySnapshot.of(
+            deviceGeneration = 0,
+            maxTextureDimension2D = 64,
+            maxBufferSizeBytes = 1L shl 20,
+            copyBytesPerRowAlignment = 256,
+            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            minUniformBufferOffsetAlignment = 256,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+            supportedOperations = PlanOperationCapability.entries.toSet(),
+            bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+            supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+            maxUniformBufferBindingSizeBytesI64 = 32L,
+            maxUniformBuffersPerShaderStageI32 = 2,
+            maxSampledTexturesPerShaderStageI32 = 1,
+            maxSamplersPerShaderStageI32 = 1,
+            maxBindingsPerBindGroupI32 = 2,
+            maxBindGroupsI32 = 3,
+        )
         val planned512 = compiler.plan(
             selected512.candidate,
-            capabilities(),
+            mixedCapabilities,
             PlanBudget(1L shl 20),
         )
-        val graph512 = assertIs<RenderPlanResult.Ready<RenderGraph>>(planned512).plan
+        val graph512 = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            planned512,
+            message = when (val result = planned512) {
+                is RenderPlanResult.ResourceLimitExceeded -> result.diagnostics.joinToString("; ") {
+                    "${it.code.value} (${it.domain}): ${it.message}"
+                }
+                is RenderPlanResult.GapOnPromotedScope -> result.diagnostics.joinToString("; ") {
+                    "${it.code.value} (${it.domain}): ${it.message}"
+                }
+                is RenderPlanResult.GapNotMigrated -> result.diagnostics.joinToString("; ") {
+                    "${it.code.value} (${it.domain}): ${it.message}"
+                }
+                is RenderPlanResult.InvalidScene -> result.diagnostics.joinToString("; ") {
+                    "${it.code.value} (${it.domain}): ${it.message}"
+                }
+                else -> result.toString()
+            },
+        ).plan
         val scene513 = sceneOf(commands512 + SceneCommand.DrawColor(ColorARGB.Blue, BlendMode.SRC_OVER))
 
         assertEquals("w7.w4c.root-drawcolor-path.v1", selected512.candidate.capabilityId)

@@ -105,11 +105,15 @@ public class RenderGraph private constructor(
             if (construction.w4dIssued) graph = issueW4dCompilerWitness(graph)
             if (construction.generalIssued) graph = issueW4dGeneralCompilerWitness(graph)
             construction.w4ePayload?.let { graph = issueW4eCompilerWitness(graph,it) }
-            if (construction.hardPathRootPublication != null) graph = issueW7HardPathGeometry(
-                graph, construction.hardPathRootPublication, construction.w5bGeometryLanes().map {
-                    W5bGeometryLanePlanV3(publishConstruction(it.sourceGraph, packed),it.commandIndicesI32(),
-                        it.drawDataResources,it.depthStencil,it.hardPathPartitionKind)
-                })
+            if (construction.hardPathRootPublication != null) {
+                val publication = construction.hardPathRootPublication
+                val rootSnapshot = issueW7HardPathRootSnapshot(graph, publication)
+                graph = issueW7HardPathGeometry(
+                    rootSnapshot, publication, construction.w5bGeometryLanes().map {
+                        W5bGeometryLanePlanV3(rootSnapshot,it.commandIndicesI32(),it.drawDataResources,
+                            it.depthStencil,it.hardPathPartitionKind)
+                    })
+            }
             else if (construction.geometryIssued) graph = issueW5bGeometry(graph, construction.w5bGeometryLanes().map {
                 W5bGeometryLanePlanV3(publishConstruction(it.sourceGraph, packed),it.commandIndicesI32(),
                     it.drawDataResources,it.depthStencil)
@@ -237,6 +241,22 @@ public class RenderGraph private constructor(
                 hardPathRootPublicationV1 = publication, hardPathRootSealTokenV1 = publication.sealToken())
             require(publication.authenticates(published)) { W5fPlanDiagnostics.Schema }
             return published
+        }
+
+        private fun issueW7HardPathRootSnapshot(
+            graph: RenderGraph,
+            publication: W7HardPathRootFrameV1.Publication,
+        ): RenderGraph {
+            require(graph.capabilityId == W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID &&
+                publication.frameIsAuthentic()) { W5fPlanDiagnostics.Schema }
+            val snapshot = RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat,
+                graph.capabilities, graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(),
+                graph.dependencies(), graph.peakFrameLocalBytes, null, null, null, null,
+                graph.materialPlanTableOrNull(), w5bGeometryIssued = true,
+                packedSourcesV4 = graph.storedPackedSourcesV4,
+                hardPathRootPublicationV1 = publication, hardPathRootSealTokenV1 = publication.sealToken())
+            require(publication.authenticates(snapshot)) { W5fPlanDiagnostics.Schema }
+            return snapshot
         }
         /** Only the composite compiler can issue this distinct, lane-owned graph representation. */
         internal fun issueW5aComposite(composite: W5aCompositePlanV1): RenderGraph {
