@@ -87,6 +87,19 @@ interrompu, XML non finalisés. Les tests ultérieurs ne sont pas couverts.
 Aucun replay complet du parent permettant d'attribuer les 36 échecs : pas
 de claim suite globale GREEN, sans régression globale, prêt à merger ou W7 fini.
 
+Reçus privés des RED et de la tentative globale, sous
+`/private/tmp/kanvas-w7-inverse-inventory.hbWqUb` :
+
+| Archive | Process log SHA256 | Events SHA256 | XML SHA256 | Exit SHA256 |
+| --- | --- | --- | --- | --- |
+| `solidrect-mask-source-replay-red-20261004-2` (RED causal) | `a8b15c93bb31d1ad36981efb54821e2cbcdf7ce17cdafaf6bc6941fb362b56c0` | `72b92073c1f6835abccd12ea59cd581321a9415c320f441583d1d0499ea1bc22` | `5a75ca7c17e5099bc2913fa9d2cef10a4be561b464c849005ccc419a6b494844` | `d8c21137e526c2164e04c94069bfbed3374b01588dd60fc55bd58a0d2ca0fe58` |
+| `solidrect-empty-demand-red-20261004-2` (RED2, intersection vide) | `4b688664c9bcd271618775ce07aefe5c924a278eea648a90ca852f2e8736a4bb` | `33d0bf53066aecd542fda9042a384a7204ad80aa5c1bc554347cd86fccdcd732` | `c2cd867f9e9ce2a9344d4069d632f6cd127272a9cfe3dd42fed343d203eb239a` | `1a1ec513cdd3d3a5d4792309971d8c0fc9d71c9cd3bc6295ca279e4e059f693c` |
+| `solidrect-mask-source-global-20261004-1` (tentative globale pré-fix1) | `41aef1ec711f9fc1139fa986346b574a91b6758be84585e8f24802cb28e4fe75` | `4c538c77fb08384efb48a6baef2ff70f1efaef3fc35ca3191f3b5d24c84d7afe` | **absent : XML non finalisé** | `5f1ca77190fdb5e5495f13370a2710f18afc5cb1c0d342d5599687276e0e928d` |
+
+Ces empreintes ont été recalculées en lecture seule sur les fichiers d'archives
+nommés. L'absence d'XML pour la globale reflète l'interruption à la limite,
+pas un reçu finalisé.
+
 ## Mesure complète 631/443
 
 Les cinq slices fixes sont [0,200), [200,400), [400,607), [607,608),
@@ -182,6 +195,20 @@ Preflight Sol puis correction des coûts/rebinds/replay : permission de
 commencer le produit, pas une qualification prématurée. Review Task1 de
 16dcf6320→1759669bf : C0/I1/M1. Fix1 1759669bf→867cd2146 : I1/M1 ADDRESSED,
 C0/I0/M0, Approved ciblé ; aucun verdict large inventé.
+
+| Constat de preflight | Disposition consignée | Limite / portée |
+| --- | --- | --- |
+| I1 — dérivation du coût par l'ancien chemin legacy | **ADDRESSED pour la preflight** : route active W6a/W6b, six textures RGBA8 et boundary prospectif `B=17 456` / `B−1=17 455` documentés. | Dérivation statique prospective ; elle ne prouvait ni la topologie finale ni le coût natif avant les témoins GREEN/B−1. Les anciens chiffres 256/1600/784 octets et 336 uniform bytes ne décrivent pas ce chemin. |
+| I2 — clones/rebinds SolidRect pouvant perdre le fait source | **ADDRESSED pour le périmètre de preflight** : les sites réels supplémentaires (`RenderGraphConstruction.kt`, `W5bGeometryLanePlanV3.kt`, `W5bDestinationGraph.kt`) sont nommés avec les chemins déjà ciblés et les frames device/layer. | La préservation effective et l'invariant de contenance relevaient de l'implémentation Step 3 et de sa review ; aucune approbation produit ne découle du seul audit de périmètre. |
+| I3 — assertion du premier pixel interrompant la capture RED | **ADDRESSED pour la capture du gate** : fixture corrigée pour collecter quatre renders par scène ; les 16 tentatives natives ont été capturées. | En RED, l'oracle complet filtré s'arrête au premier mismatch : l'égalité replay des buffers filtrés n'est pas établie par cette capture ; les preuves GREEN doivent l'établir. |
+| M1 — ambiguïté entre coordonnées de l'ancien coin et du nouveau centre | **ADDRESSED** : `[-3,-3,7,7]`, origine `(-3,-3)`, est explicitement l'ancien contrôle coin `[0,0,4,4]`; le nouveau centre et le vrai bord gardent leurs coordonnées propres. | Clarification documentaire seulement ; aucune extension d'oracle ni de géométrie. |
+| M2 — lecture d'un pixel avant validation de la forme du buffer | **ADDRESSED** : `printEvidence` valide dimensions 32×32 et longueur 4096 avant `rgbaAt`. | Robustesse du diagnostic seulement ; l'assertion oracle complète reste inchangée. |
+
+Suivi documentaire de la preflight-fix1 : la phrase de livraison désormais
+autorise à **commencer Step 3** après le RED audité. Cette permission de démarrer
+le changement borné n'est ni l'approbation Task 1, ni un statut GREEN ; les
+preuves de coûts, de replays, de contexte et de non-régression gardent leurs
+gates distinctes.
 
 Décisions déléguées : snapshot source contextuel plutôt que compiler nouveau
 (coût : fait immutable/transport supplémentaire) ; conservation des clones
