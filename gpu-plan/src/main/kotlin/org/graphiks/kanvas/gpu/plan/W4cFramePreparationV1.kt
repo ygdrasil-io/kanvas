@@ -155,7 +155,7 @@ internal object W4cFramePreparationV1 {
         var frameAttemptedEdgesBeforeI32 = 0
         var elidedNoOpsI32 = 0
         var pathSourceOccurrenceI32 = 0
-        if (hardPathRoot && scene.size > W4cPathFillPlanCompiler.MAX_DRAWS) {
+        if (hardPathRoot && scene.commandCount > W4cPathFillPlanCompiler.MAX_DRAWS) {
             return W4cFramePreparationResultV1.Gap("HardPath root accepts at most 512 original commands")
         }
         for ((commandIndex, command) in scene.withIndex()) {
@@ -273,7 +273,7 @@ internal object W4cFramePreparationV1 {
     internal fun qualifiesHardPathRoot(scene: SceneSnapshot, target: RenderTargetDescriptor): Boolean {
         if (scene.extent != target.extent || scene.colorSpace != ColorSpace.SRGB ||
             target.colorSpace != ColorSpace.SRGB || target.compositionDomain != CompositionDomain.LINEAR ||
-            scene.size > W4cPathFillPlanCompiler.MAX_DRAWS) return false
+            scene.commandCount > W4cPathFillPlanCompiler.MAX_DRAWS) return false
         var hasColor = false
         var hasDarkenPath = false
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
@@ -298,11 +298,12 @@ internal object W4cFramePreparationV1 {
                         !(node.transform.isIdentity || node.transform.isScaleTranslate()) ||
                         recognizeClip(node.clip) !is ClipRecognition.Accepted || !supportsSolidFill(node)) return false
                     val paint = node.paint ?: return false
+                    val solidMaterial = node.material as? MaterialNode.Solid ?: return false
                     if (paint.shader != null || paint.colorFilter != null || paint.maskFilter != null ||
                         paint.pathEffect != null || paint.imageFilter != null || paint.blender != null ||
                         paint.style != PaintStyleNode.FILL || node.resource != null || node.operationBlendMode != null ||
                         node.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty ||
-                        node.material !is MaterialNode.Solid || node.material.color.canonicalId != paint.color.canonicalId) return false
+                        solidMaterial.color != paint.color || !materialMatchesPaintAuthority(node)) return false
                     val blendMode = when (val blend = node.blend) {
                         BlendNode.SrcOver -> BlendMode.SRC_OVER
                         is BlendNode.Mode -> blend.mode

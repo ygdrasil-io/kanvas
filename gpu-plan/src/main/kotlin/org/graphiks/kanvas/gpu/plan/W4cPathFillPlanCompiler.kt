@@ -106,8 +106,9 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
             if (!validAllocationFacts(capabilities))
                 return promoted(W4cPlanDiagnostics.CapabilityAllocationPolicy, "W4c allocation facts are not positive powers of two")
             return try {
-                W5bDestinationGraphSealer.constructHardPathRoot(hardPathCandidate.frame, capabilities, budget)
-                    .publishConstructionResult()
+                RenderPlanResult.Ready(W5bDestinationGraphSealer.constructHardPathRoot(
+                    hardPathCandidate.frame, capabilities, budget,
+                )).publishConstructionResult()
             } catch (failure: RawMaterialRequirementsV2.Refusal) {
                 RenderPlanResult.ResourceLimitExceeded(listOf(diag(
                     RenderDiagnosticCode(failure.code), RenderDiagnosticDomain.RESOURCE, failure.code,
@@ -122,7 +123,7 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
                     RenderPlanResult.GapOnPromotedScope(listOf(diag(
                         RenderDiagnosticCode(code), RenderDiagnosticDomain.CAPABILITY, code,
                     )))
-                } else if (code == W4cPlanDiagnostics.CapabilityBufferSize) {
+                } else if (code == W4cPlanDiagnostics.CapabilityBufferSize.value) {
                     promoted(W4cPlanDiagnostics.CapabilityBufferSize, "W4c buffer capacity exceeds device limits")
                 } else {
                     resourceLimit(W4cPlanDiagnostics.PlanIdentityInvalid,

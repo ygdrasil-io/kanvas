@@ -9,7 +9,7 @@ internal object W5bDestinationGraphSealer {
         frame: W7HardPathRootFrameV1,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
-    ): RenderPlanResult<RenderGraphConstruction> {
+    ): RenderGraphConstruction {
         val extent = SizeI32(frame.target.extent.width, frame.target.extent.height)
         val pathSlots = frame.pathSlots()
         val colorSlots = frame.colorSlots()
@@ -26,7 +26,7 @@ internal object W5bDestinationGraphSealer {
         if (listOf(pathFootprint.readbackBytes, pathFootprint.vertexCapacityBytes,
                 pathFootprint.indexCapacityBytes, pathFootprint.uniformCapacityBytes).any {
                 it > capabilities.maxBufferSizeBytes
-            }) throw IllegalArgumentException(W4cPlanDiagnostics.CapabilityBufferSize)
+            }) throw IllegalArgumentException(W4cPlanDiagnostics.CapabilityBufferSize.value)
         require(extent.width <= capabilities.maxTextureDimension2D && extent.height <= capabilities.maxTextureDimension2D)
         require(W4cPathFillPlanCompiler.FORMAT in capabilities.supportedFormats())
         require(W4cPathFillPlanCompiler.REQUIRED_OPERATIONS.all { it in capabilities.supportedOperations() })
@@ -81,7 +81,7 @@ internal object W5bDestinationGraphSealer {
             .associate { it.commandIndexI32 to requireNotNull(depthId) }
         val allGeometryResources = pathResources + colorGeometry.resources
         val construction = construct(
-            PlanId(W4cPathFillPlanCompiler.planIdentity(frame.sceneFingerprint, frame.target, capabilities, budget)),
+            PlanId(frame.owner.planIdentity(frame.sceneFingerprint, frame.target, capabilities, budget)),
             W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID, extent, capabilities, budget, draws,
             frame.materialPlanTable, pathFootprint.targetBytes, pathFootprint.readbackBytes,
             pathFootprint.readbackBytesPerRow, allGeometryResources, drawDataByCommandI32 = dataByCommand,
@@ -98,7 +98,7 @@ internal object W5bDestinationGraphSealer {
             pathPartition, colorPartition,
             pathSlots.map { requireNotNull(it.path).material },
         )
-        return RenderPlanResult.Ready(construction.withHardPathRootPublication(publication))
+        return construction.withHardPathRootPublication(publication)
     }
 
     fun seal(

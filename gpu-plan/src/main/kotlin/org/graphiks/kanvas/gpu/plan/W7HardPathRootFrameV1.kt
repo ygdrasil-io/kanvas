@@ -28,17 +28,17 @@ internal class W7HardPathSlotV1(
 }
 
 /** Issuer-bound facts from one preparation of the unmodified original scene. */
-internal class W7HardPathRootFrameV1 internal constructor(
+public class W7HardPathRootFrameV1 internal constructor(
     private val admission: W4cOriginalFrameAdmissionV1,
     slots: List<W7HardPathSlotV1>,
-    val materialPlanTable: MaterialPlanTable,
-    val sourceTable: MaterialSourceConstructionTableV4,
-    val totalAttemptedEdgesI32: Int,
+    internal val materialPlanTable: MaterialPlanTable,
+    internal val sourceTable: MaterialSourceConstructionTableV4,
+    internal val totalAttemptedEdgesI32: Int,
 ) {
-    val scene: SceneSnapshot = admission.scene
-    val target: RenderTargetDescriptor = admission.target
-    val sceneFingerprint: CanonicalId = scene.canonicalId
-    val targetFingerprint: CanonicalId = target.canonicalId
+    internal val scene: SceneSnapshot = admission.scene
+    internal val target: RenderTargetDescriptor = admission.target
+    internal val sceneFingerprint: CanonicalId = scene.canonicalId
+    internal val targetFingerprint: CanonicalId = target.canonicalId
     internal val owner: W4cPathFillPlanCompiler get() = admission.owner
     private val commandFingerprints: List<CanonicalId> = immutableList(scene.map { it.canonicalId })
     private val preparedSlots: List<W7HardPathSlotV1> = immutableList(slots)
@@ -300,7 +300,7 @@ internal class W7HardPathRootFrameV1 internal constructor(
                 candidatePeak == peakFrameLocalBytes && candidateMaterialTable === frame.materialPlanTable &&
                 sameIdentity(storedResources, candidateResources) && sameIdentity(storedPasses, candidatePasses) &&
                 sameIdentity(storedDependencies, candidateDependencies) &&
-                frame.commandFingerprints().size == frame.scene.size &&
+                frame.commandFingerprints().size == frame.scene.commandCount &&
                 frame.scene.canonicalId == frame.sceneFingerprint && frame.target.canonicalId == frame.targetFingerprint
 
         private fun pathDrawByCommand(commandIndexI32: Int): PlanDraw? =
