@@ -255,7 +255,10 @@ class GmCanvas(
         b: Float,
         a: Float = 1f,
     ) {
-        drawColor(r, g, b, a, BlendMode.SRC_OVER)
+        drawRect(
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
+            Paint(color = ColorARGB.fromRGBA(r, g, b, a)),
+        )
     }
 
     fun drawColor(
