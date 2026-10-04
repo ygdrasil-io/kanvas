@@ -18,6 +18,16 @@ avec une géométrie math et une autorité de samples identiques. Le census
 d'admission. Les32 premiers refus layer sont hétérogènes ; ni32 ni17
 nouveaux rendus ne sont promis.
 
+Ce lot est une closure/foundation du contrat source, pas un ROI corpus
+établi. Périmètre explicite :
+
+| Scope | Décision |
+| --- | --- |
+| Root autonome corrélé, sans propriétaire W6b | Inchangé |
+| Root ordinary d'une frame W6b | Contrat existant réemployé |
+| Child d'un plain layer compatible | Extension visée après gate |
+| Root d'une frame plain-layer-owned sans ownsW6b | Différé ; guard conservé |
+
 ## Alternatives et décision
 
 1. **Source AA commune root/layer** : préparation math et resolve AA4
@@ -88,8 +98,12 @@ et consigner le falsifier ; aucune suppression de guard spéculative.
 
 Au-delà de la gate : alpha128, double occurrence demi-couverte dans le même
 layer (alpha3/4, couleur LINEAR≈225, alpha191/192), restorealpha128,
-ordre avec sibling opaque intersectant, layer bounds/translation et hard
-clip touchant le trait. Distinguer samples corrélés root et sources isolées,
+ordre avec sibling opaque intersectant. Pour bounds/translation : translate
+(3,2) avant saveLayer, hint LOCAL[12,15,20,17] donc DEVICE[15,17,23,19],
+trait DEVICE(11,18)→(27,18). Attendre les pixels x11..26/y17..18, y compris
+x11..14 et x23..26 hors hint. Un cas distinct pose le hard clip DEVICE
+[12,0,20,32] avant translation et n'attend que x12..19. Le hint n'est pas
+un clip ; origin et transform restent observables. Distinguer samples corrélés root et sources isolées,
 ne pas rendre leur différence invisible par un oracle d'équivalence faux.
 Oracles analytiques fullbuffer fixés avant run, pixels pleins/vides exacts,
 fractionnaires ±1LSB existant ; aucune attente ajustée au GPU.
@@ -101,8 +115,24 @@ test ne doit pas imposer un refus à une autre lane positive existante.
 LINEAR positif ; layer SRGB_ENCODED garde son refus public de composition,
 avec root PATH encoded admissible comme contrôle distinct.
 
-Après GREEN, revoir le lot et mesurer les17 anciens PATH/AA layer refusés
-du census, identité/scènes/domaines/références/budgets inchangés, images=false.
+Budget nouveau STROKE : fixture indépendante2×2, line(0,1)→(2,1), width1
+BUTT/MITER, plain layer sans hint/sibling. B analytique25296bytes : root
+RGBA16 + readback512 (2rows alignées256) + layerRGBA16 + sourceAA4RGBA64
++ sourceAA4D24S8 64 + resolveRGBA16 + poolsV/I/U16384/4096/4096
++ uniformW6 16 + material16. Le quad stroke suit StencilCover, pas
+DirectTriangle ; aucun discount cache/lifetime. La pré-évaluation source
+25104 ne dépasse pasB. ÀB : les4pixels[188,0,0,128]±1, completion/replay
+stricts. ÀB−1 : w6a.layer.frame_budget_exceeded, sentinel16bytes0x5a intact,
+discard puis bleu plein/récupération native même Surface. B reste une
+dérivation à relire avant exécution, pas un budget natif déjà qualifié ;
+l'ancien AA FILL B26980 reste un contexte distinct. Le surcoût provisoire
+source full-target32×32 ne sera pas affaibli pour faire passer ce test.
+
+Après GREEN, revoir le lot et mesurer tout le census, avec les17 anciens
+premiers préfixes w6a.layer.unsupported_child PATH/AA identifiés :14root et
+3child,12filteredroot et5unfiltered. Les3child ne sont pas des témoins de
+simple STROKE solide SrcOver. Identité/scènes/domaines/références/budgets
+inchangés, images=false ; aucun ROI immédiat n'est déduit de ce sous-groupe.
 Les filtered PATH restent une frontière distincte. Une disparition du
 premier diagnostic sans vrai rendu/metrics n'est pas une admission livrée.
 Si aucun GM n'est débloqué, le dire et re-prioriser avant un nouveau lot.
