@@ -112,6 +112,16 @@ fun main(args: Array<String>) {
                     row["dispatched"] = rendered.stats.opsDispatched
                     row["refused"] = rendered.stats.opsRefused
                     val actual = rendered.pixels.map { it.toByte() }.toByteArray()
+                    row.putAll(mapOf(
+                        "actualWidth" to rendered.width,
+                        "actualHeight" to rendered.height,
+                        "actualPixelFormat" to rendered.format.name,
+                        "actualRgbaByteCount" to actual.size,
+                        "nativeEvidenceIsClean" to rendered.isClean,
+                        "nativeEvidenceScopeKinds" to rendered.nativeEvidenceScopeKinds,
+                        "structuralSteps" to rendered.structuralSteps,
+                        "nativeEvidenceCounters" to rendered.nativeEvidenceCounters,
+                    ))
                     row["actualRgbaSha256"] = checkpointSha(actual)
                     if (row["referenceStatus"] == "trusted") {
                         stage.set("comparison")
