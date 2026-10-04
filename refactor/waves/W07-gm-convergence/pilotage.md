@@ -2,7 +2,8 @@
 
 [Qualification](transversal-corpus-qualification.md),
 [snapshot gelé2485cfb](transversal-corpus-2485cfb.json), parent draft #2446,
-branche `codex/w7-transversal-corpus-census`. 631 fiches /443 éligibles,
+branche `codex/w7-transversal-corpus-census`,
+[draft #2447](https://github.com/ygdrasil-io/kanvas/pull/2447). 631 fiches /443 éligibles,
 393 entrées en rendu (392 `attempted=true` +1 timeout sans ce champ) /
 220 rendus /197 comparés : aucun gain d'admission depuis7360c5.
 Pixels±2 ≥95 % :63→65 ; ≥99 % :47→49. Trois deltas pixels confirmés :

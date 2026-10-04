@@ -213,8 +213,11 @@ qualification visuelle entière de tous les GM. Les ports incomplets, la
 couverture AA, Picture, les origines historiques des références, les dettes
 de suites et l'ownership stencil restent ouverts.
 
-La nouvelle branche `codex/w7-transversal-corpus-census` empile uniquement
-le snapshot et ce suivi sur #2446. La review indépendante Sol a relevé
+La branche `codex/w7-transversal-corpus-census`,
+[draft #2447](https://github.com/ygdrasil-io/kanvas/pull/2447), empile uniquement
+le snapshot et ce suivi sur #2446. Publication/attachement réalisés ; base,
+HEAD documentaire et description distante vérifiés après création.
+La review indépendante Sol a relevé
 I1 (tentatives enregistrées/effectives) et M1 (statuts/PNG présentes),
 corrigés uniquement dans les documents. Relecture ciblée Sol : I1/M1
 ADDRESSED, C0/I0/M0, prêt pour publication draft documentaire uniquement.
