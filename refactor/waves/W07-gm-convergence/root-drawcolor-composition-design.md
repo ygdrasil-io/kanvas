@@ -24,7 +24,7 @@ Validation whole-scene et bornes agrégées geometry/work/graph/caps/budget ne s
 
 ## Contrat DrawColor CTM distinct
 
-En LINEAR, DrawColor remplit target∩clip déjà capturé indépendamment de toute CTM finie ultérieure. Supprimer seulement le veto finite-nonidentity de cette opération et le veto de provenance quand le frame ne contient que des couleurs ; conserver les refus nonfinite et les contraintes des vrais Draw géométriques. En encoded, tester uniquement les transforms intégrales déjà admises, sans ouvrir la politique générale de CompositionAdmissionV1 ou les filtres/geometry encoded.
+En LINEAR, DrawColor remplit target∩clip déjà capturé indépendamment de toute CTM finie ultérieure. Supprimer seulement le veto finite-nonidentity de cette opération et le veto de provenance quand le frame ne contient que des couleurs ; conserver les refus nonfinite et les contraintes des vrais Draw géométriques. En encoded, `SetTransform` admet les translations intégrales mais `DrawColor` exige une CTM identité : le contrôle positif emploie une translation intégrale puis son inverse avant la couleur, sans ouvrir la politique de CompositionAdmissionV1 ou les filtres/geometry encoded. Une couleur sous CTM encoded nonidentité ne devient pas admise dans ce lot.
 
 ## Preuves comportementales
 
