@@ -122,7 +122,13 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
             }
             // DrawColor is already a sealed color operand. It has no W5 source ownership and
             // must remain frozen for W6's ordered plain-layer publication.
-            val draws = if (frozenColors) selected.draws else selected.draws.mapIndexed { ordinal,draw -> draw.withMaterialRef(MaterialPlanRef(ordinal)) }
+            val draws = if (frozenColors) selected.draws else if (selected.capabilityId == W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID) {
+                var materialOrdinal = 0
+                selected.draws.map { draw ->
+                    if (draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) draw
+                    else draw.withMaterialRef(MaterialPlanRef(materialOrdinal++))
+                }
+            } else selected.draws.mapIndexed { ordinal,draw -> draw.withMaterialRef(MaterialPlanRef(ordinal)) }
             val id = PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget,selected.capabilityId))
             val topology = if (draws.any { it.blend is BlendPlan.DestinationReadV1 })
                 W5bDestinationGraphSealer.describeSources(selected.capabilityId,extent,capabilities,budget,draws,
@@ -138,7 +144,10 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
         }
 
     internal fun hasPendingSources(candidate: GpuPlanCandidate): Boolean =
-        (candidate as? W3Candidate)?.sourceTable?.sources()?.any { it.pending } == true
+        (candidate as? W3Candidate)?.let { selected ->
+            selected.capabilityId == W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID ||
+                selected.sourceTable?.sources()?.any { it.pending } == true
+        } == true
 
     private fun ordinaryTopology(draws: List<SolidRectDraw>,extent: SizeI32,targetBytes: Long,stagingBytes: Long,
         memory: PlanMemoryBudgetResult.WithinBudget, format: PlanLogicalColorFormat): W5bDestinationGraphSealer.DestinationTopologyV4 {
@@ -257,14 +266,32 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
             return Recognition.MaterialRefused(materialRefusals)
         }
         val pending = sourceOccurrences.any { it.pending }
+        val hasLegacyColors = draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }
+        val hasMaterialDraws = draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
+        val hasV4Source = sourceOccurrences.any { source -> source.pending ||
+            source.resolvedSource?.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 }
+        val mixedColorMaterial = hasLegacyColors && hasMaterialDraws
+        val mixedCapability = mixedColorMaterial &&
+            compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR && hasV4Source &&
+            draws.all { it.blend == BlendPlan.SrcOver }
         return if (draws.isEmpty() && elidedNoOpsI32 == 0 && !allowMetadataOnly) Recognition.Gap(
             diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 requires at least one visible draw"),
-        ) else if ((materialEntries.isNotEmpty() || pending) && draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }) {
+        ) else if (mixedColorMaterial && !mixedCapability) {
             Recognition.Gap(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W5a graphs cannot mix legacy colours and material references"))
         } else Recognition.Accepted(
-            if (pending) draws.mapIndexed { index,draw -> draw.withMaterialRef(MaterialPlanRef(index)) } else draws,
-            materialEntries.takeIf { it.isNotEmpty() && !pending }?.let(MaterialPlanTable::of),
-            if (materialEntries.isNotEmpty() || pending) W5A_CAPABILITY_ID else CAPABILITY_ID,
+            if (pending || mixedCapability) {
+                var materialOrdinal = 0
+                draws.map { draw ->
+                    if (mixedCapability && draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) draw
+                    else draw.withMaterialRef(MaterialPlanRef(materialOrdinal++))
+                }
+            } else draws,
+            materialEntries.takeIf { it.isNotEmpty() && !pending && !mixedCapability }?.let(MaterialPlanTable::of),
+            when {
+                mixedCapability -> W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID
+                materialEntries.isNotEmpty() || pending -> W5A_CAPABILITY_ID
+                else -> CAPABILITY_ID
+            },
             if (sourceOccurrences.isNotEmpty()) (MaterialSourceConstructionTableV4.of(sourceOccurrences) as SourceConstructionResultV4.Built).value else null,
         )
     }
@@ -541,7 +568,8 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
         private val targetFingerprint: CanonicalId = target.canonicalId
 
         fun hasMatchingFingerprints(): Boolean =
-            capabilityId in setOf(CAPABILITY_ID, W5A_CAPABILITY_ID) && sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
+            capabilityId in setOf(CAPABILITY_ID, W5A_CAPABILITY_ID, W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID) &&
+                sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
     }
     private sealed interface DrawRecognition {
         data object NoOp : DrawRecognition
@@ -564,6 +592,7 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
     public companion object {
         public const val CAPABILITY_ID: String = "solid-rect-pixel-aligned-simple-clip-src-over-srgb-v1"
         public const val W5A_CAPABILITY_ID: String = "w5a-solid-opacity-rect-v1"
+        public const val W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID: String = "w7.w3.root-drawcolor-material.v1"
         private val FORMAT: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         private const val PIXEL_BYTES: Long = 4L
         private const val MAX_W3_COMMANDS: Int = 512

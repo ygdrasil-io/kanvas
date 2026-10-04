@@ -71,7 +71,8 @@ internal class RenderGraphConstruction internal constructor(
     }
 
     fun publish(): RenderGraph {
-        val rectScratchI64 = if (capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID &&
+        val rectScratchI64 = if ((capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID ||
+                capabilityId == W3SolidRectPlanCompiler.W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID) &&
             visualSources(passes()).any { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 }) {
             val alignmentI64 = capabilities.minUniformBufferOffsetAlignment.toLong()
             val strideI64 = Math.addExact(32L,(alignmentI64-32L%alignmentI64)%alignmentI64)
