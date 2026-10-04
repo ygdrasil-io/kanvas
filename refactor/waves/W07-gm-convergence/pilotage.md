@@ -18,7 +18,8 @@ hors elapsedMs/renderMs identiques à2485cfb ;393 entrés/220 rendus/197 compar�
 Les cinq runs sont audités/postscellés séparément ; PNG/scores/refs/inverse
 inchangés. Disjoint SolidRect/source-demand refuse InvalidBounds avant
 allocation : limite conservatrice transitoire, pas sémantique Skia finale.
-Review large/publication draft encore en attente. Suite : common PATH AA
+Review large Astra8c675→01e4 C0/I0/M0 pour draft seulement ; publication
+encore en attente. Suite : common PATH AA
 source plain-layer, pas17 gains promis. W7 ACTIVE, pas de merge/globalGREEN.
 
 # Historique W7 — gate PATH AA : témoin filtré incorrect avant SolidRect (4 octobre 2026)

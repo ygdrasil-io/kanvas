@@ -5,7 +5,9 @@ Branche codex/w7-common-aa-path-source, base du lot
 8c675db40881acf724887de2fb32a814f5f53770 ([draft parent #2447](https://github.com/ygdrasil-io/kanvas/pull/2447)).
 [Spec](solidrect-mask-source-design.md), [plan](solidrect-mask-source-plan.md),
 [checkpoint complet](solidrect-mask-source-corpus.json).
-Publication et review large encore en attente à cette révision documentaire.
+Review large Astra sur 8c675db40→01e4a91c9 : C0/I0/M0, prêt pour draft
+uniquement. Review documentaire Sol fix1 : I1/I2 ADDRESSED, C0/I0/M0.
+Publication encore en attente à cette révision documentaire ; merge non qualifié.
 
 ## Résultat et portée
 
@@ -195,6 +197,25 @@ Preflight Sol puis correction des coûts/rebinds/replay : permission de
 commencer le produit, pas une qualification prématurée. Review Task1 de
 16dcf6320→1759669bf : C0/I1/M1. Fix1 1759669bf→867cd2146 : I1/M1 ADDRESSED,
 C0/I0/M0, Approved ciblé ; aucun verdict large inventé.
+
+Review finale indépendante Astra : transport source/rebinds/canonical
+containment, témoins natifs et corpus cohérents, C0/I0/M0 au range exact
+8c675db40→01e4a91c9. Les hunks produit/tests/docs ont été lus intégralement ;
+le snapshot mécanique a été audité lossless par toutes ses clés/présences,
+pas relu comme un dump plat. Aucun nouveau run GPU ni rejeu global effectué.
+Verdict pour draft seulement : contexte53/54 et globale pré-fix1 incomplète,
+pas de qualification merge. Les métadonnées de livraison ultérieures ne
+modifient ni le produit867 ni les preuves gelées.
+
+Dispositions laissées hors jugement par Astra : attribution des36 échecs
+globaux/backdrop, globale après fix1, admission hors halo/fallbacks autres
+familles, common PATH AA et ses discriminants/budget, root plain-layer-owned,
+priorités FILL/filtres/domaines/encoded, alternatives Rect→Path/gains17,
+pool scratch W3, autres lots W7/fonts/codecs/jpg/hardware/performance,
+compatibilité ABI de clients précompilés, certification rétrospective complète
+des postseals, publication remote/merge/clôture. Toutes restent hors preuve
+ou ouvertes comme indiqué ici ; aucune exclusion supplémentaire ni dette
+silencieusement résolue. Breaking changes permis en incubation, pas de promesse ABI.
 
 | Constat de preflight | Disposition consignée | Limite / portée |
 | --- | --- | --- |
