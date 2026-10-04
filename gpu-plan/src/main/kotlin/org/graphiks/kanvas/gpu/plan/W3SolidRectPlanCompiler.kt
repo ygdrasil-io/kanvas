@@ -23,9 +23,6 @@ import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneSnapshot
-import org.graphiks.math.color.ColorARGB
-import org.graphiks.math.color.ColorF32
-import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
@@ -361,21 +358,12 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
     }
 
     private fun recognizeDrawColor(command: SceneCommand.DrawColor, index: Int, target: RectI32,
-        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain): DrawRecognition {
-        if (!finite(command.transform)) return DrawRecognition.Invalid(
-            diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "DrawColor transform is non-finite"),
-        )
-        if (command.mode != BlendMode.SRC_OVER) return semanticGap("DrawColor blend mode is outside W3")
-        if (!command.transform.isIdentity) return geometryGap("DrawColor transform is outside W3")
-        val clip = when (val recognizedClip = recognizeClip(command.clip)) {
-            is ClipRecognition.Accepted -> recognizedClip.bounds
-            is ClipRecognition.Gap -> return DrawRecognition.Gap(recognizedClip.diagnostic)
-            is ClipRecognition.Invalid -> return DrawRecognition.Invalid(recognizedClip.diagnostic)
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain): DrawRecognition =
+        when (val result = W3DrawColorAdmissionV1.recognize(command, index, target, compositionDomain)) {
+            is W3DrawColorAdmissionResultV1.Accepted -> DrawRecognition.Accepted(result.draw)
+            is W3DrawColorAdmissionResultV1.Gap -> DrawRecognition.Gap(result.diagnostic)
+            is W3DrawColorAdmissionResultV1.Invalid -> DrawRecognition.Invalid(result.diagnostic)
         }
-        val visible = if (clip == null) target.copy() else intersect(target, clip)
-            ?: return semanticGap("DrawColor is fully clipped out")
-        return DrawRecognition.Accepted(SolidRectDraw.of(index, premultiplied(command.color, compositionDomain), visible, visible))
-    }
 
     private fun recognizeProvenanceTransform(matrix: Matrix3x3F32): ProvenanceRecognition = when {
         !finite(matrix) -> ProvenanceRecognition.Invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Transform is non-finite"))
@@ -383,18 +371,12 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
         else -> ProvenanceRecognition.Gap(diag(W3PlanDiagnostics.GeometryNotPixelAligned, RenderDiagnosticDomain.SCENE, "Transform is outside W3"))
     }
 
-    private fun recognizeClip(clip: ClipStackNode): ClipRecognition = when (clip) {
-        ClipStackNode.Empty -> ClipRecognition.Accepted(null)
-        is ClipStackNode.DeviceRect -> {
-            val bounds = clip.copyBounds()
-            if (!finite(bounds)) ClipRecognition.Invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Clip bounds are non-finite"))
-            else toIntegralRect(bounds)?.let { ClipRecognition.Accepted(it) }
-                ?: ClipRecognition.Gap(diag(W3PlanDiagnostics.ClipNotPixelAligned, RenderDiagnosticDomain.SCENE, "Clip is not pixel aligned"))
+    private fun recognizeClip(clip: ClipStackNode): ClipRecognition =
+        when (val result = W3DrawColorAdmissionV1.recognizeClip(clip)) {
+            is W3DrawColorAdmissionV1.ClipRecognition.Accepted -> ClipRecognition.Accepted(result.bounds)
+            is W3DrawColorAdmissionV1.ClipRecognition.Gap -> ClipRecognition.Gap(result.diagnostic)
+            is W3DrawColorAdmissionV1.ClipRecognition.Invalid -> ClipRecognition.Invalid(result.diagnostic)
         }
-        is ClipStackNode.Operations -> ClipRecognition.Gap(
-            diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "Complex clips are outside W3"),
-        )
-    }
 
     private fun resolveTransformed(bounds: RectF32, matrix: Matrix3x3F32): RectI32? {
         if (!finite(bounds) || !finite(matrix) || !(matrix.isIdentity || matrix.isScaleTranslate())) return null
@@ -411,18 +393,10 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
     }
 
     private fun toIntegralRect(bounds: RectF32): RectI32? {
-        if (!finite(bounds)) return null
-        val values = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
-        val converted = values.map { value ->
-            val integral = value.toLong()
-            if (integral.toFloat() != value || integral !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) return null
-            integral.toInt()
-        }
-        val result = RectI32(converted[0], converted[1], converted[2], converted[3])
-        return result.takeUnless { it.isEmpty64() }
+        return W3DrawColorAdmissionV1.integralRect(bounds)
     }
 
-    private fun intersect(first: RectI32, second: RectI32): RectI32? = first.copy().takeIf { it.intersect(second) }
+    private fun intersect(first: RectI32, second: RectI32): RectI32? = W3DrawColorAdmissionV1.intersect(first, second)
 
     private fun w3Blend(blend: BlendNode, targetClamp: BlendTargetClampV1): Boolean = FinalBlendPlanner.plan(
         blend,
@@ -448,22 +422,6 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
         return node.material.canonicalId == paintMaterial.canonicalId
     }
 
-    private fun linearPremultiplied(color: ColorARGB): ColorF32 {
-        val alpha = color.alphaNormalized
-        return ColorF32.of(
-            ColorTransferFunction.sRgb.toLinear(color.redNormalized) * alpha,
-            ColorTransferFunction.sRgb.toLinear(color.greenNormalized) * alpha,
-            ColorTransferFunction.sRgb.toLinear(color.blueNormalized) * alpha,
-            alpha,
-        )
-    }
-
-    private fun premultiplied(color: ColorARGB, domain: org.graphiks.kanvas.render.ir.CompositionDomain): ColorF32 =
-        if (domain == org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR) linearPremultiplied(color) else {
-            val alpha = color.alphaNormalized
-            ColorF32.of(color.redNormalized * alpha, color.greenNormalized * alpha, color.blueNormalized * alpha, alpha)
-        }
-
     private fun targetFormat(target: RenderTargetDescriptor): PlanLogicalColorFormat = when (target.compositionDomain) {
         org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
@@ -488,10 +446,8 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
         return MaterialPlanRef(offset + root.indexI32)
     }
 
-    private fun finite(bounds: RectF32): Boolean = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite)
-    private fun finite(matrix: Matrix3x3F32): Boolean = listOf(
-        matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty, matrix.persp0, matrix.persp1, matrix.persp2,
-    ).all(Float::isFinite)
+    private fun finite(bounds: RectF32): Boolean = W3DrawColorAdmissionV1.isFinite(bounds)
+    private fun finite(matrix: Matrix3x3F32): Boolean = W3DrawColorAdmissionV1.isFinite(matrix)
 
     private fun semanticGap(message: String): DrawRecognition.Gap = DrawRecognition.Gap(
         diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, message),
