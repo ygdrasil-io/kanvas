@@ -34,6 +34,23 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
         if (target.colorSpace != ColorSpace.SRGB) {
             return notCandidate("W4c supports only sRGB targets")
         }
+        if (W4cFramePreparationV1.qualifiesHardPathRoot(scene, target)) {
+            val admission = issueOriginalFrameAdmission(scene, target, W4cOriginalFrameModeV1.HardPathRoot)
+            return when (val preparation = W4cFramePreparationV1.prepareFrame(admission)) {
+                is W4cFramePreparationResultV1.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(
+                    W7_HARD_PATH_ROOT_CAPABILITY_ID, scene.canonicalId, target, preparation.refusals,
+                )
+                is W4cFramePreparationResultV1.Accepted -> {
+                    val frame = preparation.hardPathRootFrame ?: return invalidSelection(
+                        "HardPath root preparation did not retain its original-frame proof",
+                    )
+                    GpuPlanSelection.Candidate(W7HardPathRootCandidate(this, scene.canonicalId, target, frame))
+                }
+                is W4cFramePreparationResultV1.Gap -> notCandidate(preparation.message)
+                is W4cFramePreparationResultV1.Invalid -> invalidSelection(preparation.message)
+                is W4cFramePreparationResultV1.ResourceLimit -> resourceSelection(preparation.message)
+            }
+        }
         val admission = issueOriginalFrameAdmission(scene, target, W4cOriginalFrameModeV1.PathOnly)
         return when (val preparation = W4cFramePreparationV1.prepareFrame(admission)) {
             is W4cFramePreparationResultV1.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(CAPABILITY_ID, scene.canonicalId, target, preparation.refusals)
@@ -72,9 +89,50 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
         capabilities.bufferAllocationPolicy.uniformFloorBytes,
     ).all { it > 0L && it and (it - 1L) == 0L }
 
-    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> =
-        if (hasPendingSources(candidate)) constructSources(candidate,capabilities,budget).prepareAndPublishSourcesV4()
+    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
+        val hardPathCandidate = candidate as? W7HardPathRootCandidate
+        if (hardPathCandidate != null) {
+            if (hardPathCandidate.owner !== this || !hardPathCandidate.hasMatchingFingerprints()) return invalidCandidate()
+            val extent = SizeI32(hardPathCandidate.target.extent.width, hardPathCandidate.target.extent.height)
+            if (extent.width > capabilities.maxTextureDimension2D || extent.height > capabilities.maxTextureDimension2D)
+                return promoted(W4cPlanDiagnostics.CapabilityTextureDimension, "Target extent exceeds device texture limits")
+            if (FORMAT !in capabilities.supportedFormats()) return promoted(W4cPlanDiagnostics.CapabilityFormat, "W4c target format is unavailable")
+            if (!REQUIRED_OPERATIONS.all { it in capabilities.supportedOperations() })
+                return promoted(W4cPlanDiagnostics.CapabilityOperation, "W4c required operation is unavailable")
+            if (PlanDepthStencilFormat.Depth24PlusStencil8 !in capabilities.supportedDepthStencilFormats())
+                return promoted(W4cPlanDiagnostics.CapabilityDepthStencilFormat, "W4c depth-stencil format is unavailable")
+            if (capabilities.maxDynamicUniformBuffersPerPipelineLayout < 1)
+                return promoted(W4cPlanDiagnostics.CapabilityDynamicUniform, "W4c requires one dynamic uniform buffer")
+            if (!validAllocationFacts(capabilities))
+                return promoted(W4cPlanDiagnostics.CapabilityAllocationPolicy, "W4c allocation facts are not positive powers of two")
+            return try {
+                W5bDestinationGraphSealer.constructHardPathRoot(hardPathCandidate.frame, capabilities, budget)
+                    .publishConstructionResult()
+            } catch (failure: RawMaterialRequirementsV2.Refusal) {
+                RenderPlanResult.ResourceLimitExceeded(listOf(diag(
+                    RenderDiagnosticCode(failure.code), RenderDiagnosticDomain.RESOURCE, failure.code,
+                )))
+            } catch (_: ArithmeticException) {
+                resourceLimit(W4cPlanDiagnostics.SizeOverflow, "HardPath root graph arithmetic overflowed")
+            } catch (failure: IllegalArgumentException) {
+                val code = failure.message ?: "HardPath root graph invariants were not satisfied"
+                if (code == "unsupported.w5b.destination-capability" ||
+                    code == "unsupported.w5b.destination-texture" ||
+                    code == "unsupported.w5b.destination-row-alignment") {
+                    RenderPlanResult.GapOnPromotedScope(listOf(diag(
+                        RenderDiagnosticCode(code), RenderDiagnosticDomain.CAPABILITY, code,
+                    )))
+                } else if (code == W4cPlanDiagnostics.CapabilityBufferSize) {
+                    promoted(W4cPlanDiagnostics.CapabilityBufferSize, "W4c buffer capacity exceeds device limits")
+                } else {
+                    resourceLimit(W4cPlanDiagnostics.PlanIdentityInvalid,
+                        code)
+                }
+            }
+        }
+        return if (hasPendingSources(candidate)) constructSources(candidate,capabilities,budget).prepareAndPublishSourcesV4()
         else construct(candidate,capabilities,budget).publishConstructionResult()
+    }
 
     internal fun hasPendingSources(candidate: GpuPlanCandidate): Boolean =
         (candidate as? W4cCandidate)?.sourceTable?.sources()?.any { it.pending } == true
@@ -441,7 +499,7 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
         message: String,
     ): RenderDiagnostic = W4cPlanDiagnostics.diagnostic(code, domain, message)
 
-    private fun planIdentity(
+    internal fun planIdentity(
         scene: CanonicalId,
         target: RenderTargetDescriptor,
         capabilities: PlanCapabilitySnapshot,
@@ -511,7 +569,24 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
                 target.canonicalId == targetFingerprint
     }
 
+    private class W7HardPathRootCandidate(
+        val owner: W4cPathFillPlanCompiler,
+        override val sceneCanonicalId: CanonicalId,
+        override val target: RenderTargetDescriptor,
+        val frame: W7HardPathRootFrameV1,
+    ) : GpuPlanCandidate {
+        override val capabilityId: String = W7_HARD_PATH_ROOT_CAPABILITY_ID
+        private val sceneFingerprint = sceneCanonicalId
+        private val targetFingerprint = target.canonicalId
+
+        fun hasMatchingFingerprints(): Boolean =
+            sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint &&
+                frame.sceneFingerprint == sceneFingerprint && frame.targetFingerprint == targetFingerprint &&
+                frame.authenticates(owner)
+    }
+
     public companion object {
+        internal const val W7_HARD_PATH_ROOT_CAPABILITY_ID: String = "w7.w4c.root-drawcolor-path.v1"
         public const val W5B_CAPABILITY_ID: String = "w5b-path-fill-final-blend-v3"
         /** Historical public graph contract; it carries only legacy per-draw colors. */
         public const val HISTORICAL_CAPABILITY_ID: String =
@@ -526,7 +601,7 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
             capabilityId == CAPABILITY_ID
 
         internal val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
-        private val REQUIRED_OPERATIONS = setOf(
+        internal val REQUIRED_OPERATIONS = setOf(
             PlanOperationCapability.RenderPass,
             PlanOperationCapability.CopyUpload,
             PlanOperationCapability.UniformBuffer,

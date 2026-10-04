@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import java.util.Collections
 import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.CanonicalId
@@ -61,6 +62,7 @@ internal sealed interface W4cFramePreparationResultV1 {
         val materialPlanTable: MaterialPlanTable?,
         val capabilityId: String,
         val sourceTable: MaterialSourceConstructionTableV4,
+        val hardPathRootFrame: W7HardPathRootFrameV1? = null,
     ) : W4cFramePreparationResultV1 {
         val draws: List<W4cSealedDrawV1> = Collections.unmodifiableList(
             draws.map { draw ->
@@ -137,8 +139,7 @@ internal object W4cFramePreparationV1 {
 
     internal fun prepareFrame(admission: W4cOriginalFrameAdmissionV1): W4cFramePreparationResultV1 {
         check(admission.owner.authenticates(admission)) { "W4c frame admission was not issued by its owner" }
-        // HardPathRoot remains an unselected future mode until the later root-frame task.
-        check(admission.mode == W4cOriginalFrameModeV1.PathOnly)
+        val hardPathRoot = admission.mode == W4cOriginalFrameModeV1.HardPathRoot
         val scene = admission.scene
         if (scene.extent != admission.target.extent || scene.colorSpace != admission.target.colorSpace) {
             return W4cFramePreparationResultV1.Invalid("Scene and target descriptors disagree")
@@ -149,8 +150,14 @@ internal object W4cFramePreparationV1 {
         val materialEntries = mutableListOf<MaterialPlanEntry>()
         val sources = mutableListOf<MaterialSourceConstructionV4>()
         val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
+        val hardPathSlots = mutableListOf<W7HardPathSlotV1>()
+        val hardPathColors = mutableListOf<SolidRectDraw>()
         var frameAttemptedEdgesBeforeI32 = 0
         var elidedNoOpsI32 = 0
+        var pathSourceOccurrenceI32 = 0
+        if (hardPathRoot && scene.size > W4cPathFillPlanCompiler.MAX_DRAWS) {
+            return W4cFramePreparationResultV1.Gap("HardPath root accepts at most 512 original commands")
+        }
         for ((commandIndex, command) in scene.withIndex()) {
             when (command) {
                 is SceneCommand.Draw -> {
@@ -170,19 +177,56 @@ internal object W4cFramePreparationV1 {
                     ) {
                         is DrawRecognition.NoOp -> {
                             elidedNoOpsI32++
+                            if (hardPathRoot) hardPathSlots += W7HardPathSlotV1(
+                                commandIndex, command.canonicalId, W7HardPathSlotKindV1.NoOp,
+                                attemptedEdgesBeforeI32 = frameAttemptedEdgesBeforeI32,
+                                attemptedEdgesAfterI32 = draw.frameAttemptedEdgesAfterI32,
+                            )
                             frameAttemptedEdgesBeforeI32 = draw.frameAttemptedEdgesAfterI32
                         }
                         is DrawRecognition.MaterialRefused -> {
                             materialRefusals += draw.refusal
+                            if (hardPathRoot) hardPathSlots += W7HardPathSlotV1(
+                                commandIndex, command.canonicalId, W7HardPathSlotKindV1.NoOp,
+                                attemptedEdgesBeforeI32 = frameAttemptedEdgesBeforeI32,
+                                attemptedEdgesAfterI32 = draw.frameAttemptedEdgesAfterI32,
+                            )
                             frameAttemptedEdgesBeforeI32 = draw.frameAttemptedEdgesAfterI32
                         }
                         is DrawRecognition.Accepted -> {
                             draws += draw.draw
+                            if (hardPathRoot) {
+                                hardPathSlots += W7HardPathSlotV1(
+                                    commandIndex, command.canonicalId, W7HardPathSlotKindV1.Path,
+                                    path = draw.draw,
+                                    attemptedEdgesBeforeI32 = frameAttemptedEdgesBeforeI32,
+                                    attemptedEdgesAfterI32 = draw.frameAttemptedEdgesAfterI32,
+                                    pathSourceOccurrenceI32 = pathSourceOccurrenceI32++,
+                                )
+                            }
                             frameAttemptedEdgesBeforeI32 = draw.frameAttemptedEdgesAfterI32
                         }
                         is DrawRecognition.Gap -> return W4cFramePreparationResultV1.Gap(draw.message)
                         is DrawRecognition.Invalid -> return W4cFramePreparationResultV1.Invalid(draw.message)
                         is DrawRecognition.ResourceLimit -> return W4cFramePreparationResultV1.ResourceLimit(draw.message)
+                    }
+                }
+                is SceneCommand.DrawColor -> {
+                    if (!hardPathRoot) return W4cFramePreparationResultV1.Gap("Scene command is outside W4c")
+                    when (val draw = W3DrawColorAdmissionV1.recognize(
+                        command, commandIndex, targetBounds, CompositionDomain.LINEAR,
+                    )) {
+                        is W3DrawColorAdmissionResultV1.Accepted -> {
+                            hardPathColors += draw.draw
+                            hardPathSlots += W7HardPathSlotV1(
+                                commandIndex, command.canonicalId, W7HardPathSlotKindV1.DrawColor,
+                                color = draw.draw,
+                                attemptedEdgesBeforeI32 = frameAttemptedEdgesBeforeI32,
+                                attemptedEdgesAfterI32 = frameAttemptedEdgesBeforeI32,
+                            )
+                        }
+                        is W3DrawColorAdmissionResultV1.Gap -> return W4cFramePreparationResultV1.Gap(draw.diagnostic.message)
+                        is W3DrawColorAdmissionResultV1.Invalid -> return W4cFramePreparationResultV1.Invalid(draw.diagnostic.message)
                     }
                 }
                 is SceneCommand.SetTransform -> if (!finite(command.matrix)) {
@@ -201,6 +245,9 @@ internal object W4cFramePreparationV1 {
         if (draws.isEmpty() && elidedNoOpsI32 == 0) {
             return W4cFramePreparationResultV1.Gap("W4c requires at least one visual path draw")
         }
+        if (hardPathRoot && (hardPathColors.isEmpty() || draws.none { it.blend is BlendPlan.DestinationReadV1 })) {
+            return W4cFramePreparationResultV1.Gap("HardPath root requires a retained DrawColor and DARKEN path")
+        }
         val pending = sources.any { it.pending }
         val selectedDraws = if (pending) draws.mapIndexed { ordinal, draw -> draw.copy(material = MaterialPlanRef(ordinal)) } else draws
         val materialPlanTable = materialEntries.takeIf { it.isNotEmpty() && !pending }?.let(MaterialPlanTable::of)
@@ -209,7 +256,70 @@ internal object W4cFramePreparationV1 {
             selectedDraws.any { it.blend != BlendPlan.LegacySrcOverV1 }
         ) W4cPathFillPlanCompiler.W5B_CAPABILITY_ID else W4cPathFillPlanCompiler.CAPABILITY_ID
         val sourceTable = (MaterialSourceConstructionTableV4.of(sources) as SourceConstructionResultV4.Built).value
-        return W4cFramePreparationResultV1.Accepted(selectedDraws, materialPlanTable, capabilityId, sourceTable)
+        if (hardPathRoot && (pending || materialPlanTable == null)) {
+            return W4cFramePreparationResultV1.Gap("HardPath root requires resolved solid path materials")
+        }
+        val rootFrame = if (hardPathRoot) W7HardPathRootFrameV1(
+            admission,
+            hardPathSlots,
+            requireNotNull(materialPlanTable),
+            sourceTable,
+            frameAttemptedEdgesBeforeI32,
+        ) else null
+        return W4cFramePreparationResultV1.Accepted(selectedDraws, materialPlanTable, capabilityId, sourceTable, rootFrame)
+    }
+
+    /** Whole-frame structural preclassification; geometry preparation starts only after this accepts. */
+    internal fun qualifiesHardPathRoot(scene: SceneSnapshot, target: RenderTargetDescriptor): Boolean {
+        if (scene.extent != target.extent || scene.colorSpace != ColorSpace.SRGB ||
+            target.colorSpace != ColorSpace.SRGB || target.compositionDomain != CompositionDomain.LINEAR ||
+            scene.size > W4cPathFillPlanCompiler.MAX_DRAWS) return false
+        var hasColor = false
+        var hasDarkenPath = false
+        val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
+        for (command in scene) {
+            when (command) {
+                is SceneCommand.DrawColor -> {
+                    if (!W3DrawColorAdmissionV1.isFinite(command.transform) || !command.transform.isIdentity ||
+                        command.mode != BlendMode.SRC_OVER) return false
+                    val clip = when (val recognized = W3DrawColorAdmissionV1.recognizeClip(command.clip)) {
+                        is W3DrawColorAdmissionV1.ClipRecognition.Accepted -> recognized.bounds
+                        else -> return false
+                    }
+                    if (clip != null && W3DrawColorAdmissionV1.intersect(targetBounds, clip) == null) return false
+                    hasColor = true
+                }
+                is SceneCommand.Draw -> {
+                    val node = command.node
+                    val path = (node.geometry as? GeometryNode.Path)?.path ?: return false
+                    if (!finite(path) || !finite(node.transform) || node.origin != DrawOrigin.PATH ||
+                        path.fillRule !in setOf(FillRule.WINDING, FillRule.EVEN_ODD) ||
+                        node.coverage != CoverageRequest.HARD_EDGE ||
+                        !(node.transform.isIdentity || node.transform.isScaleTranslate()) ||
+                        recognizeClip(node.clip) !is ClipRecognition.Accepted || !supportsSolidFill(node)) return false
+                    val paint = node.paint ?: return false
+                    if (paint.shader != null || paint.colorFilter != null || paint.maskFilter != null ||
+                        paint.pathEffect != null || paint.imageFilter != null || paint.blender != null ||
+                        paint.style != PaintStyleNode.FILL || node.resource != null || node.operationBlendMode != null ||
+                        node.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty ||
+                        node.material !is MaterialNode.Solid || node.material.color.canonicalId != paint.color.canonicalId) return false
+                    val blendMode = when (val blend = node.blend) {
+                        BlendNode.SrcOver -> BlendMode.SRC_OVER
+                        is BlendNode.Mode -> blend.mode
+                        is BlendNode.Paint -> if (blend.blender == null) blend.mode else return false
+                        is BlendNode.Custom -> return false
+                    }
+                    if (blendMode !in setOf(BlendMode.SRC_OVER, BlendMode.DARKEN, BlendMode.DST) ||
+                        paint.blendMode != blendMode) return false
+                    if (blendMode == BlendMode.DARKEN) hasDarkenPath = true
+                }
+                is SceneCommand.SetTransform -> if (!finite(command.matrix)) return false
+                is SceneCommand.SetClip -> if (!finiteMetadataClip(command.clip)) return false
+                is SceneCommand.Annotation -> if (!finite(command.copyBounds())) return false
+                else -> return false
+            }
+        }
+        return hasColor && hasDarkenPath
     }
 
     private fun recognizeDraw(

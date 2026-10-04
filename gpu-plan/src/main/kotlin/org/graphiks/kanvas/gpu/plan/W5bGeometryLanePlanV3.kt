@@ -38,6 +38,7 @@ public class W5bGeometryLanePlanV3 internal constructor(
     commandIndicesI32: List<Int>,
     public val drawDataResources: PlanDrawDataResources?,
     public val depthStencil: PlanResourceId?,
+    public val hardPathPartitionKind: W7HardPathRootFrameV1.PartitionKind? = null,
 ) {
     public val capabilityId: String get() = sourceGraph.capabilityId
     private val commands = immutableList(commandIndicesI32)
@@ -137,6 +138,49 @@ internal class NativeCompositeGeometryLayoutV4(lanes: List<NativeGeometryLaneMet
     val dataByCommand = java.util.Collections.unmodifiableMap(LinkedHashMap(data))
     val depthByCommand = java.util.Collections.unmodifiableMap(LinkedHashMap(depth))
 }
+
+internal class W3DrawColorGeometryPartitionV1(
+    resources: List<PlanResource>,
+    val drawData: PlanDrawDataResources,
+) {
+    val resources: List<PlanResource> = immutableList(resources)
+}
+
+/** The shared W3-compatible V/I/U recipe for one aggregate DrawColor partition. */
+internal fun w3DrawColorGeometryPartitionV1(
+    drawCountI32: Int,
+    capabilities: PlanCapabilitySnapshot,
+    ordinalI32: Int,
+): W3DrawColorGeometryPartitionV1 {
+    require(drawCountI32 > 0 && ordinalI32 >= 0)
+    val alignmentI64 = capabilities.minUniformBufferOffsetAlignment.toLong()
+    val strideI64 = Math.addExact(32L, (alignmentI64 - 32L % alignmentI64) % alignmentI64)
+    val resources = listOf(
+        Triple(PlanResourceRole.VertexData, PlanScratchBufferKind.Vertex, 32L),
+        Triple(PlanResourceRole.IndexData, PlanScratchBufferKind.Index, 24L),
+        Triple(PlanResourceRole.UniformData, PlanScratchBufferKind.Uniform, strideI64),
+    ).map { (role, kind, perDraw) ->
+        val bytesI64 = requireNotNull(capabilities.bufferAllocationPolicy.reserve(
+            kind, Math.multiplyExact(drawCountI32.toLong(), perDraw),
+        ))
+        require(bytesI64 <= capabilities.maxBufferSizeBytes)
+        val usage = when (role) {
+            PlanResourceRole.VertexData -> PlanResourceUsage.Vertex
+            PlanResourceRole.IndexData -> PlanResourceUsage.Index
+            else -> PlanResourceUsage.Uniform
+        }
+        PlanResource.of(
+            role, ordinalI32, PlanResourceKind.Buffer, null, null, bytesI64,
+            setOf(usage, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, 1,
+        )
+    }
+    return W3DrawColorGeometryPartitionV1(resources, PlanDrawDataResources(
+        resources.single { it.role == PlanResourceRole.VertexData }.id,
+        resources.single { it.role == PlanResourceRole.IndexData }.id,
+        resources.single { it.role == PlanResourceRole.UniformData }.id,
+    ))
+}
+
 internal fun nativeCompositeGeometryLayoutV4(inputs: List<NativeGeometryInputV4>,
     capabilities: PlanCapabilitySnapshot): NativeCompositeGeometryLayoutV4 {
     val lanes = mutableListOf<NativeGeometryLaneMetadataV4>()
@@ -159,22 +203,7 @@ internal fun nativeCompositeGeometryLayoutV4(inputs: List<NativeGeometryInputV4>
         }.toMutableList()
         if (graph.capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) {
             require(resources.isEmpty())
-            val alignmentI64 = capabilities.minUniformBufferOffsetAlignment.toLong()
-            val strideI64 = Math.addExact(32L, (alignmentI64 - 32L % alignmentI64) % alignmentI64)
-            listOf(Triple(PlanResourceRole.VertexData, PlanScratchBufferKind.Vertex, 32L),
-                Triple(PlanResourceRole.IndexData, PlanScratchBufferKind.Index, 24L),
-                Triple(PlanResourceRole.UniformData, PlanScratchBufferKind.Uniform, strideI64)).forEach { (role, kind, perDraw) ->
-                val bytesI64 = requireNotNull(capabilities.bufferAllocationPolicy.reserve(kind,
-                    Math.multiplyExact(draws.size.toLong(), perDraw)))
-                require(bytesI64 <= capabilities.maxBufferSizeBytes)
-                val usage = when (role) {
-                    PlanResourceRole.VertexData -> PlanResourceUsage.Vertex
-                    PlanResourceRole.IndexData -> PlanResourceUsage.Index
-                    else -> PlanResourceUsage.Uniform
-                }
-                resources += PlanResource.of(role, ordinal, PlanResourceKind.Buffer, null, null, bytesI64,
-                    setOf(usage, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, 1)
-            }
+            resources += w3DrawColorGeometryPartitionV1(draws.size, capabilities, ordinal).resources
         }
         val data = PlanDrawDataResources(resources.single { it.role == PlanResourceRole.VertexData }.id,
             resources.single { it.role == PlanResourceRole.IndexData }.id, resources.single { it.role == PlanResourceRole.UniformData }.id)
@@ -197,14 +226,17 @@ internal fun nativeCompositeGeometryLayoutV4(inputs: List<NativeGeometryInputV4>
 
 /** Exact color/geometry split for the successor; historical W4 path validation stays closed. */
 internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<PlanResourceId, PlanResource>,
-    visualCommandCountI32: Int, w4eSource: W4eGeometryFactsV6? = null) {
+    visualCommandCountI32: Int, w4eSource: W4eGeometryFactsV6? = null,
+    allowLegacyDrawColor: Boolean = false) {
     val colors = passes.flatMap { pass -> when (pass) {
         is PlanPass.RenderPass -> pass.draws()
         is PlanPass.StencilCover -> listOf(pass.draw)
         else -> emptyList()
     } }
     require(colors.size == visualCommandCountI32 && colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
-    require(colors.all { it.sample == SamplePlan.SingleSample && (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 ||
+    require(colors.all { it.sample == SamplePlan.SingleSample && (allowLegacyDrawColor &&
+        it is SolidRectDraw && it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 ||
+        it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 ||
         (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw ||
             it is GeneralPathDraw || it is W5bW4ePathDraw) &&
             it.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||

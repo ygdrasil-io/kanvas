@@ -22,6 +22,7 @@ internal class RenderGraphConstruction internal constructor(
     val geometryIssued: Boolean = false,
     geometryLanes: List<GeometryLaneConstruction> = emptyList(),
     val w4ePayload: W4eNativePayloadPlan? = null,
+    val hardPathRootPublication: W7HardPathRootFrameV1.Publication? = null,
 ) {
     private val extent = targetExtent.copy()
     val targetExtent: SizeI32 get() = extent.copy()
@@ -40,14 +41,31 @@ internal class RenderGraphConstruction internal constructor(
     fun verifyW4dCompilerWitness(): Boolean = w4dIssued
     fun verifyW4dGeneralCompilerWitness(): Boolean = generalIssued
     fun verifyW5bGeometryCompilerWitness(): Boolean = geometryIssued
+    fun withHardPathRootPublication(
+        publication: W7HardPathRootFrameV1.Publication,
+    ): RenderGraphConstruction {
+        require(hardPathRootPublication == null && publication.frameIsAuthentic() &&
+            publication.authenticatesConstruction(id, capabilityId, targetExtent, capabilities, budget,
+                visualCommandCount, resources(), passes(), dependencies(), peakFrameLocalBytes, materialTable))
+        val partitions = publication.physicalPartitions()
+        val lanes = partitions.map { partition ->
+            GeometryLaneConstruction(this, partition.commandIndicesI32(), partition.drawDataResources,
+                partition.depthStencil, partition.kind)
+        }
+        return RenderGraphConstruction(id, capabilityId, targetExtent, colorFormat, capabilities, budget,
+            visualCommandCount, resources(), passes(), dependencies(), peakFrameLocalBytes, materialTable,
+            geometryIssued = true, geometryLanes = lanes, hardPathRootPublication = publication)
+    }
     fun withWitness(w4d: Boolean = w4dIssued, general: Boolean = generalIssued,
         geometry: Boolean = geometryIssued, newLanes: List<GeometryLaneConstruction> = lanes): RenderGraphConstruction =
         RenderGraphConstruction(id,capabilityId,targetExtent,colorFormat,capabilities,budget,visualCommandCount,
-            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4d,general,geometry,newLanes,w4ePayload)
+            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4d,general,geometry,newLanes,w4ePayload,
+            hardPathRootPublication)
     fun withW4ePayload(payload: W4eNativePayloadPlan): RenderGraphConstruction {
-        require(w4ePayload == null && payload.matchesDeclaredResources(resources()))
+        require(w4ePayload == null && hardPathRootPublication == null && payload.matchesDeclaredResources(resources()))
         return RenderGraphConstruction(id,capabilityId,targetExtent,colorFormat,capabilities,budget,visualCommandCount,
-            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4dIssued,generalIssued,geometryIssued,lanes,payload)
+            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4dIssued,generalIssued,geometryIssued,
+            lanes,payload,hardPathRootPublication)
     }
     fun resources(): List<PlanResource> = resourceValues
     fun passes(): List<PlanPass> = passValues
@@ -55,13 +73,15 @@ internal class RenderGraphConstruction internal constructor(
     fun w6dProgramLeases(): List<W6dProgramLeaseV1> = w6dProgramLeaseValues
 
     fun rebindMaterials(table: MaterialPlanTable, remap: (MaterialPlanRef) -> MaterialPlanRef): RenderGraphConstruction {
+        require(hardPathRootPublication == null) { W5fPlanDiagnostics.Schema }
         val passes = remapSourcePassesV4(passes(),remap=remap)
         val oldStopsI64 = resources().filter { it.role == PlanResourceRole.GradientStopData }.sumOf { it.byteSize }
         val rebound = RenderGraph.construct(id,capabilityId,targetExtent,colorFormat,capabilities,budget,visualCommandCount,
             resources().filterNot { it.role == PlanResourceRole.GradientStopData },passes,dependencies(),
             Math.subtractExact(peakFrameLocalBytes,oldStopsI64),table)
         val reboundLanes = lanes.map {
-            GeometryLaneConstruction(it.sourceGraph.rebindMaterials(table,remap),it.commandIndicesI32(),it.drawDataResources,it.depthStencil)
+            GeometryLaneConstruction(it.sourceGraph.rebindMaterials(table,remap),it.commandIndicesI32(),it.drawDataResources,
+                it.depthStencil,it.hardPathPartitionKind)
         }
         var authenticated = rebound
         if (w4dIssued) authenticated = RenderGraph.issueW4dCompilerWitness(authenticated)
@@ -71,6 +91,8 @@ internal class RenderGraphConstruction internal constructor(
     }
 
     fun publish(): RenderGraph {
+        require((capabilityId == W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID) ==
+            (hardPathRootPublication != null)) { W5fPlanDiagnostics.Schema }
         val rectScratchI64 = if ((capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID ||
                 capabilityId == W3SolidRectPlanCompiler.W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID) &&
             visualSources(passes()).any { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 }) {
@@ -84,8 +106,9 @@ internal class RenderGraphConstruction internal constructor(
                 Math.addExact(bytes,reserved)
             }
         } else 0L
-        return RenderGraph.publishConstruction(this,
-            packConstructedFrame(listOf(this),materialTable,Math.addExact(peakFrameLocalBytes,rectScratchI64)))
+        val packed = hardPathRootPublication?.let { PackedFrameSourcesV4.issueHardPathRoot(this, it) }
+            ?: packConstructedFrame(listOf(this),materialTable,Math.addExact(peakFrameLocalBytes,rectScratchI64))
+        return RenderGraph.publishConstruction(this,packed)
     }
 }
 
@@ -286,6 +309,26 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
             return PackedFrameSourcesV4(table,first.capabilities,first.budget,packed)
         }
 
+        fun issueHardPathRoot(
+            construction: RenderGraphConstruction,
+            publication: W7HardPathRootFrameV1.Publication,
+        ): PackedFrameSourcesV4 {
+            require(construction.capabilityId == W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID &&
+                construction.materialTable != null && publication.frameIsAuthentic() &&
+                publication.authenticatesConstruction(construction.id, construction.capabilityId,
+                    construction.targetExtent, construction.capabilities, construction.budget,
+                    construction.visualCommandCount, construction.resources(), construction.passes(),
+                    construction.dependencies(), construction.peakFrameLocalBytes, construction.materialTable)) {
+                W5fPlanDiagnostics.Schema
+            }
+            require(visualSources(construction.passes()).all {
+                it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 ||
+                    it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
+            }) { W5fPlanDiagnostics.Schema }
+            return PackedFrameSourcesV4(construction.materialTable, construction.capabilities,
+                construction.budget, emptyMap())
+        }
+
         fun issuePrepared(table: MaterialPlanTable, capabilities: PlanCapabilitySnapshot, budget: PlanBudget,
             footprints: List<MaterialSourceFootprintV4>, nonUniformBytesI64: Long): PackedFrameSourcesV4 =
             PackedFrameSourcesV4(table, capabilities, budget,
@@ -312,7 +355,8 @@ private fun visualSources(passes: List<PlanPass>): List<PlanDraw> = passes.flatM
     else -> emptyList()
 } }
 internal class GeometryLaneConstruction(val sourceGraph: RenderGraphConstruction, commands: List<Int>,
-    val drawDataResources: PlanDrawDataResources?, val depthStencil: PlanResourceId?) {
+    val drawDataResources: PlanDrawDataResources?, val depthStencil: PlanResourceId?,
+    val hardPathPartitionKind: W7HardPathRootFrameV1.PartitionKind? = null) {
     private val indices = immutableList(commands)
     fun commandIndicesI32(): List<Int> = indices
     val capabilityId: String get() = sourceGraph.capabilityId
