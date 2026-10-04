@@ -419,6 +419,7 @@ public class SolidRectDraw private constructor(
     override public val materialAuthority: PlanDrawMaterialAuthority,
     visibleBounds: RectI32,
     scissor: RectI32,
+    sourceRasterBoundsI32: RectI32,
     override public val coverage: CoveragePlan,
     override public val sample: SamplePlan,
     override public val blend: BlendPlan,
@@ -427,9 +428,11 @@ public class SolidRectDraw private constructor(
         get() = (materialAuthority as? PlanDrawMaterialAuthority.MaterialV1)?.coordinates
     private val storedVisibleBounds = visibleBounds.copy()
     private val storedScissor = scissor.copy()
+    private val storedSourceRasterBoundsI32 = sourceRasterBoundsI32.copy()
 
     public fun copyVisibleBounds(): RectI32 = storedVisibleBounds.copy()
     public fun copyScissor(): RectI32 = storedScissor.copy()
+    public fun copySourceRasterBoundsI32(): RectI32 = storedSourceRasterBoundsI32.copy()
 
     /** Legacy-only compatibility view. W5 draws never carry a duplicated colour value. */
     override public val color: ColorF32
@@ -439,12 +442,13 @@ public class SolidRectDraw private constructor(
     /** Rebind only the occurrence identity; retain the selected geometry and material authority. */
     internal fun withCommandIndexI32(indexI32: Int): SolidRectDraw {
         require(indexI32 >= 0)
-        return SolidRectDraw(indexI32, materialAuthority, storedVisibleBounds, storedScissor, coverage, sample, blend)
+        return SolidRectDraw(indexI32, materialAuthority, storedVisibleBounds, storedScissor, storedSourceRasterBoundsI32,
+            coverage, sample, blend)
     }
 
     public companion object {
         internal fun coverageMaterialCarrier(draw: PlanDraw, bounds: RectI32): SolidRectDraw =
-            SolidRectDraw(draw.commandIndex, draw.materialAuthority, bounds, bounds,
+            SolidRectDraw(draw.commandIndex, draw.materialAuthority, bounds, bounds, bounds,
                 CoveragePlan.FullOrScissor, SamplePlan.SingleSample, BlendPlan.SrcOver)
 
         public fun of(
@@ -455,14 +459,16 @@ public class SolidRectDraw private constructor(
             coverage: CoveragePlan = CoveragePlan.FullOrScissor,
             sample: SamplePlan = SamplePlan.SingleSample,
             blend: BlendPlan = BlendPlan.SrcOver,
+            sourceRasterBoundsI32: RectI32 = visibleBounds,
         ): SolidRectDraw {
             require(commandIndex >= 0) { "Command index must be non-negative" }
-            require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
+            require(!visibleBounds.isEmpty && !scissor.isEmpty && !sourceRasterBoundsI32.isEmpty) { "Draw rectangles must be non-empty" }
             return SolidRectDraw(
                 commandIndex,
                 PlanDrawMaterialAuthority.LegacyColorV1.of(color),
                 visibleBounds,
                 scissor,
+                sourceRasterBoundsI32,
                 coverage,
                 sample,
                 blend,
@@ -481,12 +487,14 @@ public class SolidRectDraw private constructor(
             coordinatesV2: MaterialCoordinatePlanV2? = null,
             coordinatesV4: SourceCoordinatesV4? = null,
             composedV5: Boolean = false,
+            sourceRasterBoundsI32: RectI32 = visibleBounds,
         ): SolidRectDraw {
             require(commandIndexI32 >= 0) { "Command index must be non-negative" }
-            require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
+            require(!visibleBounds.isEmpty && !scissor.isEmpty && !sourceRasterBoundsI32.isEmpty) { "Draw rectangles must be non-empty" }
             return SolidRectDraw(commandIndexI32, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(material) else coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material,it) }
                 ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
-                ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), visibleBounds, scissor, coverage, sample, blend)
+                ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), visibleBounds, scissor, sourceRasterBoundsI32,
+                coverage, sample, blend)
         }
     }
 }
@@ -496,6 +504,7 @@ public fun SolidRectDraw.withMaterialRef(material: MaterialPlanRef): SolidRectDr
     commandIndex, material, copyVisibleBounds(), copyScissor(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
     (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
     materialAuthority is PlanDrawMaterialAuthority.MaterialV5,
+    copySourceRasterBoundsI32(),
 )
 
 public class AnalyticRectDraw private constructor(

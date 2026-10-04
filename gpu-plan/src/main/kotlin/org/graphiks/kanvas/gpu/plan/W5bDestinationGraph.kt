@@ -311,7 +311,8 @@ internal fun PlanDraw.withFinalBlendV1(sealed: BlendPlan): PlanDraw {
     val composed = materialAuthority is PlanDrawMaterialAuthority.MaterialV5
     return when (this) {
         is SolidRectDraw -> SolidRectDraw.ofMaterial(commandIndex, ref, copyVisibleBounds(), copyScissor(),
-            coverage, sample, sealed, materialCoordinates, materialCoordinatesV2, coordinates, composed)
+            coverage, sample, sealed, materialCoordinates, materialCoordinatesV2, coordinates, composed,
+            copySourceRasterBoundsI32())
         is W5bPointDraw -> withBlend(sealed)
         is W5bVerticesDraw -> withBlend(sealed)
         is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(commandIndex, ref, copyDeviceBounds(), copyRasterBounds(),

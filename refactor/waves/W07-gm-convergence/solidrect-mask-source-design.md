@@ -44,7 +44,8 @@ immutables/seals/canonical recipes pertinentes ; aucun clone ne le perd.
 Pour direct MaskFilter.Blur seulement, W6 lit les bounds source complets,
 les intersecte avec l'inverse-demand existante, puis produit réellement la
 couverture dans cette allocation. Ne pas modifier globalement
-w6aRasterBoundsI32/known-content des scopes ordinaires. Pour le témoin bord,
+w6aRasterBoundsI32/known-content des scopes ordinaires. Pour l'ancien témoin
+au coin, clip[0,0,4,4] (pas le nouveau clip intérieur),
 source `[-3,-3,7,7]`, origin device(-3,-3), extent10×10 ; clip final[0,0,4,4].
 Le fullscreen opaque est valable seulement si l'allocation authentifiée
 est contenue dans la véritable géométrie. Aucune connaissance opaque
@@ -84,6 +85,20 @@ cas refusé ; dérivation des nouvelles charges documentée avant GREEN,
 aucun chiffre de boundary calibré au GPU. Tests de contexte W6a bounds,
 restore/composition et masque existants ; legacy branches identifiées.
 
+Témoin budget minimal séparé, sans trait AA ni fond rouge : même Surface32,
+grand rectangle bleu filtré et clip intérieur. Somme prospective fixée avant
+produit/native : root4096 + staging8192 + W6 uniform16 + BLUE source16 +
+six textures5136 = B17456. Six textures pour source10×10 : coverage400,
+blurX640, blurY1024, NORMAL1024, shadedSource1024, materialized1024 ;
+aucun lease W6d pour ces opérations fixes. Au B : oracle bleu opaque dans
+clip/transparent ailleurs et quatre renders. Au B−1=17455 : readPixels
+full4096 doit refuser `w6b.filter.frame_budget_exceeded:`, préserver sentinel
+0x5a, puis discard et rectangle bleu plein sur la même Surface/même budget,
+native/replay intégral. Pas de recherche de seuil ni changement silencieux
+de B ; si la topologie change réellement, nouvelle dérivation avant exécution.
+La comptabilité historique du pool natif W3 de récupération est distincte,
+non corrigée/relâchée dans ce sous-lot ; ne pas la présenter comme inexistante.
+
 Un source entièrement hors consumer mais dans le halo reste une admission
 séparée : W3 peut le rejeter avant publication. Le suivre explicitement,
 pas débloquer silencieusement tous les filtres/geometry/materials/domaines.
@@ -108,9 +123,11 @@ fullbuffer/native/replay PASS ; layer common AA peut rester RED attendu.
 
 ## Livraison
 
-SDD Luna implémentation, main native/Git, reviewer indépendant Astra pour
-ce choix architectural diagnostiqué (Sol review tenté mais capacité refusée).
-Aucune prétendue nouvelle review Sol. Preuve source puis revue, mesure complète
+SDD Luna implémentation, main native/Git, Astra pour le diagnostic architectural
+et Sol pour la preflight indépendante. Après RED audité et coûts/rebinds
+explicités, la re-review autorise Step3 ciblé ; produit et GREEN restent
+à qualifier par les pixels, replays, budget/refus/récupération et revue.
+Preuve source puis revue, mesure complète
 631/443 sur cinq slices inchangées images=false seulement si fix retenu ;
 delta réel, régressions et limite fully-clipped explicites. Draft empilée sur
 2447 avec source/preuves retenues après review ; aucun merge/globalGREEN/W7complete.

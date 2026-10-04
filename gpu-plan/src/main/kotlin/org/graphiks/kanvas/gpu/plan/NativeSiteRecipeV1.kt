@@ -852,12 +852,13 @@ public enum class W6FullscreenCoverageSolidRectGroupZeroAbiV1 { Empty }
 public enum class W6FullscreenCoverageSolidRectPhaseV1 { CoverageSolidRect }
 public enum class W6FullscreenCoverageSolidRectShaderFamilyV1 { SolidRectCoverageOpaque }
 
-/** Planner-owned Ib2 full-target raw coverage for the existing admitted SolidRect raster path. */
+/** Planner-owned Ib2 full-target raw coverage, sealed only when allocation lies inside SolidRect geometry. */
 public class W6FullscreenCoverageSolidRectRecipeV1 internal constructor(
     override val ownerPassId: PlanPassId,
     public val target: PlanResourceId,
     extent: org.graphiks.math.geometry.SizeI32,
     scissorTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    sourceRasterBoundsTargetLocalI32: org.graphiks.math.geometry.RectI32,
     public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent,
     public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
     public val clearColor: W6CanonicalColorF32V1 = W6CanonicalColorF32V1.of(0f, 0f, 0f, 0f),
@@ -873,13 +874,20 @@ public class W6FullscreenCoverageSolidRectRecipeV1 internal constructor(
     public val phase: W6FullscreenCoverageSolidRectPhaseV1 = W6FullscreenCoverageSolidRectPhaseV1.CoverageSolidRect
     private val frozenExtent = extent.copy()
     private val frozenScissorTargetLocalI32 = scissorTargetLocalI32.copy()
+    private val frozenSourceRasterBoundsTargetLocalI32 = sourceRasterBoundsTargetLocalI32.copy()
     init {
         require(sampleCountI32 == 1 && frozenScissorTargetLocalI32 == org.graphiks.math.geometry.RectI32(
             0, 0, frozenExtent.width, frozenExtent.height,
         ))
+        require(frozenSourceRasterBoundsTargetLocalI32.left <= 0 && frozenSourceRasterBoundsTargetLocalI32.top <= 0 &&
+            frozenSourceRasterBoundsTargetLocalI32.right >= frozenExtent.width &&
+            frozenSourceRasterBoundsTargetLocalI32.bottom >= frozenExtent.height) {
+            "W6 fullscreen SolidRect coverage allocation must be contained by authenticated source geometry."
+        }
     }
     public fun copyExtent(): org.graphiks.math.geometry.SizeI32 = frozenExtent.copy()
     public fun copyScissorTargetLocalI32(): org.graphiks.math.geometry.RectI32 = frozenScissorTargetLocalI32.copy()
+    public fun copySourceRasterBoundsTargetLocalI32(): org.graphiks.math.geometry.RectI32 = frozenSourceRasterBoundsTargetLocalI32.copy()
     public fun nativeSiteOwnerV1(): NativeSiteOwnerV1 = NativeSiteOwnerV1(ownerPassId, 0, 0)
     public fun canonicalLogicalEncodingV1(): String = W6FullscreenCoverageSolidRectNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
 }
@@ -894,6 +902,7 @@ public class W6FullscreenCoverageSolidRectNativeSiteRecipeV1 internal constructo
         enum("variant", host.variant); enum("phase", host.phase); text("owner", host.ownerPassId.value)
         int("ordinal", owner.drawOrPacketOrdinalI32); int("bundle", owner.bundleOrdinalI32); text("target", host.target.value)
         int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); rect("scissor", host.copyScissorTargetLocalI32())
+        rect("sourceRasterBoundsTargetLocal", host.copySourceRasterBoundsTargetLocalI32())
         enum("load", host.load); enum("store", host.store); color("clearColor", host.clearColor); enum("targetFormat", host.targetFormat)
         int("sampleCount", host.sampleCountI32); blend("blend", host.blend); enum("topology", host.topology)
         enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily)
@@ -1711,8 +1720,9 @@ public fun freezeW6FullscreenCoverageSolidRectRecipesV1(
         val format = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 CoverageSolidRect requires a color attachment.")
         val extent = requireNotNull(target.copyExtent())
         require(target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
+        val sourceRaster = (binding.draw as SolidRectDraw).copySourceRasterBoundsI32()
         require(put(pass.id, W6FullscreenCoverageSolidRectRecipeV1(pass.id, pass.output, extent,
-            org.graphiks.math.geometry.RectI32(0, 0, extent.width, extent.height), targetFormat = format,
+            org.graphiks.math.geometry.RectI32(0, 0, extent.width, extent.height), sourceRaster, targetFormat = format,
             sampleCountI32 = target.sampleCountI32)) == null)
     }
 }

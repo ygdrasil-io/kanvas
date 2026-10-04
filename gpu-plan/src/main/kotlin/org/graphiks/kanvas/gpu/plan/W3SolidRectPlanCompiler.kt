@@ -323,6 +323,7 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
                             coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
                             coordinatesV2 = resolved?.table?.coordinatesV2(resolved.root),
                             coordinatesV4 = if (source.pending) source.coordinates else resolved?.table?.coordinatesV4(resolved.root),
+                            sourceRasterBoundsI32 = geometry,
                         ),
                     )
                 }

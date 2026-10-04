@@ -888,9 +888,9 @@ internal class W6aLayerGraphConstruction(
             RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
                 val occurrence = directFiltersByCommand[draw.commandIndex]
                 val raster = if (occurrence?.mask is MaskFilterNode.Blur) {
-                    // A mask blur consumes the complete RRect/path coverage before the
+                    // A mask blur consumes the complete authentic source geometry before the
                     // public clip is applied at its terminal composite.
-                    w6aRasterBoundsI32(draw)
+                    directMaskSourceRasterBoundsI32(draw)
                 } else {
                     intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))
                 }
@@ -1307,7 +1307,8 @@ internal class W6aLayerGraphConstruction(
                 )
             } else null
             // The recipe was evaluated before parent reservation, using its own inverse demand.
-            // Its physical source remains this direct draw's clipped raster domain.
+            // For SolidRect mask coverage, its physical source is the authentic full-geometry
+            // domain intersected with that required input; ordinary draws retain visible bounds.
             val sourceDomain = if (terminalNoOp) noOpDomain else earlyFacts.sourceDomainDeviceI32
             // Lighting affects transparent black. Its physical child remains tightly rasterized,
             // while its semantic output is the frozen terminal consumer. Sampling filters only
@@ -4160,17 +4161,21 @@ internal class W6aLayerGraphConstruction(
         val solid = draw as? SolidRectDraw ?: error("w6a.layer.unsupported_child")
         val visibleDevice = requireNotNull(intersect(solid.copyVisibleBounds(), targetDomainDeviceI32))
         val scissorDevice = requireNotNull(intersect(solid.copyScissor(), targetDomainDeviceI32))
+        val sourceRasterDevice = requireNotNull(intersect(solid.copySourceRasterBoundsI32(), targetDomainDeviceI32))
+        val sourceRasterLayer = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(sourceRasterDevice))
         val visibleLayer = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(visibleDevice))
         val scissorLayer = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(scissorDevice))
         return when (val authority = solid.materialAuthority) {
             is PlanDrawMaterialAuthority.LegacyColorV1 -> SolidRectDraw.of(
                 solid.commandIndex, authority.copyColorF32(), visibleLayer, scissorLayer, solid.coverage, solid.sample, solid.blend,
+                sourceRasterBoundsI32 = sourceRasterLayer,
             )
             is PlanDrawMaterialAuthority.MaterialV3 -> error("w6a.layer.unsupported_child")
             else -> SolidRectDraw.ofMaterial(
                 solid.commandIndex, authority.materialPlanRef(), visibleLayer, scissorLayer, solid.coverage, solid.sample,
                 solid.blend, solid.materialCoordinates, solid.materialCoordinatesV2,
                 (authority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates, authority is PlanDrawMaterialAuthority.MaterialV5,
+                sourceRasterBoundsI32 = sourceRasterLayer,
             )
         }
     }
@@ -4186,6 +4191,13 @@ internal class W6aLayerGraphConstruction(
                 source.withLocalizedScissorV6(w6aRasterBoundsI32(source))
             else -> source
         }
+    }
+
+    /** Uses full W3 SolidRect geometry only for direct mask-source demand; all other bounds stay contextual. */
+    private fun directMaskSourceRasterBoundsI32(draw: PlanDraw): RectI32 {
+        var source = draw
+        while (source is ClippedPlanDraw) source = source.source
+        return if (source is SolidRectDraw) source.copySourceRasterBoundsI32() else w6aRasterBoundsI32(draw)
     }
 
     /** Bakes an already-admitted hard clip into the existing W4 draw; no renderer clip planning occurs. */
@@ -4205,7 +4217,8 @@ internal class W6aLayerGraphConstruction(
         val composed = materialAuthority is PlanDrawMaterialAuthority.MaterialV5
         return when (this) {
             is SolidRectDraw -> SolidRectDraw.ofMaterial(commandIndex, ref, copyVisibleBounds(), scissor,
-                coverage, sample, blend, materialCoordinates, materialCoordinatesV2, v4, composed)
+                coverage, sample, blend, materialCoordinates, materialCoordinatesV2, v4, composed,
+                copySourceRasterBoundsI32())
             is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(commandIndex, ref, copyDeviceBounds(), copyRasterBounds(),
                 scissor, blend, materialCoordinates, materialCoordinatesV2, v4, composed)
             is AnalyticRRectDraw -> if (v4 != null) AnalyticRRectDraw.ofMaterialV4(commandIndex, ref, origin,

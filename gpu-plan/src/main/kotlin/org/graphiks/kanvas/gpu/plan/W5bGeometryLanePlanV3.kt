@@ -7,7 +7,8 @@ internal fun PlanDraw.withW5dCoordinates(coordinates: MaterialCoordinatePlanV2):
     require(materialAuthority !is PlanDrawMaterialAuthority.MaterialV4) { W5fPlanDiagnostics.Unpromoted }
     return when (this) {
     is SolidRectDraw -> SolidRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
-        copyVisibleBounds(), copyScissor(), coverage, sample, blend, coordinatesV2 = coordinates)
+        copyVisibleBounds(), copyScissor(), coverage, sample, blend, coordinatesV2 = coordinates,
+        sourceRasterBoundsI32 = copySourceRasterBoundsI32())
     is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
         copyDeviceBounds(), copyRasterBounds(), copyScissor(), blend, coordinatesV2 = coordinates)
     is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
