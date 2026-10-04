@@ -12,9 +12,12 @@ huit compteurs Mesh changent sans variation pixels. 195 PASS historiques,
 Cinq audits natifs complets et postseals séparés ; refs/PNG/scores/protected
 inverse inchangés. Premiers refus communs :layerchild32/pathbudget19,
 strokedRectAA10 ; causes hétérogènes, gains non promis.
-Prochain diagnostic : normalisation AA strokedRect vers géométrie commune,
-comparée à l'admission enfant compositionnelle et au domaine encoded.
-Review/publication en attente ; pas de review Astra revendiquée après limite
+Stratégie relue indépendamment par Sol : B→A→C. La simple normalisation
+Rect→Path est insuffisante (stroke fermé/AA4 absents du Core commun).
+Prochain probe : même PATH AA STROKE solide sans filtre propre, au root puis
+dans un saveLayer plain, contrôle W6 existant ; aucune extension avant preuve
+scope/pixels/completion/replay. Probe non exécuté.
+Review du lot documentaire/publication en attente ; pas de review Astra revendiquée après limite
 de sous-agents. W7 ACTIVE, aucun merge/globalGREEN/clôture.
 
 # W7 — tinybitmap : composition encoded du port (4 octobre 2026)

@@ -109,6 +109,34 @@ Pas de migration globale du domaine encoded à ce stade : les limites de
 `CompositionAdmissionV1` sur courbes/layers/matériaux demandent des preuves
 appariées avant un changement de default.
 
+### Priorité révisée après relecture indépendante Sol
+
+La stratégie initiale de simple normalisation Rect→Path est insuffisante :
+le Core source-free exclut les Rect stroked, sa géométrie stroke exige un
+segment unique, et son inventaire de couverture actuel n'accepte pas AA4.
+L'autorité math/AA4 de `W4dGeneralPathPlanCompiler` est distincte ; une
+scène standalone Rect/Path qui passe ne démontre pas la fermeture d'une
+frame Core mixte. Aucun guard n'est supprimé et aucun fix n'est livré ici.
+
+Classement retenu : B admission enfant commune, puis A géométrie/couverture
+Rect stroke commune, puis C consommation encoded générale. Première gate
+de B : même PATH AA STROKE solide SrcOver, sans filtre propre, au root puis
+dans un saveLayer plain ; contrôle root avec sibling filtré déjà qualifié.
+Oracle indépendant full/empty/half sur tout le buffer, vraie completion,
+replay même Surface et surfaces fraîches. Le diagnostic actuel doit prouver
+une restriction de scope, pas une absence de consommateur AA4 ou un écart
+de composition au restore. Alpha, ordre, clip/coordonnées, budgets,
+négatifs filtre/AA clip/blend et refus public layer encoded restent à
+qualifier avant toute extension. Pas de nouvelle lane ou flag par GM.
+
+Cette gate est planifiée, pas exécutée. Si elle échoue, ne pas élargir le
+guard : revenir au contrat commun geometry/coverage. Les 32 préfixes ne
+constituent toujours pas une promesse de gains. Analyse Sol en lecture
+seule, indépendante des décisions de main, sans build/GPU/mutation Git ;
+rapport local conservé dans
+`/private/tmp/kanvas-w7-transversal-strategy.mN3jDF/strategy-after-census-report.md`.
+Aucune analyse Astra n'a pu être lancée à cause de la limite de sous-agents.
+
 ## Procédure native et audit
 
 Cinq tranches sérialisées, mêmes HEAD/config/registre/références, tâche
@@ -174,6 +202,6 @@ couverture AA, Picture, les origines historiques des références, les dettes
 de suites et l'ownership stencil restent ouverts.
 
 La nouvelle branche `codex/w7-transversal-corpus-census` empile uniquement
-le snapshot et ce suivi sur #2446. Review/publication en attente ; aucune
+le snapshot et ce suivi sur #2446. Review du lot documentaire/publication en attente ; aucune
 review Astra n'est revendiquée (dispatch refusé `agent thread limit reached`).
 W7 ACTIVE : pas de merge, de global GREEN, de parité complète ni de clôture.
