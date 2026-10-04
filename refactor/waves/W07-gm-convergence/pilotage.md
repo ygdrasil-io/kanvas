@@ -1,3 +1,28 @@
+# W7 — recensement transversal complet (4 octobre 2026)
+
+[Qualification](transversal-corpus-qualification.md),
+[snapshot gelé2485cfb](transversal-corpus-2485cfb.json), parent draft #2446,
+branche `codex/w7-transversal-corpus-census`,
+[draft #2447](https://github.com/ygdrasil-io/kanvas/pull/2447). 631 fiches /443 éligibles,
+393 entrées en rendu (392 `attempted=true` +1 timeout sans ce champ) /
+220 rendus /197 comparés : aucun gain d'admission depuis7360c5.
+Pixels±2 ≥95 % :63→65 ; ≥99 % :47→49. Trois deltas pixels confirmés :
+3x3bitmaprect→100 %, child_sampling_rt→84,3277 %, tinybitmap→100 % ;
+huit compteurs Mesh changent sans variation pixels. 195 PASS historiques,
+343 seuils0, ne prouvent pas la gate de parité W7. vertices607 reste timeout
+30 s/exit1, conservé dans443 ; aucune nouvelle exclusion/cap/budget modifié.
+Cinq audits natifs complets et postseals séparés ; refs/PNG/scores/protected
+inverse inchangés. Premiers refus communs :layerchild32/pathbudget19,
+strokedRectAA10 ; causes hétérogènes, gains non promis.
+Stratégie relue indépendamment par Sol : B→A→C. La simple normalisation
+Rect→Path est insuffisante (stroke fermé/AA4 absents du Core commun).
+Prochain probe : même PATH AA STROKE solide sans filtre propre, au root puis
+dans un saveLayer plain, contrôle W6 existant ; aucune extension avant preuve
+scope/pixels/completion/replay. Probe non exécuté.
+Review Sol du lot documentaire : I1/M1 ADDRESSED, C0/I0/M0, prêt pour draft uniquement.
+Pas de review Astra revendiquée après limite
+de sous-agents. W7 ACTIVE, aucun merge/globalGREEN/clôture.
+
 # W7 — tinybitmap : composition encoded du port (4 octobre 2026)
 
 [Qualification ciblée](tinybitmap-encoded-qualification.md), branche
