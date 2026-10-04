@@ -3,9 +3,11 @@
 4 octobre 2026. Base : draft #2447, renderer produit2485cfb. Lot
 architectural limité à un contrat existant, sans nouvel algorithme AA.
 
-État courant : gate exécutée, témoin filtré incorrect ; voir
-common-aa-path-source-gate.md. Extension produit STOP, contrat ci-dessous
-conditionnel. Aucune preuve GREEN source layer ou budget nouveau.
+État courant : gate initialement falsifiée par le témoin filtré, puis
+rejouée après la fondation SolidRect au produit867cd2146 / HEAD5df3c9e8.
+Root et contrôle filtré PASS ; layer RED attendu, audit et postseal faits.
+Voir common-aa-path-source-gate.md. Discriminants autorisés avant produit ;
+aucune preuve GREEN source layer ou budget nouveau.
 
 ## Autorité et intention
 
