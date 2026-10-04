@@ -28,6 +28,8 @@ En LINEAR, DrawColor remplit target∩clip déjà capturé indépendamment de to
 
 ## Preuves comportementales
 
+Qualification RED du 4 octobre : les trois témoins CTM LINEAR donnent déjà les pixels natifs attendus via la continuation prepared existante. Ils deviennent des contrôles inchangés, pas la preuve d'un défaut utilisateur W3. Ne pas modifier W3/provenance par anticipation ; si l'authentification d'une nouvelle composition root avec couleur transformée exige cette extension, établir d'abord un témoin public mixte géométrie/couleur RED et consigner la dépendance. Les quatre RED effectivement observés sont ring AA, Rect filtré, hairline clipped et paths DARKEN.
+
 Une nouvelle fixture publique Surface32×32, oracles complets calculés avant Surface, RGB±2/alpha exact, rendus répétés byte-identiques, diagnostics clean/zéro refus/Render+Readback/submit1/readback1/QueueSubmitted avant CompletionSucceeded. Réutiliser les patterns d'observation existants vers w7.ordinaryAaEvidenceDir et retenir les vrais buffers ; pas de nouveau harnais ni test de structure/forwarding. Les compteurs retention0 restent une limite de snapshot, pas un faux settled receipt.
 
 Cas : clip-fill CTM et alpha ; gradient bleu constant, DrawColor vert et ring rouge [2.5,2.5,5.5,5.5] width1 dans les trois ordres ; Rect integer ColorFilter.Matrix identité ; hairline hard rect [8.5,8.5,23.5,23.5] width0 et clip path hard intersect/difference ; deux hard paths DARKEN de rectangles [4,4,20,20] et [12,12,28,28] sur fond blanc. Oracles de géométrie indépendante, aucune attente obtenue du renderer ou graphe.

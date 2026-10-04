@@ -44,7 +44,7 @@ Apply destination-domain-plan Global Constraints verbatim through ownSDD/global-
 
 ## Task2 phase10: product repair then native GREEN
 
-- [ ] Original owner resumed after valid RED. Implement CTM correction separately from root selection/publication; no permanent adapter revert.
+- [ ] Original owner resumed after valid RED. Root repair first, no permanent adapter revert. All3publicLINEARCTMvariants already nativeGREEN at4b35fae7d, so preserve W3/provenance unless a new mixed-geometry/finite-colourCTM RED establishes that concrete dependency; no anticipatory route-only change.
 - [ ] New compiler root predicate LINEAR/no layer-picture-image-spatialfilter/atleastDrawColor+Draw. Authenticate each colour using W3, select maximal geometry spans with established authorities inclnarrowrootAAstroke when its existing closed family witnesses hold. Prevalidate fulloriginalScene/bounds/caps; actualoriginalcommandindices and ordering survive typed remaps.
 - [ ] Reuse typed W6 ordered scope-free envelope with real source packing/inventory. Preserve whole-frame geometry/work/budget refusal and all clip/stencil/destination dependencies, one final submit/readback; no nullable/table/authority/schema weakening. Handle unsupportedspan before ownership without changing existing legacy continuation; terminal/refusedowned neverfallsback.
 - [ ] Worker selfreview/report thenfreeze; controller named localsourcecommit, native newfixtureGREEN with same fullaudit/separateseals. Mismatch returns to originalowner with actualfirstboundary/oraclefixed, no speculative guards.
