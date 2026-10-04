@@ -6,8 +6,9 @@ architectural limité à un contrat existant, sans nouvel algorithme AA.
 État courant : gate initialement falsifiée par le témoin filtré, puis
 rejouée après la fondation SolidRect au produit867cd2146 / HEAD5df3c9e8.
 Root et contrôle filtré PASS ; layer RED attendu, audit et postseal faits.
-Voir common-aa-path-source-gate.md. Discriminants autorisés avant produit ;
-aucune preuve GREEN source layer ou budget nouveau.
+Voir common-aa-path-source-gate.md. Depuis, discriminants RED causaux puis
+source commune GREEN9/9 (budget corrigé analytiquement et relu avant run) ;
+contexte119/120, globale du module interrompue. Revue produit/corpus requis.
 
 ## Autorité et intention
 
@@ -122,15 +123,15 @@ LINEAR positif ; layer SRGB_ENCODED garde son refus public de composition,
 avec root PATH encoded admissible comme contrôle distinct.
 
 Budget nouveau STROKE : fixture indépendante2×2, line(0,1)→(2,1), width1
-BUTT/MITER, plain layer sans hint/sibling. B analytique25296bytes : root
+BUTT/MITER, plain layer sans hint/sibling. B analytique25312bytes : root
 RGBA16 + readback512 (2rows alignées256) + layerRGBA16 + sourceAA4RGBA64
 + sourceAA4D24S8 64 + resolveRGBA16 + poolsV/I/U16384/4096/4096
-+ uniformW6 16 + material16. Le quad stroke suit StencilCover, pas
++ uniformW6 16 + SolidRGBA16 + paint tail-alpha16 (layout composé32). Le quad stroke suit StencilCover, pas
 DirectTriangle ; aucun discount cache/lifetime. La pré-évaluation source
 25104 ne dépasse pasB. ÀB : les4pixels[188,0,0,128]±1, completion/replay
-stricts. ÀB−1 : w6a.layer.frame_budget_exceeded, sentinel16bytes0x5a intact,
-discard puis bleu plein/récupération native même Surface. B reste une
-dérivation à relire avant exécution, pas un budget natif déjà qualifié ;
+stricts. ÀB−1 : budget.w5g.composed-uniform, sentinel16bytes0x5a intact,
+discard puis bleu plein/récupération native même Surface. La dérivation a
+été relue indépendamment avant GREEN2 ; ces frontières sont qualifiées ;
 l'ancien AA FILL B26980 reste un contexte distinct. Le surcoût provisoire
 source full-target32×32 ne sera pas affaibli pour faire passer ce test.
 

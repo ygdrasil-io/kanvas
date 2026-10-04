@@ -269,11 +269,13 @@ public class W6aLayerPlanCompiler public constructor(
             val unfilteredDraw = (recordedCommand as? SceneCommand.Draw)?.let {
                 stripW6bPayload(it, drawIndexI32 in directInputDemandCommands).node
             }
-            val ordinaryAaPathSource = W4dGeneralPathPlanCompiler.w7W6OrdinaryAaPathColorSource(runtimeCatalog)
-            val rootW7W6OrdinaryAaPathSource = scopeI32 == null && ownsW6b && originalDraw != null &&
-                unfilteredDraw != null && originalDraw == unfilteredDraw &&
-                ordinaryAaPathSource.acceptsW7W6OrdinaryAaPathColorSourceScope(originalDraw) &&
-                ordinaryAaPathSource.acceptsW7W6OrdinaryAaPathColorSourceScope(unfilteredDraw)
+            val ordinaryAaPathSource = W4dGeneralPathPlanCompiler.w6OrdinaryAaPathColorSource(runtimeCatalog)
+            val ordinaryAaPathScope = originalDraw != null && unfilteredDraw != null &&
+                originalDraw == unfilteredDraw &&
+                ordinaryAaPathSource.acceptsW6OrdinaryAaPathColorSourceScope(originalDraw) &&
+                ordinaryAaPathSource.acceptsW6OrdinaryAaPathColorSourceScope(unfilteredDraw)
+            val rootOrdinaryAaPathSource = scopeI32 == null && ownsW6b && ordinaryAaPathScope
+            val childOrdinaryAaPathSource = scopeI32 != null && ordinaryAaPathScope
             // Keep the historical ordinary general-path compiler for every other segment.
             // The AA variant proves DirectTriangle during select, before capability planning.
             val historicalAaSource = originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true
@@ -290,7 +292,7 @@ public class W6aLayerPlanCompiler public constructor(
                 // A direct layer Rect keeps W4a unless the existing affine fact proves its
                 // analytic lane is unavailable. Root keeps its historical destination-read
                 // route; Picture occurrence selection applies its corresponding guard later.
-                !rootW7W6OrdinaryAaPathSource && (scopeI32 == null || draw.node.geometry !is GeometryNode.Rect ||
+                !rootOrdinaryAaPathSource && (scopeI32 == null || draw.node.geometry !is GeometryNode.Rect ||
                     requiresW7AffineRectProjection(draw.node)) &&
                     retainsW7AaDeferredSourceAuthority(segment, draw, target, runtimeCatalog)
             }?.node?.let { draw ->
@@ -314,11 +316,12 @@ public class W6aLayerPlanCompiler public constructor(
                 unfilteredDraw?.let(aaCoverageSource::acceptsW6AaColorSourceScope) == true
             val generalPath = when {
                 deferredAa != null -> deferredAaSource
-                rootW7W6OrdinaryAaPathSource -> ordinaryAaPathSource
+                rootOrdinaryAaPathSource -> ordinaryAaPathSource
                 rootAaCoverage -> aaCoverageSource
                 rootAaRectStroke -> rootAaRectSource
                 encodedHairline -> encodedHairlineSource
                 (scopeI32 != null && originalDraw?.let(aaSource::acceptsW6AaColorSourceScope) == true) || rootAaSource -> aaSource
+                childOrdinaryAaPathSource -> ordinaryAaPathSource
                 else -> W4dGeneralPathPlanCompiler()
             }
             val child = CapabilityCompilerChain.ofProjected(
