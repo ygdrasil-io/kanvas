@@ -3,7 +3,8 @@
 [Qualification](transversal-corpus-qualification.md),
 [snapshot gelé2485cfb](transversal-corpus-2485cfb.json), parent draft #2446,
 branche `codex/w7-transversal-corpus-census`. 631 fiches /443 éligibles,
-392 tentatives /220 rendus /197 comparés : aucun gain d'admission depuis7360c5.
+393 entrées en rendu (392 `attempted=true` +1 timeout sans ce champ) /
+220 rendus /197 comparés : aucun gain d'admission depuis7360c5.
 Pixels±2 ≥95 % :63→65 ; ≥99 % :47→49. Trois deltas pixels confirmés :
 3x3bitmaprect→100 %, child_sampling_rt→84,3277 %, tinybitmap→100 % ;
 huit compteurs Mesh changent sans variation pixels. 195 PASS historiques,
@@ -17,7 +18,8 @@ Rect→Path est insuffisante (stroke fermé/AA4 absents du Core commun).
 Prochain probe : même PATH AA STROKE solide sans filtre propre, au root puis
 dans un saveLayer plain, contrôle W6 existant ; aucune extension avant preuve
 scope/pixels/completion/replay. Probe non exécuté.
-Review du lot documentaire/publication en attente ; pas de review Astra revendiquée après limite
+Review Sol du lot documentaire : I1/M1 corrigés, relecture ciblée en attente.
+Pas de review Astra revendiquée après limite
 de sous-agents. W7 ACTIVE, aucun merge/globalGREEN/clôture.
 
 # W7 — tinybitmap : composition encoded du port (4 octobre 2026)

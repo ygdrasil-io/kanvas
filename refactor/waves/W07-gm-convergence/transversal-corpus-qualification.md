@@ -16,13 +16,22 @@ parent publié [draft #2446](https://github.com/ygdrasil-io/kanvas/pull/2446).
 | --- | ---: | ---: |
 | Registre recensé | 631 | 631 |
 | Éligibles | 443 | 443 |
-| Tentatives de rendu (`attempted`) | 392 | 392 |
+| Fiches avec `attempted=true` enregistré | 392 | 392 |
+| Entrées effectives en rendu, timeout inclus | 393 | 393 |
 | Rendus | 220 | 220 |
 | Comparés | 197 | 197 |
 | Cas avec ≥95 % de pixels conformes à ±2 | 63 | 65 |
 | Cas avec ≥99 % de pixels conformes à ±2 | 47 | 49 |
 | Médiane des pixels conformes à ±2, parmi les comparés | 76,24387741088867 % | 77,91666666666667 % |
 | `declaredContractPass` historique | 195 | 195 |
+
+Dans les deux snapshots, `vertices`607 entre en rendu puis atteint le
+watchdog avant la publication du champ `attempted`. Ses `stage=render` et
+`outcome=timeout` attestent cette entrée : 392 fiches `attempted=true` plus
+ce timeout sans champ, soit 393 tentatives effectives. Les 50
+`setup_failed` n'entrent pas en rendu. Le JSON et son résumé restent
+inchangés ; cette distinction explique le compteur enregistré, sans
+reclasser le timeout ni améliorer un résultat.
 
 Les issues éligibles restent exactement : 197 `compared`, 172
 `render_failed`, 50 `setup_failed`, 15 `rendered_uncompared`, 8
@@ -189,8 +198,11 @@ y compris le diagnostic inverse untracked protégé
 814 PNG générées et 559 scores existants sont inchangés ; manifest repo-rel
 des PNG `e589c21c3c3eebd3787434064fe5a122f6dc2005cf4d6786b529b1c8fd2a2c6d`,
 fichier scores `ba0bd77609386acd8b77443d853d424d36edea08719b8e868b71a65fbc8dbd54`.
-Les 631 références du registre correspondent aux hashes attendus ;
-inventaire physique 1004 fichiers,
+Les 631 statuts de référence du registre sont contrôlés : 616 PNG/hashs
+présents conformes (613 `trusted`, 3 `untrustable`) et 15 absences attendues,
+sans dérive. Les 15 éligibles `rendered_uncompared` comprennent 12 références
+manquantes et les 3 `untrustable` ; les 3 autres absences concernent des cas
+déjà exclus. L'inventaire physique distinct contient 1004 PNG,
 `1fe843ea38ab34eaa9b49fa59eb872b2cee671e849e8645f5408e2bca510a7c9`.
 Wrapper/init restent gelés. Les chemins et bytes complets figurent dans les
 reçus privés ; aucune nouvelle référence n'est créée ou remplacée.
@@ -202,6 +214,8 @@ couverture AA, Picture, les origines historiques des références, les dettes
 de suites et l'ownership stencil restent ouverts.
 
 La nouvelle branche `codex/w7-transversal-corpus-census` empile uniquement
-le snapshot et ce suivi sur #2446. Review du lot documentaire/publication en attente ; aucune
+le snapshot et ce suivi sur #2446. La review indépendante Sol a relevé
+I1 (tentatives enregistrées/effectives) et M1 (statuts/PNG présentes),
+corrigés uniquement dans les documents ; relecture ciblée en attente. Aucune
 review Astra n'est revendiquée (dispatch refusé `agent thread limit reached`).
 W7 ACTIVE : pas de merge, de global GREEN, de parité complète ni de clôture.
