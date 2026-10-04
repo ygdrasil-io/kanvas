@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
@@ -122,6 +123,7 @@ class W7W3DrawColorMaterialSurfacePixelTest {
                     drawColor(ColorARGB.Blue)
                     drawRect(FIRST, resolvedRedPaint())
                     drawColor(ColorARGB.Transparent)
+                    drawRect(FULL, admittedDstNoOpPaint())
                     drawRect(SECOND, pendingGreenPaint())
                 }
                 renderAndAssert(surface, "resolved-then-pending", resolvedThenPendingExpected)
@@ -132,6 +134,7 @@ class W7W3DrawColorMaterialSurfacePixelTest {
                     drawColor(ColorARGB.Blue)
                     drawRect(SECOND, pendingGreenPaint())
                     drawColor(ColorARGB.Transparent)
+                    drawRect(FULL, admittedDstNoOpPaint())
                     drawRect(FIRST, resolvedRedPaint())
                 }
                 renderAndAssert(surface, "pending-then-resolved", pendingThenResolvedExpected)
@@ -157,29 +160,83 @@ class W7W3DrawColorMaterialSurfacePixelTest {
         colorOnly.canvas { drawColor(ColorARGB.Blue) }
         renderAndAssert(colorOnly, "homogeneous-color", colorExpected)
 
+        val color513 = Surface(SIZE, SIZE)
+        color513.canvas { repeat(513) { drawColor(ColorARGB.Blue) } }
+        renderAndAssert(color513, "homogeneous-color-513", colorExpected)
+
         printPassiveInventoryEvidence()
     }
 
     @Test
     fun w3CommandBoundaryRefusesAndRecovers() {
-        val blueExpected = solidBuffer(Rgba(0, 0, 255))
+        val mixedExpected = twoRectBuffer(
+            outside = Rgba(0, 0, 255), firstOnly = Rgba(255, 0, 0), second = Rgba(0, 255, 0),
+        )
+        val recoveryExpected = solidBuffer(Rgba(0, 0, 255))
         val atLimit = Surface(SIZE, SIZE)
-        atLimit.canvas { repeat(512) { drawColor(ColorARGB.Blue) } }
-        renderAndAssert(atLimit, "command-boundary-512", blueExpected)
+        atLimit.canvas {
+            repeat(510) { drawColor(ColorARGB.Blue) }
+            drawRect(FIRST, resolvedRedPaint())
+            drawRect(SECOND, pendingGreenPaint())
+        }
+        renderAndAssert(atLimit, "mixed-command-boundary-512", mixedExpected)
 
         val overLimit = Surface(SIZE, SIZE)
-        overLimit.canvas { repeat(513) { drawColor(ColorARGB.Blue) } }
+        overLimit.canvas {
+            repeat(511) { drawColor(ColorARGB.Blue) }
+            drawRect(FIRST, resolvedRedPaint())
+            drawRect(SECOND, pendingGreenPaint())
+        }
         val sentinel = UByteArray(BYTE_COUNT) { 0x5au }
         val sentinelBefore = sentinel.copyOf()
         val failure = assertFailsWith<IllegalStateException> {
             overLimit.readPixels(FULL, sentinel)
         }
         println("w7.w3-drawcolor-material.command-boundary diagnostic=${failure.message}")
+        assertTrue(
+            failure.message?.startsWith("unsupported.material.mapping.gradient_interpolation") == true,
+            failure.message,
+        )
         assertContentEquals(sentinelBefore, sentinel, "513-command refusal must preserve the full caller buffer")
 
         overLimit.discardRecordedOperations()
         overLimit.canvas { drawColor(ColorARGB.Blue) }
-        renderAndAssert(overLimit, "command-boundary-recovery", blueExpected)
+        renderAndAssert(overLimit, "command-boundary-recovery", recoveryExpected)
+    }
+
+    @Test
+    fun mixedFrameBudgetBoundaryRefusesAndRecovers() {
+        val expected = twoRectBuffer(
+            outside = Rgba(0, 0, 255), firstOnly = Rgba(255, 0, 0), second = Rgba(0, 255, 0),
+        )
+        val recoveryExpected = solidBuffer(Rgba(0, 0, 255))
+
+        val atBudget = Surface(SIZE, SIZE, config = RenderConfig(frameLocalBudgetBytes = 37_184L))
+        atBudget.canvas {
+            drawColor(ColorARGB.Blue)
+            drawRect(FIRST, resolvedRedPaint())
+            drawRect(SECOND, pendingGreenPaint())
+        }
+        renderAndAssert(atBudget, "mixed-budget-37184", expected)
+
+        val belowBudget = Surface(SIZE, SIZE, config = RenderConfig(frameLocalBudgetBytes = 37_183L))
+        belowBudget.canvas {
+            drawColor(ColorARGB.Blue)
+            drawRect(FIRST, resolvedRedPaint())
+            drawRect(SECOND, pendingGreenPaint())
+        }
+        val sentinel = UByteArray(BYTE_COUNT) { 0x5au }
+        val sentinelBefore = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> {
+            belowBudget.readPixels(FULL, sentinel)
+        }
+        println("w7.w3-drawcolor-material.budget-boundary diagnostic=${failure.message}")
+        assertTrue(failure.message?.startsWith("budget.w5f.filter-uniform") == true, failure.message)
+        assertContentEquals(sentinelBefore, sentinel, "B-1 refusal must preserve the full caller buffer")
+
+        belowBudget.discardRecordedOperations()
+        belowBudget.canvas { drawColor(ColorARGB.Blue) }
+        renderAndAssert(belowBudget, "mixed-budget-recovery", recoveryExpected)
     }
 
     private fun resolvedRedPaint() = Paint(
@@ -195,6 +252,12 @@ class W7W3DrawColorMaterialSurfacePixelTest {
             listOf(GradientStop(0f, ColorARGB.Green), GradientStop(1f, ColorARGB.Green)),
             interpolation = ColorSpaceInterpolation.LINEAR,
         ),
+        antiAlias = false,
+    )
+
+    private fun admittedDstNoOpPaint() = Paint(
+        color = ColorARGB.White,
+        blendMode = BlendMode.DST,
         antiAlias = false,
     )
 
