@@ -5,7 +5,6 @@ import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -18,7 +17,6 @@ import org.graphiks.kanvas.skia.SkiaGm
  */
 class ColorFilterImageFilterLayerGm : SkiaGm {
     override val name = "colorfilterimagefilter_layer"
-    override val compositionDomain = CompositionDomain.SRGB_ENCODED
     override val renderFamily = RenderFamily.COMPOSITE
     override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
