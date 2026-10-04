@@ -10,7 +10,7 @@ La mesure sourcebc9c a perdu22 rendus face au corpus historiquebf38. Le falsifie
 
 Introduire un propriétaire fermé de composition root LINEAR ordonnée, après les propriétaires whole-frame qui fonctionnent déjà. Il assemble les vraies lanes DrawColor authentifiées W3 et les spans géométriques maximaux entre couleurs, sélectionnés par les autorités existantes. Préférer réutiliser l'enveloppe ordonnée W6 et sa publication typée ; ne pas inventer un deuxième packer ou budget. L'ancienne provenance W3/W4e/W5a est une inférence statique forte, non une télémétrie observée ; les barrières DrawColor et le passage GapNotMigrated vers le prepared renderer sont établis. L'exception interne104 reste inconnue, et ses symptômes prepared ne seront pas réparés par supposition.
 
-Alternatives écartées : revenir à l'AA Rect (sémantique fausse) ; ajouter DrawColor séparément à chaque compiler (duplication et coupling). Une ouverture encoded→LINEAR du seul booléen W6 n'est pas suffisante : dispatch child général différent de standaloneRectPathFrames, réutilisation du clip et contrôles agrégés à préserver.
+Alternatives écartées pour la solution générale : revenir à l'AA Rect (sémantique fausse) ; ajouter DrawColor séparément à chaque compiler (duplication et coupling). Le premier lot W3 décrit plus bas est une réparation bornée distincte, non cette généralisation. Une ouverture encoded→LINEAR du seul booléen W6 n'est pas suffisante : dispatch child général différent de standaloneRectPathFrames, réutilisation du clip et contrôles agrégés à préserver. Le compilateur root initial reste un objectif de design suspendu, pas une implémentation autorisée après le refus de sécurité.
 
 ## Contrat du propriétaire
 
@@ -35,6 +35,20 @@ Une nouvelle fixture publique Surface32×32, oracles complets calculés avant Su
 Cas : clip-fill CTM et alpha ; gradient bleu constant, DrawColor vert et ring rouge [2.5,2.5,5.5,5.5] width1 dans les trois ordres ; Rect integer ColorFilter.Matrix identité ; hairline hard rect [8.5,8.5,23.5,23.5] width0 et clip path hard intersect/difference ; deux hard paths DARKEN de rectangles [4,4,20,20] et [12,12,28,28] sur fond blanc. Oracles de géométrie indépendante, aucune attente obtenue du renderer ou graphe.
 
 Négatif : AA Rect stroke Shader.SolidColor de la famille mixed-root déjà refusée, sentinel readPixels inchangée puis recovery propre. Conserver le prefix historique unsupported.stroke.rect_anti_alias. Ne pas prétendre disposer de compteurs de soumission d'un résultat qui n'est pas retourné : prouver la frontière terminale disponible et noter explicitement toute absence de télémétrie native négative.
+
+## Premier lot borné après le refus de sécurité — W3 mixte
+
+Le patch général root avec scènes Annotation projetées et bindings singleton a été refusé ; aucun correctif produit n'est conservé. Le diagnostic Astra d2166a43a81da7ab82ae7ef613ec11d3935dfb9bbfe26b507790563c9d6cbad0 établit une alternative distincte : reconnaître et construire le mélange sur la scène originale, dans W3, avec un nouveau contrat mixte fermé producteur/consommateur. Ce choix de séquençage relève de la délégation locale W7, pas d'une autorisation Astra ni d'un contournement du patch refusé.
+
+Sous-domaine uniquement LINEAR : au moins un DrawColor réellement admis par W3 et un véritable Rect matériel admis par W3 ; toutes les opérations visuelles SrcOver, bounds/CTM/clip/metadata authentiques conformes à W3, aucune destination copy. Conserver les 512 commandes totales W3 et les contrôles caps/budget/empreintes whole-frame. Hors de ce sous-domaine (encoded, matériau refusé, autre geometry/blend/clip), conserver les frontières précédentes. Les scènes pure LegacyColor et pure matérielles réussies gardent leurs identités et leurs branches de validation.
+
+La nouvelle capacité explicite `W3SolidRectPlanCompiler.W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID` vaut `w7.w3.root-drawcolor-material.v1`. Son candidat est issu du seul parcours de la scène originale, et sa publication utilise une table réelle non nulle avec au moins une autorité LegacyColorV1 et une autorité matérielle W3. Les couleurs restent sans ref/source artificielle. L'association des occurrences matérielles à leurs vrais indices est dense avant interning, indépendante des ordinals des couleurs ; no-op et sources pending/résolues ne doivent pas la décaler. Source construction, fingerprints, remapping, graphe et packing permit existants restent authentifiés. Un discriminant explicite n'est pas une permission de publier un graphe arbitraire : le lowerer vérifie la forme W3 exacte et le mélange réel.
+
+Le consommateur garde INCHANGÉES les branches historiques CAPABILITY_ID et W5A_CAPABILITY_ID ; ajoute uniquement la branche du nouveau contrat, exigeant SolidRectDraw/FullOrScissor/SingleSample/SrcOver, les deux autorités réellement présentes, la table, toutes les refs/coordonnées/packed proofs et les mêmes ressources/peak/budget/scratch. Aucune validation native générique, shader, executor ou packer relâché. Aucun nouveau public constructor/debug API.
+
+Périmètre produit : W3SolidRectPlanCompiler.kt et GpuPlanTaskListLowerer.kt seulement. Nouvelle fixture publique W7W3DrawColorMaterialSurfacePixelTest.kt ; les fixtures gelées restent intactes. Les consommateurs FrameSourceLayoutV4/SourceDeferredRenderConstructionV4/RenderGraphConstruction/RenderGraph sont à vérifier, non à modifier sans dépendance concrète escaladée. Geometry math I/F32/64 inchangé.
+
+Gain visé uniquement : integerFilteredRect et son mélange W3. Pas de garantie préalable de GM104 complet. Les trois RED hairline/DARKEN/ring et le design général restent ouverts ; aucun nouveau compilateur root/projection/W6/singleton n'est autorisé dans ce lot. Corpus443 et disposition22pertes restent nécessaires avant finalisation Task2.
 
 ## Qualification et invariants
 
