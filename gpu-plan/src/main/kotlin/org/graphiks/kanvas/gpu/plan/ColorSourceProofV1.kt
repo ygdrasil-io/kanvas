@@ -422,6 +422,7 @@ internal object ColorRoundedGraphProofV1 {
                     } else ContextDependencies.Full
 
                 is ColorOperationGraphV1.Scalar.InputLinearPremul,
+                is ColorOperationGraphV1.Scalar.InputEncodedPremul,
                 is ColorOperationGraphV1.Scalar.PrimitiveEncodedInput,
                 ColorOperationGraphV1.Scalar.DiscardF32,
                 is ColorOperationGraphV1.Scalar.DevicePositionF32,
@@ -826,7 +827,8 @@ internal object ColorRoundedGraphProofV1 {
                         bytes[at].toInt() or (bytes[at+1].toInt() shl 8) }
                     ColorBoundsV1(values.min().toDouble(),values.max().toDouble())
                 }
-                is ColorOperationGraphV1.Scalar.InputLinearPremul -> error("Unbound source input")
+                is ColorOperationGraphV1.Scalar.InputLinearPremul,
+                is ColorOperationGraphV1.Scalar.InputEncodedPremul -> error("Unbound source input")
                 is ColorOperationGraphV1.Scalar.PrimitiveEncodedInput -> {
                     require(composed?.captured?.composed?.primitiveEvaluationRef != null)
                     // The actual packer exposes premultiplied UNORM8 RGB, whose intrinsic

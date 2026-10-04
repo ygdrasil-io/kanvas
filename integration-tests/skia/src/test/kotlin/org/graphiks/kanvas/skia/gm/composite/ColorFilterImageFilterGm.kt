@@ -59,25 +59,25 @@ class ColorFilterImageFilterGm : SkiaGm {
         run {
             val brightness = makeBrightness(0.9f, null)
             val grayscale = makeGrayscale(brightness)
-            canvas.drawRect(r, redPaint.copy(imageFilter = grayscale))
+            drawClippedRect(canvas, r, redPaint.copy(imageFilter = grayscale), outset = 0f)
             canvas.translate(FILTER_WIDTH + MARGIN, 0f)
         }
         run {
             val grayscale = makeGrayscale(null)
             val brightness = makeBrightness(0.9f, grayscale)
-            canvas.drawRect(r, redPaint.copy(imageFilter = brightness))
+            drawClippedRect(canvas, r, redPaint.copy(imageFilter = brightness), outset = 0f)
             canvas.translate(FILTER_WIDTH + MARGIN, 0f)
         }
         run {
             val blue = makeModeBlue(null)
             val brightness = makeBrightness(1.0f, blue)
-            canvas.drawRect(r, redPaint.copy(imageFilter = brightness))
+            drawClippedRect(canvas, r, redPaint.copy(imageFilter = brightness), outset = 0f)
             canvas.translate(FILTER_WIDTH + MARGIN, 0f)
         }
         run {
             val brightness = makeBrightness(1.0f, null)
             val blue = makeModeBlue(brightness)
-            canvas.drawRect(r, redPaint.copy(imageFilter = blue))
+            drawClippedRect(canvas, r, redPaint.copy(imageFilter = blue), outset = 0f)
             canvas.translate(FILTER_WIDTH + MARGIN, 0f)
         }
         run {

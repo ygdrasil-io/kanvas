@@ -491,7 +491,17 @@ public class W6FilterColorFilterRecipeV1 internal constructor(
 ) {
     private val frozenExtent = extent.copy(); private val frozenSourceExtent = sourceExtent.copy()
     private val frozenOffset = org.graphiks.math.geometry.Point2I32(outputToInputOffsetTargetLocalI32.x, outputToInputOffsetTargetLocalI32.y)
-    init { require(target != source && sampleCountI32 == 1 && sourceSampleCountI32 == 1 && uniformResource.value.startsWith("${PlanResourceRole.SourceUniformData.name}:") && uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 >= 16L && Math.addExact(uniformOffsetBytesI64, maxOf(16L, execution.dynamicByteCountI64)) <= uniformCapacityBytesI64) }
+    init {
+        val expectedFormat = when (execution.compositionDomain) {
+            org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+            org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
+        }
+        require(target != source && targetFormat == expectedFormat && sourceFormat == expectedFormat &&
+            sampleCountI32 == 1 && sourceSampleCountI32 == 1 &&
+            uniformResource.value.startsWith("${PlanResourceRole.SourceUniformData.name}:") &&
+            uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 >= 16L &&
+            Math.addExact(uniformOffsetBytesI64, maxOf(16L, execution.dynamicByteCountI64)) <= uniformCapacityBytesI64)
+    }
     public fun copyExtent() = frozenExtent.copy(); public fun copySourceExtent() = frozenSourceExtent.copy()
     public fun copyOutputToInputOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenOffset.x, frozenOffset.y)
     public fun nativeSiteOwnerV1(): NativeSiteOwnerV1 = NativeSiteOwnerV1(ownerPassId, 0, 0)
@@ -983,7 +993,7 @@ public class W6FullscreenPictureSourceLayerRecipeV1 internal constructor(
     override val variant = W6FullscreenRecipeVariantV1.PictureSourceLayer
     private val frozenExtent = extent.copy(); private val frozenSourceExtent = sourceExtent.copy(); private val frozenOffset = org.graphiks.math.geometry.Point2I32(outputToInputOffsetTargetLocalI32.x, outputToInputOffsetTargetLocalI32.y)
     private val frozenScissor = org.graphiks.math.geometry.RectI32(scissorTargetLocalI32.left, scissorTargetLocalI32.top, scissorTargetLocalI32.right, scissorTargetLocalI32.bottom)
-    init { require(target != source && sampleCountI32 == 1 && sourceSampleCountI32 == 1 && frozenScissor == org.graphiks.math.geometry.RectI32(0, 0, frozenExtent.width, frozenExtent.height)) }
+    init { require(target != source && targetFormat == sourceFormat && sampleCountI32 == 1 && sourceSampleCountI32 == 1 && frozenScissor == org.graphiks.math.geometry.RectI32(0, 0, frozenExtent.width, frozenExtent.height)) }
     public fun copyExtent() = frozenExtent.copy(); public fun copyOutputToInputOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenOffset.x, frozenOffset.y)
     public fun copySourceExtent() = frozenSourceExtent.copy()
     public fun copyScissorTargetLocalI32() = org.graphiks.math.geometry.RectI32(frozenScissor.left, frozenScissor.top, frozenScissor.right, frozenScissor.bottom)

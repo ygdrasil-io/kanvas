@@ -1,13 +1,20 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.ColorFilterNode
+import org.graphiks.kanvas.render.ir.CompositionDomain
 
 public sealed interface ColorFilterCompileResultV1 {
     public data class Ready(public val execution: ColorFilterExecutionPlanV1) : ColorFilterCompileResultV1
     public data class Refused(public val diagnosticCode: String) : ColorFilterCompileResultV1
 }
 public object ColorFilterPlanCompilerV1 {
-    public fun compile(filter: ColorFilterNode): ColorFilterCompileResultV1 {
+    public fun compile(
+        filter: ColorFilterNode,
+        compositionDomain: CompositionDomain = CompositionDomain.LINEAR,
+    ): ColorFilterCompileResultV1 {
+        if (compositionDomain == CompositionDomain.SRGB_ENCODED && filter !is ColorFilterNode.Matrix) {
+            return ColorFilterCompileResultV1.Refused(W5fPlanDiagnostics.Unpromoted)
+        }
         data class Frame(val node: ColorFilterNode, val depthI32: Int, val finish: Boolean)
         val stack = java.util.ArrayDeque<Frame>()
         val compiled = java.util.IdentityHashMap<ColorFilterNode, ColorFilterExecutionPlanV1>()
@@ -55,7 +62,7 @@ public object ColorFilterPlanCompilerV1 {
         // Validate the entire occurrence-expanded metadata traversal before recipes
         // copy records or substitute child operation graphs (including direct IR calls).
         postOrder.forEach { node -> compiled[node] = when (node) {
-                is ColorFilterNode.Matrix -> ColorFilterExecutionPlanV1.matrix(node)
+                is ColorFilterNode.Matrix -> ColorFilterExecutionPlanV1.matrix(node, compositionDomain)
                 is ColorFilterNode.HSLAMatrix -> ColorFilterExecutionPlanV1.hsla(node)
                 ColorFilterNode.HighContrast, ColorFilterNode.Luma, ColorFilterNode.Overdraw -> ColorFilterExecutionPlanV1.preset(node)
                 is ColorFilterNode.Table -> ColorFilterExecutionPlanV1.table(node)

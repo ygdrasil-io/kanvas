@@ -203,7 +203,10 @@ public class PlanResource private constructor(
                             PlanResourceRole.FilterTarget,
                         )) {
                         require(format is PlanTextureFormat.Color &&
-                            format.value == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL &&
+                            format.value in setOf(
+                                PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+                                PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL,
+                            ) &&
                             sampleCountI32 == 1 && lifetime == PlanResourceLifetime.FrameLocal &&
                             PlanResourceUsage.RenderAttachment in usages && PlanResourceUsage.Sampled in usages &&
                             usages.all { it in setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled,

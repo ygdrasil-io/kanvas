@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.color.ColorInterpolationProgramV1
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -31,7 +32,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         }
         scalar = { node -> visited.getOrPut(node) { when(node) {
             is Scalar.DevicePositionF32 -> true
-            is Scalar.InputLinearPremul,is Scalar.ImageEncodedInput,is Scalar.PrimitiveEncodedInput,is Scalar.DynamicF32,is Scalar.ConstantF32,
+            is Scalar.InputLinearPremul,is Scalar.InputEncodedPremul,is Scalar.ImageEncodedInput,is Scalar.PrimitiveEncodedInput,is Scalar.DynamicF32,is Scalar.ConstantF32,
             is Scalar.StopInterpolationInput,Scalar.DiscardF32 -> false
             is Scalar.ImageEncodedComponent,is Scalar.ImageTexelValid,is Scalar.ImageSampleComponent -> true
             is Scalar.NoiseComponent -> scalar(node.region.localX) || scalar(node.region.localY)
@@ -89,6 +90,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         }
         scalar = { node -> values[node] ?: when (node) {
             is Scalar.InputLinearPremul -> 0f
+            is Scalar.InputEncodedPremul -> 0f
             is Scalar.DynamicF32 -> dynamicF32(node.wordOffsetU32)
             is Scalar.ConstantF32 -> Float.fromBits(node.bitsI32)
             is Scalar.Add -> scalar(node.a) + scalar(node.b)
@@ -147,6 +149,10 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         /** Exact U16 table selection converted to F32, before the shared decoder. */
         public class NoiseGradientU16(public val read: NoiseOperationGraphV1.GradientRead) : Scalar
         public data class InputLinearPremul(public val channelI32: Int) : Scalar {
+            init { require(channelI32 in 0..3) }
+        }
+        /** Premultiplied input in the destination's encoded-sRGB composition domain. */
+        public data class InputEncodedPremul(public val channelI32: Int) : Scalar {
             init { require(channelI32 in 0..3) }
         }
         /** Actual prepared vertex UNORM8 attribute, decoded inside the common source DAG. */
@@ -312,6 +318,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             }
             val recipe = when (node) {
                 is Scalar.InputLinearPremul -> "input:${node.channelI32}"
+                is Scalar.InputEncodedPremul -> "input-encoded-premul:${node.channelI32}"
                 is Scalar.PrimitiveEncodedInput -> "primitive-encoded-input:${node.channelI32}"
                 is Scalar.DevicePositionF32 -> "device-position:${node.channelI32}"
                 is Scalar.DynamicF32 -> "dynamic:${node.wordOffsetU32}"
@@ -392,6 +399,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             }
             return bound[value] ?: when (value) {
             is Scalar.InputLinearPremul -> prefix.outputs[value.channelI32]
+            is Scalar.InputEncodedPremul -> prefix.outputs[value.channelI32]
             is Scalar.PrimitiveEncodedInput -> value
             is Scalar.ImageEncodedInput -> imageEncodedInputs?.get(value.channelI32) ?: value
             is Scalar.ImageSampleComponent -> Scalar.ImageSampleComponent(imageRegions.getOrPut(value.region) {
@@ -532,8 +540,13 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 (4 downTo 0).fold(constant(palette[5][channel])) { rest,i -> Scalar.LazyBranch(
                     Predicate.Equal(index,constant(i.toFloat())),constant(palette[i][channel]),rest) } })
         }
-        fun matrix(): ColorOperationGraphV1 {
-            val input = List(4) { Scalar.InputLinearPremul(it) }
+        fun matrix(compositionDomain: CompositionDomain = CompositionDomain.LINEAR): ColorOperationGraphV1 {
+            val input = List(4) { channel ->
+                when (compositionDomain) {
+                    CompositionDomain.LINEAR -> Scalar.InputLinearPremul(channel)
+                    CompositionDomain.SRGB_ENCODED -> Scalar.InputEncodedPremul(channel)
+                }
+            }
             val zero = constant(0f)
             val one = constant(1f)
             val straight = List(4) { if (it == 3) input[3] else Scalar.LazyBranch(

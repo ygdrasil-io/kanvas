@@ -2235,6 +2235,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 requireNotNull(spatialFilterCache?.consume(framePlan)) { "W6c cache binding was not selected by preflight." }
             val generation = generationSeal.deviceGeneration
             val root = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.LogicalTarget }.id)
+            val rootReadbackFormat = (root.format as? PlanTextureFormat.Color)?.value?.w6aTextureFormat()
+                ?: error("W6 logical target must have a sealed color format for readback.")
             require(rootTarget.width == root.copyExtent()?.width && rootTarget.height == root.copyExtent()?.height &&
                 rootTarget.deviceGeneration == generation && rootTarget.targetGeneration == generationSeal.targetGeneration)
             val (rootTexture, rootView) = rootTarget.borrow()
@@ -3713,7 +3715,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             GPUPreparedNativeTextureOperand(rootTexture, generation),
                             GPUPreparedNativeBufferOperand(buffer, generation, GPUPreparedNativeOperandOwnership.OutputOwnedReadback),
                             GPUPreparedNativeReadbackLayout(0, 0, graph.targetExtent.width, graph.targetExtent.height, pass.bytesPerRow,
-                                graph.targetExtent.height, 0L, requireNotNull(pass.mappedBytesI64), GPUTextureFormat.RGBA8UnormSrgb))
+                                graph.targetExtent.height, 0L, requireNotNull(pass.mappedBytesI64), rootReadbackFormat))
                     }
                     is PlanPass.TextureCopy -> {
                         val region = requireNotNull(pass.copySourceBoundsI32())
@@ -3749,8 +3751,15 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 readbackBuffer = null
             }
             val retained = if (runCatching { cleanup.close() }.isSuccess) null else cleanup
+            val failureLocation = failure.stackTrace.firstOrNull { frame ->
+                !frame.className.startsWith("kotlin.") && !frame.className.startsWith("java.") &&
+                    !frame.className.startsWith("jdk.")
+            }?.let { frame ->
+                " at ${frame.className}.${frame.methodName}(${frame.fileName}:${frame.lineNumber})"
+            }.orEmpty()
             return GPUPreparedNativeFramePayloadMaterialization.Refused("w6a.layer.native_materialization",
-                "Layer native materialization failed: ${failure.message.orEmpty()}", retainedCloseOwner = retained)
+                "Layer native materialization failed: ${failure.javaClass.simpleName}: ${failure.message.orEmpty()}$failureLocation",
+                retainedCloseOwner = retained)
         }
     }
 
@@ -4044,7 +4053,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
         ))))
         val pipeline = pipeline(sampledCompositeShader(offset.x, offset.y, recipe.alphaF32), layout,
-            w6aColorTarget(recipe.blend), owned)
+            w6aColorTarget(recipe.blend, recipe.targetFormat.w6aTextureFormat()), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
             entries = listOf(BindGroupEntry(0u, source)))))
         return GPUPreparedNativeScopeOperand.Render(stepIndex,
@@ -4841,10 +4850,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
                 let source_position = vec2<i32>(position.xy) + vec2<i32>(${offset.x}, ${offset.y});
                 let source_extent = vec2<i32>(textureDimensions(w6c_color_source));
-                if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
-                    return vec4<f32>(0.0);
+                var input = vec4<f32>(0.0);
+                if (source_position.x >= 0 && source_position.y >= 0 && source_position.x < source_extent.x && source_position.y < source_extent.y) {
+                    input = textureLoad(w6c_color_source, source_position, 0);
                 }
-                let input = textureLoad(w6c_color_source, source_position, 0);
                 ${W5fColorOperationEmitterV1.emit(recipe.execution.copyOperationGraph(), "input", recipe.uniformOffsetBytesI64 / 4L)}
             }
         """
@@ -4853,7 +4862,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, buffer = BufferBindingLayout(
                 type = GPUBufferBindingType.Uniform, minBindingSize = recipe.uniformCapacityBytesI64.toULong())),
         ))))
-        val pipeline = pipeline(shader, layout, w6aColorTarget(recipe.blend), owned)
+        val pipeline = pipeline(shader, layout,
+            w6aColorTarget(recipe.blend, recipe.targetFormat.w6aTextureFormat()), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
             BindGroupEntry(0u, source), BindGroupEntry(1u, BufferBinding(uniform, 0uL,
                 recipe.uniformCapacityBytesI64.toULong())),
@@ -4883,8 +4893,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         val sampling = requireNotNull(pass.sourceSampling)
         require(recipe.ownerPassId == pass.id && recipe.target == pass.output && recipe.source == pass.layerInput &&
             pass.graphTextureOperand == null && recipe.load == AttachmentLoadPlan.ClearTransparent &&
-            recipe.store == AttachmentStorePlan.Store && recipe.targetFormat == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL &&
-            recipe.sampleCountI32 == 1 && recipe.topology == W6FullscreenEmptyTopologyV1.FullscreenTriangle &&
+            recipe.store == AttachmentStorePlan.Store && recipe.sourceFormat == recipe.targetFormat &&
+            recipe.sampleCountI32 == 1 && recipe.sourceSampleCountI32 == 1 &&
+            recipe.topology == W6FullscreenEmptyTopologyV1.FullscreenTriangle &&
             recipe.groupZeroAbi == W6FullscreenPictureSourceLayerGroupZeroAbiV1.Texture &&
             recipe.shaderFamily == W6FullscreenPictureSourceLayerShaderFamilyV1.SampledLayerTextureLoad &&
             recipe.copyOutputToInputOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32())
@@ -4893,7 +4904,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
             BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
         ))))
-        val pipeline = pipeline(sampledCompositeShader(offset.x, offset.y, 1f), layout, w6aColorTarget(recipe.blend), owned)
+        val pipeline = pipeline(sampledCompositeShader(offset.x, offset.y, 1f), layout,
+            w6aColorTarget(recipe.blend, recipe.targetFormat.w6aTextureFormat()), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
             BindGroupEntry(0u, source),
         ))))
@@ -5131,7 +5143,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
         ))))
         val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.alphaCoverageFragment(offset.x, offset.y),
-            layout, w6aColorTarget(recipe.blend), owned)
+            layout, w6aColorTarget(recipe.blend, recipe.targetFormat.w6aTextureFormat()), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, source)))))
         return GPUPreparedNativeScopeOperand.Render(stepIndex,
             GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),

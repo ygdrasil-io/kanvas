@@ -125,6 +125,7 @@ internal object W6bFilterGraphConstruction {
         extent: SizeI32? = null,
         private val additionalUsages: Set<PlanResourceUsage> = emptySet(),
         private val bufferByteSizeI64: Long? = null,
+        private val colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
     ) {
         private val extentSnapshotI32 = extent?.copy()
 
@@ -156,7 +157,7 @@ internal object W6bFilterGraphConstruction {
                 role,
                 id.value.substringAfter(':').toInt(),
                 PlanResourceKind.Texture2D,
-                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                PlanTextureFormat.Color(colorFormat),
                 textureExtent,
                 checkedTextureBytesI64(4, textureExtent.width, textureExtent.height, 1),
                 buildSet {
@@ -459,7 +460,11 @@ internal object W6bFilterGraphConstruction {
                 }
                 val id = planResourceId(instruction.role, ordinal)
                 val geometry = recipe.sources.getValue(instruction.symbol)
-                resources += ResourceSpec(id, instruction.role, instruction.copyExtentI32())
+                val colorFormat = when (recipe.compositionDomain) {
+                    org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+                    org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
+                }
+                resources += ResourceSpec(id, instruction.role, instruction.copyExtentI32(), colorFormat = colorFormat)
                 bindings[instruction.symbol] = source.withResource(id, geometry.copyExtentI32(),
                     geometry.originDeviceI32, geometry.copyKnownContentDeviceI32(), geometry.copyDesiredOutputDeviceI32(),
                     geometry.copyRequiredInputDeviceI32(), geometry.copyProducedOutputDeviceI32())
@@ -746,7 +751,7 @@ internal object W6bFilterGraphConstruction {
             }
             is CapturedFilterNodeV1.ColorFilter -> {
                 val input = nextInput().source
-                val execution = when (val compiled = ColorFilterPlanCompilerV1.compile(node.filter)) {
+                val execution = when (val compiled = ColorFilterPlanCompilerV1.compile(node.filter, sourceFacts.compositionDomain)) {
                     is ColorFilterCompileResultV1.Ready -> compiled.execution
                     is ColorFilterCompileResultV1.Refused -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                         compiled.diagnosticCode, "W6c ColorFilter could not reuse the W5f numeric graph."))
@@ -1035,7 +1040,7 @@ internal object W6bFilterGraphConstruction {
         }
         val terminal = resolved(occurrence.topology.terminal)
         return W6bEvaluatedFilterRecipeV1(demands.copyRequiredSourceI32(), terminal.source,
-            requireNotNull(terminal.evaluationKey), instructions, sources, operationFacts)
+            requireNotNull(terminal.evaluationKey), instructions, sources, operationFacts, sourceFacts.compositionDomain)
     }
 
     /** Freezes raw-coverage mask work before W5 material/color evaluation. */
@@ -1171,7 +1176,8 @@ internal object W6bFilterGraphConstruction {
             }
             val instructions = frozenBuilders.map { it(sources) }
             W6bEvaluatedFilterRecipeV1(domain, sources.getValue(output.symbol),
-                instructions.filterIsInstance<W6bRecipeInstructionV1.Pass>().last().key, instructions, sources)
+                instructions.filterIsInstance<W6bRecipeInstructionV1.Pass>().last().key, instructions, sources,
+                compositionDomain = sourceFacts.compositionDomain)
         }
     }
 

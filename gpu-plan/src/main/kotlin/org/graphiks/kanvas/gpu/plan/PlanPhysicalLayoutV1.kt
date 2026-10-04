@@ -1114,6 +1114,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                 // immutable captured SceneSnapshot revision authorizes cross-frame reuse.
                 val sourceRevision = pass.evaluationKey.sourceRevisionIdentity ?: return@mapNotNull null
                 val output = rows.single { it.id == pass.output }
+                val outputFormat = (output.format as PlanTextureFormat.Color).value
                 val operation = pass.operation
                 val orderedInputs = pass.inputs().map { input ->
                     val row = rows.single { it.id == input }
@@ -1133,8 +1134,11 @@ public class PlanPhysicalLayoutV1 private constructor(
                         passIdentity = pass.id.value,
                         evaluationKey = pass.evaluationKey,
                         bounds = operation.bounds,
-                        format = (output.format as PlanTextureFormat.Color).value,
-                        colorSpaceIdentity = "rgba8-srgb-linear-premul",
+                        format = outputFormat,
+                        colorSpaceIdentity = when (outputFormat) {
+                            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL -> "rgba8-srgb-linear-premul"
+                            PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL -> "rgba8-encoded-srgb-premul"
+                        },
                         sampleCountI32 = output.sampleCountI32,
                         capabilityGenerationI64 = graph.capabilities.deviceGeneration,
                         backendGenerationI64 = graph.capabilities.deviceGeneration,

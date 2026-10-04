@@ -263,7 +263,7 @@ class GpuPlanTaskListLowererTest {
             targetBounds = originalScratch.targetBounds,
             packetIds = originalScratch.packetIds,
             commandIds = originalScratch.commandIds,
-            structuralPipelineKey = originalScratch.structuralPipelineKey,
+            packetStructuralPipelineKeys = originalScratch.packetStructuralPipelineKeys,
             uniformPlan = originalScratch.uniformPlan,
             maxBufferSize = originalScratch.maxBufferSize,
             maxDynamicUniformBuffersPerPipelineLayout = originalScratch.maxDynamicUniformBuffersPerPipelineLayout,
@@ -411,9 +411,11 @@ class GpuPlanTaskListLowererTest {
                 if (fact.name == "minUniformBufferOffsetAlignment") fact.copy(value = "128") else fact
             },
         )
-        val forgedStructuralKey = scratch.structuralPipelineKey.copy(
-            colorFormat = org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
-        )
+        val forgedStructuralKeys = scratch.packetStructuralPipelineKeys.map { key ->
+            key.copy(
+                colorFormat = org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
+            )
+        }
         val forgedScratch = W3SessionScratchV1(
             planId = scratch.planId,
             capabilitySealHash = scratch.capabilitySealHash,
@@ -423,7 +425,7 @@ class GpuPlanTaskListLowererTest {
             targetBounds = scratch.targetBounds,
             packetIds = scratch.packetIds,
             commandIds = scratch.commandIds,
-            structuralPipelineKey = forgedStructuralKey,
+            packetStructuralPipelineKeys = forgedStructuralKeys,
             uniformPlan = scratch.uniformPlan,
             maxBufferSize = scratch.maxBufferSize,
             maxDynamicUniformBuffersPerPipelineLayout = scratch.maxDynamicUniformBuffersPerPipelineLayout,
@@ -431,11 +433,11 @@ class GpuPlanTaskListLowererTest {
             indexBytes = scratch.indexBytes,
             poolCapacities = scratch.poolCapacities,
         )
-        val forgedPackets = render.drawPackets.map { packet ->
+        val forgedPackets = render.drawPackets.mapIndexed { index, packet ->
             val authority = requireNotNull(packet.corePrimitivePreparedAuthority)
             copyPacket(packet, packet.targetStateHash).attachCorePrimitivePreparedAuthority(
                 authority.copy(
-                    structuralPipelineKey = forgedStructuralKey,
+                    structuralPipelineKey = forgedStructuralKeys[index],
                     w3SessionScratch = forgedScratch,
                 ),
             )
@@ -676,7 +678,7 @@ class GpuPlanTaskListLowererTest {
         assertEquals(target.logicalBounds, scratch.targetBounds)
         assertEquals(listOf(packet.packetId), scratch.packetIds)
         assertEquals(listOf(packet.commandIdValue), scratch.commandIds)
-        assertEquals(authority.structuralPipelineKey, scratch.structuralPipelineKey)
+        assertEquals(listOf(authority.structuralPipelineKey), scratch.packetStructuralPipelineKeys)
         assertEquals(32L, scratch.vertexBytes)
         assertEquals(24L, scratch.indexBytes)
         assertEquals(1, scratch.uniformPlan.slots.size)

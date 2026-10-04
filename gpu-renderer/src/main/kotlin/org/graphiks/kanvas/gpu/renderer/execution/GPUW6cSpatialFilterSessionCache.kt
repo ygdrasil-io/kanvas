@@ -187,6 +187,7 @@ internal class GPUW6cSpatialFilterSessionCache(
         require(row.byteSize == plan.reservedBytesI64 && row.sampleCountI32 == 1)
         val format = when (row.format) {
             PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) -> GPUTextureFormat.RGBA8UnormSrgb
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL) -> GPUTextureFormat.RGBA8Unorm
             else -> error("W6c spatial cache requires frozen RGBA8 target")
         }
         val texture = device.createTexture(TextureDescriptor(size = Extent3D(extent.width.toUInt(), extent.height.toUInt()),

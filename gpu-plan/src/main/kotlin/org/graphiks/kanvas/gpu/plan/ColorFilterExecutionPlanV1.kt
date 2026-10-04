@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.plan
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.render.ir.ColorFilterNode
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.kanvas.render.ir.ImmutableUBytes
 
 public class ColorFilterExecutionPlanV1 private constructor(
@@ -10,6 +11,7 @@ public class ColorFilterExecutionPlanV1 private constructor(
     public val canonicalIdentity: String,
     private val records: List<Record>,
     private val graph: ColorOperationGraphV1,
+    public val compositionDomain: CompositionDomain = CompositionDomain.LINEAR,
     internal val composeChildren: Pair<ColorFilterExecutionPlanV1,ColorFilterExecutionPlanV1>? = null,
     internal val lerpChildren: Pair<ColorFilterExecutionPlanV1,ColorFilterExecutionPlanV1>? = null,
 ) {
@@ -120,11 +122,21 @@ public class ColorFilterExecutionPlanV1 private constructor(
             val structure = "transfer-v1:${filter.canonicalId.value}:${graph.canonicalIdentity}"
             return ColorFilterExecutionPlanV1(structure,structure,emptyList(),graph)
         }
-        fun matrix(filter: ColorFilterNode.Matrix): ColorFilterExecutionPlanV1 {
+        fun matrix(
+            filter: ColorFilterNode.Matrix,
+            compositionDomain: CompositionDomain = CompositionDomain.LINEAR,
+        ): ColorFilterExecutionPlanV1 {
             require(filter.values.sizeI32 == 20 && (0 until 20).all { filter.values[it].isFinite() })
-            val graph = ColorOperationGraphV1.matrix()
-            val structure = "color-filter-v1:matrix20-row-major-linear-straight-clamp-premul:${graph.canonicalIdentity}"
-            return ColorFilterExecutionPlanV1(structure, "$structure:${filter.canonicalId.value}", listOf(Record.Matrix(filter)), graph)
+            val graph = ColorOperationGraphV1.matrix(compositionDomain)
+            val domainIdentity = if (compositionDomain == CompositionDomain.LINEAR) "" else ":${compositionDomain.name}"
+            val structure = "color-filter-v1:matrix20-row-major-straight-clamp-premul$domainIdentity:${graph.canonicalIdentity}"
+            return ColorFilterExecutionPlanV1(
+                structure,
+                "$structure:${filter.canonicalId.value}",
+                listOf(Record.Matrix(filter)),
+                graph,
+                compositionDomain,
+            )
         }
         fun compose(filter: ColorFilterNode.Compose, outer: ColorFilterExecutionPlanV1,
             inner: ColorFilterExecutionPlanV1): ColorFilterExecutionPlanV1 {

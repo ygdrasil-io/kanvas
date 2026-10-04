@@ -48,10 +48,16 @@ public object CompositionAdmissionV1 {
             }
             return emptyList()
         }
+        var inMatrixFilterLayer = false
         scene.forEachIndexed { index, command ->
             when (command) {
-                is SceneCommand.BeginLayer -> plainLayerRefusal(command, index)?.let { return listOf(it) }
-                SceneCommand.EndLayer -> Unit
+                is SceneCommand.BeginLayer -> {
+                    plainLayerRefusal(command, index, scene.filterTable)?.let { return listOf(it) }
+                    inMatrixFilterLayer = command.descriptor.paint?.imageFilter != null
+                }
+                SceneCommand.EndLayer -> inMatrixFilterLayer = false
+                is SceneCommand.Draw -> (if (inMatrixFilterLayer) matrixFilterLayerDrawRefusal(command, index)
+                    else drawRefusal(command, index))?.let { return listOf(it) }
                 else -> refusal(command, index)?.let { return listOf(it) }
             }
         }
@@ -222,6 +228,26 @@ public object CompositionAdmissionV1 {
         return null
     }
 
+    /** Matrix-filter layers currently admit only direct hard solid Rect children. */
+    private fun matrixFilterLayerDrawRefusal(command: SceneCommand.Draw, index: Int): RenderDiagnostic? {
+        val node = command.node
+        val paint = node.paint
+        if (node.origin != DrawOrigin.RECT || node.geometry !is GeometryNode.Rect ||
+            paint?.style != PaintStyleNode.FILL || paint.antiAlias ||
+            node.coverage != CoverageRequest.HARD_EDGE || !node.transform.isIdentityOrIntegerTranslation() ||
+            !node.clip.isHardIntegerRectOrEmpty() || !(node.geometry as GeometryNode.Rect).copyBounds().isIntegerRect()
+        ) return diagnostic("geometry", index, "Encoded Matrix-filter layers admit only non-AA integer Rect FILL draws.")
+        if (!node.blend.isSrcOver() || paint.blendMode != BlendMode.SRC_OVER || node.operationBlendMode != null) {
+            return diagnostic("blend", index, "Encoded Matrix-filter layers admit only SrcOver blending.")
+        }
+        if (node.material !is MaterialNode.Solid || paint.shader != null || paint.blender != null ||
+            paint.colorFilter != null || paint.maskFilter != null || paint.pathEffect != null ||
+            paint.imageFilter != null || node.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty ||
+            node.resource != null
+        ) return diagnostic("source", index, "Encoded Matrix-filter layers require direct solid Rect children without effects.")
+        return null
+    }
+
     /** The encoded Rect shader leaf keeps RECT provenance and the existing owned-image authority. */
     private fun imageShaderRefusal(
         node: org.graphiks.kanvas.render.ir.DrawNode,
@@ -319,17 +345,34 @@ public object CompositionAdmissionV1 {
         return null
     }
 
-    private fun plainLayerRefusal(command: SceneCommand.BeginLayer, index: Int): RenderDiagnostic? {
+    private fun plainLayerRefusal(
+        command: SceneCommand.BeginLayer,
+        index: Int,
+        filterTable: org.graphiks.kanvas.render.ir.CapturedFilterTableV1,
+    ): RenderDiagnostic? {
         val descriptor = command.descriptor
         val paint = descriptor.paint
         val material = descriptor.material
+        val imageFilterRoot = paint?.imageFilter
+        val imageFilterAdmitted = imageFilterRoot?.let { root ->
+            val filter = filterTable.nodeAt(root.id) as? org.graphiks.kanvas.render.ir.CapturedFilterNodeV1.ColorFilter
+            filter != null && filter.filter is org.graphiks.kanvas.render.ir.ColorFilterNode.Matrix &&
+                filter.input == org.graphiks.kanvas.render.ir.CapturedFilterInputV1.ImplicitSource
+        } ?: true
+        val effectsAdmitted = if (imageFilterRoot == null) {
+            descriptor.effects == org.graphiks.kanvas.render.ir.EffectStack.Empty
+        } else {
+            val entries = descriptor.effects as? org.graphiks.kanvas.render.ir.EffectStack.Entries
+            entries != null && entries.effectCount == 1 && entries.effectAt(0) == imageFilterRoot
+        }
+        val admittedMatrixLayer = imageFilterRoot != null && imageFilterAdmitted
         if (descriptor.initWithPrevious || descriptor.backdrop != org.graphiks.kanvas.render.ir.EffectStack.Empty ||
-            descriptor.effects != org.graphiks.kanvas.render.ir.EffectStack.Empty ||
+            !effectsAdmitted ||
             (material != null && (material !is org.graphiks.kanvas.render.ir.MaterialNode.Solid || material.color != paint?.color))
         ) return diagnostic("layer", index, "Encoded composition admits only a plain initialized layer restore.")
         if (paint?.shader != null || paint?.blender != null ||
             paint?.colorFilter != null || paint?.maskFilter != null || paint?.pathEffect != null ||
-            paint?.imageFilter != null || !descriptor.blend.isSrcOver()
+            !imageFilterAdmitted || !descriptor.blend.isSrcOver()
         ) return diagnostic("layer", index, "Encoded composition admits only a plain SrcOver layer restore.")
         val bounds = descriptor.copyBounds()
         if (bounds != null && !bounds.isIntegerRect()) {
@@ -338,11 +381,15 @@ public object CompositionAdmissionV1 {
         if (!descriptor.transform.isIdentityOrIntegerTranslation()) {
             return diagnostic("geometry", index, "Encoded composition layer transform must be identity or an integer translation.")
         }
-        if (!descriptor.clip.isHardIntegerRectOrEmpty()) {
+        if (!descriptor.clip.isHardIntegerRectOrEmpty() &&
+            !(admittedMatrixLayer && descriptor.clip.isPixelAlignedIntegerRectOrEmpty())
+        ) {
             return diagnostic("geometry", index, "Encoded composition layer clip must be empty or a hard integer rectangle.")
         }
         val clip = descriptor.compositeClip
-        if (clip != null && !clip.isHardIntegerRectOrEmpty()) {
+        if (clip != null && !clip.isHardIntegerRectOrEmpty() &&
+            !(admittedMatrixLayer && clip.isPixelAlignedIntegerRectOrEmpty())
+        ) {
             return diagnostic("geometry", index, "Encoded composition layer clip must be empty or a hard integer rectangle.")
         }
         return null
@@ -364,6 +411,13 @@ public object CompositionAdmissionV1 {
         ClipStackNode.Empty -> true
         is ClipStackNode.DeviceRect -> !antiAlias && copyBounds().isIntegerRect()
         else -> false
+    }
+
+    /** Integer-aligned AA rectangles have pixel-exact, hard boundaries; never admits composites. */
+    private fun ClipStackNode.isPixelAlignedIntegerRectOrEmpty(): Boolean = when (this) {
+        ClipStackNode.Empty -> true
+        is ClipStackNode.DeviceRect -> copyBounds().isIntegerRect()
+        is ClipStackNode.Operations -> false
     }
 
     private fun org.graphiks.math.geometry.RectF32.isIntegerRect(): Boolean =

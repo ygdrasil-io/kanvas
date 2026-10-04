@@ -1932,7 +1932,9 @@ private fun testOperandKeys(
     scope: GPUPreparedNativeScopeOperand,
     prefix: String,
 ): List<GPUPreparedNativeOperandKey> {
+    if (scope is GPUPreparedNativeScopeOperand.NoOp) return scope.expectedOperandKeys
     val roles = when (scope) {
+        is GPUPreparedNativeScopeOperand.NoOp -> error("NoOp expected operand keys are handled above")
         is GPUPreparedNativeScopeOperand.Render -> listOf(GPUPreparedNativeOperandRole.RenderColorTarget) +
             scope.operands.drop(1).map { operand ->
                 when (operand) {

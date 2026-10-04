@@ -1259,8 +1259,10 @@ class RenderGraphContractTest {
             pictureSourceLocator = locator, plannedCommandId = planned,
             aggregateId = PictureStreamAggregateIdI32(0))
         val aggregate = PictureStreamAggregateV1(
-            PictureStreamAggregateIdI32(0), PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
-            "picture-source", 1, 0, FramePlannedCommandIdI32(0), emptyList(),
+            PictureStreamAggregateIdI32(0),
+            PictureAggregateOwnerV1.DrawPicture(FramePlannedCommandIdI32(0)),
+            PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
+            "picture-source", 1, 0, emptyList(),
             requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
             org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
             org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
@@ -1285,11 +1287,11 @@ class RenderGraphContractTest {
         val locator = PictureSourceLocatorV1(0, 0)
         val aggregate = PictureStreamAggregateV1(
             PictureStreamAggregateIdI32(0),
+            PictureAggregateOwnerV1.DrawPicture(FramePlannedCommandIdI32(0)),
             PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
             "picture-source",
             1,
             0,
-            FramePlannedCommandIdI32(0),
             emptyList(),
             requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
             org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
@@ -1348,11 +1350,11 @@ class RenderGraphContractTest {
             pictureSourceLocator = secondLocator, plannedCommandId = secondPlanned, aggregateId = aggregateId)
         val aggregate = PictureStreamAggregateV1(
             aggregateId,
+            PictureAggregateOwnerV1.DrawPicture(FramePlannedCommandIdI32(0)),
             PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
             "picture",
             2,
             0,
-            FramePlannedCommandIdI32(0),
             emptyList(),
             requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
             org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
@@ -1402,8 +1404,9 @@ class RenderGraphContractTest {
         val locator = PictureSourceLocatorV1(0, 0)
         val aggregate = PictureStreamAggregateV1(
             PictureStreamAggregateIdI32(0),
+            PictureAggregateOwnerV1.DrawPicture(FramePlannedCommandIdI32(0)),
             PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
-            "picture", 1, 0, FramePlannedCommandIdI32(0), emptyList(),
+            "picture", 1, 0, emptyList(),
             requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
             org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
             org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
@@ -1456,11 +1459,11 @@ class RenderGraphContractTest {
         val locator = PictureSourceLocatorV1(0, 0)
         val aggregate = PictureStreamAggregateV1(
             PictureStreamAggregateIdI32(0),
+            PictureAggregateOwnerV1.DrawPicture(FramePlannedCommandIdI32(0)),
             PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
             "picture-source",
             2,
             0,
-            FramePlannedCommandIdI32(0),
             emptyList(),
             requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
             org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
@@ -3521,12 +3524,13 @@ class RenderGraphContractTest {
         }
         val resources = listOf(root, source, horizontal, vertical, staging)
         val budget = PlanBudget(4_096)
+        val capabilities = supportedCapabilities(setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL))
         return RenderGraph.of(
             PlanId("w6b-publication"), W6aLayerPlanCompiler.CAPABILITY_ID, textureExtent,
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
-            supportedCapabilities(setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)), budget, 0,
+            capabilities, budget, 0,
             resources, passes, passes.zipWithNext { before, after -> PlanPassDependency(before.id, after.id) },
-            W6aLayerPlanBudget.peak(resources, passes.size, budget),
+            W6aLayerPlanBudget.peak(resources, passes, capabilities, budget),
         )
     }
 
@@ -3602,7 +3606,8 @@ class RenderGraphContractTest {
         )
         val passes = listOf(begin, entryTerminal, seal, graphTexture, filter, terminal)
         val aggregate = PictureStreamAggregateV1(
-            aggregateId, PictureStreamExecutionModeV1.ISOLATED_SOURCE, scene.canonicalId.value, 1, 0, planned,
+            aggregateId, PictureAggregateOwnerV1.DrawPicture(planned),
+            PictureStreamExecutionModeV1.ISOLATED_SOURCE, scene.canonicalId.value, 1, 0,
             emptyList(), mapping, ClipStackNode.Empty, ClipStackNode.Empty, domain, domain, root.id,
             aggregateTarget.id, aggregateTarget.id, 0L,
             PictureStreamRegionsV1(domain, domain, domain, domain),
@@ -3715,12 +3720,13 @@ class RenderGraphContractTest {
         )
         val resources = listOf(root, source, wrong, horizontal, vertical, colorized, terminal, staging)
         val budget = PlanBudget(4_096)
+        val capabilities = supportedCapabilities(setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL))
         return RenderGraph.of(
             PlanId("w6b-shadow-publication"), W6aLayerPlanCompiler.CAPABILITY_ID, SizeI32(1, 1),
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
-            supportedCapabilities(setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)), budget, 0,
+            capabilities, budget, 0,
             resources, passes, passes.zipWithNext { before, after -> PlanPassDependency(before.id, after.id) },
-            W6aLayerPlanBudget.peak(resources, passes.size, budget),
+            W6aLayerPlanBudget.peak(resources, passes, capabilities, budget),
         )
     }
 

@@ -76,7 +76,7 @@ class NormalizedDrawCommandTest {
         assertEquals(GPUDrawKind.FillRect, command.drawKind)
         assertEquals(GPUTransformType.Identity, command.transform.type)
         assertEquals(GPUClipKind.WideOpen, command.clip.kind)
-        assertEquals(GPUMaterialKind.SolidColor, command.material.kind)
+        assertEquals(GPUMaterialKind.SolidColor, requireNotNull(command.material).kind)
         assertFalse(command.ordering.dependsOnDestination)
         assertEquals("unit-test:fillRect#7", command.diagnosticName)
     }
@@ -99,7 +99,7 @@ class NormalizedDrawCommandTest {
         assertEquals(GPUDrawKind.FillRRect, command.drawKind)
         assertEquals(GPUTransformType.Identity, command.transform.type)
         assertEquals(GPUClipKind.WideOpen, command.clip.kind)
-        assertEquals(GPUMaterialKind.SolidColor, command.material.kind)
+        assertEquals(GPUMaterialKind.SolidColor, requireNotNull(command.material).kind)
         assertEquals(GPURRectCornerRadii(x = 4f, y = 6f), command.rrect.topLeft)
         assertEquals(GPURRectCornerRadii(x = 4f, y = 6f), command.rrect.topRight)
         assertEquals(GPURRectCornerRadii(x = 4f, y = 6f), command.rrect.bottomRight)

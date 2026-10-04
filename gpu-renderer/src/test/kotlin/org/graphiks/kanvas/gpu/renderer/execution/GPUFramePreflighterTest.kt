@@ -656,7 +656,7 @@ class GPUFramePreflighterTest {
                     targetBounds = originalScratch.targetBounds,
                     packetIds = originalScratch.packetIds,
                     commandIds = originalScratch.commandIds,
-                    structuralPipelineKey = originalScratch.structuralPipelineKey,
+                    packetStructuralPipelineKeys = originalScratch.packetStructuralPipelineKeys,
                     uniformPlan = originalScratch.uniformPlan,
                     maxBufferSize = originalScratch.maxBufferSize,
                     maxDynamicUniformBuffersPerPipelineLayout =

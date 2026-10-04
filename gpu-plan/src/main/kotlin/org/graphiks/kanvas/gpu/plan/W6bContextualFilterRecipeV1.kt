@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.render.ir.CompositionDomain
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.LayerMappingF64
 
@@ -10,6 +11,7 @@ internal class W6bFilterSourceFactsV1(
     desiredOutputDeviceI32: RectI32,
     val mapping: LayerMappingF64,
     val preparePicture: ((W6bBoundFilterOperationV1, W6bSourceGeometryV1) -> W6bPreparedPictureSourceV1?)? = null,
+    val compositionDomain: CompositionDomain = CompositionDomain.LINEAR,
 ) {
     private val sourceDomain = sourceDomainDeviceI32.copy()
     private val knownContent = knownContentDeviceI32?.copy()
@@ -47,6 +49,7 @@ internal class W6bEvaluatedFilterRecipeV1(
     instructions: List<W6bRecipeInstructionV1>,
     sources: Map<W6bRecipeSymbolV1, W6bRecipeSourceV1>,
     operationFacts: List<W6bEvaluatedOperationFactsV1> = emptyList(),
+    val compositionDomain: CompositionDomain = CompositionDomain.LINEAR,
 ) {
     private val requiredInput = requiredInputDeviceI32?.copy()
     val instructions = immutableList(instructions)
