@@ -65,6 +65,10 @@ This initial general-root map is deferred phase10B, not current edit authorizati
 
 ## Task2 phase10B: general root repair deferred pending typed authority
 
+Current next-lot amendment: [hard-path-root-drawcolor-design.md](hard-path-root-drawcolor-design.md) and [hard-path-root-drawcolor-plan.md](hard-path-root-drawcolor-plan.md) specify a closed original-frame W4c DARKEN vertical slice. They require fresh Sol plan review before implementation. The historical general-root steps below remain deferred, not authorization to recreate the rejected compiler.
+
+Phase10A measured at91cff4f24: W3six nativePASS/26buffers/B37184-B37183/mixed512-513; root5PASS3FAIL; controls25PASS1PictureprefixFAIL already observed beforeW3; Skia5PASS; GM104rendered32.302515622496394, GM111exact100unchanged. gpu-plan247PASS29FAIL unchanged, renderer352PASS119FAIL identical in a reversible pre-W3 three-file variant. These are not moduleGREEN or Task2/W7 completion. Full443/other21priorlosses/rootfamilies/finalreviews remain open.
+
 The earlier general-root steps below are a design target, NOT implementation authorization after safetyreject. Require original-scene family/geometry work ledgers/preparation/fragments/packing permit contract detailed and approved before any rootcompiler/Annotation/singleton/native-envelope rewrite. Phase10A is distinct anddoesnotfulfil them.
 
 - [ ] Original owner resumed after valid RED. Root repair first, no permanent adapter revert. All3publicLINEARCTMvariants already nativeGREEN at4b35fae7d, so preserve W3/provenance unless a new mixed-geometry/finite-colourCTM RED establishes that concrete dependency; no anticipatory route-only change.
