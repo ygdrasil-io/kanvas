@@ -66,36 +66,53 @@ internal class FrameSourceLayoutV4 private constructor(
 
     private fun prepareAndPublishLayered(): org.graphiks.kanvas.render.ir.RenderPlanResult<RenderGraph> {
         val frame = requireNotNull(layeredInput)
-        if (sources.isEmpty()) {
+        if (sources.isEmpty() && frame.imageColorFilterExecutions().isEmpty()) {
             // A DrawColor lane has sealed LegacyColorV1 operands and intentionally owns no
             // W5 material table entry. Preserve every lane in recorded order so W6 can publish
             // those frozen render passes without asking the material packer to invent a source.
+            // W6c filter uniforms are independent of W5 source rows and require normal inventory.
             return org.graphiks.kanvas.render.ir.RenderPlanResult.Ready(frame.publish(null, nativeLanes.map { it.passes() }))
         }
-        return when (val bound = prepareAndFinish { table, roots, inventory ->
-            val lanes = nativeLanes.mapIndexed { index, lane ->
-                val w4eColors = lane.geometrySource?.takeIf { it.w4ePayload != null }?.let { geometry ->
-                    remapSourcePassesV4(geometry.passes(), composed = { table.entry(it).bindings is ComposedMaterialBindingV5 }) {
+        return when (val bound = prepareAndFinishOptionalTable { table, roots, inventory ->
+            if (table == null) {
+                require(sources.isEmpty() && roots.isEmpty() && interner.sizeI32 == 0 &&
+                    interner.laneRemaps().isEmpty() && nativeLanes.all { it.sourceTable().sources().isEmpty() } &&
+                    frame.maskMaterialSources().isEmpty() && frame.graphTextureMaterialSources().isEmpty()) {
+                    W5fPlanDiagnostics.Schema
+                }
+                val lanes = nativeLanes.map { lane ->
+                    lane.passes().also { passes ->
+                        require(RenderGraph.visualDraws(passes).all {
+                            it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
+                        }) { W5fPlanDiagnostics.Schema }
+                    }
+                }
+                frame.publish(null, lanes, inventory, emptyMap(), emptyMap())
+            } else {
+                val lanes = nativeLanes.mapIndexed { index, lane ->
+                    val w4eColors = lane.geometrySource?.takeIf { it.w4ePayload != null }?.let { geometry ->
+                        remapSourcePassesV4(geometry.passes(), composed = { table.entry(it).bindings is ComposedMaterialBindingV5 }) {
+                            roots[nativeOffsetsI32[index] + it.indexI32]
+                        }.filterIsInstance<PlanPass.PathRenderPass>().filter { it.phase != PathRenderPhase.SingleSampleStencilProducer }
+                            .associateBy { it.draw.commandIndex }
+                    }
+                    remapSourcePassesV4(lane.passes(), composed = { table.entry(it).bindings is ComposedMaterialBindingV5 },
+                        w4eColorPasses = w4eColors) {
                         roots[nativeOffsetsI32[index] + it.indexI32]
-                    }.filterIsInstance<PlanPass.PathRenderPass>().filter { it.phase != PathRenderPhase.SingleSampleStencilProducer }
-                        .associateBy { it.draw.commandIndex }
+                    }
                 }
-                remapSourcePassesV4(lane.passes(), composed = { table.entry(it).bindings is ComposedMaterialBindingV5 },
-                    w4eColorPasses = w4eColors) {
-                    roots[nativeOffsetsI32[index] + it.indexI32]
+                val nativeSourceCountI32 = nativeLanes.fold(0) { countI32, lane ->
+                    Math.addExact(countI32, lane.sourceTable().sources().size)
                 }
+                val maskMaterialRoots = frame.maskMaterialSources().mapIndexed { indexI32, (occurrenceIdI32, _) ->
+                    occurrenceIdI32 to roots[Math.addExact(nativeSourceCountI32, indexI32)]
+                }.toMap()
+                val graphTextureBaseI32 = Math.addExact(nativeSourceCountI32, maskMaterialRoots.size)
+                val graphTextureMaterialRoots = frame.graphTextureMaterialSources().mapIndexed { indexI32, (aggregateId, _) ->
+                    aggregateId to roots[Math.addExact(graphTextureBaseI32, indexI32)]
+                }.toMap()
+                frame.publish(table, lanes, inventory, maskMaterialRoots, graphTextureMaterialRoots)
             }
-            val nativeSourceCountI32 = nativeLanes.fold(0) { countI32, lane ->
-                Math.addExact(countI32, lane.sourceTable().sources().size)
-            }
-            val maskMaterialRoots = frame.maskMaterialSources().mapIndexed { indexI32, (occurrenceIdI32, _) ->
-                occurrenceIdI32 to roots[Math.addExact(nativeSourceCountI32, indexI32)]
-            }.toMap()
-            val graphTextureBaseI32 = Math.addExact(nativeSourceCountI32, maskMaterialRoots.size)
-            val graphTextureMaterialRoots = frame.graphTextureMaterialSources().mapIndexed { indexI32, (aggregateId, _) ->
-                aggregateId to roots[Math.addExact(graphTextureBaseI32, indexI32)]
-            }.toMap()
-            frame.publish(table, lanes, inventory, maskMaterialRoots, graphTextureMaterialRoots)
         }) {
             is SourceConstructionResultV4.Built -> org.graphiks.kanvas.render.ir.RenderPlanResult.Ready(bound.value)
             is SourceConstructionResultV4.Refused -> bound.failure
@@ -152,7 +169,14 @@ internal class FrameSourceLayoutV4 private constructor(
             is SourceConstructionResultV4.Refused -> result.failure
         }
 
-    private fun <T> prepareAndFinish(finish: (MaterialPlanTable,List<MaterialPlanRef>,SourcePhysicalConstructionV1)->T): SourceConstructionResultV4<T> = try {
+    private fun <T> prepareAndFinish(finish: (MaterialPlanTable,List<MaterialPlanRef>,SourcePhysicalConstructionV1)->T): SourceConstructionResultV4<T> =
+        prepareAndFinishOptionalTable { table, roots, inventory ->
+            finish(requireNotNull(table) { W5fPlanDiagnostics.Schema }, roots, inventory)
+        }
+
+    private fun <T> prepareAndFinishOptionalTable(
+        finish: (MaterialPlanTable?,List<MaterialPlanRef>,SourcePhysicalConstructionV1)->T,
+    ): SourceConstructionResultV4<T> = try {
         val prepared = PreparedStops.prepare(this)
         val boundSources = java.util.IdentityHashMap<MaterialSourceConstructionV4,EffectiveMaterialPlanner.Result.Ready>()
         val boundImages = java.util.IdentityHashMap<MaterialSourceConstructionV4,ImageSampleExecutionPlanV1>()
@@ -246,51 +270,64 @@ internal class FrameSourceLayoutV4 private constructor(
         // Bind the already-recorded placements/root maps, including copied unary
         // chains. A second structural interning pass cannot drop/add an entry.
         val selected = interner.bind(bound) { it.actualDescriptor }
-        var table = MaterialPlanTable.of(selected.map { it.entry })
-        require(table.sizeI32 == interner.sizeI32 && table.gradientStopSlab?.canonicalIdentity == prepared.slab?.canonicalIdentity &&
-            (table.gradientStopSlab?.byteSizeI64 ?: 0L) == stopBytesI64) { W5fPlanDiagnostics.Schema }
         val roots = interner.laneRemaps().mapIndexed { index,refs ->
             refs[entries[index].lastIndex]
-        }
-        sources.forEachIndexed { index,source -> if (source.image != null)
-            table = table.sealColorSourceV4(roots[index],source.coordinates,source.deviceBoundsF32)
         }
         val actualLegacy = mutableListOf<RawMaterialRequirementsV2.LegacyLayout>()
         val actualV4 = linkedMapOf<String,MaterialSourceFootprintV4>()
         val pendingPhysical = linkedMapOf<String,String>()
-        sources.forEachIndexed { index,source ->
-            val root = roots[index]
-            if (source.pending || source.resolvedSource?.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) {
-                val footprint = RawMaterialRequirementsV2.measureV4(table,root)
-                require(footprint.proof.authenticates(table,root,source.coordinates)) { W5fPlanDiagnostics.Schema }
-                actualV4[footprint.canonicalIdentity] = footprint
-                if (source.pending) {
-                    if (source.composed != null) require(footprint.proof.composedDefinition?.captured === source &&
-                        footprint.proof.composedDefinition.frameOwner === this) { W5gPlanDiagnostics.Schema }
-                    else if (source.image != null) require(footprint.proof.imageExecution === boundImages[source]) {
-                        W5fPlanDiagnostics.Schema
-                    } else {
-                        var leafIndex = root.indexI32
-                        while (table.entry(MaterialPlanRef(leafIndex)).bindings.let {
-                            it is MaterialBindingPlan.OpacityF32V1 || it is ColorFilterBindingV4 }) leafIndex--
-                        val actualLeaf = table.entry(MaterialPlanRef(leafIndex)).bindings as? GradientInterpolationBindingV4
-                        require(actualLeaf != null && actualLeaf.definition.frameOwner === this &&
-                            actualLeaf.definition.allocationIdentity == source.canonicalIdentity &&
-                            actualLeaf.sourceProof.preparedDefinition === actualLeaf.definition) { W5fPlanDiagnostics.Schema }
-                    }
-                    val previous = pendingPhysical.putIfAbsent(source.canonicalIdentity,footprint.canonicalIdentity)
-                    require(previous == null || previous == footprint.canonicalIdentity) { W5fPlanDiagnostics.Schema }
-                }
-            } else {
-                val actual = RawMaterialRequirementsV2.measureLegacy(table,root)
-                require(legacyAllocations.any { it.authenticatesFinal(actual,table.gradientStopSlab) }) { W5fPlanDiagnostics.Schema }
-                if (actualLegacy.none { it.canonicalIdentity == actual.canonicalIdentity }) actualLegacy += actual
+        val table: MaterialPlanTable? = if (selected.isEmpty()) {
+            require(layeredInput != null && sources.isEmpty() && entries.isEmpty() && boundRows.isEmpty() &&
+                bound.isEmpty() && interner.sizeI32 == 0 && interner.laneRemaps().isEmpty() && roots.isEmpty() &&
+                actualLegacy.isEmpty() && actualV4.isEmpty() && pendingPhysical.isEmpty() &&
+                legacyAllocations.isEmpty() && ranges.isEmpty() && pendingRanges.isEmpty() && legacyRanges.isEmpty() &&
+                prepared.slab == null && stopBytesI64 == 0L && uniformBytesI64 == 0L && noiseBytesI64 == 0L) {
+                W5fPlanDiagnostics.Schema
             }
+            null
+        } else {
+            var sourceTable = MaterialPlanTable.of(selected.map { it.entry })
+            require(sourceTable.sizeI32 == interner.sizeI32 &&
+                sourceTable.gradientStopSlab?.canonicalIdentity == prepared.slab?.canonicalIdentity &&
+                (sourceTable.gradientStopSlab?.byteSizeI64 ?: 0L) == stopBytesI64) { W5fPlanDiagnostics.Schema }
+            sources.forEachIndexed { index,source -> if (source.image != null)
+                sourceTable = sourceTable.sealColorSourceV4(roots[index],source.coordinates,source.deviceBoundsF32)
+            }
+            sources.forEachIndexed { index,source ->
+                val root = roots[index]
+                if (source.pending || source.resolvedSource?.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) {
+                    val footprint = RawMaterialRequirementsV2.measureV4(sourceTable,root)
+                    require(footprint.proof.authenticates(sourceTable,root,source.coordinates)) { W5fPlanDiagnostics.Schema }
+                    actualV4[footprint.canonicalIdentity] = footprint
+                    if (source.pending) {
+                        if (source.composed != null) require(footprint.proof.composedDefinition?.captured === source &&
+                            footprint.proof.composedDefinition.frameOwner === this) { W5gPlanDiagnostics.Schema }
+                        else if (source.image != null) require(footprint.proof.imageExecution === boundImages[source]) {
+                            W5fPlanDiagnostics.Schema
+                        } else {
+                            var leafIndex = root.indexI32
+                            while (sourceTable.entry(MaterialPlanRef(leafIndex)).bindings.let {
+                                it is MaterialBindingPlan.OpacityF32V1 || it is ColorFilterBindingV4 }) leafIndex--
+                            val actualLeaf = sourceTable.entry(MaterialPlanRef(leafIndex)).bindings as? GradientInterpolationBindingV4
+                            require(actualLeaf != null && actualLeaf.definition.frameOwner === this &&
+                                actualLeaf.definition.allocationIdentity == source.canonicalIdentity &&
+                                actualLeaf.sourceProof.preparedDefinition === actualLeaf.definition) { W5fPlanDiagnostics.Schema }
+                        }
+                        val previous = pendingPhysical.putIfAbsent(source.canonicalIdentity,footprint.canonicalIdentity)
+                        require(previous == null || previous == footprint.canonicalIdentity) { W5fPlanDiagnostics.Schema }
+                    }
+                } else {
+                    val actual = RawMaterialRequirementsV2.measureLegacy(sourceTable,root)
+                    require(legacyAllocations.any { it.authenticatesFinal(actual,sourceTable.gradientStopSlab) }) { W5fPlanDiagnostics.Schema }
+                    if (actualLegacy.none { it.canonicalIdentity == actual.canonicalIdentity }) actualLegacy += actual
+                }
+            }
+            require(pendingPhysical.values.distinct().size == pendingPhysical.size &&
+                actualLegacy.size == legacyAllocations.size && legacyAllocations.all { planned ->
+                    actualLegacy.any { planned.authenticatesFinal(it,sourceTable.gradientStopSlab) }
+                }) { W5fPlanDiagnostics.Schema }
+            sourceTable
         }
-        require(pendingPhysical.values.distinct().size == pendingPhysical.size &&
-            actualLegacy.size == legacyAllocations.size && legacyAllocations.all { planned ->
-                actualLegacy.any { planned.authenticatesFinal(it,table.gradientStopSlab) }
-            }) { W5fPlanDiagnostics.Schema }
         val composedImages=actualV4.values.flatMap { it.proof.composedImageResources }
         val issuedImages=java.util.IdentityHashMap<ImageUploadPlanV1,Unit>()
         require(imageDescriptions.all { description ->
@@ -322,6 +359,8 @@ internal class FrameSourceLayoutV4 private constructor(
         require(actualV4.values.fold(actualUniformBytes) { bytes,value ->
             Math.addExact(bytes,value.uniformByteCountI64) } == uniformBytesI64) { W5fPlanDiagnostics.Schema }
         val inventory = if (layeredInput == null) SourcePhysicalConstructionV1() else {
+            if (table == null) require(imageInventory.isEmpty() && imageDescriptions.isEmpty() &&
+                runtimeInventory.isEmpty() && noiseRanges.isEmpty()) { W5fPlanDiagnostics.Schema }
             val resources = mutableListOf<PlanResource>()
             val uniforms = linkedMapOf<String, PlanResourceId>()
             val w6cColorUniformBindings = linkedMapOf<String, W6cColorUniformBindingV1>()

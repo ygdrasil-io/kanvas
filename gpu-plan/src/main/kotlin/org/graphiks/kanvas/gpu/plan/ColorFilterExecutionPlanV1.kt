@@ -129,7 +129,8 @@ public class ColorFilterExecutionPlanV1 private constructor(
             require(filter.values.sizeI32 == 20 && (0 until 20).all { filter.values[it].isFinite() })
             val graph = ColorOperationGraphV1.matrix(compositionDomain)
             val domainIdentity = if (compositionDomain == CompositionDomain.LINEAR) "" else ":${compositionDomain.name}"
-            val structure = "color-filter-v1:matrix20-row-major-straight-clamp-premul$domainIdentity:${graph.canonicalIdentity}"
+            val linearIdentity = if (compositionDomain == CompositionDomain.LINEAR) "linear-" else ""
+            val structure = "color-filter-v1:matrix20-row-major-${linearIdentity}straight-clamp-premul$domainIdentity:${graph.canonicalIdentity}"
             return ColorFilterExecutionPlanV1(
                 structure,
                 "$structure:${filter.canonicalId.value}",

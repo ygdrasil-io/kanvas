@@ -151,6 +151,34 @@ class W7ColorFilterDestinationDomainSurfacePixelTest {
     }
 
     @Test
+    fun emptyMatrixImageFilterLayerBiasMatchesPerStageOracle() {
+        val matrix = constantBiasMatrix()
+        val expected = Domains.entries.associateWith { domain ->
+            layerBuffer(domain, Pixel(0, 0, 0, 0), matrix)
+        }
+        assertEquals(ubyteArrayOf(137u, 188u, 225u, 255u).toList(),
+            expected.getValue(Domains.LINEAR).copyOfRange(0, 4).toList())
+        assertEquals(ubyteArrayOf(64u, 128u, 191u, 255u).toList(),
+            expected.getValue(Domains.ENCODED).copyOfRange(0, 4).toList())
+
+        for (domain in Domains.entries) {
+            val surface = Surface(SIZE, SIZE, config = config(domain))
+            surface.canvas {
+                saveLayer(SaveLayerRec(paint = Paint(
+                    imageFilter = imageFilter(matrix),
+                    blendMode = BlendMode.SRC_OVER,
+                    antiAlias = false,
+                )))
+                restore()
+            }
+            val actual = surface.render()
+            retainActualPixels(actual, "empty-layer-bias", domain)
+            assertBuffer(actual, expected.getValue(domain), "empty Matrix ImageFilter layer bias $domain",
+                expectedDispatchedOpsI32 = 0)
+        }
+    }
+
+    @Test
     fun restoreAlphaBackgroundsAndOrderMatchOracle() {
         val identity = identityMatrix()
         val child = Pixel(192, 64, 32, 255)
@@ -499,8 +527,9 @@ class W7ColorFilterDestinationDomainSurfacePixelTest {
         this[offset + 3] = (pixel.a.coerceIn(0.0, 1.0) * 255.0).roundToInt().coerceIn(0, 255).toUByte()
     }
 
-    private fun assertBuffer(actual: RenderResult, expected: UByteArray, label: String) {
-        assertNative(actual, label)
+    private fun assertBuffer(actual: RenderResult, expected: UByteArray, label: String,
+        expectedDispatchedOpsI32: Int? = null) {
+        assertNative(actual, label, expectedDispatchedOpsI32)
         assertEquals(SIZE, actual.width, label)
         assertEquals(SIZE, actual.height, label)
         assertEquals(PixelFormat.RGBA8, actual.format, label)
@@ -512,7 +541,7 @@ class W7ColorFilterDestinationDomainSurfacePixelTest {
         }
     }
 
-    private fun assertNative(result: RenderResult, label: String) {
+    private fun assertNative(result: RenderResult, label: String, expectedDispatchedOpsI32: Int? = null) {
         val evidence = "$label scopes=${result.nativeEvidenceScopeKinds} stats=${result.stats} " +
             "steps=${result.structuralSteps} counters=${result.nativeEvidenceCounters} " +
             "diagnostics=${result.diagnostics.summary()} bytes=${result.pixels.size}"
@@ -523,7 +552,8 @@ class W7ColorFilterDestinationDomainSurfacePixelTest {
         val completedIndex = result.structuralSteps.indexOf("CompletionSucceeded")
         assertTrue(submittedIndex >= 0, evidence)
         assertTrue(completedIndex > submittedIndex, evidence)
-        assertTrue(result.stats.opsDispatched > 0, evidence)
+        if (expectedDispatchedOpsI32 == null) assertTrue(result.stats.opsDispatched > 0, evidence)
+        else assertEquals(expectedDispatchedOpsI32, result.stats.opsDispatched, evidence)
         assertEquals(0, result.stats.opsRefused, evidence)
         assertEquals(1L, result.nativeEvidenceCounters["submits"], evidence)
         assertEquals(1L, result.nativeEvidenceCounters["readbackCopies"], evidence)
