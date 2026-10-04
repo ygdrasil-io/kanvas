@@ -17,6 +17,8 @@ import org.graphiks.math.geometry.SizeI32
 
 /** Closed W4c capability for bounded solid hard-edge path fills. */
 public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    private val admissionIssuerToken = Any()
+
     public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
     override fun select(
         scene: SceneSnapshot,
@@ -32,7 +34,7 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
         if (target.colorSpace != ColorSpace.SRGB) {
             return notCandidate("W4c supports only sRGB targets")
         }
-        val admission = W4cOriginalFrameAdmissionV1.pathOnly(this, scene, target)
+        val admission = issueOriginalFrameAdmission(scene, target, W4cOriginalFrameModeV1.PathOnly)
         return when (val preparation = W4cFramePreparationV1.prepareFrame(admission)) {
             is W4cFramePreparationResultV1.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(CAPABILITY_ID, scene.canonicalId, target, preparation.refusals)
             is W4cFramePreparationResultV1.Accepted -> GpuPlanSelection.Candidate(
@@ -43,6 +45,24 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
             is W4cFramePreparationResultV1.ResourceLimit -> resourceSelection(preparation.message)
         }
     }
+
+    private fun issueOriginalFrameAdmission(
+        scene: SceneSnapshot,
+        target: RenderTargetDescriptor,
+        mode: W4cOriginalFrameModeV1,
+    ): W4cOriginalFrameAdmissionV1 = W4cOriginalFrameAdmissionV1(
+        owner = this,
+        scene = scene,
+        target = target,
+        runtimeCatalog = runtimeCatalog,
+        mode = mode,
+        issuerToken = admissionIssuerToken,
+    )
+
+    internal fun authenticates(admission: W4cOriginalFrameAdmissionV1): Boolean =
+        admission.owner === this &&
+            admission.runtimeCatalog === runtimeCatalog &&
+            admission.wasIssuedBy(admissionIssuerToken)
 
     private fun validAllocationFacts(capabilities: PlanCapabilitySnapshot): Boolean = listOf(
         capabilities.copyBytesPerRowAlignment.toLong(),

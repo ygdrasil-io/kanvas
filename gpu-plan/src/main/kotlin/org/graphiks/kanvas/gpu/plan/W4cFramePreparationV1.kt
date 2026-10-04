@@ -38,30 +38,17 @@ internal enum class W4cOriginalFrameModeV1 {
 }
 
 /** Non-public, issuer-bound input for a single preparation of an original scene. */
-internal class W4cOriginalFrameAdmissionV1 private constructor(
+internal class W4cOriginalFrameAdmissionV1 internal constructor(
     internal val owner: W4cPathFillPlanCompiler,
     internal val scene: SceneSnapshot,
     internal val target: RenderTargetDescriptor,
     internal val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
     internal val mode: W4cOriginalFrameModeV1,
+    issuerToken: Any,
 ) {
-    internal companion object {
-        internal fun pathOnly(
-            owner: W4cPathFillPlanCompiler,
-            scene: SceneSnapshot,
-            target: RenderTargetDescriptor,
-        ): W4cOriginalFrameAdmissionV1 = W4cOriginalFrameAdmissionV1(
-            owner, scene, target, owner.runtimeCatalog, W4cOriginalFrameModeV1.PathOnly,
-        )
+    private val issuerToken: Any = issuerToken
 
-        internal fun hardPathRoot(
-            owner: W4cPathFillPlanCompiler,
-            scene: SceneSnapshot,
-            target: RenderTargetDescriptor,
-        ): W4cOriginalFrameAdmissionV1 = W4cOriginalFrameAdmissionV1(
-            owner, scene, target, owner.runtimeCatalog, W4cOriginalFrameModeV1.HardPathRoot,
-        )
-    }
+    internal fun wasIssuedBy(expectedToken: Any): Boolean = issuerToken === expectedToken
 }
 
 internal sealed interface W4cFramePreparationResultV1 {
@@ -91,7 +78,7 @@ internal sealed interface W4cFramePreparationResultV1 {
     data class ResourceLimit(val message: String) : W4cFramePreparationResultV1
 }
 
-internal data class W4cSealedDrawV1(
+internal class W4cSealedDrawV1(
     val commandIndex: Int,
     val pathF32: PathF32,
     val transform: Matrix3x3F32,
@@ -101,9 +88,29 @@ internal data class W4cSealedDrawV1(
     val coordinatesV4: SourceCoordinatesV4?,
     val geometryF32: PathFillGeometryF32,
     val strategy: PathFillStrategy,
-    val scissorI32: RectI32,
+    scissorI32: RectI32,
     val blend: BlendPlan,
-)
+) {
+    private val scissorI32Storage: RectI32 = scissorI32.copy()
+    val scissorI32: RectI32 get() = scissorI32Storage.copy()
+
+    fun copy(
+        commandIndex: Int = this.commandIndex,
+        pathF32: PathF32 = this.pathF32,
+        transform: Matrix3x3F32 = this.transform,
+        material: MaterialPlanRef = this.material,
+        coordinates: MaterialCoordinatePlanV1? = this.coordinates,
+        coordinatesV2: MaterialCoordinatePlanV2? = this.coordinatesV2,
+        coordinatesV4: SourceCoordinatesV4? = this.coordinatesV4,
+        geometryF32: PathFillGeometryF32 = this.geometryF32,
+        strategy: PathFillStrategy = this.strategy,
+        scissorI32: RectI32 = this.scissorI32,
+        blend: BlendPlan = this.blend,
+    ): W4cSealedDrawV1 = W4cSealedDrawV1(
+        commandIndex, pathF32, transform, material, coordinates, coordinatesV2, coordinatesV4,
+        geometryF32, strategy, scissorI32, blend,
+    )
+}
 
 /** Shared single pass over original scene commands for W4c frame recognition and preparation. */
 internal object W4cFramePreparationV1 {
@@ -129,10 +136,9 @@ internal object W4cFramePreparationV1 {
     }
 
     internal fun prepareFrame(admission: W4cOriginalFrameAdmissionV1): W4cFramePreparationResultV1 {
-        // Both closed modes share the same authentic path preparation. HardPathRoot is not
-        // selected by W4cPathFillPlanCompiler until the later root-frame task.
-        check(admission.mode == W4cOriginalFrameModeV1.PathOnly ||
-            admission.mode == W4cOriginalFrameModeV1.HardPathRoot)
+        check(admission.owner.authenticates(admission)) { "W4c frame admission was not issued by its owner" }
+        // HardPathRoot remains an unselected future mode until the later root-frame task.
+        check(admission.mode == W4cOriginalFrameModeV1.PathOnly)
         val scene = admission.scene
         if (scene.extent != admission.target.extent || scene.colorSpace != admission.target.colorSpace) {
             return W4cFramePreparationResultV1.Invalid("Scene and target descriptors disagree")

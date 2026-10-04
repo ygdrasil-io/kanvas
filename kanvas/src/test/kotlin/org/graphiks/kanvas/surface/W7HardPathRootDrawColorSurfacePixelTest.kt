@@ -368,29 +368,29 @@ class W7HardPathRootDrawColorSurfacePixelTest {
     }
 
     private fun retainActualBuffer(result: RenderResult, label: String) {
-        val evidenceRoot = System.getProperty("w7.ordinaryAaEvidenceDir") ?: return
-        val directory = File(evidenceRoot)
-        check(directory.isDirectory) { "W7 evidence directory does not exist: $directory" }
-        val file = File(directory, "w7-hard-path-root-$label.rgba")
-        check(!file.exists()) { "Refusing to overwrite W7 pixel evidence: $file" }
-        val bytes = ByteArray(result.pixels.size) { index -> result.pixels[index].toByte() }
-        file.outputStream().use { output -> output.write(bytes) }
-        val sha256 = MessageDigest.getInstance("SHA-256").digest(bytes)
-            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-        println("w7.hard-path-root.actual-buffer path=${file.absolutePath} byteCount=${bytes.size} sha256=$sha256")
+        retainPixels(result.pixels, label, RetainedEvidenceKind.Actual)
     }
 
     private fun retainCallerBuffer(pixels: UByteArray, label: String) {
+        retainPixels(pixels, label, RetainedEvidenceKind.Caller)
+    }
+
+    private fun retainPixels(pixels: UByteArray, label: String, kind: RetainedEvidenceKind) {
         val evidenceRoot = System.getProperty("w7.ordinaryAaEvidenceDir") ?: return
         val directory = File(evidenceRoot)
         check(directory.isDirectory) { "W7 evidence directory does not exist: $directory" }
         val file = File(directory, "w7-hard-path-root-$label.rgba")
-        check(!file.exists()) { "Refusing to overwrite W7 caller-buffer evidence: $file" }
+        check(!file.exists()) { "Refusing to overwrite W7 ${kind.overwriteDescription}: $file" }
         val bytes = ByteArray(pixels.size) { index -> pixels[index].toByte() }
         file.outputStream().use { output -> output.write(bytes) }
         val sha256 = MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-        println("w7.hard-path-root.caller-buffer path=${file.absolutePath} byteCount=${bytes.size} sha256=$sha256")
+        println("w7.hard-path-root.${kind.outputLabel} path=${file.absolutePath} byteCount=${bytes.size} sha256=$sha256")
+    }
+
+    private enum class RetainedEvidenceKind(val outputLabel: String, val overwriteDescription: String) {
+        Actual("actual-buffer", "pixel evidence"),
+        Caller("caller-buffer", "caller-buffer evidence"),
     }
 
     private fun solidBuffer(color: Rgba) = buffer { _, _ -> color }
