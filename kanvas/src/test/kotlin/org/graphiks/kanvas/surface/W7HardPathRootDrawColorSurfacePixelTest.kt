@@ -160,6 +160,25 @@ class W7HardPathRootDrawColorSurfacePixelTest {
     }
 
     @Test
+    fun mixedCommandBoundaryKeepsHistoricalContinuation() {
+        val expected512 = orderedPathsBuffer(middle = null, after = false)
+        val expected513 = orderedPathsBuffer(middle = null, after = false)
+        val recoveryExpected = solidBuffer(Rgba(0, 0, 255))
+        assertAll(listOf(
+            {
+                val surface = Surface(SIZE, SIZE)
+                recordBoundaryScene(surface, colorCount = 510)
+                renderAndAssert(surface, "boundary-512", expected512)
+            },
+            {
+                val surface = Surface(SIZE, SIZE)
+                recordBoundaryScene(surface, colorCount = 511)
+                characterizeConditionalOutcome(surface, "boundary-513", expected513, recoveryExpected)
+            },
+        ))
+    }
+
+    @Test
     fun mixedFrameBudgetBoundaryRefusesAndRecovers() {
         val budgetB = 69_664L
         val expected = orderedPathsBuffer(middle = null, after = false)
@@ -184,8 +203,8 @@ class W7HardPathRootDrawColorSurfacePixelTest {
                 assertTrue(sentinelUnchanged, "B-1 refusal must leave the entire caller buffer unchanged")
                 assertTrue(failure is IllegalStateException, failure?.toString() ?: "B-1 did not refuse")
                 assertTrue(
-                    failure?.message?.startsWith("resource-limit.w5b.destination-budget") == true,
-                    failure?.message,
+                    failure.message?.startsWith("resource-limit.w5b.destination-budget") == true,
+                    failure.message,
                 )
             },
         ))
@@ -194,31 +213,93 @@ class W7HardPathRootDrawColorSurfacePixelTest {
     @Test
     fun foreignRootFamiliesRefuseAndRecover() {
         val recoveryExpected = solidBuffer(Rgba(0, 0, 255))
-        val surface = Surface(SIZE, SIZE)
-        surface.canvas {
-            drawRect(FULL, constantBlueGradient())
-            drawColor(ColorARGB.Green)
-            drawRect(RectF32.ofLTRB(8f, 8f, 24f, 24f), Paint(
-                shader = Shader.SolidColor(ColorARGB.Red),
-                antiAlias = true,
-                style = PaintStyle.STROKE,
-                strokeWidth = 1f,
-            ))
-        }
-        val sentinel = UByteArray(BYTE_COUNT) { 0x5au }
-        val before = sentinel.copyOf()
-        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(FULL, sentinel) }
-        assertTrue(failure.message?.startsWith("unsupported.stroke.rect_anti_alias:") == true, failure.message)
-        assertContentEquals(before, sentinel)
-        surface.discardRecordedOperations()
-        surface.canvas { drawColor(ColorARGB.Blue) }
-        renderAndAssert(surface, "foreign-stroke-recovery", recoveryExpected)
+        val shaderPathExpected = orderedPathsBuffer(middle = null, after = false)
+        assertAll(listOf(
+            {
+                val surface = Surface(SIZE, SIZE)
+                surface.canvas {
+                    drawRect(FULL, constantBlueGradient())
+                    drawColor(ColorARGB.Green)
+                    drawRect(RectF32.ofLTRB(8f, 8f, 24f, 24f), Paint(
+                        shader = Shader.SolidColor(ColorARGB.Red),
+                        antiAlias = true,
+                        style = PaintStyle.STROKE,
+                        strokeWidth = 1f,
+                    ))
+                }
+                val sentinel = UByteArray(BYTE_COUNT) { 0x5au }
+                val before = sentinel.copyOf()
+                val failure = assertFailsWith<IllegalStateException> { surface.readPixels(FULL, sentinel) }
+                println("w7.hard-path-root.foreign-stroke-refusal type=${failure::class.qualifiedName} diagnostic=${failure.message}")
+                assertTrue(failure.message?.startsWith("unsupported.stroke.rect_anti_alias:") == true, failure.message)
+                assertContentEquals(before, sentinel)
+                surface.discardRecordedOperations()
+                surface.canvas { drawColor(ColorARGB.Blue) }
+                renderAndAssert(surface, "foreign-stroke-recovery", recoveryExpected)
+            },
+            {
+                val surface = Surface(SIZE, SIZE)
+                surface.canvas {
+                    drawColor(ColorARGB.White)
+                    drawPath(redPath(), darken(ColorARGB.Red))
+                    drawPath(greenPath(), Paint(
+                        color = ColorARGB.Green,
+                        shader = Shader.SolidColor(ColorARGB.Green),
+                        blendMode = CanvasBlendMode.DARKEN,
+                        antiAlias = false,
+                    ))
+                }
+                characterizeConditionalOutcome(surface, "foreign-shader-path", shaderPathExpected, recoveryExpected)
+            },
+        ))
     }
 
     private fun recordBudgetScene(surface: Surface) = surface.canvas {
         drawColor(ColorARGB.White)
         drawPath(redPath(), darken(ColorARGB.Red))
         drawPath(greenPath(), darken(ColorARGB.Green))
+    }
+
+    private fun recordBoundaryScene(surface: Surface, colorCount: Int) = surface.canvas {
+        repeat(colorCount) { drawColor(ColorARGB.White) }
+        drawPath(redPath(), darken(ColorARGB.Red))
+        drawPath(greenPath(), darken(ColorARGB.Green))
+    }
+
+    private fun characterizeConditionalOutcome(
+        surface: Surface,
+        label: String,
+        expected: UByteArray,
+        recoveryExpected: UByteArray,
+    ) {
+        val callerBuffer = UByteArray(BYTE_COUNT) { 0x5au }
+        val before = callerBuffer.copyOf()
+        var refusal: IllegalStateException? = null
+        try {
+            surface.readPixels(FULL, callerBuffer)
+        } catch (failure: IllegalStateException) {
+            refusal = failure
+        }
+        println("w7.hard-path-root.characterization label=$label outcome=${if (refusal == null) "success" else "refusal"} " +
+            "type=${refusal?.javaClass?.name} diagnostic=${refusal?.message}")
+        if (refusal == null) {
+            retainCallerBuffer(callerBuffer, "$label-caller-output")
+            assertAll(listOf(
+                { assertFullPixels(expected, callerBuffer, "$label readPixels") },
+                { renderAndAssert(surface, label, expected) },
+            ))
+        } else {
+            retainCallerBuffer(callerBuffer, "$label-caller-sentinel")
+            assertContentEquals(before, callerBuffer, "$label refusal must leave the caller sentinel unchanged")
+            assertEquals(
+                "org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException",
+                refusal.javaClass.name,
+                "$label refusal exception type",
+            )
+            surface.discardRecordedOperations()
+            surface.canvas { drawColor(ColorARGB.Blue) }
+            renderAndAssert(surface, "$label-recovery", recoveryExpected)
+        }
     }
 
     private fun darken(color: ColorARGB) = Paint(color, blendMode = CanvasBlendMode.DARKEN, antiAlias = false)
@@ -292,9 +373,15 @@ class W7HardPathRootDrawColorSurfacePixelTest {
     private fun assertFullBuffer(expected: UByteArray, result: RenderResult, label: String) {
         assertEquals(BYTE_COUNT, expected.size, "$label oracle must cover the full RGBA8 target")
         assertEquals(BYTE_COUNT, result.pixels.size, "$label returned full RGBA8 target")
+        assertFullPixels(expected, result.pixels, label)
+    }
+
+    private fun assertFullPixels(expected: UByteArray, actual: UByteArray, label: String) {
+        assertEquals(BYTE_COUNT, expected.size, "$label oracle must cover the full RGBA8 target")
+        assertEquals(BYTE_COUNT, actual.size, "$label returned full RGBA8 target")
         for (offset in expected.indices) {
             val want = expected[offset].toInt()
-            val got = result.pixels[offset].toInt()
+            val got = actual[offset].toInt()
             if (offset % 4 == 3) assertEquals(want, got, "$label alpha pixel=${offset / 4}")
             else assertTrue(abs(want - got) <= 2, "$label RGB byte=$offset expected=$want actual=$got")
         }
@@ -311,6 +398,19 @@ class W7HardPathRootDrawColorSurfacePixelTest {
         val sha256 = MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
         println("w7.hard-path-root.actual-buffer path=${file.absolutePath} byteCount=${bytes.size} sha256=$sha256")
+    }
+
+    private fun retainCallerBuffer(pixels: UByteArray, label: String) {
+        val evidenceRoot = System.getProperty("w7.ordinaryAaEvidenceDir") ?: return
+        val directory = File(evidenceRoot)
+        check(directory.isDirectory) { "W7 evidence directory does not exist: $directory" }
+        val file = File(directory, "w7-hard-path-root-$label.rgba")
+        check(!file.exists()) { "Refusing to overwrite W7 caller-buffer evidence: $file" }
+        val bytes = ByteArray(pixels.size) { index -> pixels[index].toByte() }
+        file.outputStream().use { output -> output.write(bytes) }
+        val sha256 = MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        println("w7.hard-path-root.caller-buffer path=${file.absolutePath} byteCount=${bytes.size} sha256=$sha256")
     }
 
     private fun solidBuffer(color: Rgba) = buffer { _, _ -> color }
