@@ -216,6 +216,9 @@ de suites et l'ownership stencil restent ouverts.
 La nouvelle branche `codex/w7-transversal-corpus-census` empile uniquement
 le snapshot et ce suivi sur #2446. La review indépendante Sol a relevé
 I1 (tentatives enregistrées/effectives) et M1 (statuts/PNG présentes),
-corrigés uniquement dans les documents ; relecture ciblée en attente. Aucune
+corrigés uniquement dans les documents. Relecture ciblée Sol : I1/M1
+ADDRESSED, C0/I0/M0, prêt pour publication draft documentaire uniquement.
+Rapports complets conservés dans le dossier local de reçus cité plus haut
+(`census-review-report.md`, `census-fix-review-report.md`). Aucune
 review Astra n'est revendiquée (dispatch refusé `agent thread limit reached`).
 W7 ACTIVE : pas de merge, de global GREEN, de parité complète ni de clôture.

@@ -18,7 +18,7 @@ Rect→Path est insuffisante (stroke fermé/AA4 absents du Core commun).
 Prochain probe : même PATH AA STROKE solide sans filtre propre, au root puis
 dans un saveLayer plain, contrôle W6 existant ; aucune extension avant preuve
 scope/pixels/completion/replay. Probe non exécuté.
-Review Sol du lot documentaire : I1/M1 corrigés, relecture ciblée en attente.
+Review Sol du lot documentaire : I1/M1 ADDRESSED, C0/I0/M0, prêt pour draft uniquement.
 Pas de review Astra revendiquée après limite
 de sous-agents. W7 ACTIVE, aucun merge/globalGREEN/clôture.
 
