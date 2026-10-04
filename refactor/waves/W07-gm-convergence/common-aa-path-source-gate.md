@@ -1,8 +1,14 @@
 # W7 — gate native source PATH AA : falsifier initial et reprise
 
-État actuel : la gate fraîche après SolidRect qualifie root et contrôle,
-avec layer RED attendu. La preuve initiale reste ci-dessous ; la reprise
-ne la réécrit pas et ne prouve encore ni source layer ni nouveau budget.
+État actuel : la validation focalisée est GREEN (9/9), couvrant la source
+layer et le budget B=25 312 / B−1 (`budget.w5g.composed-uniform`). Le run
+contextuel est 119/120 ; le run global est incomplet et ne constitue pas
+GREEN. Ces preuves portent sur les sources produit `W6aLayerPlanCompiler.kt`
+(SHA-256 `f152690c3249a6a6b0223847e32310af2514a5035f0a2ff49717fe4ba32b5d5d`)
+et `W4dGeneralPathPlanCompiler.kt`
+(SHA-256 `1fcb3a87283a58be8a97d8ee83271e3b2121eb32d60042ce4f59b3ed4f04ff62`)
+avant le nettoyage mineur ; la requalification de ce cleanup attend le
+contrôleur. Les preuves historiques ci-dessous restent inchangées.
 
 4 octobre 2026. Produit inchangé à2485cfb ; HEAD documentaire6ac4fb193.
 Cette preuve invalide la gate requise par common-aa-path-source-plan.md,

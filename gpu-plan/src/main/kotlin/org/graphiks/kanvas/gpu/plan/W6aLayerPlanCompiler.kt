@@ -304,7 +304,7 @@ public class W6aLayerPlanCompiler public constructor(
             if (deferredAa?.blend == BlendPlan.NoOpV1) return@forEach
             val rootAaRectStroke = (ownsMixedRootAaRect || ownsW6b) && scopeI32 == null &&
                 originalDraw?.paint?.let { paint -> paint.imageFilter == null && paint.maskFilter == null } == true &&
-                originalDraw?.let(rootAaRectSource::acceptsW6RootAaRectStrokeScope) == true
+                originalDraw.let(rootAaRectSource::acceptsW6RootAaRectStrokeScope) == true
             val encodedHairline = ownsEncodedHairlineFrame &&
                 (recordedCommand as? SceneCommand.Draw)?.let(CompositionAdmissionV1::isAdmittedEncodedRectHairline) == true
             val rootAaCoverage = scopeI32 == null && ownsW6b &&
