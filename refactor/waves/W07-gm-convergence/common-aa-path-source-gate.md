@@ -7,8 +7,23 @@ GREEN. Ces preuves portent sur les sources produit `W6aLayerPlanCompiler.kt`
 (SHA-256 `f152690c3249a6a6b0223847e32310af2514a5035f0a2ff49717fe4ba32b5d5d`)
 et `W4dGeneralPathPlanCompiler.kt`
 (SHA-256 `1fcb3a87283a58be8a97d8ee83271e3b2121eb32d60042ce4f59b3ed4f04ff62`)
-avant le nettoyage mineur ; la requalification de ce cleanup attend le
-contrôleur. Les preuves historiques ci-dessous restent inchangées.
+avant le nettoyage mineur ; sa requalification est consignée ci-dessous.
+Les preuves historiques restent inchangées.
+
+Requalification du nettoyage (4 octobre 2026) : produit W6a SHA-256
+`6ed6737599673a442f576593fdeaae868f44bf89e0157deaffb57da6ee0ba562`,
+W4d inchangé. Archives privées `common-aa-path-cleanup-focused-20261004-1`
+et `common-aa-path-cleanup-context-20261004-1` sous
+`/private/tmp/kanvas-w7-inverse-inventory.hbWqUb`.
+Focal9/9,108buffers natifs et10refus ; exit0/Gradle20s, recompilation W6a
+sans warning safe-call. Contexte119/120, unique FAIL historique backdrop
+identique (hors horodatage), exit1/Gradle24s. Logs178/420lignes,
+18/240events et2/6XML intégralement audités, inventaires/binary hashés,
+ownPGID92074/92517 vides ; postseals séparés exacts7702fichiers,
+manifestSHA`4378adbe95e9001dcd1dce49588a1098dcab30c333baf43cae8f09a0041adcc7`.
+Fixtures, PNG/scores/références et helpers inchangés. La tentative globale
+plus bas appartient au produit avant nettoyage ; elle n'a pas été répétée,
+reste incomplète et ne qualifie pas globalement le produit actuel.
 
 4 octobre 2026. Produit inchangé à2485cfb ; HEAD documentaire6ac4fb193.
 Cette preuve invalide la gate requise par common-aa-path-source-plan.md,
