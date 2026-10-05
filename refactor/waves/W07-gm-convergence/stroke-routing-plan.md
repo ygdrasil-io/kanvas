@@ -8,7 +8,7 @@
 
 **Tech Stack:** Kotlin, :math, semantic IR, GPU plan, native WebGPU/Metal public Surface tests.
 
-**Spec:** This document's architecture and constraints, under the delegated pilotage in [pilotage.md](pilotage.md). Astra independently reviewed this strategy before implementation.
+**Spec:** This document's architecture and constraints, under the delegated pilotage in [pilotage.md](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md). Astra independently reviewed this strategy before implementation.
 
 ## Global constraints
 

@@ -37,7 +37,7 @@ Produit mesuré813e61f09 : ciblés263/263, corpus631/443 complet. Correction
 finale5a931c87a : public94+GM9 frais,103/103, code exécutable inchangé. La
 globale240s reste incomplète (688SUCCESS/40FAILURE/1SKIPPED,22anciennes
 identités non atteintes) ; sa réussite n'est pas un livrable atteint.
-Les détails et limites sont dans [status](status.md) et [pilotage](pilotage.md).
+Les détails et limites sont dans [status](status.md) et [pilotage](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md).
 
 Les checkboxes ci-dessous indiquent les obligations traitées par la solution
 finale amendée, pas la conservation des implémentations intermédiaires.

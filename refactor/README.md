@@ -1,5 +1,53 @@
 # Refactor du renderer Skia
 
+## Situation actuelle — 5 octobre 2026
+
+La recherche de parité Skia est mise de côté à la demande de l'utilisateur.
+Les travaux réalisés sur la géométrie, Scene IR, les plans GPU, les matériaux,
+les layers et leurs contrats natifs sont conservés. Aucun objectif de parité
+globale n'est déclaré atteint ; les gaps ouverts ne deviennent pas des succès.
+
+Le dernier lot local DrawColor + paths DARKEN sans antialiasing est qualifié
+sur `4d86aa875` et clôturé dans le
+[plan hard-path](waves/W07-gm-convergence/hard-path-root-drawcolor-plan.md#qualification-finale-du-lot-local--2026-10-05).
+Les mesures et limites de ce lot y sont conservées ; les campagnes GM suivantes
+et le retrait legacy W8 ne sont pas lancés.
+
+Le cleanup supprime uniquement 31 anciens snapshots JSON de corpus et le journal
+intermédiaire W7 `pilotage.md` (environ 21 Mo de JSON). Le
+[snapshot transversal historique](waves/W07-gm-convergence/transversal-corpus-2485cfb.json)
+est conservé comme point de comparaison ancien, pas comme résultat du code courant.
+Les specs, plans, qualifications finales, sources, tests, références et scores restent
+inchangés, hormis les liens documentaires vers les artefacts retirés.
+
+Les fichiers retirés restent récupérables dans le commit
+`36350563f48485598009d61a1707f7cff0ff7e94` avant cleanup, par exemple :
+
+```sh
+rtk proxy git show 36350563f48485598009d61a1707f7cff0ff7e94:refactor/waves/W07-gm-convergence/pilotage.md
+```
+
+Les liens historiques utilisent ce commit immuable, encore local à ce checkpoint.
+Les URLs GitHub seront disponibles après sa publication ; jusque-là, la
+récupération se fait avec `git show` comme ci-dessus. Les sections ci-dessous
+sont un historique des validations et décisions, pas des instructions pour
+reprendre la campagne de parité.
+
+### Intégration sur la branche principale
+
+La branche principale du dépôt est `master`. La pile publiée comporte 62 PR,
+de #2385 à #2447, plus les derniers lots locaux. Une fusion calculée avec
+`origin/master` à `6b9b152c8` ne présente pas de conflit ; ce constat n'est
+ni une fusion effective ni une qualification de tests.
+
+Vérification fraîche avant intégration : `:gpu-plan:test`, code local
+`36350563f`, 279 tests = 250 PASS /29 FAIL, zéro test ignoré, sortie Gradle1.
+Les 29 identités, messages et textes complets d'échec restent identiques au
+contrôle précédent ; ce sont des tests unitaires de sélection/ressources/budgets,
+pas la campagne GM mise en attente. La suite globale n'a pas été déclarée GREEN.
+La fusion reste suspendue à une décision sur cette dette ; aucun push ou merge
+n'a été effectué pendant ce cleanup.
+
 Ce dossier centralise les documents humains de pilotage de la remédiation
 architecturale du renderer. Les artefacts techniques générés — captures PNG,
 diffs, métriques, manifests et résultats JSON — restent dans leurs répertoires
@@ -249,7 +297,7 @@ et gates finales obligatoires, aucun nativeGREEN, ISO, push/PR W5g ou clôture g
 | W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms F64 `Identity`/`AxisAlignedAffine`/`GeneralAffine`/`Perspective`, le graph AA4/resolve scellé et la lane hard générale prouvée byte-exact à travers `Surface`. W4e fournit hard mask 1×, inverse/D24S8 et oracle/matrice `Surface`; Task 9-fix1 clôt les 18 deltas frais, Task 9-fix2 élimine le fallback d'usages couleur implicite, et le correctif final post-revue couvre les consumers Rect/RRect/Path, les entrées/copies bornées et les buffers V/I/U scellés. `final-fix3` conserve ses preuves publiques de mutation/ordre; la pré-publication `.from` reste un constat statique, sans conclusion pixel sur l'identité du pool. La baseline globale historique reste 51 failures, 0 error et 2 skips, sans nouveau run global W5b. Les 45 DrawPoint sont désormais fermés par le gate public W5b; restent AA4 et `TopologyLimit` conservative F64→F32. Font/codec, GM/dashboard/baseline et `jpg-color-cube` exclus ([status](waves/W04-geometry-coverage/status.md)) |
 | W5 | Material graph, blends, gradients et images | W5a–W5h closes sur leurs périmètres fonctionnels bornés. W5f conserve 688PASS/2skipsAA4 et sa [Draft #2400](https://github.com/ygdrasil-io/kanvas/pull/2400). W5g livre Blend partagé, gradients/images, NoiseV1 et convergence : final921 cas/919PASS/2skipsAA4/0failure-error public, cinq compiles exit0, review finale `COMPLIANT`/`APPROVED` C0/I0/M0 après correction owner-aware ; [Draft #2401](https://github.com/ygdrasil-io/kanvas/pull/2401) empilée sur W5f. W5h ferme 33/33 cellules H dans son domaine borné (1021 invocations H, convergence5), reviews Task7 et whole-branch `APPROVED` C0/I0/M0 ; [Draft #2402](https://github.com/ygdrasil-io/kanvas/pull/2402) empilée sur W5g. Les exits natifs133 restent `UNKNOWN`, sans score ISO ni Ready-to-merge. Conical B-cross-zero, AA4, clips Picture complexes, close/rollback target-level, teardown et gaps W8/intégration restent réservés ; covering/baselines/exclusions W5h détaillés en tête et dans le [status](waves/W05-material-graph/status.md) |
 | W6 | Layers et effets | W6a/W6b/W6c/W6d restent bornés dans le [status](waves/W06-layers-effects/status.md). W6e est restacké sur le prérequis revu `codex/w6e-filter-bounds-recipe` (`6bd5962e5`, Draft #2407) : ses six shards couvrent les 22 familles, W4/W5/layers, puis le replay mémoire `Picture` deux fois par famille et les fixtures B/B−1/cache/refus/recovery représentatifs. Les quatre formules fermées sont W6b `8+8+12+52+256=336`, W6c `5×4+2×16+256=308`, W6d `5×4+2×16+4096+256=4404` et W6e `8+12+32+256=308`; elles ne constituent ni budget par famille ni agrégat des 22, dont la matrice reste ouverte. Les 14 XML ciblés (`77/0/0/0`) n'ont aucune failure/error ; native133/134 reste **UNKNOWN**. Le writer courant est Picture 15/schema 9 avec lecteurs historiques et aucun wire change. Fonts/codecs, GM/dashboard/render/score, Skia global, `jpg-color-cube`, F16/HDR positif et claim ISO/globale restent exclus. La review Sol whole-branch, la Draft PR sur le prérequis, le push et le merge restent des gates contrôleur. |
-| W7 | Convergence GM | [Pilotage mesuré](waves/W07-gm-convergence/pilotage.md), [corpus final `38c75ab12`](waves/W07-gm-convergence/inverse-inventory-38c75ab12.json) :207/443 rendus,184 comparés,42≥99%,57≥95%, zéro gain/perte dans le lot inverse direct/Picture AA ;207 hashes/métriques et631 lignes hors temps identiques,18 invariants conservés. Paire/inventaire root authentifiés, source inverse-AA W6 distincte, preuve math raster local/clip/target/origine device jusque prepared/native ; masked-AA non pris en charge refusé avant allocation avec récupération. Au SHA exact342/343 natifs affectés (seul W5bNoOp connu),788 événements mathPASS (478geometry+310matrix, XML final310seulement) ; globale240s rouge/incomplète687PASS/37FAIL/1SKIP, mêmes725cas/statuts et37échecs, non atteints bornés non exhaustifs. Astra1Important/3Minor corrigés, contre-revue Sol tous ADDRESSED sans nouvelle rupture ; draft [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431) publiée/rattachée sur [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430), parent/head distants vérifiés. Références/seuils/domaines/exclusions et vertices30s inchangés. Alpha128 fractionnel opaque, masked-AA positif, autres W7/W6/W0 et merge ouverts. Prochain diagnostic causal : inverse_fill_filters337, pas42gains promis. |
+| W7 | Convergence GM | [Pilotage mesuré](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md), [corpus final `38c75ab12`](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/inverse-inventory-38c75ab12.json) :207/443 rendus,184 comparés,42≥99%,57≥95%, zéro gain/perte dans le lot inverse direct/Picture AA ;207 hashes/métriques et631 lignes hors temps identiques,18 invariants conservés. Paire/inventaire root authentifiés, source inverse-AA W6 distincte, preuve math raster local/clip/target/origine device jusque prepared/native ; masked-AA non pris en charge refusé avant allocation avec récupération. Au SHA exact342/343 natifs affectés (seul W5bNoOp connu),788 événements mathPASS (478geometry+310matrix, XML final310seulement) ; globale240s rouge/incomplète687PASS/37FAIL/1SKIP, mêmes725cas/statuts et37échecs, non atteints bornés non exhaustifs. Astra1Important/3Minor corrigés, contre-revue Sol tous ADDRESSED sans nouvelle rupture ; draft [#2431](https://github.com/ygdrasil-io/kanvas/pull/2431) publiée/rattachée sur [#2430](https://github.com/ygdrasil-io/kanvas/pull/2430), parent/head distants vérifiés. Références/seuils/domaines/exclusions et vertices30s inchangés. Alpha128 fractionnel opaque, masked-AA positif, autres W7/W6/W0 et merge ouverts. Prochain diagnostic causal : inverse_fill_filters337, pas42gains promis. |
 | W8 | Retrait legacy et runtime | Non démarrée |
 
 La réserve de relecture W7 au code `3398dc3` est levée : le garde de plain layer

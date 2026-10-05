@@ -1,9 +1,33 @@
 # W07 — diagnostic GM provisoire
 
+## Parité différée et préparation de l'intégration — 5 octobre 2026
+
+La campagne de parité Skia est mise de côté à la demande de l'utilisateur.
+W7 n'est pas déclaré terminé et aucune nouvelle campagne GM n'est planifiée ici.
+La priorité devient le cleanup statique et l'intégration des travaux existants
+sur `master`, sans retirer de tests ni masquer leurs échecs.
+
+Le lot hard-path + vrai DrawColor est clos et relu :
+[qualification finale](hard-path-root-drawcolor-plan.md#qualification-finale-du-lot-local--2026-10-05).
+Les derniers résultats natifs qualifiés sont conservés dans ce plan.
+Le gate d'intégration frais `:gpu-plan:test` reste RED : 250 PASS /29 FAIL,
+tous les échecs exactement ceux du contrôle précédent. Ce ne sont pas des
+écarts de comparaison Skia. La suite globale et la fusion restent non qualifiées.
+
+31 snapshots JSON intermédiaires et le journal `pilotage.md` sont retirés.
+Le snapshot transversal historique est conservé ; les liens vers les autres
+archives désignent le commit Git avant cleanup `36350563f`, encore local à ce
+checkpoint. Les URLs GitHub seront disponibles après sa publication ; jusque-là,
+la récupération passe par `git show`.
+Le [README refactor](../../README.md#situation-actuelle--5-octobre-2026)
+consigne le périmètre, la récupération et l'état d'intégration.
+Les sections suivantes sont historiques ; leurs mentions « prochain lot »,
+« W7 actif » ou « continuer » ne constituent plus un ordre d'exécution courant.
+
 ## Rect hard + root Path AA encoded — 3 octobre 2026
 
 [Design](root-aa-rect-design.md), [plan amendé](root-aa-rect-plan.md),
-[qualification](root-aa-rect-qualification.md), [snapshot frais](root-aa-rect-8e44f0c8a.json).
+[qualification](root-aa-rect-qualification.md), [snapshot frais](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/root-aa-rect-8e44f0c8a.json).
 Branche codex/w7-root-aa-rect-admission, parent#2436/53bf9c55b,
 source/tests privée8e44f0c8a. Admission commune root-AA/W4d avec ownership Rect
 standalone, géométrie exacte I/F32/I32 dans math, MSAA4 final-only conservé.
@@ -35,7 +59,7 @@ Suivi post-publication documentaire uniquement, CI non inspectée, aucune fusion
 
 [Design](root-aa-encoded-design.md), [plan](root-aa-encoded-plan.md),
 [qualification](root-aa-encoded-qualification.md),
-[corpus frais complet](root-aa-encoded-28adb36d3.json).
+[corpus frais complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/root-aa-encoded-28adb36d3.json).
 Source privée28adb36d3, stack prévue sur#2435/6f059f0dc.
 Nouvelle capacité Surface/Picture root SRGB_ENCODED pour Paths solides AA
 noninverses linéaires/FILL ou finite positive STROKE BUTT/MITER, clip hard,
@@ -80,7 +104,7 @@ C0/I0 Sol ; précision Minor appliquée. Globale RED/incomplète, W7 actif.
 
 Branche `codex/w7-scaled-stroke-diagnostic`, base publiée#2434/7658d902b.
 [Plan causal et qualification](scaled-stroke-diagnostic-plan.md),
-[snapshot frais](path-ctm-4e4b699a6.json). La frontière était dans GmCanvas :
+[snapshot frais](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/path-ctm-4e4b699a6.json). La frontière était dans GmCanvas :
 path affine prétransformé, paint/largeur/shader encore en coordonnées locales.
 Le correctif garde path et paint sous le même CTM temporaire pour chaque path
 nonidentity, après capture du clip, avec restauration propre en finally.
@@ -145,7 +169,7 @@ RED causal2/21 puis GREEN21/21 aux oracles figés ; geometry488+matrix310
 JVM PASS, compilation JS réellement exécutée, six témoins natifs PASS4+2.
 Review Sol Task1 approuvée C0/I0/M1 warnings hérités.
 
-Le [checkpoint complet frais](undashed-arc-c0567497f.json) conserve631/443,
+Le [checkpoint complet frais](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/undashed-arc-c0567497f.json) conserve631/443,
 7invariants metadata et18par cas : **217rendus(+5),194comparés(+5),
 46≥99%(+2),63≥95%(+3),médiane77.45815728081598%(avant75%)**.
 Aucun ancien rendu perdu/modifié :212hashes RGBA et métriques identiques.
@@ -236,7 +260,7 @@ non inspectée, globale rouge/incomplète conservée.
 Branche `codex/w7-complexclip2-port`, parent publié#2432/d958bd26c.
 [Plan exécuté](complexclip2-port-plan.md), source/tests
 `092a293be0d37534769b32fa774faa56d1231952`,
-[snapshot frais exact](complexclip2-092a293be.json).
+[snapshot frais exact](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/complexclip2-092a293be.json).
 La carte blanche W7 permet ce lot mesuré sans nouvelle boucle d'approbation.
 Luna/high implémente ; controller runtime/Git/docs/artefacts ; Sol review uniquement.
 
@@ -342,7 +366,7 @@ qualifiés séparément. Ce n'est pas l'univers exhaustif ni une globale verte.
 Source/tests committés `2e5419afd6501cfc9d09dbed8409324149450a4c`, sept fichiers
 identiques au candidat natif6c6d. Probe six-cas toujours rouge non committée,
 archivée byte-identique sans suppression de custody.
-Le [corpus frais exact](inverse-hairline-2e5419afd.json) conserve631/443 et les
+Le [corpus frais exact](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/inverse-hairline-2e5419afd.json) conserve631/443 et les
 18invariants : **212rendus(+5),189comparés(+5),42≥99%(=),58≥95%(+1),médiane75%**.
 Cinq admissions : check_small_sigma_offset, complexclip2, complexclip2_rect_aa,
 localmatriximagefilter et offsetimagefilter. Aucun ancien rendu ne change :
@@ -423,7 +447,7 @@ exhaustif ;272 sont affectées et passent séparément au même SHA. Aucune excl
 ni conversion d'échec en succès. Le cas cubic decoded-image est interrompu,
 sans changement de décodage ni assertion d'absence du GPU.
 
-Le [corpus final frais](inverse-inventory-38c75ab12.json) conserve **631/443**,
+Le [corpus final frais](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/inverse-inventory-38c75ab12.json) conserve **631/443**,
 **207 rendus /184 comparés**,42 cas≥99%,57≥95%, médiane74.06067251461988%.
 **Aucun gain ni perte GM** :207 hashes/métriques anciens et631lignes hors temps
 identiques à e9da0ebd6,18invariants et présence inchangés. Tranches0/1/0,
@@ -432,7 +456,7 @@ Copie du journal agrégé vérifiée SHA256
 `19a3c3a4cb477247b5003d2c35f812bf74ef5bafee3adcf5ea83e4a513b5e407`.
 Les9lignes warning JDK/LWJGL/Gradle par tranche sont identiques et non supprimées.
 Aucune image nouvelle/changée : ensemble d'inspection delta vide, aucune
-régénération de PNG/scores/dashboard justifiée. Le [checkpoint c61786ab5](inverse-inventory-c61786ab5.json)
+régénération de PNG/scores/dashboard justifiée. Le [checkpoint c61786ab5](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/inverse-inventory-c61786ab5.json)
 reste historique, pas relabelisé en qualification finale.
 
 Gaps conservés : inverse-maskAA positif, alpha128+bord fractionnel sur fond
@@ -646,7 +670,7 @@ aucune couleur n'est ajustée pour correspondre à l'aperçu brut.
 
 ### Corpus final
 
-Le [snapshot complet](inverseclip-port-e9da0ebd6.json) porte sur le source/test
+Le [snapshot complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/inverseclip-port-e9da0ebd6.json) porte sur le source/test
 figé ci-dessus : **631 entrées,443 éligibles,207 rendus (+1),184 comparés (+1),
 42 à ≥99 % (+1),57 à ≥95 % (+1)** à ±2/canal. Médiane74.06067251461988 %.
 `inverseclip` est le seul gain, sans perte : les206anciens hashes RGBA et
@@ -682,7 +706,7 @@ admission plus large dans ce lot.
 Branche `codex/w7-clip-gm-ports`, parent draft#2428,
 [plan](clip-gm-ports-plan.md). Source/test final
 `6e0fca2df5aef733bb516ddd2b714dd342920ab4`,
-[snapshot complet](clip-gm-ports-6e0fca2df.json). Qualification terminée ;
+[snapshot complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/clip-gm-ports-6e0fca2df.json). Qualification terminée ;
 Astra approuve la publication draft, sans Critical/Important/Minor restant.
 Draft [#2429](https://github.com/ygdrasil-io/kanvas/pull/2429) publiée et
 rattachée, empilée sur#2428, sans merge ni clôture W7.
@@ -778,7 +802,7 @@ distincts. Aucune clôture W7 ni autorisation de merge.
 Branche `codex/w7-clip-producer-scissor`, empilée sur #2427,
 [design](clip-producer-scissor-design.md), [plan](clip-producer-scissor-plan.md).
 Produit mesuré `be813afd75da9e094a9368c65a0d9fc31b2598a9`,
-[snapshot complet](clip-producer-scissor-be813afd7.json). Draft
+[snapshot complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/clip-producer-scissor-be813afd7.json). Draft
 [#2428](https://github.com/ygdrasil-io/kanvas/pull/2428) publiée sur #2427,
 après verdict final de qualification Astra favorable à une draft.
 
@@ -862,7 +886,7 @@ clôt ni W7 ni les gates W6/W0, et ne vaut pas autorisation de merge.
 Branche `codex/w7-sk3d-port`, [design](sk3d-port-design.md),
 [plan](sk3d-port-plan.md). Code mesuré
 `813e61f098317750c3a8a1d98dea185629ead38e`,
-[snapshot complet](sk3d-port-813e61f09.json). Draft
+[snapshot complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/sk3d-port-813e61f09.json). Draft
 [#2427](https://github.com/ygdrasil-io/kanvas/pull/2427) publiée sur #2426.
 Task1 et le prérequis renderer Task2 sont approuvés par Sol. La revue globale
 Astra a conduit au correctif final test/KDoc `5a931c87a`, approuvé par l'unique
@@ -980,7 +1004,7 @@ Le corpus figé au même SHA est 631 identités / 443 éligibles : 200 rendus,
 178 comparaisons, 39 à ≥99 % et 52 à ≥95 % des pixels à ±2/canal. Les 18
 invariants, tous les hashes et métriques sont identiques à
 `picture-8829d18`; le snapshot remplacé est
-[`picture-3398dc3.json`](picture-3398dc3.json). Face au hardstop,
+[`picture-3398dc3.json`](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/picture-3398dc3.json). Face au hardstop,
 `sk3d_simple` reste une admission native seulement (51.931111111111115 % à ±2,
 SSIM 0.6385013748432061, max [136,255,119,0]) : son écart de
 silhouette/couleur est majeur, et l'alpha opaque identique ne prouve aucune
@@ -1136,8 +1160,8 @@ exclus. W7 et les gates antérieures restent ouverts, sans merge ni claim ISO.
 
 Branche `codex/w7-hardstop-ports`, draft
 [#2425](https://github.com/ygdrasil-io/kanvas/pull/2425) empilée sur #2424.
-[Plan](hardstop-ports-plan.md), [snapshot631](hardstop-ports-34e3d4e98.json),
-[bilan et arbitrages](pilotage.md#lot-ports-hardstop-fidèles--30-septembre-2026).
+[Plan](hardstop-ports-plan.md), [snapshot631](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/hardstop-ports-34e3d4e98.json),
+[bilan et arbitrages](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-ports-hardstop-fidèles--30-septembre-2026).
 Grille 500×500 dans une image 512×512, ordre des doubles stops et hauteur
 des bandes réparés ; paints non-AA conformes aux sources Skia épinglées.
 Les deux domaines restent LINEAR, aucun changement moteur ou critère.
@@ -1163,13 +1187,13 @@ W7 reste ouvert, publication draft uniquement, aucune parité globale.
 Branche `codex/w7-alphagradients-port`, draft
 [#2424](https://github.com/ygdrasil-io/kanvas/pull/2424) empilée sur #2423.
 [Design](alphagradients-port-design.md), [plan](alphagradients-port-plan.md),
-[bilan et arbitrages](pilotage.md#lot-alphagradients-fidèle-et-diagnostic-cohérent--30-septembre-2026).
+[bilan et arbitrages](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-alphagradients-fidèle-et-diagnostic-cohérent--30-septembre-2026).
 Domaine déclaré par GM, LINEAR par défaut et encodé pour alphagradients,
 config conservé au rendu et au replay diagnostique. Port des deux colonnes
 fidèle, sans changement moteur ni relâchement des proofs/caps/tolérances.
 
 **alphagradients33,882161%→100% des pixels ±2**, maximumRGB1/alpha0 ; fond
-et contours exacts. [Corpus631 final](alphagradients-port-6259c38d8.json)
+et contours exacts. [Corpus631 final](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/alphagradients-port-6259c38d8.json)
 sur `6259c38d8` :198/443 rendus,176comparaisons,197autres images inchangées,
 aucune perte/nouveau rendu, références/scopes/seuils préservés.37cas≥99%,
 50≥95%, médiane72,010742%. Métadonnée630LINEAR/1encoded, vertices30s conservé.
@@ -1210,7 +1234,7 @@ nouvelle casse Critical/Important. Minor différé : le helper omettrait son
 contrôle de largeur pour une future ligne vide ; les grilles actuelles sont
 complètes, y compris la colonne manquante du cas scale. Warnings conservés.
 
-[Corpus631 final](encoded-hairline-f80d94fb4.json) : **198/443 rendus,
+[Corpus631 final](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/encoded-hairline-f80d94fb4.json) : **198/443 rendus,
 176 comparaisons,198 anciennes images strictement identiques**. Références,
 seuils, scopes, résultats et diagnostics inchangés ; `vertices` timeout30s.
 Aucun gain GM mesuré : le port fidèle d'`alphagradients` reste séparé et
@@ -1222,7 +1246,7 @@ Branche `codex/w7-surface-composition`, draft
 [#2422](https://github.com/ygdrasil-io/kanvas/pull/2422) empilée sur
 [#2421](https://github.com/ygdrasil-io/kanvas/pull/2421).
 [Design](surface-composition-design.md), [plan](surface-composition-plan.md)
-et [bilan](pilotage.md#lot-domaine-de-composition-surface--30-septembre-2026).
+et [bilan](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-domaine-de-composition-surface--30-septembre-2026).
 
 `SRGB_ENCODED` explicite fonctionne du draw au snapshot : solides,
 LinearGradient sRGB/CLAMP dans les deux modes alpha, un plain layer,
@@ -1248,7 +1272,7 @@ legacy SRC renommé et élargi, pas supprimé. Globale antérieure à la correct
 finale, non relancée ; suite rouge/incomplète. Dettes
 native133 isolées et warnings conservés.
 
-[Corpus631 final](surface-composition-1d629b0be.json) : **198/443 rendus,176
+[Corpus631 final](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/surface-composition-1d629b0be.json) : **198/443 rendus,176
 comparaisons,198 anciennes images strictement identiques**. Aucun changement
 d'identité/référence/scope/seuil/résultat/diagnostic ; `vertices` timeout30s
 conservé. Aucun gain GM : les ports n'activent pas encore l'opt-in encodé.
@@ -1272,8 +1296,8 @@ Renderer `09d9574b5`, branche `codex/w7-gradient-alpha-mode`, draft
 [#2421](https://github.com/ygdrasil-io/kanvas/pull/2421) empilée sur #2420,
 revue finale corrigée et validée. [Design](gradient-alpha-design.md),
 [plan et commandes](gradient-alpha-plan.md),
-[snapshot631](gradient-alpha-09d9574b5.json) et
-[bilan](pilotage.md#lot-politique-alpha-du-gradient--30-septembre-2026).
+[snapshot631](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/gradient-alpha-09d9574b5.json) et
+[bilan](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-politique-alpha-du-gradient--30-septembre-2026).
 
 `STRAIGHT` reste le défaut ; `PREMULTIPLIED` est maintenant une capacité
 publique sRGB/CLAMP, conservée dans capture, V4 et Picture16/schema10.
@@ -1317,8 +1341,8 @@ Surface, puis port corrigé avec mesure distincte du changement de scène.
 Renderer `ff628a94d`, branche `codex/w7-mixed-root-aa-rect`, draft
 [#2420](https://github.com/ygdrasil-io/kanvas/pull/2420) empilée sur #2419.
 [Design](mixed-root-aa-rect-design.md), [plan](mixed-root-aa-rect-plan.md),
-[snapshot631](mixed-root-ff628a94d.json) et
-[bilan détaillé](pilotage.md#lot-mélange-racine-rect-stroke-aa--29-septembre-2026).
+[snapshot631](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/mixed-root-ff628a94d.json) et
+[bilan détaillé](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-mélange-racine-rect-stroke-aa--29-septembre-2026).
 
 **197→198 rendus /443 éligibles;175→176 comparaisons.** Les197 anciennes
 images restent pixel-identiques. Seul `alphagradients` devient rendable,
@@ -1344,7 +1368,7 @@ W7 non clos, aucune autorisation de merge.
 Draft [#2419](https://github.com/ygdrasil-io/kanvas/pull/2419) empilée sur #2418,
 renderer `82893045c`, branche `codex/w7-aa-mask-coverage`.
 [Design](aa-mask-design.md), [plan](aa-mask-plan.md) et
-[snapshot complet](aa-mask-82893045c.json). La source blanche AA4/resolve1
+[snapshot complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/aa-mask-82893045c.json). La source blanche AA4/resolve1
 reste indépendante de la peinture ; stencil producer/cover partagent une
 seule passe native, puis NORMAL et le matériau W5 couvrent le halo complet.
 
@@ -1384,7 +1408,7 @@ Renderer `470f62e63`, branche `codex/w7-root-aa-source`, PR draft
 racine admis dans une frame W6 ordinaire, par source MSAA4 isolée et composite
 immédiat ; aucun changement d'ownership, de budget ou d'autorité native.
 
-Le [snapshot](root-aa-470f62e63.json) conserve 631 identités/443 éligibles :
+Le [snapshot](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/root-aa-470f62e63.json) conserve 631 identités/443 éligibles :
 **193 rendus (+1), 171 comparaisons ; les 192 anciens rendus sont pixel-identiques**.
 Seul `rasterallocator` devient rendable, à 27,25 % de pixels ±2/canal ; ce n'est
 pas une preuve de fidélité au GM Skia. Toujours 36 cas à ≥99 %, 48 à ≥95 %.
@@ -1393,7 +1417,7 @@ pas une preuve de fidélité au GM Skia. Toujours 36 cas à ≥99 %, 48 à ≥95
 Validation ciblée : **16/16 W7 et 53/53 contrôles voisins**, Gradle 0 (sélections
 recoupées). Suite globale rouge/incomplète : 681 PASS, mêmes 43 échecs sur 725 cas
 communs, un interrompu et quatre anciens cas non atteints. Le runner échoue
-aussi lors de l'arrêt. Voir le [bilan](pilotage.md#lot-source-aa-racine--29-septembre-2026).
+aussi lors de l'arrêt. Voir le [bilan](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-source-aa-racine--29-septembre-2026).
 
 Arbitrages : nouvelle route exclue des frames W6b ; allocation plein viewport
 conservatrice ; **Picture AA positif différé**, même sans clip, avec refus
@@ -1412,7 +1436,7 @@ Code `d45904e0b`, branche `codex/w7-layer-source-routing`, empilée sur
 reflets inclus. Le renderer savait déjà les traiter ; l'adaptateur les
 transformait prématurément en Path. Ce lot ne crée aucune capacité GPU.
 
-Le [snapshot complet](rect-adapter-d45904e0b.json) mesure **192/443 rendus
+Le [snapshot complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/rect-adapter-d45904e0b.json) mesure **192/443 rendus
 (+26), 170 comparaisons et 36 cas à ≥99 % de pixels ±2/canal (+10)**.
 Les 166 anciens rendus restent disponibles : 162 sont pixel-identiques,
 trois scores progressent et `perlinnoise_localmatrix` change de pixels à score
@@ -1429,7 +1453,7 @@ témoins vérifient le second rendu Surface,
 seul le blur vérifie aussi Picture. Le test historique de clip tourné échoue.
 La tentative générale reste rouge/incomplète à 240 s : 685 PASS, les mêmes
 43 échecs que #2416 et un interrompu. Les réserves de validation et la mesure
-appariée figurent dans le [bilan](pilotage.md#diagnostic-des-sources-de-layers--29-septembre-2026).
+appariée figurent dans le [bilan](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#diagnostic-des-sources-de-layers--29-septembre-2026).
 Reviews Sol de tâche et de branche approuvées pour cette publication draft ;
 aucun Critical/Important, un Minor de nommage de second rendu Surface reste suivi.
 Le verdict ne permet ni merge ni clôture W7.
@@ -1463,10 +1487,10 @@ n'est pas attesté. Cette réserve TDD reste explicitement ouverte.
 La review Sol de toute la branche `14d2be4f8..6ad868c91` autorise sa publication
 draft (Critical 0 / Important 0 / Minor 0), pas le merge ni la clôture W7.
 
-Le [snapshot complet](sweep-aa-49d8224d3.json) conserve **166/443 rendus**, 144
+Le [snapshot complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/sweep-aa-49d8224d3.json) conserve **166/443 rendus**, 144
 comparaisons et 26 cas à ≥99 % de pixels ±2/canal. **Les 166 empreintes RGBA,
 les issues et diagnostics sont inchangés** : aucun gain de GM ou de fidélité
-mesuré. `vertices` reste timeout à 30 s. Voir le [bilan](pilotage.md#lot-preuve-sweep-aa--29-septembre-2026).
+mesuré. `vertices` reste timeout à 30 s. Voir le [bilan](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-preuve-sweep-aa--29-septembre-2026).
 
 La combinaison RRect × vingt wrappers n'est pas établie. Les défauts Radial,
 Conical, AA géométrique et opacité × bords fractionnaires restent ouverts.
@@ -1482,7 +1506,7 @@ la PR draft [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414).
 une chaîne V4 ; le graph numérique et la preuve existants redeviennent
 cohérents, sans modifier les contrôles d'autorité du renderer.
 
-Le [snapshot complet](image-opacity-bef3af6fa.json) mesure **166/443 rendus**
+Le [snapshot complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/image-opacity-bef3af6fa.json) mesure **166/443 rendus**
 (+1), **144 comparaisons** et toujours **26 cas à ≥99 % de pixels ±2/canal**.
 `lattice2` passe du refus à un rendu sans refus, à **54,0875 %** : la fidélité
 reste imparfaite. Les **165 anciens rendus sont identiques pixel à pixel**.
@@ -1493,7 +1517,7 @@ ciblés passent avec Gradle 0** dans une exécution isolée. La suite générale
 isolée reste inachevée à 240 s : **728 réussites, 50 échecs, un interrompu**,
 exactement les 779 mêmes identités et résultats que la base. Les exécutions
 préliminaires ayant brièvement chevauché sont écartées au profit de ces
-rejeux sérialisés. Voir le [bilan](pilotage.md#lot-imageopacité--29-septembre-2026).
+rejeux sérialisés. Voir le [bilan](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-imageopacité--29-septembre-2026).
 Revues Sol de tâche et de branche : aucun défaut bloquant ; publication draft
 approuvée, couverture opacité × bords AA fractionnaires à compléter.
 Prochain lot : preuve Sweep AA ;
@@ -1504,7 +1528,7 @@ W7 et les gates W6 restent ouverts, sans merge readiness.
 Renderer `b256b3d68`, PR draft [#2414](https://github.com/ygdrasil-io/kanvas/pull/2414)
 empilée sur #2413 :
 le cache de preuve utilise les dépendances conservatrices sans élargir
-les domaines numériques ou budgets. Le [snapshot](proof-b256b3d68.json)
+les domaines numériques ou budgets. Le [snapshot](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/proof-b256b3d68.json)
 mesure **165/443 rendus** (+1), **143 comparaisons**, **26 cas à ≥99 %**
 et **un timeout** au lieu de trois. Les 164 anciens rendus sont identiques
 pixel à pixel. `ninepatch-stretch` rend en 26,168 s (78,15 %, marge faible) ;
@@ -1515,11 +1539,11 @@ Le périmètre, les références et les seuils sont inchangés.
 auparavant bloqué termine en 1,756 s mais conserve un refus numérique AA.
 La tentative complète, bornée à 240 s, reste inachevée : **728 réussites,
 50 échecs, un test interrompu** ; aucun ancien test vert observé ne devient
-rouge. Le [bilan et ses limites](pilotage.md#lot-cache-de-preuve-cpu--29-septembre-2026)
+rouge. Le [bilan et ses limites](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-cache-de-preuve-cpu--29-septembre-2026)
 et le [plan](proof-evaluation-plan.md) distinguent performance, admission et
 fidélité. W7 reste ouvert, sans merge readiness.
 
-La [validation complémentaire par dix lots bornés](pilotage.md#validation-complémentaire-par-lots-bornés)
+La [validation complémentaire par dix lots bornés](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#validation-complémentaire-par-lots-bornés)
 atteint **411/412 réussites W6/W7 Surface**, **598/598 cas de géométrie W5h**
 et **92/92 cas W5f image filter**. La sélection générale GPU/API/blend observe
 **1 990 réussites et 1 254 échecs** : leur antériorité n'est pas établie
@@ -1539,7 +1563,7 @@ seuls les diagnostics et la validation sont ajoutés à ce checkpoint.
 Renderer `5f971f750`, PR draft [#2413](https://github.com/ygdrasil-io/kanvas/pull/2413)
 empilée sur #2412 : l'égalité des
 pointillés immuables est réparée dans `math`, sans desserrer les seals.
-Le [snapshot final](dash-5f971f750.json) conserve **164/443 rendus**, tous
+Le [snapshot final](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/dash-5f971f750.json) conserve **164/443 rendus**, tous
 identiques pixel à pixel à #2412, **142 comparaisons** et **26 cas à ≥99 %**.
 Les 631 identités, scopes, références, seuils et trois timeouts sont inchangés.
 
@@ -1551,7 +1575,7 @@ préservent l'expérience ; **le défaut AA reste ouvert**.
 **77 tests publics ciblés et 476 tests math geometry passent** sur le code
 final, Gradle 0. La tentative de suite Kanvas complète est inachevée : 39 échecs observés,
 puis arrêt d'un calcul long dans la preuve CPU d'un test de gradient W5d.
-Les [limites de validation](pilotage.md#validation-du-lot-et-limite-de-la-suite-complète)
+Les [limites de validation](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#validation-du-lot-et-limite-de-la-suite-complète)
 sont explicites. W7 et les gates W6 ne sont pas clos ; aucune merge
 readiness n'est revendiquée.
 
@@ -1563,13 +1587,13 @@ renderer `718445e6e`, empilée sur #2411 : **164/443** rendus (+41),
 Les 123 anciens rendus restent disponibles, 118 identiques bit à bit.
 Les références, scènes, seuils, exclusions et trois timeouts restent inchangés.
 
-Le [bilan détaillé](pilotage.md#lot-standalone-rectpath--29-septembre-2026)
+Le [bilan détaillé](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-standalone-rectpath--29-septembre-2026)
 documente les cinq anciens rendus modifiés, notamment le recul de
 `circle_sizes`, et les deux nouveaux rendus à 0 % liés à des ports non fidèles.
 La médiane appariée des 105 anciennes comparaisons reste 54,64 %.
 **69 tests ciblés passent**, mais le test historique de pointillé à phase
 négative reste en échec, reproduit avec le routage historique et diagnostiqué.
-Le [plan](stroke-routing-plan.md) et le [snapshot](strokes-718445e6e.json)
+Le [plan](stroke-routing-plan.md) et le [snapshot](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/strokes-718445e6e.json)
 conservent la preuve. W7 reste ouvert, sans revendication de parité globale
 ni de merge readiness.
 
@@ -1578,7 +1602,7 @@ ni de merge readiness.
 PR draft empilée : [#2411](https://github.com/ygdrasil-io/kanvas/pull/2411)
 sur #2410.
 
-Le [pilotage](pilotage.md) remplace le comptage de rendus comme indicateur
+Le [pilotage](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md) remplace le comptage de rendus comme indicateur
 unique : **123/443** GMs éligibles produisent une image, **105** peuvent être
 comparées aux références actuelles ; **20** de ces comparaisons atteignent
 99 % de pixels à ±2 par canal. Les défauts de port et de dimensions restent

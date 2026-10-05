@@ -116,7 +116,7 @@ M1 warnings conservé. Ce sont des approbations locales, pas une gate globale.
 
 ### Corpus comparable complet
 
-[Snapshot frais](path-ctm-4e4b699a6.json), SHA256
+[Snapshot frais](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/path-ctm-4e4b699a6.json), SHA256
 `0ac040efb1f5d2dc9f9699b61f215a97f7c4d5e8914a4cd7c6a0735d62792019`.
 Trois tranches exécutées avant le fix de fixture, produit identique :
 0..606 termine0 en129s ; vertices607 termine1 en38s avec son watchdog

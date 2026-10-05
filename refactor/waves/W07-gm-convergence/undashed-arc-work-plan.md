@@ -59,7 +59,7 @@ and statuses as parent,35raw messages identical and2Diagnostics addresses only.
 401covering identities outsideglobal399PASS2knownPictureFAIL; union1126 is
 not exhaustive. No full-suite or merge qualification.
 
-Fresh [snapshot](undashed-arc-c0567497f.json),631registry/443eligible unchanged :
+Fresh [snapshot](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/undashed-arc-c0567497f.json),631registry/443eligible unchanged :
 217rendered(+5),194compared(+5),46>=99(+2),63>=95(+3),median77.45815728081598.
 Sevenmetadata/eighteencaseinvariants preserved,212oldRGBAhashes/metrics identical,
 lost0.608nontime rows identical,23deltas=5admissions+18diagnostics, not23gains.

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Kotlin/JVM, gpu-plan, native Metal/WebGPU Surface tests.
 
-**Spec:** The CPU stall documented in [pilotage.md](pilotage.md), within the user's delegated W7 pilotage. This is a bounded repair of an existing flow, not a new proof engine.
+**Spec:** The CPU stall documented in [pilotage.md](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md), within the user's delegated W7 pilotage. This is a bounded repair of an existing flow, not a new proof engine.
 
 ## Global Constraints
 
@@ -118,8 +118,8 @@ Corpus: 631 fixed identities, 443 eligible, 165 rendered (+1), 143 compared,
 26 at ≥99% pixels ±2/channel, one remaining timeout. All 164 prior RGBA
 hashes remain identical. The new ninepatch render takes 26.168 s and has
 limited headroom; lattice2 reaches an authority refusal in 0.527 s.
-See [pilotage](pilotage.md#lot-cache-de-preuve-cpu--29-septembre-2026)
-and [snapshot](proof-b256b3d68.json) for the complete denominator and caveats.
+See [pilotage](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-cache-de-preuve-cpu--29-septembre-2026)
+and [snapshot](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/proof-b256b3d68.json) for the complete denominator and caveats.
 
 ```sh
 rtk proxy ./gradlew :integration-tests:skia:measureSkiaParity --offline --console=plain \

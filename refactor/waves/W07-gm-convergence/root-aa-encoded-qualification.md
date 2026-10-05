@@ -3,7 +3,7 @@
 2 octobre 2026. Lot sur #2435, base produit6f059f0dcf364cc351f984573f1fa9b7610ba337.
 Source/tests qualifiés au snapshot privé28adb36d36038c6e9ab68334009c7b0d7c841335.
 [Design](root-aa-encoded-design.md), [plan](root-aa-encoded-plan.md),
-[snapshot frais complet](root-aa-encoded-28adb36d3.json).
+[snapshot frais complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/root-aa-encoded-28adb36d3.json).
 
 ## Résultat local, pas parité Skia
 
@@ -85,7 +85,7 @@ ont leur completion marker et les631indices uniques sont complets.
 **217rendus/194comparés,47≥99%,63≥95%,médiane77.45815728081598%**.
 Outcomes éligibles194compared/175render_failed/50setup_failed/
 15rendered_uncompared/8reference_dimension_mismatch/1timeout.
-Les631fiches sont identiques au [parent](path-ctm-4e4b699a6.json) en excluant
+Les631fiches sont identiques au [parent](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/path-ctm-4e4b699a6.json) en excluant
 uniquement elapsedMs/renderMs :18invariants, présence des champs,
 diagnostics, outcomes,217hashes RGBA et métriques inchangés. Les7invariants
 de run sont identiques ; seul rendererCommit et les dates/temps reflètent

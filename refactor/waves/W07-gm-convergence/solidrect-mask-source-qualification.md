@@ -4,7 +4,7 @@
 Branche codex/w7-common-aa-path-source, base du lot
 8c675db40881acf724887de2fb32a814f5f53770 ([draft parent #2447](https://github.com/ygdrasil-io/kanvas/pull/2447)).
 [Spec](solidrect-mask-source-design.md), [plan](solidrect-mask-source-plan.md),
-[checkpoint complet](solidrect-mask-source-corpus.json).
+[checkpoint complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/solidrect-mask-source-corpus.json).
 Review large Astra sur 8c675db40→01e4a91c9 : C0/I0/M0, prêt pour draft
 uniquement. Review documentaire Sol fix1 : I1/I2 ADDRESSED, C0/I0/M0.
 Publication encore en attente à cette révision documentaire ; merge non qualifié.

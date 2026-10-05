@@ -114,7 +114,7 @@ rtk proxy ruby /private/tmp/kanvas-w7-inverse-inventory.hbWqUb/bounded-run.rb /p
 - Le compteur conserve l'historique core/text/atlas/flat-only layer, plus les propriétaires Vertices distincts : pas une migration générale vers des opérations logiques homogènes toutes familles.
 - Admission Vertices off-target sans clip et négatifs singuliers par famille restent non qualifiés. Numeric controls existants inchangés PASS ; aucun diagnostic inventé ou promotion implicite.
 - Fonts/codecs externes/jpg-color-cube exclus ; aucun test infrastructure/mock/fake/skip/CPU fallback ; thresholds/validators/budgets/caps inchangés.
-- Aucun render/score régénéré, aucun gain corpus mesuré. Tinybitmap exact/±2 historique toujours0 malgré son SSIM ; provenance des PNG, AA/coverage et autres dettes du [pilotage](pilotage.md) restent ouvertes.
+- Aucun render/score régénéré, aucun gain corpus mesuré. Tinybitmap exact/±2 historique toujours0 malgré son SSIM ; provenance des PNG, AA/coverage et autres dettes du [pilotage](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md) restent ouvertes.
 
 ## Inventaires des preuves privées
 

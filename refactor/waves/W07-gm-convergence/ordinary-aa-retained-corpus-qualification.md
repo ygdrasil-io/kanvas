@@ -33,10 +33,10 @@ les suites globales vertes.
 
 ## Provenance et intégrité
 
-La référence physique (baseline) est [`root-aa-rect-8e44f0c8a.json`](root-aa-rect-8e44f0c8a.json),
+La référence physique (baseline) est [`root-aa-rect-8e44f0c8a.json`](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/root-aa-rect-8e44f0c8a.json),
 renderer commit `8e44f0c8ad1ac65d97275d010ed083e1e44bbfcd`. L’instantané public
 (snapshot) est
-[`ordinary-aa-retained-corpus.json`](ordinary-aa-retained-corpus.json), SHA-256
+[`ordinary-aa-retained-corpus.json`](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/ordinary-aa-retained-corpus.json), SHA-256
 `767b1342a71e860d9718a66a863b457e52c28da15c7f144941c95af25e7b03fb`, produit
 par l’agrégateur existant depuis les cinq journaux du corpus, sans les neuf
 journaux indépendants Task1. Le HEAD complet réellement mesuré est

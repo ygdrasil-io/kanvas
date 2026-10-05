@@ -92,7 +92,7 @@ indépendantes et inspection des images exposent les écarts.
 
 Après livraison des deux frames seulement : sous-groupe9 ordinaire puis
 corpus631/443 fixe via measureSkiaParity. Baseline
-[8e44f0c8a](root-aa-rect-8e44f0c8a.json) :217 rendus/194 comparés,
+[8e44f0c8a](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/root-aa-rect-8e44f0c8a.json) :217 rendus/194 comparés,
 47≥99%±2,63≥95%±2. Neuf opportunités ne garantissent pas neuf gains.
 Fonts133/codecs54/jpg-color-cube1 restent exclus, aucune référence/score/seuil
 ou scope modifié. Nouveau refus substantiel, contenu absent, forte erreur

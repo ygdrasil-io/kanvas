@@ -158,10 +158,10 @@ l'enfant Gradle retourne143, pas une sortie normale de suite complète. Les
 XML globaux ne sont pas finalisés; les résultats viennent des events persistés
 et du log. Warnings JVM/Gradle conservés.
 
-Corpus631 final : [snapshot](mixed-root-ff628a94d.json),198 rendus/176
+Corpus631 final : [snapshot](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/mixed-root-ff628a94d.json),198 rendus/176
 comparaisons, gain unique `alphagradients`33,8822%,197 anciennes empreintes
 inchangées, aucune perte ni changement de référence/seuil/scope. Le rejeu PNG
-retrouve la même empreinte; voir le [bilan](pilotage.md#lot-mélange-racine-rect-stroke-aa--29-septembre-2026)
+retrouve la même empreinte; voir le [bilan](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#lot-mélange-racine-rect-stroke-aa--29-septembre-2026)
 pour la divergence du port et les limites de fidélité. `vertices` reste
 timeout30s. Revue globale Sol `1cd04aa77..cd6f923fd` : aucun finding C/I/M,
 publication draft recevable, merge readiness NON. Draft

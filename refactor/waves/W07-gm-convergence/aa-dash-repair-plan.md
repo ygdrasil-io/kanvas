@@ -8,7 +8,7 @@
 
 **Tech Stack:** Kotlin, math geometry F64, GPU renderer, native Metal/WebGPU Surface, fixed Skia corpus.
 
-**Spec:** The open defects and next priorities in [pilotage.md](pilotage.md#changements-des-anciens-pixels-et-dette-ouverte), under the user's delegated pilotage.
+**Spec:** The open defects and next priorities in [pilotage.md](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/pilotage.md#changements-des-anciens-pixels-et-dette-ouverte), under the user's delegated pilotage.
 
 ## Global Constraints
 

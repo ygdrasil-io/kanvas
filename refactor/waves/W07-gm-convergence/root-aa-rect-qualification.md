@@ -4,7 +4,7 @@
 [#2436](https://github.com/ygdrasil-io/kanvas/pull/2436), base publiée
 53bf9c55b8950c36eb14a40eb44626cb02d6020c.
 [Design](root-aa-rect-design.md), [plan amendé](root-aa-rect-plan.md),
-[corpus frais complet](root-aa-rect-8e44f0c8a.json).
+[corpus frais complet](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/root-aa-rect-8e44f0c8a.json).
 Source/tests gelés et qualifiés au snapshot privé
 8e44f0c8ad1ac65d97275d010ed083e1e44bbfcd ; BASE de Task2 ad8ebfde1,
 pas HEAD~1. Les six blobs modifiés et H sont indépendamment byte-identiques

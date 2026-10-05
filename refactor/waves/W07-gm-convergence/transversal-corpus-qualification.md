@@ -7,7 +7,7 @@ les 631 fiches exactes du registre ; ce n'est pas 631 rendus GPU réussis.
 
 ## Résultat et dénominateurs
 
-Comparaison avec [le snapshot retenu](ordinary-aa-retained-corpus.json),
+Comparaison avec [le snapshot retenu](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/ordinary-aa-retained-corpus.json),
 renderer `7360c5f94e3fcaa2f68d4375d8cdd7ad12295460`.
 Le nouveau renderer est `2485cfb47177ec3f9bfd82a2014c6f5233b7448c`,
 parent publié [draft #2446](https://github.com/ygdrasil-io/kanvas/pull/2446).

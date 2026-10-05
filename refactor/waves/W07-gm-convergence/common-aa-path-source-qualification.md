@@ -14,7 +14,7 @@ La tentative globale antérieure au nettoyage portait sur W6a f152 / W4d 1fcb : 
 
 ## Census et delta mesuré
 
-Snapshot frais [`common-aa-path-source-corpus.json`](common-aa-path-source-corpus.json) : 740 716 octets, SHA-256 `e8528b81c9167ac693f83de4348262434573ff71351e0ad2921f7a9a8af732ad`. Les cinq journaux utilisent le renderer commit `bf38d08be20edaa487ae2fddab43dda03fd4f268`, registry 631 / SHA-256 `4ca8eea61451b1143fd3d15634d2c34e0c9ec31b74fd351ca30a69ee36f565d7`, timeout par GM 30 s, borne 240 s, `images=false`, Mac OS X / aarch64 / Java 25.0.1. L’agrégation utilise le script inchangé ; aucune exclusion nouvelle.
+Snapshot frais [`common-aa-path-source-corpus.json`](https://github.com/ygdrasil-io/kanvas/blob/36350563f48485598009d61a1707f7cff0ff7e94/refactor/waves/W07-gm-convergence/common-aa-path-source-corpus.json) : 740 716 octets, SHA-256 `e8528b81c9167ac693f83de4348262434573ff71351e0ad2921f7a9a8af732ad`. Les cinq journaux utilisent le renderer commit `bf38d08be20edaa487ae2fddab43dda03fd4f268`, registry 631 / SHA-256 `4ca8eea61451b1143fd3d15634d2c34e0c9ec31b74fd351ca30a69ee36f565d7`, timeout par GM 30 s, borne 240 s, `images=false`, Mac OS X / aarch64 / Java 25.0.1. L’agrégation utilise le script inchangé ; aucune exclusion nouvelle.
 
 | Slice | Exit wrapper | PGID | SHA-256 log | SHA-256 exit | SHA-256 journal | Postseal : fichiers / manifest SHA-256 |
 | --- | ---: | ---: | --- | --- | --- | --- |
