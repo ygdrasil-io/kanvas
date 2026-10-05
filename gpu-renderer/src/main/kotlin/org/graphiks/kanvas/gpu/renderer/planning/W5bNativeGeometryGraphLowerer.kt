@@ -65,6 +65,15 @@ internal class W5bNativeGeometryGraphLowerer {
         val scratches = mutableListOf<W5bGeometryScratchV3>()
         val analyticUniformSeals = mutableMapOf<GPUDrawPacketID, GPUCorePrimitiveAnalyticShapeUniformSeal>()
         for (lane in lanes) {
+            if (graph.capabilityId == W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID) {
+                if (scratches.isEmpty()) {
+                    val hardPath = lowerHardPathRoot(request, lanes, table, targetResource, stagingResource,
+                        target, staging, bounds, targetFormat.nativeFormat, seal.sealHash, maxBuffer, maxDynamic)
+                    packets += hardPath.packets
+                    scratches += hardPath.scratches
+                }
+                continue
+            }
             val commands = lane.commandIndicesI32().toSet()
             val draws = graph.passes().flatMap { pass -> when (pass) {
                 is PlanPass.RenderPass -> pass.draws()
@@ -293,8 +302,164 @@ internal class W5bNativeGeometryGraphLowerer {
             is GPUCorePrimitivePreparedFrameResult.Recorded -> GpuPlanLoweringResult.Lowered(result.taskList, readback.requestId.value)
             is GPUCorePrimitivePreparedFrameResult.Refused -> invalid(result.diagnostic.message)
         }
-    } catch (failure: IllegalArgumentException) { invalid(failure.message ?: "Invalid W5b native geometry authority") }
+    } catch (failure: HardPathLoweringFailure) { failure.result }
+      catch (failure: IllegalArgumentException) { invalid(failure.message ?: "Invalid W5b native geometry authority") }
       catch (failure: IllegalStateException) { invalid(failure.message ?: "Invalid W5b native geometry lane") }
+
+    private class HardPathLoweringFailure(val result: GpuPlanLoweringResult) : RuntimeException()
+
+    private data class HardPathRootPackets(
+        val packets: List<GPUDrawPacket>,
+        val scratches: List<W5bGeometryScratchV3>,
+    )
+
+    private fun lowerHardPathRoot(
+        request: GpuPlanLoweringRequest,
+        lanes: List<W5bGeometryLanePlanV3>,
+        table: MaterialPlanTable,
+        targetResource: PlanResource,
+        stagingResource: PlanResource,
+        target: GPUFrameTargetRef,
+        staging: GPUFrameBufferRef,
+        bounds: GPUPixelBounds,
+        nativeFormat: GPUColorFormat,
+        capabilitySealHash: String,
+        maxBufferSize: Long,
+        maxDynamicUniformBuffers: Long,
+    ): HardPathRootPackets {
+        val graph = request.graph
+        val publication = requireNotNull(graph.hardPathRootPublicationV1OrNull())
+        require(publication.authenticates(graph) && lanes.size == 2)
+        val pathPartition = publication.physicalPartitions().single {
+            it.kind == W7HardPathRootFrameV1.PartitionKind.Path
+        }
+        val colorPartition = publication.physicalPartitions().single {
+            it.kind == W7HardPathRootFrameV1.PartitionKind.DrawColor
+        }
+        val pathLane = lanes.single {
+            it.hardPathPartitionKind == W7HardPathRootFrameV1.PartitionKind.Path
+        }
+        val colorLane = lanes.single {
+            it.hardPathPartitionKind == W7HardPathRootFrameV1.PartitionKind.DrawColor
+        }
+        val rootSnapshot = pathLane.sourceGraph
+        require(rootSnapshot === colorLane.sourceGraph && rootSnapshot !== graph &&
+            rootSnapshot.capabilityId == W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID &&
+            rootSnapshot.verifyW5bGeometryCompilerWitness() && rootSnapshot.w5bGeometryLanes().isEmpty())
+
+        fun exactPartition(lane: W5bGeometryLanePlanV3,
+            partition: W7HardPathRootFrameV1.PhysicalPartition) {
+            val data = requireNotNull(lane.drawDataResources)
+            val laneResources = listOfNotNull(data.vertex, data.index, data.uniform, lane.depthStencil)
+            require(lane.commandIndicesI32() == partition.commandIndicesI32() &&
+                lane.depthStencil == partition.depthStencil && laneResources.size == partition.resourceIds().size &&
+                laneResources.toSet() == partition.resourceIds().toSet())
+        }
+        exactPartition(pathLane, pathPartition)
+        exactPartition(colorLane, colorPartition)
+        require(pathLane.depthStencil == pathPartition.depthStencil && colorLane.depthStencil == null)
+
+        val slots = publication.commandSlots()
+        val pathSlots = slots.filter { it.kind == W7HardPathRootFrameV1.SlotKind.Path }
+        val colorSlots = slots.filter { it.kind == W7HardPathRootFrameV1.SlotKind.DrawColor }
+        require(pathSlots.map { it.originalCommandIndexI32 } == pathPartition.commandIndicesI32() &&
+            colorSlots.map { it.originalCommandIndexI32 } == colorPartition.commandIndicesI32())
+        val paths = pathSlots.map { requireNotNull(it.draw) as PathFillDraw }
+        val colors = colorSlots.map { requireNotNull(it.draw) as SolidRectDraw }
+        require(colors.all { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 })
+
+        val resourceById = graph.resources().associateBy { it.id }
+        fun resource(id: PlanResourceId): PlanResource = requireNotNull(resourceById[id])
+        fun exactCapacity(data: PlanDrawDataResources, capacities: GPUCorePrimitiveFramePoolCapacities) {
+            require(listOf(resource(data.vertex).byteSize, resource(data.index).byteSize,
+                resource(data.uniform).byteSize) ==
+                listOf(capacities.vertexBytes, capacities.indexBytes, capacities.uniformBytes))
+        }
+
+        val pathCommands = pathPartition.commandIndicesI32().toSet()
+        val colorCommands = colorPartition.commandIndicesI32().toSet()
+        val colorPassIdsByCommand = rootSnapshot.passes().filterIsInstance<PlanPass.RenderPass>()
+            .flatMap { pass -> pass.draws().filter { it.commandIndex in colorCommands }
+                .map { it.commandIndex to pass.id.value } }
+            .groupBy({ it.first }, { it.second })
+        require(colors.all { colorPassIdsByCommand[it.commandIndex]?.size == 1 })
+        val pathPasses = rootSnapshot.passes().filter { pass -> when (pass) {
+            is PlanPass.RenderPass -> pass.draws().singleOrNull()?.commandIndex in pathCommands
+            is PlanPass.StencilGeometryProducerV3 -> pass.commandIndexI32 in pathCommands
+            is PlanPass.StencilCover -> pass.draw.commandIndex in pathCommands
+            else -> false
+        } }
+        val pathBuilder = W4cPathFillGraphLowerer()
+        val pathBuilt = pathPasses.map { pathBuilder.w5bPacket(it, paths, table, bounds, rootSnapshot) }
+        val footprint = (PathFillPlanBudget.calculate(graph.targetExtent, paths.map { it.copyGeometryF32() },
+            graph.capabilities, graph.budget, usesW5aMaterialContract = true) as
+            PathFillPlanBudgetResult.WithinBudget).footprint
+        var firstPassIndex = 0
+        val visuals = paths.map { draw ->
+            val visual = W4cPathFillGraphLowerer.W4cVisualDraw(draw, firstPassIndex,
+                pathPasses.filterIsInstance<PlanPass.StencilCover>()
+                    .singleOrNull { it.draw.commandIndex == draw.commandIndex }?.atomicGroup?.value)
+            firstPassIndex += if (draw.strategy == PathFillStrategy.StencilCover) 2 else 1
+            visual
+        }
+        require(firstPassIndex == pathPasses.size)
+        val pathData = requireNotNull(pathLane.drawDataResources)
+        val pathFacts = W4cPathFillGraphLowerer.W4cGraph(
+            W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
+            targetResource, stagingResource, resource(pathData.vertex), resource(pathData.index),
+            resource(pathData.uniform), pathLane.depthStencil?.let(::resource), pathPasses,
+            rootSnapshot.passes().last() as PlanPass.ReadbackPass, visuals, footprint, table,
+        )
+        val pathScratch = requireNotNull(pathBuilder.sealScratch(
+            pathFacts, pathBuilt, graph.id.value, target, staging, bounds, pathLane.depthStencil,
+            capabilitySealHash, request.deviceGeneration.value, maxBufferSize, maxDynamicUniformBuffers,
+            rootSnapshot,
+        ))
+        exactCapacity(pathData, pathScratch.poolCapacities)
+        val pathGeometryScratch = W5bGeometryScratchV3.PathFill(pathScratch,
+            pathBuilt.map { it.packet }, pathBuilt.map { it.structuralPipelineKey })
+
+        val colorBuilder = GpuPlanTaskListLowerer()
+        val colorPackets = colors.map { draw ->
+            val color = (draw.materialAuthority as PlanDrawMaterialAuthority.LegacyColorV1).copyColorF32()
+            colorBuilder.packet(draw, color, draw.commandIndex, bounds, null, null,
+                nativeFormat = nativeFormat,
+                passId = requireNotNull(colorPassIdsByCommand[draw.commandIndex]?.singleOrNull()))
+        }
+        val colorScratch = when (val sealed = colorBuilder.sealW3Scratch(request, target, staging, bounds,
+            capabilitySealHash, colorPackets, nativeFormat)) {
+            is GpuPlanTaskListLowerer.W3SessionScratchSealResult.Sealed -> sealed.scratch
+            is GpuPlanTaskListLowerer.W3SessionScratchSealResult.Unsupported ->
+                throw HardPathLoweringFailure(GpuPlanLoweringResult.UnsupportedCapability(sealed.diagnostic))
+            is GpuPlanTaskListLowerer.W3SessionScratchSealResult.Invalid ->
+                throw HardPathLoweringFailure(GpuPlanLoweringResult.InvalidPlan(sealed.diagnostic))
+        }
+        val colorData = requireNotNull(colorLane.drawDataResources)
+        exactCapacity(colorData, colorScratch.poolCapacities)
+        val colorGeometryScratch = W5bGeometryScratchV3.Direct(colorScratch)
+
+        val pathPacketsByPass = pathPasses.zip(pathBuilt).associate { (pass, built) -> pass.id to built.packet }
+        val colorPacketsByCommand = colors.zip(colorPackets).associate { (draw, packet) -> draw.commandIndex to packet }
+        val chronologicalPackets = rootSnapshot.passes().flatMap { pass ->
+            when (pass) {
+                is PlanPass.RenderPass -> pass.draws().map { draw ->
+                    when (draw.commandIndex) {
+                        in pathCommands -> requireNotNull(pathPacketsByPass[pass.id])
+                        in colorCommands -> requireNotNull(colorPacketsByCommand[draw.commandIndex])
+                        else -> error("HardPath pass is not owned by a published physical partition")
+                    }
+                }
+                is PlanPass.StencilGeometryProducerV3,
+                is PlanPass.StencilCover -> listOf(requireNotNull(pathPacketsByPass[pass.id]))
+                else -> emptyList()
+            }
+        }
+        require(chronologicalPackets.size == pathBuilt.size + colorPackets.size &&
+            chronologicalPackets.map { it.packetId }.distinct().size == chronologicalPackets.size &&
+            chronologicalPackets.all { it.commandIdValue in pathCommands || it.commandIdValue in colorCommands })
+        return HardPathRootPackets(chronologicalPackets,
+            listOf(pathGeometryScratch, colorGeometryScratch))
+    }
 
     private fun invalid(message: String) = GpuPlanLoweringResult.InvalidPlan(RenderDiagnostic(
         RenderDiagnosticCode("w5b.geometry.incompatible-plan"), RenderDiagnosticDomain.RESOURCE, RenderDiagnosticSeverity.ERROR, message))

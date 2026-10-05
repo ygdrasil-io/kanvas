@@ -587,7 +587,7 @@ public class W4cPathFillPlanCompiler internal constructor(internal val runtimeCa
     }
 
     public companion object {
-        internal const val W7_HARD_PATH_ROOT_CAPABILITY_ID: String = "w7.w4c.root-drawcolor-path.v1"
+        public const val W7_HARD_PATH_ROOT_CAPABILITY_ID: String = "w7.w4c.root-drawcolor-path.v1"
         public const val W5B_CAPABILITY_ID: String = "w5b-path-fill-final-blend-v3"
         /** Historical public graph contract; it carries only legacy per-draw colors. */
         public const val HISTORICAL_CAPABILITY_ID: String =

@@ -293,12 +293,16 @@ internal class W5bPreparedFrameWitnessV3(
                 org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID,
-                org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID))
+                org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
+                org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID))
         require(this.geometryLanes.isNotEmpty() && this.geometryLanes.first() === scratch &&
             this.geometryLanes.all { it.planId == graph.id.value && it.target == scratch.target && it.staging == scratch.staging &&
-                it.capabilitySealHash == scratch.capabilitySealHash && it.deviceGeneration == scratch.deviceGeneration &&
+                it.targetBounds == scratch.targetBounds && it.capabilitySealHash == scratch.capabilitySealHash &&
+                it.deviceGeneration == scratch.deviceGeneration &&
                 it.fitsDeviceLimits(graph.capabilities.maxBufferSizeBytes,
                     graph.capabilities.maxDynamicUniformBuffersPerPipelineLayout.toLong()) })
+        if (graph.capabilityId == org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID)
+            require(graph.hardPathRootPublicationV1OrNull()?.authenticates(graph) == true)
         require(capabilitySeal.sealHash == scratch.capabilitySealHash && recordingSeal.capabilitySealHash == capabilitySeal.sealHash)
         require(targetPreparation.resource == scratch.target && stagingPreparation.resource == scratch.staging)
         require(memory.diagnostic == null && memory.targetResidentBytes + memory.peakFrameTransientBytes == graph.peakFrameLocalBytes)
@@ -381,8 +385,127 @@ internal class W5bPreparedFrameWitnessV3(
                 } || actual.drawPackets.any { it.resourceGeneration != packetResourceGenerations[it.packetId] || it.diagnostics.isNotEmpty() }
         }) return false
         val packets = renders.flatMap { it.drawPackets }
-        return geometryLanes.flatMap { it.packetIds } == packets.map { it.packetId } &&
-            geometryLanes.flatMap { it.commandIds } == packets.map { it.commandIdValue } &&
-            geometryLanes.all { it.hasExactUniformPayloads(graph.capabilities.minUniformBufferOffsetAlignment.toLong(), packetsFor(it)) }
+        val exactUniforms = geometryLanes.all {
+            it.hasExactUniformPayloads(graph.capabilities.minUniformBufferOffsetAlignment.toLong(), packetsFor(it))
+        }
+        return if (graph.capabilityId == org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID) {
+            validatesHardPathPartitionPackets(packets, exactUniforms)
+        } else {
+            geometryLanes.flatMap { it.packetIds } == packets.map { it.packetId } &&
+                geometryLanes.flatMap { it.commandIds } == packets.map { it.commandIdValue } && exactUniforms
+        }
+    }
+
+    private fun validatesHardPathPartitionPackets(
+        packets: List<GPUDrawPacket>,
+        exactUniforms: Boolean,
+    ): Boolean {
+        if (!exactUniforms || packets.map { it.packetId }.distinct().size != packets.size) return false
+        val publication = graph.hardPathRootPublicationV1OrNull() ?: return false
+        if (!publication.authenticates(graph)) return false
+        val partitions = publication.physicalPartitions()
+        val pathPartition = partitions.singleOrNull {
+            it.kind == org.graphiks.kanvas.gpu.plan.W7HardPathRootFrameV1.PartitionKind.Path
+        } ?: return false
+        val colorPartition = partitions.singleOrNull {
+            it.kind == org.graphiks.kanvas.gpu.plan.W7HardPathRootFrameV1.PartitionKind.DrawColor
+        } ?: return false
+        val pathLane = geometryLanes.singleOrNull { it is W5bGeometryScratchV3.PathFill }
+            as? W5bGeometryScratchV3.PathFill ?: return false
+        val colorLane = geometryLanes.singleOrNull { it is W5bGeometryScratchV3.Direct }
+            as? W5bGeometryScratchV3.Direct ?: return false
+        if (geometryLanes.size != 2 || scratch !== pathLane) return false
+
+        val slots = publication.commandSlots()
+        val pathCommands = slots.filter { it.kind == org.graphiks.kanvas.gpu.plan.W7HardPathRootFrameV1.SlotKind.Path }
+            .map { it.originalCommandIndexI32 }
+        val colorCommands = slots.filter { it.kind == org.graphiks.kanvas.gpu.plan.W7HardPathRootFrameV1.SlotKind.DrawColor }
+            .map { it.originalCommandIndexI32 }
+        if (pathCommands != pathPartition.commandIndicesI32() || colorCommands != colorPartition.commandIndicesI32() ||
+            pathLane.commandIds.distinct() != pathCommands || colorLane.commandIds != colorCommands ||
+            pathLane.authority.depthStencilResourceId != pathPartition.depthStencil || colorPartition.depthStencil != null) return false
+        val pathData = pathPartition.drawDataResources
+        val colorData = colorPartition.drawDataResources
+        val pathScratch = pathLane.authority
+        val colorScratch = colorLane.authority
+        if (pathScratch.capabilityId != org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.W5B_CAPABILITY_ID ||
+            pathScratch.vertexResourceId != pathData.vertex || pathScratch.indexResourceId != pathData.index ||
+            pathScratch.uniformResourceId != pathData.uniform || pathScratch.depthStencilResourceId != pathPartition.depthStencil ||
+            colorScratch.planId != graph.id.value || colorScratch.capabilitySealHash != scratch.capabilitySealHash) return false
+        val resources = graph.resources().associateBy { it.id }
+        if (listOf(resources[pathData.vertex]?.byteSize, resources[pathData.index]?.byteSize,
+                resources[pathData.uniform]?.byteSize) != listOf(pathScratch.vertexCapacityBytes,
+                pathScratch.indexCapacityBytes, pathScratch.uniformCapacityBytes) ||
+            listOf(resources[colorData.vertex]?.byteSize, resources[colorData.index]?.byteSize,
+                resources[colorData.uniform]?.byteSize) != listOf(colorScratch.poolCapacities.vertexBytes,
+                colorScratch.poolCapacities.indexBytes, colorScratch.poolCapacities.uniformBytes)) return false
+
+        val pathCommandSet = pathCommands.toSet()
+        val colorCommandSet = colorCommands.toSet()
+        val pathPackets = packets.filter { it.commandIdValue in pathCommandSet }
+        val colorPackets = packets.filter { it.commandIdValue in colorCommandSet }
+        if (pathPackets.map { it.packetId } != pathLane.packetIds ||
+            colorPackets.map { it.packetId } != colorLane.packetIds ||
+            packets.any { (it.commandIdValue in pathCommandSet) == (it.commandIdValue in colorCommandSet) } ||
+            packets.any { it.resourceGeneration != org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION } ||
+            colorPackets.map { it.commandIdValue } != colorCommands ||
+            colorPackets.any { it.role != GPUDrawPacketRole.Shading }) return false
+        val colorSlotsByCommand = slots.filter {
+            it.kind == org.graphiks.kanvas.gpu.plan.W7HardPathRootFrameV1.SlotKind.DrawColor
+        }.associateBy { it.originalCommandIndexI32 }
+        if (colorPackets.any { packet ->
+                val draw = colorSlotsByCommand[packet.commandIdValue]?.draw as? org.graphiks.kanvas.gpu.plan.SolidRectDraw
+                    ?: return false
+                val authority = draw.materialAuthority as? org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.LegacyColorV1
+                    ?: return false
+                val color = authority.copyColorF32()
+                val semantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
+                    ?: return false
+                val material = semantic.material as? org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor
+                    ?: return false
+                val expectedRgba = listOf(color.red, color.green, color.blue, color.alpha)
+                material.materialSourceAuthority != null || semantic.premultipliedRgba != expectedRgba ||
+                    material.premultipliedRgba != expectedRgba
+            }) return false
+        val expectedColorPackets = graph.passes().flatMap { pass ->
+            if (pass is PlanPass.RenderPass) pass.draws().filter { it.commandIndex in colorCommandSet }
+                .map { Triple(it.commandIndex, GPUDrawPacketRole.Shading, pass.id.value) }
+            else emptyList()
+        }
+        if (colorPackets.size != expectedColorPackets.size ||
+            colorPackets.zip(expectedColorPackets).any { (packet, expected) ->
+                packet.commandIdValue != expected.first || packet.role != expected.second || packet.passId != expected.third
+            }) return false
+        val expectedStencilCommands = slots.filter {
+            it.kind == org.graphiks.kanvas.gpu.plan.W7HardPathRootFrameV1.SlotKind.Path &&
+                (it.draw as? org.graphiks.kanvas.gpu.plan.PathFillDraw)?.strategy ==
+                    org.graphiks.kanvas.gpu.plan.PathFillStrategy.StencilCover
+        }.map { it.originalCommandIndexI32 }
+        if ((pathPartition.depthStencil != null) != expectedStencilCommands.isNotEmpty()) return false
+
+        val expectedPathPackets = graph.passes().flatMap { pass -> when (pass) {
+            is PlanPass.RenderPass -> pass.draws().filter { it.commandIndex in pathCommandSet }.map { draw ->
+                Triple(draw.commandIndex, GPUDrawPacketRole.Shading, pass.id.value)
+            }
+            is PlanPass.StencilGeometryProducerV3 -> if (pass.commandIndexI32 in pathCommandSet)
+                listOf(Triple(pass.commandIndexI32, GPUDrawPacketRole.PathStencilProducer, pass.id.value)) else emptyList()
+            is PlanPass.StencilCover -> if (pass.draw.commandIndex in pathCommandSet)
+                listOf(Triple(pass.draw.commandIndex, GPUDrawPacketRole.PathStencilCover, pass.id.value)) else emptyList()
+            else -> emptyList()
+        } }
+        if (pathPackets.size != expectedPathPackets.size || pathPackets.zip(expectedPathPackets).any { (packet, expected) ->
+                packet.commandIdValue != expected.first || packet.role != expected.second || packet.passId != expected.third
+            }) return false
+
+        graph.passes().forEachIndexed { index, pass ->
+            if (pass is PlanPass.StencilGeometryProducerV3) {
+                val cover = graph.passes().getOrNull(index + 1) as? PlanPass.StencilCover ?: return false
+                if (cover.draw.commandIndex != pass.commandIndexI32 || cover.atomicGroup != pass.atomicGroup ||
+                    cover.draw.copyPathGeometry() != pass.copyGeometry() || cover.draw.copyScissorI32() != pass.copyScissorI32() ||
+                    cover.depthStencil != pass.depthStencil || cover.load != org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.Load ||
+                    cover.store != org.graphiks.kanvas.gpu.plan.AttachmentStorePlan.Store) return false
+            }
+        }
+        return true
     }
 }
