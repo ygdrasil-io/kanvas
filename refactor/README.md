@@ -33,7 +33,7 @@ récupération se fait avec `git show` comme ci-dessus. Les sections ci-dessous
 sont un historique des validations et décisions, pas des instructions pour
 reprendre la campagne de parité.
 
-### Intégration sur la branche principale
+### Intégration sur la branche principale — dette acceptée
 
 La branche principale du dépôt est `master`. La pile publiée comporte 62 PR,
 de #2385 à #2447, plus les derniers lots locaux. Une fusion calculée avec
@@ -45,8 +45,40 @@ Vérification fraîche avant intégration : `:gpu-plan:test`, code local
 Les 29 identités, messages et textes complets d'échec restent identiques au
 contrôle précédent ; ce sont des tests unitaires de sélection/ressources/budgets,
 pas la campagne GM mise en attente. La suite globale n'a pas été déclarée GREEN.
-La fusion reste suspendue à une décision sur cette dette ; aucun push ou merge
-n'a été effectué pendant ce cleanup.
+Le 5 octobre 2026, l'utilisateur accepte explicitement cette dette (« on les
+accepte ») et autorise l'intégration des travaux existants sur `master`, avec
+qualification globale incomplète. Aucun test n'est supprimé, aucun attendu,
+budget ou seuil n'est assoupli ; les règles GitHub restent applicables.
+
+La consolidation incorpore `master` à `6b9b152c8` sans conflit, en préservant
+ses cleanups existants font/codec. Les 62 heads publiés de la pile sont des
+ancêtres de l'état intégré `a98f78365`, qui contient aussi les derniers lots
+locaux et le cleanup `9c125f68e`.
+
+Sur cet état intégré, un nouveau `:gpu-plan:test` exécute 279 tests :
+250 PASS /29 FAIL, zéro skip/error, Gradle1 en 21 s, sans timeout.
+Toutes les identités, issues, messages et textes d'échec sont byte-exacts au
+contrôle initial ; 558 événements START/END sont appariés, processus terminé
+et seals sources pré/post identiques. Ce résultat reste RED, pas GREEN.
+
+La dette unitaire conservée se répartit ainsi :
+
+| Classe de test gpu-plan | Échecs |
+| --- | ---: |
+| CapabilityCompilerChainTest | 3 |
+| W3SolidRectPlanCompilerTest | 4 |
+| W4bAnalyticRRectPlanCompilerTest | 6 |
+| W4cPathFillPlanCompilerTest | 1 |
+| W4dGeneralPathPlanCompilerTest | 1 |
+| W4dPathStrokePlanCompilerTest | 13 |
+| W4eClipPlanCompilerTest | 1 |
+| Total | 29 |
+
+L'intégration est autorisée par PR consolidée en squash, seule méthode de
+fusion activée sur le dépôt. Les branches historiques et le commit d'archive
+sont conservés. Le contrôle ci-dessus ne requalifie ni le `gpu-renderer`
+historique (352 PASS /119 FAIL au dernier lot), ni la suite globale, ni la
+parité Skia ; ces dettes et domaines non qualifiés restent ouverts.
 
 Ce dossier centralise les documents humains de pilotage de la remédiation
 architecturale du renderer. Les artefacts techniques générés — captures PNG,

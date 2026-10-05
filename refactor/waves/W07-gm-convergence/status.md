@@ -1,6 +1,6 @@
 # W07 — diagnostic GM provisoire
 
-## Parité différée et préparation de l'intégration — 5 octobre 2026
+## Parité différée et intégration autorisée — 5 octobre 2026
 
 La campagne de parité Skia est mise de côté à la demande de l'utilisateur.
 W7 n'est pas déclaré terminé et aucune nouvelle campagne GM n'est planifiée ici.
@@ -12,7 +12,14 @@ Le lot hard-path + vrai DrawColor est clos et relu :
 Les derniers résultats natifs qualifiés sont conservés dans ce plan.
 Le gate d'intégration frais `:gpu-plan:test` reste RED : 250 PASS /29 FAIL,
 tous les échecs exactement ceux du contrôle précédent. Ce ne sont pas des
-écarts de comparaison Skia. La suite globale et la fusion restent non qualifiées.
+écarts de comparaison Skia. L'utilisateur accepte explicitement ces échecs et
+la qualification globale incomplète, et autorise l'intégration sur `master`.
+Un nouveau contrôle après incorporation de `master` (`a98f78365`) confirme
+279 tests = 250 PASS /29 FAIL, avec les mêmes identités et textes d'échec,
+zéro skip/error, sans timeout et avec seals sources pré/post identiques.
+Aucun test, attendu, budget ou seuil n'est retiré ou assoupli. La suite reste
+RED ; cette décision n'est ni une clôture W7, ni une claim de parité ou de
+qualification globale. Le README détaille la dette acceptée.
 
 31 snapshots JSON intermédiaires et le journal `pilotage.md` sont retirés.
 Le snapshot transversal historique est conservé ; les liens vers les autres
