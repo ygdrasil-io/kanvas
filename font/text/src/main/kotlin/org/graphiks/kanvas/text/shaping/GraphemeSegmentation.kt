@@ -37,33 +37,6 @@ public data class GraphemeSegmentationResult(
     public val diagnostics: List<ShapingDiagnostic>,
 )
 
-public data class GraphemeFixtureDumpInput(
-    public val fixtureName: String,
-    public val sourceText: String,
-    public val result: GraphemeSegmentationResult,
-)
-
-public data class GraphemeSegmentsDump(
-    public val unicodeVersion: String,
-    public val inputs: List<GraphemeFixtureDumpInput>,
-) {
-    public fun toCanonicalJson(): String = buildString {
-        append("{\n")
-        append("  \"schemaVersion\": 1,\n")
-        append("  \"dumpId\": \"unicode-segments\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M5-002\"],\n")
-        appendJsonField("unicodeVersion", unicodeVersion, comma = true)
-        appendJsonField("sourceTextHashAlgorithm", SOURCE_TEXT_HASH_ALGORITHM, comma = true)
-        append("  \"inputs\": [\n")
-        append(inputs.joinToString(",\n") { input -> input.toCanonicalJson().prependIndent("    ") })
-        append("\n  ],\n")
-        append("  \"nonClaims\": [\n")
-        append(GraphemeNonClaims.joinToString(",\n") { nonClaim -> "    ${jsonString(nonClaim)}" })
-        append("\n  ]\n")
-        append("}\n")
-    }
-}
-
 public class GraphemeClusterer(
     private val unicodeDataSet: UnicodeDataSet,
     private val expectedUnicodeVersion: String = PinnedUnicodeDataGenerator.PinnedUnicodeVersion,
@@ -169,18 +142,6 @@ public class GraphemeClusterer(
             diagnostics = diagnostics,
         )
     }
-
-    public fun dumpFixtures(fixtures: List<Pair<String, String>>): GraphemeSegmentsDump =
-        GraphemeSegmentsDump(
-            unicodeVersion = unicodeDataSet.version.value,
-            inputs = fixtures.map { (fixtureName, sourceText) ->
-                GraphemeFixtureDumpInput(
-                    fixtureName = fixtureName,
-                    sourceText = sourceText,
-                    result = segment(sourceText),
-                )
-            },
-        )
 
     private fun decodeScalars(text: String, diagnostics: MutableList<ShapingDiagnostic>): List<GraphemeScalar> {
         val scalars = mutableListOf<GraphemeScalar>()
@@ -430,7 +391,6 @@ private data class GraphemeRule(
     val breakAllowed: Boolean,
 )
 
-private const val SOURCE_TEXT_HASH_ALGORITHM = "sha256-utf16-code-units"
 private const val GcbCr = "CR"
 private const val GcbLf = "LF"
 private const val GcbControl = "Control"
@@ -487,15 +447,6 @@ private val PinnedUnicodeDataSet: UnicodeDataSet by lazy {
     )
 }
 
-private val GraphemeNonClaims = listOf(
-    "bounded-kfont-m5-002-fixture-evidence-only",
-    "no-complete-ucd-claim",
-    "no-word-sentence-or-line-breaking-claim",
-    "no-shaping-support-promotion",
-    "no-paragraph-support-claim",
-    "no-gpu-text-route-claim",
-)
-
 private fun String.isControlLikeGcb(): Boolean =
     this == GcbCr || this == GcbLf || this == GcbControl
 
@@ -505,60 +456,6 @@ private fun readUnicodeResource(fileName: String): String {
         ?: GraphemeClusterer::class.java.classLoader.getResourceAsStream(resourcePath)
         ?: error("Missing pinned Unicode resource: $resourcePath")
     return stream.bufferedReader(Charsets.UTF_8).use { reader -> reader.readText() }
-}
-
-private fun GraphemeFixtureDumpInput.toCanonicalJson(): String = buildString {
-    append("{\n")
-    appendJsonField("fixtureName", fixtureName, comma = true, indent = "  ")
-    appendJsonField("inputTextHash", result.sourceTextHash, comma = true, indent = "  ")
-    append("  \"clusters\": [\n")
-    append(result.clusters.joinToString(",\n") { cluster -> cluster.toCanonicalJson().prependIndent("    ") })
-    append("\n  ],\n")
-    append("  \"boundaries\": [\n")
-    append(result.boundaries.joinToString(",\n") { boundary -> boundary.toCanonicalJson().prependIndent("    ") })
-    append("\n  ],\n")
-    append("  \"diagnostics\": [")
-    if (result.diagnostics.isNotEmpty()) {
-        append("\n")
-        append(result.diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
-        append("\n  ")
-    }
-    append("]\n")
-    append("}")
-}
-
-private fun GraphemeCluster.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("clusterIndex")).append(": ").append(clusterIndex).append(", ")
-    append(jsonString("utf16Range")).append(": ").append(jsonString(utf16Range.toRangeLabel())).append(", ")
-    append(jsonString("codePointRange")).append(": ").append(jsonString(codePointRange.toRangeLabel())).append(", ")
-    append(jsonString("clusterLevel")).append(": ").append(clusterLevel).append(", ")
-    append(jsonString("sourceTextHash")).append(": ").append(jsonString(sourceTextHash)).append(", ")
-    append(jsonString("unicodeVersion")).append(": ").append(jsonString(unicodeVersion)).append(", ")
-    append(jsonString("breakBeforeRuleId")).append(": ").append(jsonString(breakBeforeRuleId))
-    append("}")
-}
-
-private fun GraphemeBoundaryDecision.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("boundaryIndex")).append(": ").append(boundaryIndex).append(", ")
-    append(jsonString("codePointIndex")).append(": ").append(codePointIndex).append(", ")
-    append(jsonString("ruleId")).append(": ").append(jsonString(ruleId)).append(", ")
-    append(jsonString("breakAllowed")).append(": ").append(breakAllowed).append(", ")
-    append(jsonString("leftUtf16Range")).append(": ").append(jsonString(leftUtf16Range?.toRangeLabel())).append(", ")
-    append(jsonString("rightUtf16Range")).append(": ").append(jsonString(rightUtf16Range?.toRangeLabel())).append(", ")
-    append(jsonString("leftCodePoint")).append(": ").append(jsonString(leftCodePoint?.toCodePointLabel())).append(", ")
-    append(jsonString("rightCodePoint")).append(": ").append(jsonString(rightCodePoint?.toCodePointLabel()))
-    append("}")
-}
-
-private fun ShapingDiagnostic.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("code")).append(": ").append(jsonString(code)).append(", ")
-    append(jsonString("severity")).append(": ").append(jsonString("refusal")).append(", ")
-    append(jsonString("textRange")).append(": ").append(jsonString(textRange?.toRangeLabel())).append(", ")
-    append(jsonString("message")).append(": ").append(jsonString(message))
-    append("}")
 }
 
 private fun clusterInvariantDiagnostic(textRange: IntRange, reason: String): ShapingDiagnostic =
@@ -585,42 +482,6 @@ private fun String.sourceTextHash(): String {
     return MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte ->
         "%02x".format(byte.toInt() and 0xFF)
     }
-}
-
-private fun StringBuilder.appendJsonField(name: String, value: String?, comma: Boolean, indent: String = "  ") {
-    append(indent).append(jsonString(name)).append(": ").append(jsonString(value))
-    if (comma) append(",")
-    append("\n")
-}
-
-private fun jsonString(value: String?): String =
-    value?.let {
-        buildString {
-            append('"')
-            for (char in it) {
-                when (char) {
-                    '\\' -> append("\\\\")
-                    '"' -> append("\\\"")
-                    '\n' -> append("\\n")
-                    '\r' -> append("\\r")
-                    '\t' -> append("\\t")
-                    else -> {
-                        if (char.code < 0x20 || char.code in 0xD800..0xDFFF) {
-                            append("\\u")
-                            append(char.code.toString(16).uppercase().padStart(4, '0'))
-                        } else {
-                            append(char)
-                        }
-                    }
-                }
-            }
-            append('"')
-        }
-    } ?: "null"
-
-private fun Int.toCodePointLabel(): String {
-    val hex = toString(16).uppercase()
-    return "U+${hex.padStart(maxOf(4, hex.length), '0')}"
 }
 
 private fun IntRange.toRangeLabel(): String =

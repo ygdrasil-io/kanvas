@@ -27,7 +27,7 @@ class SvgIntegrationTest {
             ?: error("SVG not found: $svgPath")
 
         if (!SvgReferenceManager.hasReferencePng(svgPath)) {
-            error("Reference PNG not found for $svgPath. Run: ./scripts/generate_svg_references.sh")
+            error("Reference PNG not found for $svgPath")
         }
 
         try {

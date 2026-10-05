@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.text.paragraph
 
-import java.security.MessageDigest
 import org.graphiks.kanvas.text.shaping.BasicTextSegmenter
 import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataGenerator
 import org.graphiks.kanvas.text.shaping.PinnedUnicodeDataSetResources
@@ -182,47 +181,6 @@ public class DefaultUax14LineBreaker(
         return ranges.filter { range -> !range.isEmpty() }
     }
 
-    public fun dumpFixtures(fixtures: List<Pair<String, Paragraph>>): String = buildString {
-        append("{\n")
-        append("  \"schemaVersion\": 1,\n")
-        append("  \"dumpId\": \"line-breaks\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M8-003\"],\n")
-        append("  \"unicodeVersion\": ").append(jsonString(PinnedUnicodeDataGenerator.PinnedUnicodeVersion)).append(",\n")
-        append("  \"cases\": [\n")
-        fixtures.forEachIndexed { index, (caseId, paragraph) ->
-            append("    ").append(caseDump(caseId, paragraph))
-            if (index != fixtures.lastIndex) append(",")
-            append("\n")
-        }
-        append("  ],\n")
-        append("  \"nonClaims\": [\n")
-        append("    \"no-complete-target-support-claim\",\n")
-        append("    \"no-complete-uax14-claim\",\n")
-        append("    \"no-complete-paragraph-layout-claim\",\n")
-        append("    \"no-skia-paragraph-parity-claim\"\n")
-        append("  ]\n")
-        append("}\n")
-    }
-
-    private fun caseDump(caseId: String, paragraph: Paragraph): String {
-        val map = analyze(paragraph)
-        return buildString {
-            append("{\"caseId\": ")
-                .append(jsonString(caseId))
-                .append(", \"text\": ")
-                .append(jsonString(paragraph.text))
-                .append(", \"inputHash\": ")
-                .append(jsonString(map.inputHash))
-                .append(", \"softWrap\": ")
-                .append(map.softWrap)
-                .append(", \"opportunities\": ")
-                .append(map.opportunities.joinToString(prefix = "[", postfix = "]") { opportunity -> opportunity.toDumpJson() })
-                .append(", \"diagnostics\": ")
-                .append(map.diagnostics.joinToString(prefix = "[", postfix = "]") { diagnostic -> diagnostic.toDumpJson() })
-                .append("}")
-        }
-    }
-
     private fun opportunityFor(
         paragraph: Paragraph,
         left: IntRange,
@@ -320,63 +278,3 @@ private fun lineRange(text: String, startInclusive: Int, endExclusive: Int): Int
 
 private fun String.isLineBreakSkippablePrefix(): Boolean =
     this == " " || this == "\t" || this == "\n"
-
-private fun LineBreakOpportunity.toDumpJson(): String = buildString {
-    append("{\"offset\": ")
-        .append(offset)
-        .append(", \"kind\": ")
-        .append(jsonString(kind.name.lowercase()))
-        .append(", \"reason\": ")
-        .append(jsonString(reason))
-        .append(", \"leftClusterRange\": ")
-        .append(leftClusterRange?.toDumpJson() ?: "null")
-        .append(", \"rightClusterRange\": ")
-        .append(rightClusterRange?.toDumpJson() ?: "null")
-        .append(", \"leftLineBreakClass\": ")
-        .append(leftLineBreakClass?.let(::jsonString) ?: "null")
-        .append(", \"rightLineBreakClass\": ")
-        .append(rightLineBreakClass?.let(::jsonString) ?: "null")
-        .append("}")
-}
-
-private fun ParagraphLayoutDiagnostic.toDumpJson(): String = buildString {
-    append("{\"code\": ")
-        .append(jsonString(code))
-        .append(", \"message\": ")
-        .append(jsonString(message))
-        .append(", \"textRange\": ")
-        .append(textRange?.toDumpJson() ?: "null")
-        .append(", \"severity\": ")
-        .append(jsonString(severity))
-        .append("}")
-}
-
-private fun IntRange.toDumpJson(): String = jsonString("$first..$last")
-
-private fun ByteArray.sha256Hex(): String =
-    MessageDigest.getInstance("SHA-256").digest(this).joinToString("") { byte -> "%02x".format(byte) }
-
-private fun String.sourceHash(): String = toByteArray(Charsets.UTF_8).sha256Hex()
-
-private fun jsonString(value: String): String = buildString {
-    append('"')
-    value.forEach { char ->
-        when (char) {
-            '\\' -> append("\\\\")
-            '"' -> append("\\\"")
-            '\b' -> append("\\b")
-            '\u000C' -> append("\\f")
-            '\n' -> append("\\n")
-            '\r' -> append("\\r")
-            '\t' -> append("\\t")
-            else -> {
-                if (char.code in 0x20..0x7E) {
-                    append(char)
-                } else {
-                    append("\\u").append(char.code.toString(16).padStart(4, '0'))
-                }
-            }
-        }
-    }
-    append('"')
-}

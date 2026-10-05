@@ -165,28 +165,6 @@ public object RequiredScriptFeaturePolicies {
         )
     }
 
-    public fun toCanonicalJson(): String = buildString {
-        append("{\n")
-        append("  \"schemaVersion\": 1,\n")
-        append("  \"dumpId\": \"feature-policy-matrix\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M6-006\"],\n")
-        append("  \"rows\": [\n")
-        append(rows.joinToString(",\n") { row -> row.toCanonicalJson().prependIndent("    ") })
-        append("\n  ],\n")
-        append(
-            "  \"nonClaims\": " +
-                jsonStringList(
-                    listOf(
-                        "no-complete-target-support-claim",
-                        "no-complete-feature-policy-claim",
-                        "no-native-shaper-oracle-claim",
-                        "no-gpu-text-route-claim",
-                    ),
-                ) +
-                "\n",
-        )
-        append("}\n")
-    }
 }
 
 public data class OpenTypeTableAvailability(
@@ -294,51 +272,7 @@ public data class OpenTypeLayoutResult(
     public val shapedRun: OpenTypeShapedRun,
     public val diagnostics: List<ShapingDiagnostic>,
 ) {
-    public fun toEvidenceBundle(): OpenTypeLayoutEvidenceBundle =
-        OpenTypeLayoutEvidenceBundle(
-            shapingPlanJson = shapingPlan.toCanonicalJson(diagnostics),
-            gsubTraceJson = gsubTrace.toCanonicalJson(),
-            gposTraceJson = gposTrace.toCanonicalJson(),
-            shapedGlyphRunJson = shapedRun.toCanonicalJson(),
-        )
 }
-
-public data class OpenTypeLayoutEvidenceBundle(
-    public val shapingPlanJson: String,
-    public val gsubTraceJson: String,
-    public val gposTraceJson: String,
-    public val shapedGlyphRunJson: String,
-)
-
-public data class OpenTypeShapingPlanCase(
-    public val caseId: String,
-    public val result: OpenTypeLayoutResult,
-)
-
-public fun openTypeShapingPlanCasesToCanonicalJson(cases: List<OpenTypeShapingPlanCase>): String {
-    require(cases.isNotEmpty()) { "OpenType shaping plan dump requires at least one case." }
-    val unicodeVersion = cases.first().result.shapingPlan.unicodeVersion
-    require(cases.all { it.result.shapingPlan.unicodeVersion == unicodeVersion }) {
-        "OpenType shaping plan cases must use a single pinned Unicode version."
-    }
-
-    return buildString {
-        append("{\n")
-        append("  \"schemaVersion\": 1,\n")
-        append("  \"dumpId\": \"shaping-plan\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M6-001\"],\n")
-        appendJsonField("unicodeVersion", unicodeVersion, comma = true)
-        appendJsonField("sourceTextHashAlgorithm", "SHA-256-UTF-8", comma = true)
-        append("  \"cases\": [\n")
-        append(cases.joinToString(",\n") { shapingCase ->
-            shapingCase.toCanonicalJson().trimEnd().prependIndent("    ")
-        })
-        append("\n  ],\n")
-        append("  \"nonClaims\": ${jsonStringList(OpenTypeLayoutNonClaims)}\n")
-        append("}\n")
-    }
-}
-
 public class OpenTypeLayoutEngineContract(
     private val unicodeVersion: String = PinnedUnicodeDataGenerator.PinnedUnicodeVersion,
     private val glyphMapper: OpenTypeLayoutGlyphMapper,
@@ -637,14 +571,6 @@ private val gsubFeatureTags = setOf("ccmp", "locl", "liga", "rlig", "clig", "cal
 private val gposFeatureTags = setOf("kern", "mark", "mkmk", "dist", "abvm", "blwm")
 private val gdefFeatureTags = setOf("mark", "mkmk", "rlig", "liga")
 
-private val OpenTypeLayoutNonClaims = listOf(
-    "no-complete-target-support-claim",
-    "no-complex-shaping-support-claim",
-    "no-gsub-gpos-lookup-implementation-claim",
-    "no-native-shaper-oracle-claim",
-    "no-gpu-text-route-claim",
-)
-
 private fun List<ShapingDiagnostic>.distinctForOpenTypeEvidence(): List<ShapingDiagnostic> =
     distinctBy { Triple(it.code, it.message, it.textRange) }
 
@@ -680,172 +606,6 @@ private fun codePointRangesForOpenType(text: String, range: IntRange): List<Open
 
 private infix fun Int.untilExclusive(endExclusive: Int): IntRange =
     this..(endExclusive - 1)
-
-private fun OpenTypeShapingPlan.toCanonicalJson(diagnostics: List<ShapingDiagnostic>): String = buildString {
-    append("{\n")
-    append("  \"schemaVersion\": 1,\n")
-    append("  \"dumpId\": \"shaping-plan\",\n")
-    append("  \"ownerTickets\": [\"KFONT-M6-001\"],\n")
-    appendJsonField("unicodeVersion", unicodeVersion, comma = true)
-    appendJsonField("sourceTextHashAlgorithm", "SHA-256-UTF-8", comma = true)
-    appendJsonField("sourceTextHash", sourceTextHash, comma = true)
-    appendJsonField("textRange", textRange.toRangeLabel(), comma = true)
-    appendJsonField("typefaceId", typefaceId?.value?.toString(), comma = true)
-    append("  \"scriptRun\": ${scriptRun.toPlanJson()},\n")
-    append("  \"bidi\": {\"level\": $bidiLevel, \"direction\": ${jsonString(direction)}},\n")
-    appendJsonField("languageSystem", languageSystem, comma = true)
-    append("  \"features\": ${features.toCanonicalJson()},\n")
-    append("  \"traceRefs\": {\"gsub\": ${jsonString(gsubTraceRef)}, \"gpos\": ${jsonString(gposTraceRef)}},\n")
-    appendJsonField("fallbackRun", fallbackRun, comma = true)
-    append("  \"directGlyphInput\": $directGlyphInput,\n")
-    append("  \"diagnostics\": ${diagnostics.toDiagnosticJsonArray()},\n")
-    append("  \"nonClaims\": ${jsonStringList(OpenTypeLayoutNonClaims)}\n")
-    append("}\n")
-}
-
-private fun OpenTypeShapingPlanCase.toCanonicalJson(): String = buildString {
-    val plan = result.shapingPlan
-    append("{\n")
-    appendJsonField("caseId", caseId, comma = true)
-    appendJsonField("sourceTextHash", plan.sourceTextHash, comma = true)
-    appendJsonField("textRange", plan.textRange.toRangeLabel(), comma = true)
-    appendJsonField("typefaceId", plan.typefaceId?.value?.toString(), comma = true)
-    append("  \"scriptRun\": ${plan.scriptRun.toPlanJson()},\n")
-    append("  \"bidi\": {\"level\": ${plan.bidiLevel}, \"direction\": ${jsonString(plan.direction)}},\n")
-    appendJsonField("languageSystem", plan.languageSystem, comma = true)
-    append("  \"features\": ${plan.features.toCanonicalJson()},\n")
-    append("  \"traceRefs\": {\"gsub\": ${jsonString(plan.gsubTraceRef)}, \"gpos\": ${jsonString(plan.gposTraceRef)}},\n")
-    appendJsonField("fallbackRun", plan.fallbackRun, comma = true)
-    append("  \"directGlyphInput\": ${plan.directGlyphInput},\n")
-    append("  \"diagnostics\": ${result.diagnostics.toDiagnosticJsonArray()}\n")
-    append("}\n")
-}
-
-private fun OpenTypeLookupTrace.toCanonicalJson(): String = buildString {
-    append("{\n")
-    append("  \"schemaVersion\": 1,\n")
-    append("  \"dumpId\": ${jsonString(dumpId)},\n")
-    append("  \"ownerTickets\": [\"KFONT-M6-001\"],\n")
-    appendJsonField("unicodeVersion", unicodeVersion, comma = true)
-    appendJsonField("sourceTextHashAlgorithm", "SHA-256-UTF-8", comma = true)
-    appendJsonField("sourceTextHash", sourceTextHash, comma = true)
-    appendJsonField("stage", stage, comma = true)
-    appendJsonField("typefaceId", typefaceId?.value?.toString(), comma = true)
-    append("  \"scriptRun\": ${scriptRun.toPlanJson()},\n")
-    append("  \"features\": ${features.toCanonicalJson()},\n")
-    append("  \"events\": ${events.joinToString(prefix = "[", postfix = "]") { it.toCanonicalJson() }},\n")
-    append("  \"diagnostics\": ${diagnostics.toDiagnosticJsonArray()},\n")
-    append("  \"nonClaims\": ${jsonStringList(OpenTypeLayoutNonClaims)}\n")
-    append("}\n")
-}
-
-private fun OpenTypeShapedRun.toCanonicalJson(): String = buildString {
-    append("{\n")
-    append("  \"schemaVersion\": 1,\n")
-    append("  \"dumpId\": \"opentype-layout-contract-shaped-glyph-run\",\n")
-    append("  \"ownerTickets\": [\"KFONT-M6-001\"],\n")
-    appendJsonField("unicodeVersion", unicodeVersion, comma = true)
-    appendJsonField("sourceTextHashAlgorithm", "SHA-256-UTF-8", comma = true)
-    appendJsonField("sourceTextHash", sourceTextHash, comma = true)
-    appendJsonField("typefaceId", typefaceId?.value?.toString(), comma = true)
-    appendJsonField("script", script, comma = true)
-    appendJsonField("direction", direction, comma = true)
-    append("  \"glyphs\": ${glyphs.joinToString(prefix = "[", postfix = "]") { it.toCanonicalJson() }},\n")
-    append("  \"clusters\": ${clusters.joinToString(prefix = "[", postfix = "]") { it.toCanonicalJson() }},\n")
-    append("  \"diagnostics\": ${diagnostics.toDiagnosticJsonArray()},\n")
-    append("  \"nonClaims\": ${jsonStringList(OpenTypeLayoutNonClaims)}\n")
-    append("}\n")
-}
-
-private fun ScriptItemizationRun.toPlanJson(): String = buildString {
-    append("{")
-    append(jsonPair("clusterRange", clusterRange.toRangeLabel())).append(", ")
-    append(jsonPair("utf16Range", utf16Range.toRangeLabel())).append(", ")
-    append(jsonPair("codePointRange", codePointRange.toRangeLabel())).append(", ")
-    append(jsonPair("selectedScript", selectedScript)).append(", ")
-    append(jsonString("openTypeScriptTags")).append(": ").append(jsonStringList(openTypeScriptTags)).append(", ")
-    append(jsonString("extensionCandidates")).append(": ").append(jsonStringList(extensionCandidates)).append(", ")
-    append(jsonPair("languageHint", languageHint)).append(", ")
-    append(jsonPair("reason", reason))
-    append("}")
-}
-
-private fun ScriptFeaturePolicy.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonPair("scriptFamily", scriptFamily)).append(", ")
-    append(jsonString("selectedScripts")).append(": ").append(jsonStringList(selectedScripts)).append(", ")
-    append(jsonString("openTypeScriptTags")).append(": ").append(jsonStringList(openTypeScriptTags)).append(", ")
-    append(jsonString("requiredDefaults")).append(": ").append(jsonStringList(requiredDefaults)).append(", ")
-    append(jsonString("optionalFeatures")).append(": ").append(jsonStringList(optionalFeatures)).append(", ")
-    append(jsonString("refusalWhenMissing")).append(": ").append(jsonStringList(refusalWhenMissing))
-    append("}")
-}
-
-private fun ResolvedFeatureSet.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("requested")).append(": ").append(requested.toFeatureArrayJson()).append(", ")
-    append(jsonString("enabled")).append(": ").append(enabled.toFeatureArrayJson()).append(", ")
-    append(jsonString("disabled")).append(": ").append(disabled.toFeatureArrayJson()).append(", ")
-    append(jsonString("defaulted")).append(": ").append(defaulted.toFeatureArrayJson()).append(", ")
-    append(jsonString("unsupported")).append(": ").append(unsupported.toFeatureArrayJson())
-    append("}")
-}
-
-private fun List<ShapingFeatureRequest>.toFeatureArrayJson(): String =
-    joinToString(prefix = "[", postfix = "]") { feature ->
-        "{\"tag\": ${jsonString(feature.tag)}, \"value\": ${feature.value}}"
-    }
-
-private fun OpenTypeLookupTraceEvent.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonPair("stage", stage)).append(", ")
-    append(jsonPair("lookupId", lookupId)).append(", ")
-    append(jsonString("lookupType")).append(": ").append(lookupType ?: "null").append(", ")
-    append(jsonPair("decision", decision)).append(", ")
-    append(jsonString("featureTags")).append(": ").append(jsonStringList(featureTags)).append(", ")
-    append(jsonPair("diagnosticCode", diagnosticCode))
-    append("}")
-}
-
-private fun OpenTypeShapedGlyph.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("glyphIndex")).append(": ").append(glyphIndex).append(", ")
-    append(jsonString("glyphId")).append(": ").append(glyphId).append(", ")
-    append(jsonString("clusterIndex")).append(": ").append(clusterIndex).append(", ")
-    append(jsonPair("sourceUtf16Range", sourceUtf16Range.toRangeLabel())).append(", ")
-    append(jsonPair("source", source)).append(", ")
-    append(jsonString("xAdvance")).append(": ").append(xAdvance).append(", ")
-    append(jsonString("xOffset")).append(": ").append(xOffset).append(", ")
-    append(jsonString("yOffset")).append(": ").append(yOffset)
-    append("}")
-}
-
-private fun OpenTypeClusterMapping.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("clusterIndex")).append(": ").append(clusterIndex).append(", ")
-    append(jsonPair("sourceUtf16Range", sourceUtf16Range.toRangeLabel())).append(", ")
-    append(jsonPair("glyphRange", glyphRange.toRangeLabel())).append(", ")
-    append(jsonString("synthetic")).append(": ").append(synthetic)
-    append("}")
-}
-
-private fun List<ShapingDiagnostic>.toDiagnosticJsonArray(): String =
-    joinToString(prefix = "[", postfix = "]") { diagnostic -> diagnostic.toCanonicalJson() }
-
-private fun ShapingDiagnostic.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonPair("code", code)).append(", ")
-    append(jsonPair("severity", "refusal")).append(", ")
-    append(jsonPair("textRange", textRange?.toRangeLabel())).append(", ")
-    append(jsonPair("message", message))
-    append("}")
-}
-
-private fun StringBuilder.appendJsonField(name: String, value: String?, comma: Boolean) {
-    append("  ").append(jsonPair(name, value))
-    if (comma) append(",")
-    append("\n")
-}
 
 private fun String.sourceTextHashForOpenTypeLayout(): String =
     MessageDigest.getInstance("SHA-256")

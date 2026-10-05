@@ -5,7 +5,7 @@ KAN-050 aggregates existing PM-visible support, refusal, dependency, performance
 ## Summary
 
 - Families: 6
-- Support rows checked: 16
+- Support rows checked: 13
 - Readiness delta: 0.0
 - Native Kadre CI required: false
 
@@ -17,16 +17,16 @@ KAN-050 aggregates existing PM-visible support, refusal, dependency, performance
 | `coverage-strokes-clips` | Coverage, strokes and clips | `reports/wgsl-pipeline/coverage-closeout-matrix/kan-040-coverage-closeout-matrix.json` | Only bounded AA clip support is claimed; hairlines, caps/joins, dashes and nested clips keep stable refusal categories. |
 | `filters-layers` | Image filters and layers | `reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json`<br>`reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json` | Bounded DAG rows remain separated from arbitrary DAG, picture-prepass and large-sigma gaps. |
 | `text-glyphs` | Text and glyphs | `reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json`<br>`reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json` | Simple Latin and bounded shaping evidence remain separate from broad shaping, font fallback, SDF/LCD and alpha-mask support. |
-| `color-bitmap-codec` | Color, bitmap and codec provenance | `reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json`<br>`reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json`<br>`reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json` | Bounded color/bitmap rows and one real PNG source stay visible without broad codec, mipmap or color-managed decode claims. |
+| `color-bitmap-codec` | Color and bitmap provenance | `reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json`<br>`reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json` | Bounded color and bitmap rows stay visible without broad mipmap or color-managed decode claims. |
 | `performance-cache` | Performance and cache | `reports/wgsl-pipeline/performance-family-budgets/kan-048-performance-family-budgets.json`<br>`reports/wgsl-pipeline/cache-telemetry-release-gate/kan-049-cache-telemetry-release-gate.json` | Measured bitmap/color budgets and cache telemetry classifications remain reporting-only unless accepted release-gate policy exists. |
 
 ## Categories
 
 | Category | Count | PM meaning |
 |---|---:|---|
-| `supported` | 16 | Selected rows with complete reference, CPU/GPU, diff/stat, route diagnostics and fallbackReason=none. |
+| `supported` | 13 | Selected rows with complete reference, CPU/GPU, diff/stat, route diagnostics and fallbackReason=none. |
 | `expected-unsupported` | 5 | Known limitations with stable fallback reasons; not hidden failures. |
-| `dependency-gated` | 3 | Real dependency required; no short-lived font/codec substitute is added. |
+| `dependency-gated` | 1 | Real dependency required; no short-lived font/codec substitute is added. |
 | `reporting-only` | 35 | Useful PM evidence that is not a release-blocking gate. |
 | `implementation-gap` | 6 | Feature-family gap with explicit next-step evidence requirements. |
 | `root-cause-blocked` | 2 | Post-breadth visual-delta root causes are visible as blockers, not support claims. |
@@ -48,9 +48,6 @@ KAN-050 aggregates existing PM-visible support, refusal, dependency, performance
 | `kan045.paint.color-filter.blend-kplus.rect.v1` | `color-bitmap-codec` | `reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json` | reference, cpuGpu, diffStat, routeDiagnostics, fallbackStable |
 | `kan046.bitmap-shader-repeat-tile` | `color-bitmap-codec` | `reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json` | reference, cpuGpu, diffStat, routeDiagnostics, fallbackStable |
 | `kan046.bitmap-subset-local-matrix-repeat` | `color-bitmap-codec` | `reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json` | reference, cpuGpu, diffStat, routeDiagnostics, fallbackStable |
-| `kan047.paint.bitmap-rect.nearest.fixture.v1` | `color-bitmap-codec` | `reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json` | reference, cpuGpu, diffStat, routeDiagnostics, fallbackStable |
-| `kan047.bitmap-shader-repeat-tile` | `color-bitmap-codec` | `reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json` | reference, cpuGpu, diffStat, routeDiagnostics, fallbackStable |
-| `kan047.bitmap-subset-local-matrix-repeat` | `color-bitmap-codec` | `reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json` | reference, cpuGpu, diffStat, routeDiagnostics, fallbackStable |
 
 ## Root-Cause Blockers
 

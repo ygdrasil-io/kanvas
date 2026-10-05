@@ -7,5 +7,4 @@ dependencies {
     api(project(":font:core"))
 
     implementation(kotlin("stdlib"))
-    testImplementation(kotlin("test"))
 }

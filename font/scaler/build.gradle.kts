@@ -9,5 +9,4 @@ dependencies {
     implementation(project(":font:colr"))
     implementation(project(":font:sfnt"))
     implementation(kotlin("stdlib"))
-    testImplementation(kotlin("test"))
 }

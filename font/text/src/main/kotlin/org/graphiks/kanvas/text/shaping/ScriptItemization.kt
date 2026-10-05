@@ -25,33 +25,6 @@ public data class ScriptItemizationResult(
     public val diagnostics: List<ShapingDiagnostic>,
 )
 
-public data class ScriptFixtureDumpInput(
-    public val fixtureName: String,
-    public val sourceText: String,
-    public val result: ScriptItemizationResult,
-)
-
-public data class ScriptRunsDump(
-    public val unicodeVersion: String,
-    public val inputs: List<ScriptFixtureDumpInput>,
-) {
-    public fun toCanonicalJson(): String = buildString {
-        append("{\n")
-        append("  \"schemaVersion\": 1,\n")
-        append("  \"dumpId\": \"script-runs\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M5-004\"],\n")
-        appendJsonField("unicodeVersion", unicodeVersion, comma = true)
-        appendJsonField("sourceTextHashAlgorithm", "SHA-256", comma = true)
-        append("  \"inputs\": [\n")
-        append(inputs.joinToString(",\n") { input -> input.toCanonicalJson().prependIndent("    ") })
-        append("\n  ],\n")
-        append("  \"nonClaims\": [\n")
-        append(ScriptItemizationNonClaims.joinToString(",\n") { nonClaim -> "    ${jsonString(nonClaim)}" })
-        append("\n  ]\n")
-        append("}\n")
-    }
-}
-
 public class ScriptExtensionsItemizer(
     private val unicodeDataSet: UnicodeDataSet,
     private val expectedUnicodeVersion: String = PinnedUnicodeDataGenerator.PinnedUnicodeVersion,
@@ -105,18 +78,6 @@ public class ScriptExtensionsItemizer(
             diagnostics = diagnostics,
         )
     }
-
-    public fun dumpFixtures(fixtures: List<Pair<String, String>>): ScriptRunsDump =
-        ScriptRunsDump(
-            unicodeVersion = unicodeDataSet.version.value,
-            inputs = fixtures.sortedBy { it.first }.map { (fixtureName, sourceText) ->
-                ScriptFixtureDumpInput(
-                    fixtureName = fixtureName,
-                    sourceText = sourceText,
-                    result = itemize(sourceText),
-                )
-            },
-        )
 
     private fun clusterFacts(
         text: String,
@@ -399,97 +360,15 @@ private val supportedOpenTypeTags = mapOf(
     "Zsym" to listOf("Zsym"),
 )
 
-private val ScriptItemizationNonClaims = listOf(
-    "no-complete-target-support-claim",
-    "no-complete-ucd-claim",
-    "no-complete-gsub-gpos-claim",
-    "no-shaping-support-promotion",
-    "no-paragraph-support-claim",
-    "no-gpu-text-route-claim",
-)
-
 private fun String.isStrongScriptCode(): Boolean =
     this != "Zyyy" && this != "Zinh"
 
 private fun String.isTargetMatrixCandidate(): Boolean =
     this != "Zyyy" && this != "Zinh"
 
-private fun ScriptFixtureDumpInput.toCanonicalJson(): String = buildString {
-    append("{\n")
-    appendJsonField("fixtureName", fixtureName, comma = true)
-    appendJsonField("sourceText", sourceText, comma = true)
-    appendJsonField("inputTextHash", result.sourceTextHash, comma = true)
-    append("  \"runs\": [\n")
-    append(result.runs.joinToString(",\n") { run -> run.toCanonicalJson().prependIndent("    ") })
-    append("\n  ],\n")
-    append("  \"diagnostics\": [")
-    if (result.diagnostics.isNotEmpty()) {
-        append("\n")
-        append(result.diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
-        append("\n  ")
-    }
-    append("]\n")
-    append("}")
-}
-
-private fun ScriptItemizationRun.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonPair("clusterRange", clusterRange.toRangeLabel())).append(", ")
-    append(jsonPair("utf16Range", utf16Range.toRangeLabel())).append(", ")
-    append(jsonPair("codePointRange", codePointRange.toRangeLabel())).append(", ")
-    append(jsonPair("selectedScript", selectedScript)).append(", ")
-    append(jsonString("openTypeScriptTags")).append(": ").append(jsonStringList(openTypeScriptTags)).append(", ")
-    append(jsonString("extensionCandidates")).append(": ").append(jsonStringList(extensionCandidates)).append(", ")
-    append(jsonPair("languageHint", languageHint)).append(", ")
-    append(jsonPair("reason", reason))
-    append("}")
-}
-
-private fun ShapingDiagnostic.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonPair("code", code)).append(", ")
-    append(jsonPair("severity", "refusal")).append(", ")
-    append(jsonPair("textRange", textRange?.toRangeLabel())).append(", ")
-    append(jsonPair("message", message))
-    append("}")
-}
-
 private fun String.sourceTextHashForScriptItemization(): String =
     MessageDigest.getInstance("SHA-256")
         .digest(toByteArray(Charsets.UTF_8))
         .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xFF) }
-
-private fun StringBuilder.appendJsonField(name: String, value: String, comma: Boolean) {
-    append("  ").append(jsonPair(name, value))
-    if (comma) append(",")
-    append("\n")
-}
-
-private fun jsonPair(name: String, value: String?): String =
-    jsonString(name) + ": " + if (value == null) "null" else jsonString(value)
-
-private fun jsonStringList(values: List<String>): String =
-    values.joinToString(prefix = "[", postfix = "]") { value -> jsonString(value) }
-
-private fun jsonString(value: String): String = buildString {
-    append('"')
-    for (char in value) {
-        when (char) {
-            '\\' -> append("\\\\")
-            '"' -> append("\\\"")
-            '\n' -> append("\\n")
-            '\r' -> append("\\r")
-            '\t' -> append("\\t")
-            else -> {
-                if (char.code < 0x20 || char.isSurrogate()) {
-                    append("\\u").append(char.code.toString(16).uppercase().padStart(4, '0'))
-                } else {
-                    append(char)
-                }
-            }
-        }
-    }
-    append('"')
-}
 
 private fun IntRange.toRangeLabel(): String = "$first..$last"

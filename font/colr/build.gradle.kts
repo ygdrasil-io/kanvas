@@ -9,5 +9,4 @@ kotlin {
 dependencies {
     implementation(project(":font:core"))
     implementation(project(":font:sfnt"))
-    testImplementation(project(":codec:test-fixtures"))
 }

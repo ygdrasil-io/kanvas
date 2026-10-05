@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.graphiks.kanvas.skia.gm.image.BitmapShaderGmTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:43:53.449Z" hostname="b3-16-2026-08-13-16-13" time="0.0">
-  <properties/>
-  <testcase name="draws bitmap shader and alpha mask cases()" classname="org.graphiks.kanvas.skia.gm.image.BitmapShaderGmTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
