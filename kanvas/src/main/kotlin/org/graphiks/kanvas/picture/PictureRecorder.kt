@@ -1,8 +1,8 @@
 package org.graphiks.kanvas.picture
 
 import org.graphiks.kanvas.canvas.Canvas
-import org.graphiks.kanvas.canvas.DisplayListBuffer
-import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.SnapshotDisplayListBuffer
+import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -16,9 +16,11 @@ import org.graphiks.math.geometry.RectF32
  * val picture = recorder.finishRecordingAsPicture()
  * ```
  */
-class PictureRecorder {
+class PictureRecorder(
+    private val captureLimits: SceneCaptureLimits = SceneCaptureLimits.DEFAULT,
+) {
     private var activeCanvas: Canvas? = null
-    private var activeBuffer: DisplayListBuffer? = null
+    private var activeBuffer: SnapshotDisplayListBuffer? = null
     private var recordingBounds: RectF32? = null
 
     /**
@@ -31,16 +33,12 @@ class PictureRecorder {
      */
     fun beginRecording(bounds: RectF32): Canvas {
         check(activeCanvas == null) { "Recording already in progress" }
-        val buffer = object : DisplayListBuffer {
-            private val ops = mutableListOf<DisplayOp>()
-            override fun append(op: DisplayOp) { ops.add(op) }
-            override fun ops(): List<DisplayOp> = ops.toList()
-        }
+        val buffer = SnapshotDisplayListBuffer(captureLimits)
         val canvas = Canvas(buffer)
         canvas.clipRect(bounds)
         activeBuffer = buffer
         activeCanvas = canvas
-        recordingBounds = bounds
+        recordingBounds = RectF32(bounds.left, bounds.top, bounds.right, bounds.bottom)
         return canvas
     }
 
@@ -52,7 +50,7 @@ class PictureRecorder {
     fun finishRecordingAsPicture(): Picture {
         val buffer = activeBuffer ?: throw IllegalStateException("No recording in progress")
         val bounds = recordingBounds ?: throw IllegalStateException("No recording bounds")
-        val picture = Picture(bounds, buffer.ops())
+        val picture = Picture(bounds, buffer.sealedOps())
         activeCanvas = null
         activeBuffer = null
         recordingBounds = null

@@ -4,6 +4,7 @@ import java.util.LinkedHashMap
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.wgsl.PreparedTextA8Shader
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant
 
@@ -68,6 +69,7 @@ class GPUPreparedTextCompositeProgramCache(
         sourceCoverageEncoding: GPUSourceCoverageEncoding =
             GPUSourceCoverageEncoding.ModulateRGBA,
         clipVariant: GPUPreparedTextClipVariant = GPUPreparedTextClipVariant.None,
+        destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = null,
     ): GPUPreparedTextCompositeProgramResult {
         val authenticated = runCatching { material.authenticatedSnapshot() }.getOrNull()
             ?: return composeObserved(
@@ -77,9 +79,10 @@ class GPUPreparedTextCompositeProgramCache(
                 fixedFunctionBlendState,
                 sourceCoverageEncoding,
                 clipVariant,
+                destinationBlend,
             )
         val key = structuralKey(
-            authenticated.composableFragment,
+            if (authenticated.commonSource == null) authenticated.composableFragment else null,
             targetFormatClass,
             blendPlanIdentity,
             fixedFunctionBlendState,
@@ -98,6 +101,7 @@ class GPUPreparedTextCompositeProgramCache(
             fixedFunctionBlendState,
             sourceCoverageEncoding,
             clipVariant,
+            destinationBlend,
         ).also { result ->
             if (result is GPUPreparedTextCompositeProgramResult.Ready) {
                 entries[key] = result.program
@@ -130,6 +134,7 @@ class GPUPreparedTextCompositeProgramCache(
         fixedFunctionBlendState: GPUFixedFunctionBlendState?,
         sourceCoverageEncoding: GPUSourceCoverageEncoding,
         clipVariant: GPUPreparedTextClipVariant,
+        destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
     ): GPUPreparedTextCompositeProgramResult =
         GPUPreparedTextShaderComposer.composeObserved(
             material = material,
@@ -138,6 +143,7 @@ class GPUPreparedTextCompositeProgramCache(
             fixedFunctionBlendState = fixedFunctionBlendState,
             sourceCoverageEncoding = sourceCoverageEncoding,
             clipVariant = clipVariant,
+            destinationBlend = destinationBlend,
             observer = object : GPUPreparedTextCompositionObserver {
                 override fun onCompose() {
                     composeCount += 1
@@ -158,15 +164,15 @@ class GPUPreparedTextCompositeProgramCache(
         )
 
     private fun structuralKey(
-        fragment: GPUPreparedMaterialFragment,
+        fragment: GPUPreparedMaterialFragment?,
         targetFormatClass: String,
         blendPlanIdentity: String,
         fixedFunctionBlendState: GPUFixedFunctionBlendState?,
         sourceCoverageEncoding: GPUSourceCoverageEncoding,
         clipVariant: GPUPreparedTextClipVariant,
     ): StructuralKey = StructuralKey(
-        fragmentHash = fragment.fragmentHash,
-        fragmentAbiHash = fragment.abiHash,
+        fragmentHash = fragment?.fragmentHash ?: "prepared-text-geometry-v6",
+        fragmentAbiHash = fragment?.abiHash ?: "prepared-text-group0-uniform-atlas-v6",
         vertexAbi = PreparedTextA8Shader.VertexLayout.canonicalCacheIdentity(),
         targetFormatClass = targetFormatClass,
         blendPlanIdentity = blendPlanIdentity,

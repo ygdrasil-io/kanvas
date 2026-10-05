@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":kanvas"))
+    implementation(project(":gpu-renderer"))
     implementation(project(":codec:api"))
     implementation(project(":codec:png"))
     implementation(project(":math:color"))

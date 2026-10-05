@@ -12,7 +12,7 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
-import kotlin.random.Random
+import org.graphiks.kanvas.skia.SkiaRandom
 
 enum class Clip { kRect_Clip, kRRect_Clip, kPath_Clip }
 
@@ -75,11 +75,11 @@ abstract class ComplexClip2Gm(
         rectColors[4] = 0xFF00FFFF.toInt()
 
         val opChoices = arrayOf(ClipOp.DIFFERENCE, ClipOp.INTERSECT)
-        val r = Random(0)
+        val r = SkiaRandom()
         for (i in 0 until kRows) {
             for (j in 0 until kCols) {
                 for (k in 0 until 5) {
-                    val idx = r.nextInt(opChoices.size)
+                    val idx = (r.nextU() % opChoices.size.toUInt()).toInt()
                     ops[j * kRows + i][k] = opChoices[idx]
                 }
             }
@@ -89,8 +89,8 @@ abstract class ComplexClip2Gm(
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0xDD / 255f, 0xA0 / 255f, 0xDD / 255f)
 
-        var rectPaint = Paint(style = PaintStyle.STROKE, strokeWidth = 0f)
-        val fillPaint = Paint(color = ColorARGB.fromRGBA(0xA0 / 255f, 0xDD / 255f, 0xA0 / 255f))
+        var rectPaint = Paint(style = PaintStyle.STROKE, strokeWidth = 0f, antiAlias = false)
+        val fillPaint = Paint(color = ColorARGB.fromRGBA(0xA0 / 255f, 0xDD / 255f, 0xA0 / 255f), antiAlias = false)
 
         for (i in 0 until kRows) {
             for (j in 0 until kCols) {

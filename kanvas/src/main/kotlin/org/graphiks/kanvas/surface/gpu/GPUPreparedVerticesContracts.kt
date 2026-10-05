@@ -6,33 +6,46 @@ import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtif
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedVerticesMaterialPlanEmission
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesFloatBounds
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPrimitiveBlendPlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
 /** The public operation semantic retained by one handle-free prepared vertices draw. */
-enum class GPUPreparedVerticesOperationKind { DrawVertices, DrawMesh }
+internal enum class GPUPreparedVerticesOperationKind { DrawVertices, DrawMesh }
+
+/** Sealed W5a material authority retained from capture through native preflight. */
+internal data class GPUPreparedVerticesMaterialPlan(
+    val table: MaterialPlanTable,
+    val ref: MaterialPlanRef,
+    val blend: org.graphiks.kanvas.gpu.plan.BlendPlan,
+    val commonProgram: GPUPreparedMaterialProgram? = null,
+) {
+    init { table.entry(ref) }
+}
 
 /** Exact immutable clip decision retained by the prepared draw. */
-data class GPUPreparedVerticesClipSnapshot(
+internal data class GPUPreparedVerticesClipSnapshot(
     val identity: String,
     val coveragePlan: GPUClipCoveragePlan,
     val scissorBounds: GPUBounds?,
 )
 
 /** Closed accountability record for canonical refusal codes not emitted by this pure phase. */
-enum class GPUPreparedVerticesRefusalDisposition { Direct, Delegated, Reserved }
+internal enum class GPUPreparedVerticesRefusalDisposition { Direct, Delegated, Reserved }
 
-data class GPUPreparedVerticesRefusalClassification(
+internal data class GPUPreparedVerticesRefusalClassification(
     val disposition: GPUPreparedVerticesRefusalDisposition,
     val authority: String,
     val reason: String,
 )
 
-object GPUPreparedVerticesRefusalCoverage {
+internal object GPUPreparedVerticesRefusalCoverage {
     val classifications: Map<String, GPUPreparedVerticesRefusalClassification> =
         Collections.unmodifiableMap(linkedMapOf(
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.Topology to c(GPUPreparedVerticesRefusalDisposition.Reserved, "GPUPreparedVerticesPacker", "public VertexMode is closed"),
@@ -66,14 +79,57 @@ object GPUPreparedVerticesRefusalCoverage {
     ) = GPUPreparedVerticesRefusalClassification(disposition, authority, reason)
 }
 
+internal interface GPUPreparedVerticesGeometryInput {
+    val artifact: GPUPreparedVerticesUploadArtifact
+    val operationKind: GPUPreparedVerticesOperationKind
+    val operationIndex: Int
+    val culledByClip: Boolean
+}
+
+/** Actual packed geometry and clip only. Material is bound after the common source publication. */
+internal class GPUPreparedVerticesGeometry(
+    override val artifact: GPUPreparedVerticesUploadArtifact,
+    override val operationKind: GPUPreparedVerticesOperationKind,
+    override val operationIndex: Int,
+    val transform: Matrix3x3F32,
+    val clip: ClipStack,
+    val clipSnapshot: GPUPreparedVerticesClipSnapshot,
+    val sourceBounds: GPUPreparedVerticesFloatBounds,
+    val deviceBounds: GPUBounds,
+    val clippedBounds: GPUBounds?,
+    val meshBounds: RectF32?,
+    val provenance: String,
+    val primitiveColorPresent: Boolean,
+) : GPUPreparedVerticesGeometryInput {
+    override val culledByClip get() = clipSnapshot.scissorBounds != null && clippedBounds == null
+
+    fun bind(paint: org.graphiks.kanvas.paint.Paint, operationBlendMode: org.graphiks.kanvas.paint.BlendMode?,
+        targetColorFormat: String, plan: GPUPreparedVerticesMaterialPlan): GPUPreparedVerticesDraw {
+        val program = requireNotNull(plan.commonProgram)
+        val alpha = org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification.Translucent
+        val finalBlend = paint.blendMode.toGpuBlendFacts().copy(sourceAlpha = alpha)
+        val primitive = if (!primitiveColorPresent) null else GPUPrimitiveBlendPlan(
+            (operationBlendMode ?: org.graphiks.kanvas.paint.BlendMode.MODULATE).toGpuBlendFacts()
+                .copy(sourceAlpha = alpha).canonicalBlendPlan(
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption.FullOrScissor, targetColorFormat))
+        return GPUPreparedVerticesDraw.create(artifact, operationKind, program, plan,
+            GPUPreparedVerticesMaterialPlanEmission.common(program), transform, clip, clipSnapshot,
+            finalBlend, org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lowerForRecording(plan.blend),
+            sourceBounds, deviceBounds, clippedBounds, culledByClip, meshBounds, operationIndex,
+            provenance, 1, primitiveColorPresent, primitive)
+    }
+}
+
 /**
  * Immutable result of pure vertices/mesh lowering. It deliberately contains no
  * WebGPU objects, upload offsets, cache references, or native allocation state.
  */
-class GPUPreparedVerticesDraw private constructor(
-    val artifact: GPUPreparedVerticesUploadArtifact,
-    val operationKind: GPUPreparedVerticesOperationKind,
+internal class GPUPreparedVerticesDraw private constructor(
+    override val artifact: GPUPreparedVerticesUploadArtifact,
+    override val operationKind: GPUPreparedVerticesOperationKind,
     val material: GPUPreparedMaterialProgram,
+    val materialPlan: GPUPreparedVerticesMaterialPlan?,
+    val materialPlanEmission: GPUPreparedVerticesMaterialPlanEmission?,
     val transform: Matrix3x3F32,
     clip: ClipStack,
     val clipSnapshot: GPUPreparedVerticesClipSnapshot,
@@ -83,14 +139,14 @@ class GPUPreparedVerticesDraw private constructor(
     val deviceBounds: GPUBounds,
     /** Null means the draw is wholly clipped and can be culled without restoring device bounds. */
     val clippedBounds: GPUBounds?,
-    val culledByClip: Boolean,
+    override val culledByClip: Boolean,
     meshBounds: RectF32?,
-    val operationIndex: Int,
+    override val operationIndex: Int,
     val provenance: String,
     val paintAlphaApplicationCount: Int,
     val primitiveColorPresent: Boolean,
     val primitiveBlendPlan: GPUPrimitiveBlendPlan?,
-) {
+) : GPUPreparedVerticesGeometryInput {
     private val clipState = clip.snapshotForPreparedText()
     private val meshBoundsSnapshot = meshBounds?.copy()
 
@@ -99,6 +155,9 @@ class GPUPreparedVerticesDraw private constructor(
         require(provenance.isNotBlank()) { "Prepared vertices provenance must not be blank" }
         require(paintAlphaApplicationCount == 1) {
             "Prepared vertices paint alpha must be applied exactly once"
+        }
+        require((materialPlan == null) == (materialPlanEmission == null)) {
+            "Prepared vertices W5a plan and compiler emission must be paired"
         }
     }
 
@@ -116,6 +175,8 @@ class GPUPreparedVerticesDraw private constructor(
             artifact: GPUPreparedVerticesUploadArtifact,
             operationKind: GPUPreparedVerticesOperationKind,
             material: GPUPreparedMaterialProgram,
+            materialPlan: GPUPreparedVerticesMaterialPlan? = null,
+            materialPlanEmission: GPUPreparedVerticesMaterialPlanEmission? = null,
             transform: Matrix3x3F32,
             clip: ClipStack,
             clipSnapshot: GPUPreparedVerticesClipSnapshot,
@@ -135,6 +196,8 @@ class GPUPreparedVerticesDraw private constructor(
             artifact = artifact,
             operationKind = operationKind,
             material = material,
+            materialPlan = materialPlan,
+            materialPlanEmission = materialPlanEmission,
             transform = Matrix3x3F32.of(
                 transform.sx, transform.kx, transform.tx,
                 transform.ky, transform.sy, transform.ty,
@@ -159,7 +222,9 @@ class GPUPreparedVerticesDraw private constructor(
 }
 
 /** One terminal result, published only after every lowering authority succeeds. */
-sealed interface GPUPreparedVerticesLowering {
+internal sealed interface GPUPreparedVerticesLowering {
+    /** Actual packer/transform/clip admission with no material program or authority. */
+    data class GeometryReady(val geometry: GPUPreparedVerticesGeometry) : GPUPreparedVerticesLowering
     @ConsistentCopyVisibility
     data class Ready internal constructor(val draw: GPUPreparedVerticesDraw) : GPUPreparedVerticesLowering
 

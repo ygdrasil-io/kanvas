@@ -5,16 +5,30 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
+import org.graphiks.math.geometry.SizeI32
+import org.graphiks.kanvas.render.ir.checkedNoiseTileI32
 
 enum class ColorSpaceInterpolation { SRGB, LINEAR, OKLAB, HSL, OKLCH }
 
+/** Selects whether a linear gradient interpolates straight or premultiplied stop colours. */
+enum class GradientAlphaMode { STRAIGHT, PREMULTIPLIED }
+
 sealed interface Shader {
     data class SolidColor(val color: ColorARGB) : Shader
+    /** Applies a finite alpha in [0, 1] to the child material without changing its structure. */
+    data class Opacity(val shader: Shader, val alphaF32: Float) : Shader {
+        init {
+            require(alphaF32.isFinite() && alphaF32 in 0f..1f) {
+                "Shader opacity alpha must be finite and within 0..1"
+            }
+        }
+    }
     data class LinearGradient(
         val start: Point2F32, val end: Point2F32,
         val stops: List<GradientStop>,
         val tileMode: TileMode = TileMode.CLAMP,
         val interpolation: ColorSpaceInterpolation = ColorSpaceInterpolation.SRGB,
+        val alphaMode: GradientAlphaMode = GradientAlphaMode.STRAIGHT,
     ) : Shader
     data class RadialGradient(
         val center: Point2F32, val radius: Float,
@@ -50,11 +64,24 @@ sealed interface Shader {
         val effect: org.graphiks.kanvas.pipeline.RuntimeEffect,
         val uniforms: org.graphiks.kanvas.pipeline.UniformBlock,
         val children: Map<String, Shader> = emptyMap(),
+        val resources: org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings = org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings.Empty,
     ) : Shader
     data class WithLocalMatrix(val shader: Shader, val matrix: Matrix3x3F32) : Shader
     data class WithColorFilter(val shader: Shader, val filter: ColorFilter) : Shader
-    data class PerlinNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeF32?) : Shader
-    data class FractalNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeF32?) : Shader
+    data class PerlinNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeI32?) : Shader {
+        @Deprecated("Use SizeI32 for an integral noise tile")
+        constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: SizeF32?) :
+            this(baseX, baseY, numOctaves, seed, checkedNoiseTileI32(tileSize))
+        constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: Nothing?) :
+            this(baseX, baseY, numOctaves, seed, null as SizeI32?)
+    }
+    data class FractalNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeI32?) : Shader {
+        @Deprecated("Use SizeI32 for an integral noise tile")
+        constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: SizeF32?) :
+            this(baseX, baseY, numOctaves, seed, checkedNoiseTileI32(tileSize))
+        constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: Nothing?) :
+            this(baseX, baseY, numOctaves, seed, null as SizeI32?)
+    }
     data class WithWorkingColorSpace(val shader: Shader, val interpolation: ColorSpaceInterpolation) : Shader
     data class CoordClamp(val shader: Shader, val subset: RectF32) : Shader
 }

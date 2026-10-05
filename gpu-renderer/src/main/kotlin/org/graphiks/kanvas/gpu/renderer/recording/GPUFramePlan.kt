@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.passes.materialSourcePartitionV3
+
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.security.MessageDigest
@@ -29,6 +31,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
@@ -270,6 +274,12 @@ sealed interface GPUFrameStep {
             Map<GPUDrawPacketID, GPUImageBindingRequest> = emptyMap(),
         preparedTextBindingsByPacketId:
             Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> = emptyMap(),
+        /** Dedicated W4e mask continuation, intentionally separate from scene MSAA ownership. */
+        val w4eMaskContinuation: GPUW4eMaskContinuationRequest? = null,
+        /** Dedicated W4e scene continuation, intentionally separate from generic and W4d.2 MSAA. */
+        val w4eSceneContinuation: GPUW4eSceneContinuationRequest? = null,
+        val w5bInitialClearV3: org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3? = null,
+        val w6aPassV1: org.graphiks.kanvas.gpu.plan.PlanPass? = null,
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -287,19 +297,20 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
 
         init {
-            require(drawPackets.isNotEmpty()) {
+            require(if (w6aPassV1 != null) w6aRenderPacketsMatch(w6aPassV1, drawPackets) else if (w5bInitialClearV3 == null) drawPackets.isNotEmpty() else
+                drawPackets.isEmpty() && w5bInitialClearV3.matches(target, loadStore, samplePlan)) {
                 "GPUFrameStep.RenderPassStep.drawPackets must not be empty"
             }
             require(drawPackets.map(GPUDrawPacket::packetId).distinct().size == drawPackets.size) {
                 "GPUFrameStep.RenderPassStep.drawPackets must have unique packet IDs"
             }
-            require(drawPackets.map(GPUDrawPacket::targetStateHash).distinct().size == 1) {
+            require(drawPackets.map(GPUDrawPacket::targetStateHash).distinct().size == if (drawPackets.isNotEmpty()) 1 else 0) {
                 "GPUFrameStep.RenderPassStep.drawPackets must share one target state"
             }
             require(sourceTaskIds.isNotEmpty() && sourceTaskIds.distinct().size == sourceTaskIds.size) {
                 "GPUFrameStep.RenderPassStep.sourceTaskIds must be non-empty and unique"
             }
-            require(batches.isNotEmpty()) {
+            require(if (drawPackets.isNotEmpty()) batches.isNotEmpty() else batches.isEmpty()) {
                 "GPUFrameStep.RenderPassStep.batches must not be empty"
             }
             require(
@@ -309,12 +320,28 @@ sealed interface GPUFrameStep {
                 "GPUFrameStep.RenderPassStep.batches must exactly partition drawPackets in order"
             }
             require(
-                batches.flatMap(GPUFrameRenderBatch::sourceTaskIds).distinct() == sourceTaskIds,
+                if (drawPackets.isNotEmpty()) batches.flatMap(GPUFrameRenderBatch::sourceTaskIds).distinct() == sourceTaskIds
+                else sourceTaskIds.size == 1,
             ) {
                 "GPUFrameStep.RenderPassStep batch sourceTaskIds must exactly cover the step sourceTaskIds"
             }
             require(sampleContinuation == null || sampleContinuation.key.samplePlan == samplePlan) {
                 "GPUFrameStep.RenderPassStep sample continuation must match the render sample plan"
+            }
+            require(w4eMaskContinuation == null ||
+                sampleContinuation == null && samplePlan is GPUSamplePlan.MultisampleFrame &&
+                samplePlan.sampleCount == 4 && target.matchesW4eLogicalResource(w4eMaskContinuation.maskTargetResourceId)
+            ) {
+                "GPUFrameStep.RenderPassStep W4e continuation must own a dedicated four-sample mask target"
+            }
+            require(w4eSceneContinuation == null ||
+                sampleContinuation == null && samplePlan is GPUSamplePlan.MultisampleFrame &&
+                samplePlan.sampleCount == 4 && target.matchesW4eLogicalResource(w4eSceneContinuation.sceneTargetResourceId)
+            ) {
+                "GPUFrameStep.RenderPassStep W4e scene continuation must own a dedicated four-sample scene target"
+            }
+            require(w4eMaskContinuation == null || w4eSceneContinuation == null) {
+                "GPUFrameStep.RenderPassStep cannot own W4e mask and scene continuations together"
             }
             val preparedImagePacketIds = drawPackets
                 .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }
@@ -603,6 +630,10 @@ sealed interface GPUFrameStep {
     }
 }
 
+/** Session-qualified W4e refs retain their compiler-sealed logical resource suffix. */
+private fun GPUFrameTargetRef.matchesW4eLogicalResource(resourceId: String): Boolean =
+    value == resourceId || value.endsWith(".$resourceId")
+
 /** One adjacent batch retained inside a single render-pass step. */
 class GPUFrameRenderBatch(
     val batchId: String,
@@ -634,6 +665,11 @@ class GPUFramePlan(
     phaseOrder: List<GPUTaskPhase> = GPUTaskPhase.entries,
     elidedNoOpDraws: List<GPUFrameElidedNoOpDraw> = emptyList(),
     val atomicallyRefused: Boolean = false,
+    val w5eConstructionV1: org.graphiks.kanvas.gpu.plan.W5eImageConstructionPlanV1? = null,
+    val w5ePreparedFrameV1: org.graphiks.kanvas.gpu.renderer.passes.W5ePreparedFrameWitnessV1? = null,
+    /** Internal native projection retains the original, pre-owned source authority root. */
+    w5hSourceRootFrameV1: GPUFramePlan? = null,
+    val w6aLayerFrameV1: GPUW6aLayerFramePlan? = null,
 ) {
     val recordingSeals: List<GPURecordingSeal> = immutableList(recordingSeals)
     val steps: List<GPUFrameStep> = immutableList(steps)
@@ -642,6 +678,15 @@ class GPUFramePlan(
     val dependencies: List<GPUTaskDependency> = immutableList(dependencies)
     val phaseOrder: List<GPUTaskPhase> = immutableList(phaseOrder)
     val elidedNoOpDraws: List<GPUFrameElidedNoOpDraw> = immutableList(elidedNoOpDraws)
+    internal val w5aGeometryHostTemplatesV1: List<GPUW5aGeometryHostTemplateV1> = immutableList(
+        this.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { render ->
+            render.drawPackets.filter { it.materialSourcePartitionV3() != null }.mapNotNull { packet ->
+                w5hSourceRootFrameV1?.w5hSourceAuthorityRootV1?.template(packet)
+                    ?: w6aLayerFrameV1?.template(packet)
+                    ?: if (w5hSourceRootFrameV1 == null) sealW5aGeometryHostTemplateV1(packet,
+                        render.preparedTextBindingsByPacketId[packet.packetId]) else null } })
+    internal val w5hSourceAuthorityRootV1: GPUW5hSourceAuthorityRootV1 =
+        w5hSourceRootFrameV1?.w5hSourceAuthorityRootV1 ?: GPUW5hSourceAuthorityRootV1(this)
 
     init {
         require(frameId == capabilitySeal.frameId) {
@@ -783,6 +828,20 @@ private fun GPUFramePlan.canonicalPreimageHash(): String =
         long("frameId", frameId.value)
         capabilitySeal("capabilitySeal", capabilitySeal)
         bool("atomicallyRefused", atomicallyRefused)
+        w5eConstructionV1?.let { string("w5eConstructionV1", it.canonicalIdentity) }
+        // Source-plan identity only: the witness's expected frame hash is never recursively hashed.
+        w5ePreparedFrameV1?.let { string("w5ePreparedFrameV1", it.canonicalIdentity) }
+        list("w5aGeometryHostTemplatesV1", w5aGeometryHostTemplatesV1) { template ->
+            string("packet", template.packetId)
+            string("recipe", template.pipelineRecipeId)
+            string("source", template.sourceWgsl)
+            string("vertexEntry", template.vertexEntryPoint)
+            string("fragmentEntry", template.fragmentEntryPoint)
+            string("target", template.target.toString())
+            list("groupZero", template.groupZeroLayout.entries) { string("entry", it.toString()) }
+            nullableString("coverage", template.w5bInlineCoverageV3?.name)
+            nullableString("coordinates", template.materialCoordinateSlot?.name)
+        }
         list("recordingSeals", recordingSeals) { seal ->
             tag("GPURecordingSeal")
             string("recordingId", seal.recordingId.value)
@@ -967,6 +1026,8 @@ private fun CanonicalHashSink.memoryAllocation(value: GPUFrameMemoryAllocation) 
     long("bytes", value.bytes)
     string("resourceKind", value.resourceKind.name)
     nullable("extent", value.extent) { bounds("value", it) }
+    long("firstPassIndex", value.firstPassIndex.toLong())
+    long("lastPassIndexExclusive", value.lastPassIndexExclusive.toLong())
 }
 
 private fun CanonicalHashSink.step(value: GPUFrameStep) {
@@ -1499,6 +1560,8 @@ private fun GPUFrameStep.canonicalTypeTag(): String = when (this) {
 private fun CanonicalHashSink.packet(value: GPUDrawPacket) {
     tag("GPUDrawPacket")
     string("packetId", value.packetId.value)
+    nullableString("w5aSourceStageV2", value.w5aSourceStageV2?.canonicalIdentity)
+    value.w5eImageFrameWitnessV1?.let { string("w5eImageSourceV3", it.canonicalIdentity) }
     int("commandIdValue", value.commandIdValue)
     string("analysisRecordId", value.analysisRecordId)
     string("passId", value.passId)
@@ -1576,6 +1639,7 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
     nullable("resourceBlock", ref.resourceBlock) { block -> string("fingerprint", block.fingerprint.value) }
     when (value) {
         is GPUDrawSemanticPayload.SolidRect -> Unit
+        is GPUDrawSemanticPayload.PathStencilProducer -> Unit
         is GPUDrawSemanticPayload.MaskBlur -> {
             string("canonicalHash", value.canonicalHash)
             string("sourceFamily", value.sourceFamily)
@@ -1963,6 +2027,9 @@ private fun CanonicalHashSink.destinationSourceKey(
 ) {
     tag(name)
     tag("GPUDestinationSnapshotGroupKey")
+    nullable("destinationVersion", value.destinationVersion) { version ->
+        long("valueI64", version.valueI64)
+    }
     string("target", value.target.value)
     long("targetGeneration", value.targetGeneration)
     long("deviceGeneration", value.deviceGeneration.value)
@@ -2321,7 +2388,8 @@ private fun GPUFrameMemoryBudgetPlan.dumpLine(): String =
         }} allocations=${allocations.mapIndexed { index, allocation ->
             "$index:{label=${allocation.label},category=${allocation.category.name}," +
                 "bytes=${allocation.bytes},kind=${allocation.resourceKind.name}," +
-                "extent=${allocation.extent ?: "none"}}"
+                "extent=${allocation.extent ?: "none"},firstPass=${allocation.firstPassIndex}," +
+                "lastPassExclusive=${allocation.lastPassIndexExclusive}}"
         }.joinToString(";").ifEmpty { "none" }} " +
         "budgetDiagnostic=${diagnostic?.dumpLine("budget") ?: "none"}"
 
@@ -2341,6 +2409,7 @@ private fun GPUDrawPacket.stableDump(): String =
         "uniform=${uniformSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.byteOffset}" } ?: "none"}|" +
         "resource=${resourceSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.bindingIndex}" } ?: "none"}|" +
         "semantic=${semanticPayload?.stableDump() ?: "none"}|" +
+                (w5eImageFrameWitnessV1?.let { "imageV3=${it.canonicalIdentity}|" } ?: "") +
         "vertex=$vertexSourceLabel|scissor=${scissorBoundsHash ?: "none"}|" +
         "clipExecution=${clipExecutionPlan?.canonicalIdentity() ?: "none"}|" +
         "clipProducer=${clipProducerAuthority?.selectorIdentity ?: "none"}|target=$targetStateHash|" +
@@ -2362,6 +2431,7 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
         } ?: "none"}"
     return when (this) {
         is GPUDrawSemanticPayload.SolidRect -> "$common)"
+        is GPUDrawSemanticPayload.PathStencilProducer -> "$common)"
         is GPUDrawSemanticPayload.MaskBlur ->
             "$common,family=$sourceFamily,bounds=$deviceBounds,local=${localWidth}x$localHeight," +
                 "scale=$scale,style=${style.name},sigma=$effectiveSigma,taps=$tapCount," +
@@ -2483,6 +2553,7 @@ private fun GPUDestinationSnapshotGroupKey.dumpDestinationSourceKey(): String {
             "depthStencilAttachment=${value.depthStencilAttachment?.value ?: "none"}"
     } ?: "sampleContinuation=none"
     return "sourceTarget=${target.value} targetGeneration=$targetGeneration " +
+        "destinationVersion=${destinationVersion?.valueI64 ?: "legacy"} " +
         "deviceGeneration=${deviceGeneration.value} format=${format.value} " +
         "color=${colorInterpretation.value} $continuation " +
         "sourceIntermediate=${sourceIntermediate?.value ?: "none"}"

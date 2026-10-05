@@ -1,0 +1,223 @@
+package org.graphiks.kanvas.surface
+
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
+
+/** Independent public fixture: inverse translation is x - 3, with nested shader and paint opacity. */
+internal object W5dGradientAddressingCpuOracle {
+    // Decimal arithmetic on exact Double expansions of F32 inputs is independent
+    // of the planner's binary integer accumulator and explicit IEEE rounding.
+    fun exactAverageF32(stops: List<GradientStop>): List<Float> = (0..3).map { channelI32 ->
+        fun channelF32(stop: GradientStop): Float = with(stop.color) {
+            listOf(redNormalized, greenNormalized, blueNormalized, alphaNormalized)[channelI32]
+        }
+        stops.zipWithNext().fold(java.math.BigDecimal.ZERO) { sum, (left, right) ->
+            sum + (java.math.BigDecimal(right.position.toDouble()) - java.math.BigDecimal(left.position.toDouble())) *
+                (java.math.BigDecimal(channelF32(left).toDouble()) + java.math.BigDecimal(channelF32(right).toDouble())) /
+                java.math.BigDecimal(2)
+        }.toFloat()
+    }
+
+    // The four-lane Picture places local strip y=[4,5] at device row r by
+    // translation (0,r-4). Its fragment center (x+.5,r+.5) therefore maps
+    // independently to (x+.5,(r+.5)-(r-4)) = (x+.5,4.5). Every sample is
+    // inside its lane's full coverage; the supplied straight color is at that
+    // unchanged shader point (including Sweep axes and Conical circle equality).
+    fun straightPixel(rgbaF32: List<Float>): WgslFloatEnvelopeV1Oracle.DrawResult =
+        WgslFloatEnvelopeV1Oracle.gradientThenBlend({ rgbaF32.map(WgslFloatEnvelopeV1Oracle.Interval::input).toTypedArray() },
+            1f, WgslFloatEnvelopeV1Oracle.clearAttachment(), BlendMode.DIFFERENCE)
+
+    fun colorPixel(color: ColorARGB): WgslFloatEnvelopeV1Oracle.DrawResult = straightPixel(
+        listOf(color.redNormalized, color.greenNormalized, color.blueNormalized, color.alphaNormalized))
+
+    enum class GradientFixtureFamily { LINEAR, RADIAL, SWEEP, CONICAL }
+    enum class W5dPublicLane { RECT, RRECT, PATH_FILL, PATH_STROKE }
+
+    fun familyPixel(family: GradientFixtureFamily, mode: TileMode, pixelXI32: Int, pixelYI32: Int,
+        orderedClamp: Boolean, fullSweep: Boolean = false, sweepStartF32: Float = 0f): WgslFloatEnvelopeV1Oracle.DrawResult {
+        // Independently invert the two literal translations, keeping the clamp between them.
+        val xF64 = if (orderedClamp) (pixelXI32 + .5 - 1).coerceIn(0.0, 28.0) - 1 else pixelXI32 + .5 - 1
+        val yF64 = pixelYI32 + .5
+        val dxF64 = xF64 - 17.5
+        val dyF64 = yF64 - 4.5
+        val valid = family != GradientFixtureFamily.CONICAL || kotlin.math.abs(dyF64) <= 2.0
+        val rawF64 = when (family) {
+            GradientFixtureFamily.LINEAR -> dxF64 / 8
+            GradientFixtureFamily.RADIAL -> kotlin.math.hypot(dxF64, dyF64) / 8
+            GradientFixtureFamily.SWEEP -> {
+                val angleF64 = (kotlin.math.atan2(dyF64, dxF64) * 180 / kotlin.math.PI + 360) % 360
+                (angleF64 - sweepStartF32) / ((if (fullSweep) 360 else 180) - sweepStartF32)
+            }
+            // Equal radii: largest valid root is (x-start + sqrt(r*r-dy*dy))/8.
+            GradientFixtureFamily.CONICAL -> (dxF64 - 2 + kotlin.math.sqrt(maxOf(0.0, 4 - dyF64 * dyF64))) / 8
+        }
+        val effective = if (fullSweep) TileMode.CLAMP else mode
+        val tF64 = when (effective) {
+            TileMode.CLAMP, TileMode.DECAL -> rawF64.coerceIn(0.0, 1.0)
+            TileMode.REPEAT -> rawF64 - kotlin.math.floor(rawF64)
+            TileMode.MIRROR -> 1 - kotlin.math.abs((rawF64 - 2 * kotlin.math.floor(rawF64 / 2)) - 1)
+        }
+        return tiledPixel(TileSample(rawF64.toFloat(), tF64.toFloat(), valid &&
+            (effective != TileMode.DECAL || rawF64 in 0.0..1.0)), effective, false, false)
+    }
+
+    data class TileSample(val rawTF32: Float, val expectedTF32: Float, val expectedValid: Boolean = true)
+
+    // Literal, hand-checked signed boundaries; no production tile or stop helper.
+    fun tileSamples(mode: TileMode): List<TileSample> {
+        val raw = listOf(-2f, -1.25f, -1f, 0f, .25f, .375f, .5f, .625f, .75f, 1f, 2f, 2.25f)
+        val tiled = when (mode) {
+            TileMode.CLAMP, TileMode.DECAL -> listOf(0f, 0f, 0f, 0f, .25f, .375f, .5f, .625f, .75f, 1f, 1f, 1f)
+            TileMode.REPEAT -> listOf(0f, .75f, 0f, 0f, .25f, .375f, .5f, .625f, .75f, 0f, 0f, .25f)
+            TileMode.MIRROR -> listOf(0f, .75f, 1f, 0f, .25f, .375f, .5f, .625f, .75f, 1f, 0f, .25f)
+        }
+        return raw.zip(tiled) { t, expected -> TileSample(t, expected, mode != TileMode.DECAL || t in 0f..1f) }
+    }
+
+    fun tiledPixel(sample: TileSample, mode: TileMode, endpointDuplicates: Boolean,
+        destinationBlend: Boolean): WgslFloatEnvelopeV1Oracle.DrawResult {
+        val color = when {
+            !sample.expectedValid -> ColorARGB.Transparent
+            endpointDuplicates && mode == TileMode.CLAMP && sample.rawTF32 < 0f -> ColorARGB.Black
+            endpointDuplicates && mode == TileMode.CLAMP && sample.rawTF32 >= 1f -> ColorARGB.Green
+            sample.expectedTF32 < .5f -> ColorARGB.Red
+            else -> ColorARGB.Blue
+        }
+        val rgbaF32 = listOf(color.redNormalized,
+            color.greenNormalized, color.blueNormalized, color.alphaNormalized)
+        fun source(values: List<Float>) = { values.map(WgslFloatEnvelopeV1Oracle.Interval::input).toTypedArray() }
+        val destination = if (destinationBlend) requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            WgslFloatEnvelopeV1Oracle.gradientThenBlend(source(listOf(1f, 1f, 1f, 1f)), 1f,
+                WgslFloatEnvelopeV1Oracle.clearAttachment(), BlendMode.SRC_OVER)))
+        else WgslFloatEnvelopeV1Oracle.clearAttachment()
+        return WgslFloatEnvelopeV1Oracle.gradientThenBlend(source(rgbaF32), if (destinationBlend) .5f else 1f,
+            destination, if (destinationBlend) BlendMode.DIFFERENCE else BlendMode.SRC_OVER)
+    }
+
+    private data class Parts(val fractionF64: Double, val exponentI32: Int, val valid: Boolean)
+
+    // Decode integer bits independently of the production matrix/coordinate implementation.
+    // FTZ is a choice of classified parts; zero is never tested on the original operand again.
+    private fun classifications(valueF32: Float): Set<Parts> {
+        val bitsI32 = valueF32.toRawBits()
+        val magnitudeI32 = bitsI32 and Int.MAX_VALUE
+        val exponentI32 = magnitudeI32 ushr 23
+        val mantissaI32 = magnitudeI32 and 0x7fffff
+        if (exponentI32 == 255) return setOf(Parts(0.0, 0, false))
+        if (magnitudeI32 == 0) return setOf(Parts(0.0, 0, true))
+        val signF64 = if (bitsI32 < 0) -1.0 else 1.0
+        if (exponentI32 != 0) return setOf(Parts(signF64 * (1.0 + mantissaI32 / 8388608.0) / 2.0, exponentI32 - 126, true))
+        val leadingI32 = 31 - Integer.numberOfLeadingZeros(mantissaI32)
+        return setOf(Parts(signF64 * mantissaI32 / Math.scalb(1.0, leadingI32 + 1), leadingI32 - 148, true),
+            Parts(0.0, 0, true))
+    }
+
+    private fun divide(numeratorF32: Float, denominatorF32: Float): Set<Float?> = buildSet {
+        for (numerator in classifications(numeratorF32)) for (denominator in classifications(denominatorF32)) {
+            if (!numerator.valid || !denominator.valid || denominator.fractionF64 == 0.0) { add(null); continue }
+            if (numerator.fractionF64 == 0.0) { add(0f); continue }
+            val fractionF32 = (numerator.fractionF64 / denominator.fractionF64).toFloat()
+            // Include the permitted division error, in addition to exact rounding.
+            val fractions = mutableSetOf(fractionF32)
+            var lowerF32 = fractionF32
+            var upperF32 = fractionF32
+            repeat(4) { lowerF32 = Math.nextDown(lowerF32); upperF32 = Math.nextUp(upperF32)
+                fractions += lowerF32; fractions += upperF32 }
+            for (quotientF32 in fractions) {
+                val exponentI32 = Math.getExponent(kotlin.math.abs(quotientF32).toDouble()) + 1
+                val fractionF64 = Math.scalb(quotientF32.toDouble(), -exponentI32)
+                val resultExponentI32 = numerator.exponentI32 - denominator.exponentI32 + exponentI32
+                if (resultExponentI32 > 128) { add(null); continue }
+                val resultF32 = Math.scalb(fractionF64, resultExponentI32).toFloat()
+                add(resultF32.takeIf { it.isFinite() })
+                if (resultF32 != 0f && kotlin.math.abs(resultF32) < java.lang.Float.MIN_NORMAL) add(0f)
+            }
+        }
+    }
+
+    private fun row(aF32: Float, xF32: Float, bF32: Float, yF32: Float, cF32: Float): Set<Float> {
+        // Parenthesizations and either multiply/add contraction of ax + by + c.
+        fun ftz(valueF32: Float): Set<Float> = if (kotlin.math.abs(valueF32) < java.lang.Float.MIN_NORMAL)
+            setOf(valueF32, 0f) else setOf(valueF32)
+        fun add(left: Set<Float>, right: Set<Float>): Set<Float> = left.flatMap { a -> right.flatMap { b -> ftz(a + b) } }.toSet()
+        fun mul(left: Set<Float>, right: Set<Float>): Set<Float> = left.flatMap { a -> right.flatMap { b -> ftz(a * b) } }.toSet()
+        fun fma(left: Set<Float>, right: Set<Float>, tail: Set<Float>): Set<Float> =
+            left.flatMap { a -> right.flatMap { b -> tail.flatMap { c -> ftz(Math.fma(a, b, c)) } } }.toSet()
+        val a = ftz(aF32); val b = ftz(bF32); val c = ftz(cF32); val x = ftz(xF32); val y = ftz(yF32)
+        val ax = mul(a, x); val by = mul(b, y)
+        return listOf(add(add(ax, by), c), add(ax, add(by, c)), add(add(ax, c), by),
+            add(fma(a, x, c), by), add(fma(b, y, c), ax),
+            add(fma(a, x, by), c), add(fma(b, y, ax), c), fma(a, x, add(by, c)), fma(b, y, add(ax, c)),
+            fma(a, x, fma(b, y, c)), fma(b, y, fma(a, x, c))).flatten().toSet()
+    }
+
+    private fun matrix(points: Set<Point2F32?>, inverseF32: Matrix3x3F32): Set<Point2F32?> = buildSet {
+        for (point in points) {
+            if (point == null) { add(null); continue }
+            val xs = row(inverseF32.sx, point.x, inverseF32.kx, point.y, inverseF32.tx)
+            val ys = row(inverseF32.ky, point.x, inverseF32.sy, point.y, inverseF32.ty)
+            val ws = row(inverseF32.persp0, point.x, inverseF32.persp1, point.y, inverseF32.persp2)
+            for (wF32 in ws) for (xF32 in xs) for (yF32 in ys) {
+                val affine = inverseF32.persp0 == 0f && inverseF32.persp1 == 0f && inverseF32.persp2 == 1f
+                val projectedX = if (affine) setOf(xF32.takeIf { it.isFinite() }) else divide(xF32, wF32)
+                val projectedY = if (affine) setOf(yF32.takeIf { it.isFinite() }) else divide(yF32, wF32)
+                for (pxF32 in projectedX) for (pyF32 in projectedY) {
+                    add(if (pxF32 == null || pyF32 == null) null else Point2F32(pxF32, pyF32))
+                }
+            }
+        }
+    }
+
+    private fun clamp(points: Set<Point2F32?>, subsetF32: RectF32): Set<Point2F32?> = points.map { point ->
+        point?.let { Point2F32(it.x.coerceIn(subsetF32.left, subsetF32.right), it.y.coerceIn(subsetF32.top, subsetF32.bottom)) }
+    }.toSet()
+
+    @OptIn(ExperimentalUnsignedTypes::class)
+    fun projectivePixelCodes(pixelXI32: Int, scaleF64: Double, numeratorF64: Double = 2 * scaleF64): Set<List<UByte>> {
+        // Hand-derived inverse coefficients; no production composition, inversion or plan helper.
+        var points: Set<Point2F32?> = setOf(Point2F32(pixelXI32 + .5f, .5f))
+        points = matrix(points, Matrix3x3F32()) // affine CTM is exact, without an artificial /1 error
+        points = matrix(points, Matrix3x3F32(sx = 0f, kx = 0f, tx = numeratorF64.toFloat(),
+            ky = 0f, sy = scaleF64.toFloat(), ty = 0f, persp0 = scaleF64.toFloat(), persp1 = 0f,
+            persp2 = (-1.5 * scaleF64).toFloat()))
+        points = clamp(points, RectF32.ofLTRB(0f, 0f, 2f, 1f))
+        val result = points.map { point ->
+            if (point == null) listOf<UByte>(0u, 0u, 0u, 0u)
+            else {
+                // Every candidate stays in the same constant stop span.
+                require(point.x <= .875f || point.x >= 1f)
+                if (point.x >= 1f) bluePixel().toList() else redPixel().toList()
+            }
+        }.toSet()
+        require(result.size == 1) { "Chosen public pixel must close to a singleton: $result" }
+        return result
+    }
+
+    // Hand-derived endpoint colors: inverse x = 8.5 is blue; inverse x = .5 is red.
+    @OptIn(ExperimentalUnsignedTypes::class)
+    fun bluePixel(): UByteArray = ubyteArrayOf(0u, 0u, 255u, 255u)
+    @OptIn(ExperimentalUnsignedTypes::class)
+    fun redPixel(): UByteArray = ubyteArrayOf(255u, 0u, 0u, 255u)
+
+    fun evaluate(pixelXI32: Int, stops: List<GradientStop>, ctmScaleXF32: Float = 1f): WgslFloatEnvelopeV1Oracle.DrawResult.Bounded {
+        // The fixture has an exact dy=0 axis and a power-of-two denominator. Samples
+        // are inside constant spans, so every permitted coordinate schedule selects
+        // the same color; the attachment/opacity envelope remains independently modeled.
+        val tF32 = (((pixelXI32 + .5f) / ctmScaleXF32 - 3f) / 8f).coerceIn(0f, 1f)
+        val left = stops.lastOrNull { it.position <= tF32 } ?: stops.first()
+        val right = stops.firstOrNull { it.position > tF32 } ?: stops.last()
+        require(left.color == right.color) { "This fixture must sample a constant-color span" }
+        val color = left.color
+        val result = WgslFloatEnvelopeV1Oracle.gradientThenBlend({
+            listOf(color.redNormalized, color.greenNormalized, color.blueNormalized, color.alphaNormalized)
+                .map(WgslFloatEnvelopeV1Oracle.Interval::input).toTypedArray()
+        }, (.75f * .5f) * (191f / 255f), WgslFloatEnvelopeV1Oracle.clearAttachment(), BlendMode.SRC_OVER)
+        require(result is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { result.toString() }
+        return result
+    }
+}

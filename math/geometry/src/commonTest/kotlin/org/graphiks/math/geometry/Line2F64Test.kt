@@ -47,6 +47,15 @@ class Line2F64Test {
     }
 
     @Test
+    fun `nearRay preserves its wider near-zero ULP tolerance`() {
+        val line = Line2F64(
+            arrayOf(Point2F64(0.0, 0.0), Point2F64(1e-14, 0.0)),
+        )
+
+        kotlin.test.assertTrue(line.nearRay(Point2F64(5e-15, 5e-14)))
+    }
+
+    @Test
     fun `nearPoint preserves pathops distance overflow behavior end to end`() {
         val baseline = 1e300
         val adjacent = 1.0000000000000002e300

@@ -4,7 +4,13 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.sqrt
+import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.paint.PathEffect
+import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRouteGeometryAnalysis
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCapturedGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRRectGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -12,6 +18,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.isPositiveUniformScaleTranslateGradientLocalMatrix
 import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
@@ -30,6 +37,8 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaskBlurPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlanInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
@@ -42,11 +51,15 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringP
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
+import org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointDomainV3
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
+import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingGeometryAnalysis
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.math.geometry.PointSquaresF32
+import org.graphiks.math.geometry.RectI32
 
 internal sealed interface GPUCorePrimitiveSemanticGatherResult {
     data class Gathered(val semantics: Map<Int, GPUDrawSemanticPayload>) :
@@ -57,6 +70,11 @@ internal sealed interface GPUCorePrimitiveSemanticGatherResult {
         val message: String,
         val facts: Map<String, String>,
     ) : GPUCorePrimitiveSemanticGatherResult
+}
+
+internal sealed interface GPUCorePrimitiveGeometryGatherResult {
+    data class Gathered(val plans: Map<Int, GPUCorePrimitiveGeometryPlan>) : GPUCorePrimitiveGeometryGatherResult
+    data class Refused(val refusal: GPUCorePrimitiveSemanticGatherResult.Refused) : GPUCorePrimitiveGeometryGatherResult
 }
 
 /** Lossless bridge used by heterogeneous surface gathering without rebuilding core semantics. */
@@ -76,7 +94,7 @@ internal enum class GPUCorePrimitiveColorTransform {
     SrgbToLinear,
 }
 
-data class GPUCorePrimitiveGeometryRefusal(
+internal data class GPUCorePrimitiveGeometryRefusal(
     val code: String,
     val refusalFacts: Map<String, String>,
 )
@@ -87,6 +105,74 @@ private class GPUCorePrimitiveGeometryRefusalException(
 
 /** Production boundary for exact, handle-free core primitive semantic gathering. */
 internal object GPUCorePrimitiveSemanticBuilder {
+    /** Completes the same device geometry algorithms against the exact ID-free occurrence. */
+    fun captureSourceGeometry(
+        visual: GPUFramePathVisualCommand,
+        analysis: GPUFirstRouteGeometryAnalysis,
+        targetBounds: GPUPixelBounds,
+    ): GPUCorePrimitiveCapturedGeometry {
+        try {
+            require(analysis.ownsCapturedCommand(visual.normalized) &&
+                analysis.facts.commandFamily == visual.normalized.analysisCommandFamily()) {
+                "Source-free geometry analysis must own its exact normalized occurrence"
+            }
+            (visual.normalized as? NormalizedDrawCommand.FillPath)?.corePointGeometryRefusalOrNull()?.let {
+                throw GPUCorePrimitiveGeometryRefusalException(it)
+            }
+            visual.geometryRefusal?.let { throw GPUCorePrimitiveGeometryRefusalException(it) }
+            val facts = visual.toCorePrimitiveGeometryFacts(
+                targetBounds, GPUCoreAnalysisGeometryFacts(analysis), visual.clipExecutionPlan.canonicalIdentity(),
+            )
+            return GPUCorePrimitivePayloadGatherer().captureSourceGeometry(GPUCorePrimitiveSourceGeometryInput(
+                analysis, facts.sourceFamily, facts.geometry, facts.targetBounds, facts.scissorBounds,
+                facts.clipCoveragePlan, facts.clipExecutionPlanIdentity, facts.frameProvenance, facts.coverageMode,
+            ))
+        } catch (failure: GPUCorePrimitiveGeometryRefusalException) {
+            throw GPUCoreSourceGeometryRefusal(failure.refusal)
+        } catch (failure: IllegalArgumentException) {
+            val code = failure.message?.takeIf { it.startsWith("unsupported.core_primitive.") }
+                ?: "unsupported.core_primitive.geometry.invalid"
+            throw GPUCoreSourceGeometryRefusal(GPUCorePrimitiveGeometryRefusal(
+                code, mapOf("reason" to (failure.message ?: "invalid_geometry")),
+            ))
+        }
+    }
+
+    /** Same geometry builders, before any material ref, source payload or executable recording. */
+    fun gatherGeometry(
+        visualCommands: List<GPUFramePathVisualCommand>,
+        recording: GPURecordingGeometryAnalysis,
+        targetBounds: GPUPixelBounds,
+    ): GPUCorePrimitiveGeometryGatherResult {
+        val records = recording.analysis.records.groupBy { it.commandIdValue }
+        val gatherer = GPUCorePrimitivePayloadGatherer()
+        val plans = linkedMapOf<Int, GPUCorePrimitiveGeometryPlan>()
+        for (visual in visualCommands) {
+            try {
+                (visual.normalized as? NormalizedDrawCommand.FillPath)?.corePointGeometryRefusalOrNull()?.let {
+                    throw GPUCorePrimitiveGeometryRefusalException(it)
+                }
+                visual.geometryRefusal?.let { throw GPUCorePrimitiveGeometryRefusalException(it) }
+                val commandId = visual.normalized.commandId.value
+                val record = records[commandId]?.singleOrNull() ?: refuseGeometry(
+                    "unsupported.core_primitive.analysis_record_bijection",
+                    mapOf("matchingRecordCount" to records[commandId].orEmpty().size.toString()),
+                )
+                visual.requireAnalysisIdentity(record)
+                plans[commandId] = gatherer.gatherGeometry(visual.toCorePrimitiveGeometryInput(targetBounds, record,
+                    visual.clipExecutionPlan.canonicalIdentity()))
+            } catch (failure: GPUCorePrimitiveGeometryRefusalException) {
+                return GPUCorePrimitiveGeometryGatherResult.Refused(failure.refusal.toGatherRefusal(visual))
+            } catch (failure: IllegalArgumentException) {
+                val code = failure.message?.takeIf { it.startsWith("unsupported.core_primitive.") }
+                    ?: "unsupported.core_primitive.geometry.invalid"
+                return GPUCorePrimitiveGeometryGatherResult.Refused(GPUCorePrimitiveGeometryRefusal(code,
+                    mapOf("reason" to (failure.message ?: "invalid_geometry"))).toGatherRefusal(visual))
+            }
+        }
+        return GPUCorePrimitiveGeometryGatherResult.Gathered(java.util.Collections.unmodifiableMap(plans))
+    }
+
     fun gather(
         visualCommands: List<GPUFramePathVisualCommand>,
         recording: GPURecording,
@@ -105,6 +191,9 @@ internal object GPUCorePrimitiveSemanticBuilder {
             .flatMap(GPUTask.Render::drawPackets)
             .groupBy { packet -> packet.commandIdValue }
         visualCommands.forEach { visual ->
+            (visual.normalized as? NormalizedDrawCommand.FillPath)?.corePointGeometryRefusalOrNull()?.let { refusal ->
+                return refusal.toGatherRefusal(visual)
+            }
             visual.geometryRefusal?.let { refusal ->
                 return refusal.toGatherRefusal(visual)
             }
@@ -140,26 +229,10 @@ internal object GPUCorePrimitiveSemanticBuilder {
                 GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness ->
                     visual.blendPlan.canonicalIdentity()
             }
-            val expectedAnalysisFamily = visual.normalized.analysisCommandFamily()
-            if (analysisRecord.commandFamily != expectedAnalysisFamily) {
-                return GPUCorePrimitiveGeometryRefusal(
-                    code = "unsupported.core_primitive.analysis_command_family_mismatch",
-                    refusalFacts = mapOf(
-                        "analysisRecordId" to analysisRecord.recordId,
-                        "analysisCommandFamily" to analysisRecord.commandFamily,
-                        "normalizedCommandFamily" to expectedAnalysisFamily,
-                    ),
-                ).toGatherRefusal(visual)
-            }
-            val expectedAnalysisRecordId = visual.normalized.analysisRecordId()
-            if (analysisRecord.recordId != expectedAnalysisRecordId) {
-                return GPUCorePrimitiveGeometryRefusal(
-                    code = "unsupported.core_primitive.analysis_record_id_mismatch",
-                    refusalFacts = mapOf(
-                        "analysisRecordId" to analysisRecord.recordId,
-                        "expectedAnalysisRecordId" to expectedAnalysisRecordId,
-                    ),
-                ).toGatherRefusal(visual)
+            try {
+                visual.requireAnalysisIdentity(analysisRecord)
+            } catch (failure: GPUCorePrimitiveGeometryRefusalException) {
+                return failure.refusal.toGatherRefusal(visual)
             }
             val semantic = if (visual.normalized.maskFilterOrNull() != null) {
                 try {
@@ -198,6 +271,20 @@ internal object GPUCorePrimitiveSemanticBuilder {
         }
         return GPUCorePrimitiveSemanticGatherResult.Gathered(semantics)
     }
+}
+
+private fun GPUFramePathVisualCommand.requireAnalysisIdentity(record: GPUDrawAnalysisRecord) {
+    val expectedFamily = normalized.analysisCommandFamily()
+    if (record.commandFamily != expectedFamily) refuseGeometry(
+        "unsupported.core_primitive.analysis_command_family_mismatch",
+        mapOf("analysisRecordId" to record.recordId, "analysisCommandFamily" to record.commandFamily,
+            "normalizedCommandFamily" to expectedFamily),
+    )
+    val expectedRecordId = normalized.analysisRecordId()
+    if (record.recordId != expectedRecordId) refuseGeometry(
+        "unsupported.core_primitive.analysis_record_id_mismatch",
+        mapOf("analysisRecordId" to record.recordId, "expectedAnalysisRecordId" to expectedRecordId),
+    )
 }
 
 private fun GPUCorePrimitiveGeometryRefusal.toGatherRefusal(
@@ -567,10 +654,117 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     ) {
         refuseGeometry("unsupported.core_primitive.material.path_stencil", normalizedMaterial.corePrimitiveMaterialFacts())
     }
-    val (material, premultipliedRgba) = normalizedMaterial.toCorePrimitiveMaterial(
+    val materialRef = normalized.w5aMaterialPlanRef
+    val (material, premultipliedRgba) = if (materialRef != null) {
+        GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1(materialRef) to emptyList<Float>()
+    } else normalizedMaterial.toCorePrimitiveMaterial(
         colorTransform = colorTransform,
         deviceGradientTransform = nativeHardPathClipGradientTransformOrNull(),
     )
+    val input = toCorePrimitiveGeometryInput(targetBounds, analysisRecord)
+    return GPUCorePrimitivePayloadInput(
+        commandIdValue = input.commandIdValue,
+        sourceFamily = input.sourceFamily,
+        geometry = input.geometry,
+        premultipliedRgba = premultipliedRgba,
+        material = material,
+        targetBounds = input.targetBounds,
+        scissorBounds = input.scissorBounds,
+        clipCoveragePlan = input.clipCoveragePlan,
+        clipExecutionPlanIdentity = input.clipExecutionPlanIdentity,
+        blendPlanIdentity = recordingBlendPlanIdentity,
+        frameProvenance = input.frameProvenance,
+        coverageMode = input.coverageMode,
+        analysisRecordId = input.analysisRecordId,
+        analysisCommandFamily = input.analysisCommandFamily,
+        rectRouteAuthority = input.rectRouteAuthority,
+        rectGeometryAuthority = input.rectGeometryAuthority,
+        rrectGeometryAuthority = input.rrectGeometryAuthority,
+        drrectOuterGeometryAuthority = input.drrectOuterGeometryAuthority,
+        drrectInnerGeometryAuthority = input.drrectInnerGeometryAuthority,
+    )
+}
+
+/** Thin planning projections; these contain existing owner geometry, not a new geometric value type. */
+private data class GPUCoreDeviceGeometryFacts(
+    val sourceFamily: GPUCorePrimitiveSourceFamily,
+    val geometry: GPUCorePrimitiveGeometryInput,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipCoveragePlan: GPUClipCoveragePlan,
+    val clipExecutionPlanIdentity: String?,
+    val frameProvenance: org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance,
+    val coverageMode: GPUCorePrimitiveCoverageMode,
+    val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+    val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+)
+
+private data class GPUCoreAnalysisGeometryFacts(
+    val identityDiagnostic: Pair<String, String>,
+    val corePrimitiveRectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+    val corePrimitiveRectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    val corePrimitiveRRectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val corePrimitiveDRRectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val corePrimitiveDRRectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+) {
+    constructor(record: GPUDrawAnalysisRecord) : this(
+        "analysisRecordId" to record.recordId,
+        record.corePrimitiveRectRouteAuthority,
+        record.corePrimitiveRectGeometryAuthority,
+        record.corePrimitiveRRectGeometryAuthority,
+        record.corePrimitiveDRRectOuterGeometryAuthority,
+        record.corePrimitiveDRRectInnerGeometryAuthority,
+    )
+
+    constructor(analysis: GPUFirstRouteGeometryAnalysis) : this(
+        "recordingStage" to "unbound-source-geometry",
+        analysis.facts.corePrimitiveRectRouteAuthority,
+        analysis.facts.corePrimitiveRectGeometryAuthority,
+        analysis.facts.corePrimitiveRRectGeometryAuthority,
+        null,
+        null,
+    )
+}
+
+private fun GPUFramePathVisualCommand.toCorePrimitiveGeometryInput(
+    targetBounds: GPUPixelBounds,
+    analysisRecord: GPUDrawAnalysisRecord,
+    clipExecutionIdentity: String? = null,
+): GPUCorePrimitiveGeometryPlanInput {
+    val facts = toCorePrimitiveGeometryFacts(
+        targetBounds, GPUCoreAnalysisGeometryFacts(analysisRecord), clipExecutionIdentity,
+    )
+    val hasAnalysisIdentity = facts.sourceFamily in setOf(
+        GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveSourceFamily.RRect, GPUCorePrimitiveSourceFamily.DRRect,
+    )
+    return GPUCorePrimitiveGeometryPlanInput(
+        commandIdValue = normalized.commandId.value,
+        sourceFamily = facts.sourceFamily,
+        geometry = facts.geometry,
+        targetBounds = facts.targetBounds,
+        scissorBounds = facts.scissorBounds,
+        clipCoveragePlan = facts.clipCoveragePlan,
+        clipExecutionPlanIdentity = facts.clipExecutionPlanIdentity,
+        frameProvenance = facts.frameProvenance,
+        coverageMode = facts.coverageMode,
+        rectRouteAuthority = facts.rectRouteAuthority,
+        rectGeometryAuthority = facts.rectGeometryAuthority,
+        rrectGeometryAuthority = facts.rrectGeometryAuthority,
+        drrectOuterGeometryAuthority = facts.drrectOuterGeometryAuthority,
+        drrectInnerGeometryAuthority = facts.drrectInnerGeometryAuthority,
+        analysisRecordId = analysisRecord.recordId.takeIf { hasAnalysisIdentity },
+        analysisCommandFamily = analysisRecord.commandFamily.takeIf { hasAnalysisIdentity },
+    )
+}
+
+private fun GPUFramePathVisualCommand.toCorePrimitiveGeometryFacts(
+    targetBounds: GPUPixelBounds,
+    analysisFacts: GPUCoreAnalysisGeometryFacts,
+    clipExecutionIdentity: String? = null,
+): GPUCoreDeviceGeometryFacts {
     val sourceFamily = normalized.toCoreSourceFamily()
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?
     val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?
@@ -581,26 +775,26 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     when (sourceFamily) {
         GPUCorePrimitiveSourceFamily.Rect -> {
             val fillRect = normalized as NormalizedDrawCommand.FillRect
-            if (analysisRecord.corePrimitiveRRectGeometryAuthority != null) {
+            if (analysisFacts.corePrimitiveRRectGeometryAuthority != null) {
                 refuseGeometry(
                     "unsupported.core_primitive.rrect.analysis_authority_forbidden",
                     mapOf(
-                        "analysisRecordId" to analysisRecord.recordId,
+                        analysisFacts.identityDiagnostic,
                         "sourceFamily" to sourceFamily.name,
                     ),
                 )
             }
-            rectRouteAuthority = analysisRecord.corePrimitiveRectRouteAuthority
+            rectRouteAuthority = analysisFacts.corePrimitiveRectRouteAuthority
                 ?: refuseGeometry(
                     "unsupported.core_primitive.rect.analysis_authority_missing",
-                    mapOf("analysisRecordId" to analysisRecord.recordId),
+                    mapOf(analysisFacts.identityDiagnostic),
                 )
-            rectGeometryAuthority = analysisRecord.corePrimitiveRectGeometryAuthority?.also { authority ->
+            rectGeometryAuthority = analysisFacts.corePrimitiveRectGeometryAuthority?.also { authority ->
                 if (!authority.matchesCorePrimitiveRectGeometry(fillRect.rect, fillRect.transform)) {
                     refuseGeometry(
                         "unsupported.core_primitive.rect.geometry_authority_mismatch",
                         mapOf(
-                            "analysisRecordId" to analysisRecord.recordId,
+                            analysisFacts.identityDiagnostic,
                             "analysisGeometryAuthority" to authority.toString(),
                         ),
                     )
@@ -608,7 +802,7 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
             } ?: refuseGeometry(
                 "unsupported.core_primitive.rect.geometry_authority_mismatch",
                 mapOf(
-                    "analysisRecordId" to analysisRecord.recordId,
+                    analysisFacts.identityDiagnostic,
                     "analysisGeometryAuthority" to "missing",
                 ),
             )
@@ -619,27 +813,27 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         }
         GPUCorePrimitiveSourceFamily.RRect -> {
             val fillRRect = normalized as NormalizedDrawCommand.FillRRect
-            if (analysisRecord.corePrimitiveRectRouteAuthority != null ||
-                analysisRecord.corePrimitiveRectGeometryAuthority != null
+            if (analysisFacts.corePrimitiveRectRouteAuthority != null ||
+                analysisFacts.corePrimitiveRectGeometryAuthority != null
             ) {
                 refuseGeometry(
                     "unsupported.core_primitive.rect.analysis_authority_forbidden",
                     mapOf(
-                        "analysisRecordId" to analysisRecord.recordId,
+                        analysisFacts.identityDiagnostic,
                         "sourceFamily" to sourceFamily.name,
                     ),
                 )
             }
-            val authority = analysisRecord.corePrimitiveRRectGeometryAuthority
+            val authority = analysisFacts.corePrimitiveRRectGeometryAuthority
                 ?: refuseGeometry(
                     "unsupported.core_primitive.rrect.analysis_authority_missing",
-                    mapOf("analysisRecordId" to analysisRecord.recordId),
+                    mapOf(analysisFacts.identityDiagnostic),
                 )
             if (!authority.matchesCorePrimitiveRRectGeometry(fillRRect.rrect, fillRRect.transform)) {
                 refuseGeometry(
                     "unsupported.core_primitive.rrect.geometry_authority_mismatch",
                     mapOf(
-                        "analysisRecordId" to analysisRecord.recordId,
+                        analysisFacts.identityDiagnostic,
                         "analysisGeometryAuthority" to authority.toString(),
                     ),
                 )
@@ -653,14 +847,14 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         }
         GPUCorePrimitiveSourceFamily.DRRect -> {
             val fillDRRect = normalized as NormalizedDrawCommand.FillDRRect
-            val outerAuthority = analysisRecord.corePrimitiveDRRectOuterGeometryAuthority
-                ?: refuseGeometry("unsupported.core_primitive.drrect.outer_analysis_authority_missing", mapOf("analysisRecordId" to analysisRecord.recordId))
-            val innerAuthority = analysisRecord.corePrimitiveDRRectInnerGeometryAuthority
-                ?: refuseGeometry("unsupported.core_primitive.drrect.inner_analysis_authority_missing", mapOf("analysisRecordId" to analysisRecord.recordId))
+            val outerAuthority = analysisFacts.corePrimitiveDRRectOuterGeometryAuthority
+                ?: refuseGeometry("unsupported.core_primitive.drrect.outer_analysis_authority_missing", mapOf(analysisFacts.identityDiagnostic))
+            val innerAuthority = analysisFacts.corePrimitiveDRRectInnerGeometryAuthority
+                ?: refuseGeometry("unsupported.core_primitive.drrect.inner_analysis_authority_missing", mapOf(analysisFacts.identityDiagnostic))
             if (!outerAuthority.matchesCorePrimitiveRRectGeometry(fillDRRect.outer, fillDRRect.transform) ||
                 !innerAuthority.matchesCorePrimitiveRRectGeometry(fillDRRect.inner, fillDRRect.transform)
             ) {
-                refuseGeometry("unsupported.core_primitive.drrect.geometry_authority_mismatch", mapOf("analysisRecordId" to analysisRecord.recordId))
+                refuseGeometry("unsupported.core_primitive.drrect.geometry_authority_mismatch", mapOf(analysisFacts.identityDiagnostic))
             }
             rectRouteAuthority = null
             rectGeometryAuthority = null
@@ -673,22 +867,22 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
             )
         }
         else -> {
-            if (analysisRecord.corePrimitiveRectRouteAuthority != null ||
-                analysisRecord.corePrimitiveRectGeometryAuthority != null
+            if (analysisFacts.corePrimitiveRectRouteAuthority != null ||
+                analysisFacts.corePrimitiveRectGeometryAuthority != null
             ) {
                 refuseGeometry(
                     "unsupported.core_primitive.rect.analysis_authority_forbidden",
                     mapOf(
-                        "analysisRecordId" to analysisRecord.recordId,
+                        analysisFacts.identityDiagnostic,
                         "sourceFamily" to sourceFamily.name,
                     ),
                 )
             }
-            if (analysisRecord.corePrimitiveRRectGeometryAuthority != null) {
+            if (analysisFacts.corePrimitiveRRectGeometryAuthority != null) {
                 refuseGeometry(
                     "unsupported.core_primitive.rrect.analysis_authority_forbidden",
                     mapOf(
-                        "analysisRecordId" to analysisRecord.recordId,
+                        analysisFacts.identityDiagnostic,
                         "sourceFamily" to sourceFamily.name,
                     ),
                 )
@@ -723,37 +917,18 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
                 else -> false
             }
         } == true
-    return GPUCorePrimitivePayloadInput(
-        commandIdValue = normalized.commandId.value,
+    return GPUCoreDeviceGeometryFacts(
         sourceFamily = sourceFamily,
         geometry = geometry,
-        premultipliedRgba = premultipliedRgba,
-        material = material,
         targetBounds = targetBounds,
         scissorBounds = scissor,
         clipCoveragePlan = clipCoverage,
-        blendPlanIdentity = recordingBlendPlanIdentity,
+        clipExecutionPlanIdentity = clipExecutionIdentity,
         frameProvenance = provenance,
         // The canonical hairline point square is hard DirectTriangles geometry, so its
         // coverage is full-or-scissor even though the FillPath command derives stencil
         // coverage for general path fills.
-        coverageMode = if (directStrokeUnderHardPathClip ||
-            normalized is NormalizedDrawCommand.FillPath && normalized.isHairlinePointCommand()
-        ) {
-            GPUCorePrimitiveCoverageMode.FullOrScissor
-        } else {
-            coverageMode()
-        },
-        analysisRecordId = analysisRecord.recordId.takeIf {
-            sourceFamily == GPUCorePrimitiveSourceFamily.Rect ||
-                sourceFamily == GPUCorePrimitiveSourceFamily.RRect ||
-                sourceFamily == GPUCorePrimitiveSourceFamily.DRRect
-        },
-        analysisCommandFamily = analysisRecord.commandFamily.takeIf {
-            sourceFamily == GPUCorePrimitiveSourceFamily.Rect ||
-                sourceFamily == GPUCorePrimitiveSourceFamily.RRect ||
-                sourceFamily == GPUCorePrimitiveSourceFamily.DRRect
-        },
+        coverageMode = coreCoverageMode(targetBounds, directStrokeUnderHardPathClip),
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
         rrectGeometryAuthority = rrectGeometryAuthority,
@@ -978,6 +1153,44 @@ private fun GPUCorePrimitiveColorTransform.apply(channel: Float): Float = when (
     }
 }
 
+/** Unowned admission only: use the very same device geometry and coverage as semantic gathering. */
+internal fun GPUFramePathVisualCommand.isInPreparedPointDomain(targetBounds: GPUPixelBounds,
+    hasPointClip: Boolean): Boolean {
+    if (geometryRefusal != null || normalized.maskFilterOrNull() != null || clipExecutionPlan is GPUClipExecutionPlan.Refused)
+        return false
+    if (normalized !is NormalizedDrawCommand.FillRect && normalized !is NormalizedDrawCommand.FillPath) return false
+    return try {
+        val family = normalized.toCoreSourceFamily()
+        W5bPreparedPointDomainV3.acceptsCoverage(family, coreCoverageMode(targetBounds), clipCoverage, hasPointClip) &&
+            when (val geometry = normalized.toDeviceGeometry(targetBounds)) {
+                is GPUCorePrimitiveGeometryInput.Rect -> W5bPreparedPointDomainV3.acceptsRect(
+                    geometry.left, geometry.top, geometry.right, geometry.bottom)
+                is GPUCorePrimitiveGeometryInput.TriangulatedPath -> W5bPreparedPointDomainV3.acceptsPath(family, geometry.geometryMode)
+                else -> false
+            }
+    } catch (_: GPUCorePrimitiveGeometryRefusalException) {
+        false
+    }
+}
+
+/** The already-admitted Rect's actual device geometry and exact integral clip. */
+internal fun GPUFramePathVisualCommand.preparedRectDestinationBounds(target: GPUPixelBounds): GPUPixelBounds {
+    require(isInPreparedPointDomain(target, false))
+    val rect = normalized.toDeviceGeometry(target) as GPUCorePrimitiveGeometryInput.Rect
+    val bounds = org.graphiks.kanvas.gpu.renderer.commands.GPUBounds(rect.left, rect.top, rect.right, rect.bottom)
+        .preparedVerticesPixelBounds(target)
+    return org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationIntersection(bounds,
+        requireNotNull(clipCoverage.toPreparedScissorBounds(target)), target)
+}
+
+private fun GPUFramePathVisualCommand.coreCoverageMode(
+    targetBounds: GPUPixelBounds,
+    directStrokeUnderHardPathClip: Boolean = false,
+): GPUCorePrimitiveCoverageMode =
+    if (directStrokeUnderHardPathClip || normalized is NormalizedDrawCommand.FillPath &&
+        (normalized.isHairlinePointCommand() || normalized.exactPositiveWidthSquarePointDeviceGeometryOrNull(targetBounds) != null))
+        GPUCorePrimitiveCoverageMode.FullOrScissor else coverageMode()
+
 private fun GPUFramePathVisualCommand.coverageMode(): GPUCorePrimitiveCoverageMode = when (geometryCoverage) {
     GPUCoverageConsumption.FullOrScissor -> GPUCorePrimitiveCoverageMode.FullOrScissor
     GPUCoverageConsumption.ScalarCoverage -> GPUCorePrimitiveCoverageMode.ScalarAA
@@ -1040,23 +1253,9 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
     targetBounds: GPUPixelBounds,
 ): GPUCorePrimitiveGeometryInput {
     if (source.operation == "drawPoint" || source.operation == "drawPoints.points") {
-        val refusalCode = when {
-            dashIntervals?.isNotEmpty() == true -> "unsupported.core_primitive.point.path_effect_exact_lowering"
-            !strokeWidth.isFinite() || strokeWidth < 0f -> "unsupported.core_primitive.point.invalid_width"
-            strokeCap == "round" -> "unsupported.core_primitive.point.round_cap_exact_lowering"
-            else -> null
-        }
-        if (refusalCode != null) {
-            refuseGeometry(
-                refusalCode,
-                mapOf(
-                    "width" to strokeWidth.toString(),
-                    "cap" to strokeCap,
-                    "dashIntervals" to dashIntervals?.joinToString(",").orEmpty(),
-                ),
-            )
-        }
+        corePointGeometryRefusalOrNull()?.let { refuseGeometry(it.code, it.refusalFacts) }
         if (strokeWidth == 0f) return hairlinePointDeviceGeometry(targetBounds)
+        exactPositiveWidthSquarePointDeviceGeometryOrNull(targetBounds)?.let { return it }
     }
     if (stroke) return strokeDeviceGeometry(targetBounds)
     if (tessellatedVertices.isEmpty()) {
@@ -1094,6 +1293,70 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
 }
 
 /**
+ * Proves the exact captured source shape before it can use hard direct coverage. The square is
+ * checked against the original point width and canonical vertex order; no arbitrary quad or
+ * bounding-box replacement is admitted.
+ */
+private fun NormalizedDrawCommand.FillPath.exactPositiveWidthSquarePointVerticesOrNull(): FloatArray? {
+    if (source.operation != "drawPoint" || stroke || antiAlias || maskFilter != null ||
+        !strokeWidth.isFinite() || strokeWidth <= 0f || strokeCap != "square" ||
+        pathEffectKind != null || dashIntervals?.isNotEmpty() == true || dashPhase != 0f ||
+        transform != GPUTransformFacts.identity() || clip.kind != GPUClipKind.WideOpen ||
+        clip.coveragePlan != GPUClipCoveragePlan.NoClip || clip.executionPlan != GPUClipExecutionPlan.NoClip ||
+        clip.perspectiveCaptureRefusal || clip.clipTransformRefusal != null ||
+        pathDescriptor.inverseFill || pathDescriptor.fillRule !in setOf("NonZero", "winding") ||
+        contourStarts != listOf(0) || totalVertexCount != 5 || edgeCount != 5 ||
+        pathDescriptor.pointCount != 5 || pathDescriptor.edgeCount != 5 || tessellatedVertices.size != 10
+    ) return null
+
+    val vertices = tessellatedVertices.toFloatArray()
+    if (vertices.any { !it.isFinite() }) return null
+    val left = vertices[0]
+    val top = vertices[1]
+    val right = vertices[2]
+    val bottom = vertices[5]
+    if (!(left < right && top < bottom) || right - left != strokeWidth || bottom - top != strokeWidth) return null
+
+    val halfWidth = strokeWidth * 0.5f
+    val centerX = left + (right - left) * 0.5f
+    val centerY = top + (bottom - top) * 0.5f
+    if (!halfWidth.isFinite() ||
+        left != centerX - halfWidth || right != centerX + halfWidth ||
+        top != centerY - halfWidth || bottom != centerY + halfWidth
+    ) return null
+
+    val canonicalClosed = floatArrayOf(
+        left, top,
+        right, top,
+        right, bottom,
+        left, bottom,
+        left, top,
+    )
+    return canonicalClosed.takeIf { vertices.contentEquals(it) }?.copyOfRange(0, 8)
+}
+
+/** Converts only the fully proved single square using the existing immutable math carrier. */
+private fun NormalizedDrawCommand.FillPath.exactPositiveWidthSquarePointDeviceGeometryOrNull(
+    targetBounds: GPUPixelBounds,
+): GPUCorePrimitiveGeometryInput.TriangulatedPath? {
+    val vertices = exactPositiveWidthSquarePointVerticesOrNull() ?: return null
+    val target = RectI32(targetBounds.left, targetBounds.top, targetBounds.right, targetBounds.bottom)
+    val squares = PointSquaresF32.fromDeviceQuadsF32OrNull(vertices, target) ?: return null
+    val bounds = squares.copyBoundsI32()
+    return GPUCorePrimitiveGeometryInput.TriangulatedPath(
+        vertices = squares.copyVerticesF32().toList(),
+        indices = squares.copyIndicesI32().toList(),
+        sourceContourStarts = squares.copyContourStartsI32().toList(),
+        sourceVertexCount = 4,
+        coverBounds = GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom),
+        geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        fillRule = GPUCorePrimitiveFillRule.Winding,
+        inverseFill = false,
+        sourceAuthority = pathDescriptor.sourceAuthority,
+    )
+}
+
+/**
  * The hard clip-stencil consumer shares the clip's complete stencil byte and therefore may not
  * write path coverage itself. A single non-AA winding triangle is the only FillPath shape we
  * can currently lower to direct indexed geometry without needing a stencil edge fan.
@@ -1126,6 +1389,42 @@ private fun NormalizedDrawCommand.FillPath.directTriangleDeviceGeometryOrNull(
     )
 }
 
+/** Validates point geometry before either the legacy mapper or W5a planner evaluates paint. */
+internal fun DisplayOp.corePointGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? {
+    val pointPaint = when (this) {
+        is DisplayOp.DrawPoint -> paint
+        is DisplayOp.DrawPoints -> paint.takeIf { mode == PointMode.POINTS }
+        else -> null
+    } ?: return null
+    return corePointGeometryRefusal(
+        pointPaint.strokeWidth, pointPaint.strokeCap.name.lowercase(),
+        (pointPaint.pathEffect as? PathEffect.Dash)?.intervals,
+    )
+}
+
+private fun NormalizedDrawCommand.FillPath.corePointGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? =
+    if (source.operation == "drawPoint" || source.operation == "drawPoints.points") {
+        corePointGeometryRefusal(strokeWidth, strokeCap, dashIntervals)
+    } else null
+
+private fun corePointGeometryRefusal(
+    strokeWidth: Float,
+    strokeCap: String,
+    dashIntervals: FloatArray?,
+): GPUCorePrimitiveGeometryRefusal? {
+    val code = when {
+        dashIntervals?.isNotEmpty() == true -> "unsupported.core_primitive.point.path_effect_exact_lowering"
+        !strokeWidth.isFinite() || strokeWidth < 0f -> "unsupported.core_primitive.point.invalid_width"
+        strokeCap == "round" -> "unsupported.core_primitive.point.round_cap_exact_lowering"
+        else -> return null
+    }
+    return GPUCorePrimitiveGeometryRefusal(code, mapOf(
+        "width" to strokeWidth.toString(),
+        "cap" to strokeCap,
+        "dashIntervals" to dashIntervals?.joinToString(",").orEmpty(),
+    ))
+}
+
 private fun NormalizedDrawCommand.FillPath.isHairlinePointCommand(): Boolean =
     (source.operation == "drawPoint" || source.operation == "drawPoints.points") && strokeWidth == 0f
 
@@ -1143,46 +1442,22 @@ private fun NormalizedDrawCommand.FillPath.hairlinePointDeviceGeometry(
     // A hairline point path flattens each degenerate point rect to exactly one vertex at the
     // point (every line-to coincides with the rect start), so the flattened path is one vertex
     // per point in command order.
-    val deviceSquares = tessellatedVertices.chunked(2).mapNotNull { vertex ->
-        val point = transform.map(vertex[0], vertex[1])
-        val left = floor(point.first).toInt()
-        val top = floor(point.second).toInt()
-        val clampedLeft = left.coerceIn(targetBounds.left, targetBounds.right)
-        val clampedTop = top.coerceIn(targetBounds.top, targetBounds.bottom)
-        val clampedRight = (left + 1).coerceIn(targetBounds.left, targetBounds.right)
-        val clampedBottom = (top + 1).coerceIn(targetBounds.top, targetBounds.bottom)
-        if (clampedRight <= clampedLeft || clampedBottom <= clampedTop) null
-        else GPUPixelBounds(clampedLeft, clampedTop, clampedRight, clampedBottom)
+    val devicePoints = tessellatedVertices.chunked(2).map { vertex ->
+        transform.map(vertex[0], vertex[1]).let { org.graphiks.math.geometry.Point2F32(it.first, it.second) }
     }
-    if (deviceSquares.isEmpty()) {
-        refuseGeometry(
+    val geometry = org.graphiks.math.geometry.PointSquaresF32.hairlineDevicePointsF32OrNull(devicePoints,
+        org.graphiks.math.geometry.RectI32(targetBounds.left, targetBounds.top, targetBounds.right, targetBounds.bottom))
+        ?: refuseGeometry(
             code = "unsupported.core_primitive.empty_path",
             facts = mapOf("source" to source.operation),
         )
-    }
-    val vertices = deviceSquares.flatMap { square ->
-        listOf(
-            square.left.toFloat(), square.top.toFloat(),
-            square.right.toFloat(), square.top.toFloat(),
-            square.right.toFloat(), square.bottom.toFloat(),
-            square.left.toFloat(), square.bottom.toFloat(),
-        )
-    }
-    val indices = deviceSquares.indices.flatMap { squareIndex ->
-        val base = squareIndex * 4
-        listOf(base, base + 1, base + 2, base, base + 2, base + 3)
-    }
+    val bounds = geometry.copyBoundsI32()
     return GPUCorePrimitiveGeometryInput.TriangulatedPath(
-        vertices = vertices,
-        indices = indices,
-        sourceContourStarts = deviceSquares.indices.map { it * 4 },
-        sourceVertexCount = deviceSquares.size * 4,
-        coverBounds = GPUPixelBounds(
-            deviceSquares.minOf { it.left },
-            deviceSquares.minOf { it.top },
-            deviceSquares.maxOf { it.right },
-            deviceSquares.maxOf { it.bottom },
-        ),
+        vertices = geometry.copyVerticesF32().toList(),
+        indices = geometry.copyIndicesI32().toList(),
+        sourceContourStarts = geometry.copyContourStartsI32().toList(),
+        sourceVertexCount = geometry.pointCountI32 * 4,
+        coverBounds = GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom),
         geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
         sourceAuthority = pathDescriptor.sourceAuthority,
     )

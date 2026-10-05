@@ -114,6 +114,68 @@ class SkiaGmInventoryTest {
     }
 
     @Test
+    fun `v3 json exposes conformance fields and deterministic summaries`() {
+        val row = SkiaGmInventoryRow(
+            name = "a",
+            family = "PATH",
+            referenceName = "a",
+            referenceAvailable = true,
+            renderAvailable = true,
+            attempted = true,
+            terminalFailure = false,
+            score = 97.5,
+            operationCount = 3,
+            route = "gpu",
+            firstDiagnostic = null,
+            referenceStatus = "trusted",
+            setupState = InventorySetupState.SUCCEEDED,
+            conformanceDecision = GmConformanceDecision(GmConformanceScope.ELIGIBLE),
+        )
+
+        val json = renderSkiaGmInventoryJson(listOf(row))
+
+        assertTrue("\"schemaVersion\": \"gpu-gm-inventory-v3\"" in json)
+        assertTrue("\"conformanceScope\": \"eligible\"" in json)
+        assertTrue("\"conformanceReason\": null" in json)
+        assertTrue("\"conformanceOwner\": null" in json)
+        assertTrue("\"registeredCount\": 1" in json)
+        assertTrue("\"mustAttemptCount\": 1" in json)
+        assertTrue("\"byScope\": {\"eligible\": 1}" in json)
+        assertTrue("\"byFamily\": {\"PATH\": 1}" in json)
+    }
+
+    @Test
+    fun `v3 json exports quarantined resource metadata and summary count`() {
+        val row = SkiaGmInventoryRow(
+            name = "jpg-color-cube",
+            family = "IMAGE",
+            referenceName = "jpg-color-cube",
+            referenceAvailable = true,
+            renderAvailable = false,
+            attempted = false,
+            terminalFailure = false,
+            score = null,
+            operationCount = 0,
+            route = "excluded:quarantined-resource-limit",
+            firstDiagnostic = "excluded:quarantined-resource-limit",
+            referenceStatus = "trusted",
+            conformanceDecision = GmConformanceDecision(
+                GmConformanceScope.QUARANTINED_RESOURCE_LIMIT,
+                reason = "legacy-snapshot-262144-draw-rects-not-practically-renderable",
+                owner = "legacy-renderer-remediation",
+            ),
+        )
+
+        val json = renderSkiaGmInventoryJson(listOf(row))
+
+        assertTrue("\"conformanceScope\": \"quarantined-resource-limit\"" in json)
+        assertTrue("\"conformanceReason\": \"legacy-snapshot-262144-draw-rects-not-practically-renderable\"" in json)
+        assertTrue("\"conformanceOwner\": \"legacy-renderer-remediation\"" in json)
+        assertTrue("\"mustAttemptCount\": 0" in json)
+        assertTrue("\"byScope\": {\"quarantined-resource-limit\": 1}" in json)
+    }
+
+    @Test
     fun `score parser rejects duplicate and orphan rows`() {
         val root = Files.createTempDirectory("gm-scores").toFile()
         val duplicate = root.resolve("duplicate.properties").apply { writeText("a=1\na=2\n") }
@@ -281,6 +343,22 @@ class SkiaGmInventoryTest {
     }
 
     @Test
+    fun `non fatal Error during draw is isolated as an eligible setup failure`() {
+        val surface = FailingRenderInventorySurface()
+
+        val evidence = captureInventoryEvidence(MeshZeroInitInventoryProbeGm()) { surface }
+
+        assertFalse(evidence.attempted)
+        assertFalse(evidence.renderSucceeded)
+        assertFalse(evidence.terminalFailure)
+        assertEquals(InventorySetupState.FAILED, evidence.setupState)
+        assertEquals("setup-failure", evidence.route)
+        assertEquals("STUB.MESH.GPU_ZERO_INIT", evidence.setupDiagnostic)
+        assertEquals(GmConformanceScope.ELIGIBLE, evidence.conformanceDecision.scope)
+        assertEquals(0, surface.renderCalls)
+    }
+
+    @Test
     fun `one failing Surface render is terminal and is never retried`() {
         val surface = FailingRenderInventorySurface()
         val evidence = captureInventoryEvidence(InventoryProbeGm()) { surface }
@@ -329,6 +407,14 @@ private class UnsupportedStrokeInventoryProbeGm : SkiaGm by InventoryProbeGm() {
 private class ThrowingDrawInventoryProbeGm : SkiaGm by InventoryProbeGm() {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         throw IllegalStateException("gm-draw-failed-after-background")
+    }
+}
+
+private class MeshZeroInitInventoryProbeGm : SkiaGm by InventoryProbeGm() {
+    override val name = "mesh_zero_init"
+
+    override fun draw(canvas: GmCanvas, width: Int, height: Int) {
+        throw NotImplementedError("STUB.MESH.GPU_ZERO_INIT")
     }
 }
 

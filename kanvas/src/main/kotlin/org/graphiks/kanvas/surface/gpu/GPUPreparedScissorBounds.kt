@@ -26,9 +26,11 @@ internal fun GPUClipCoveragePlan.toPreparedScissorBounds(
 
 internal fun List<GPUTextA8Instance>.preparedTextBounds(
     target: GPUTargetFacts,
-): GPUBounds? {
-    val coordinates = flatMap(GPUTextA8Instance::deviceQuad)
-    if (coordinates.size != size * 8 || coordinates.any { coordinate -> !coordinate.isFinite() }) return null
+): GPUBounds? = preparedTextQuadBounds(map(GPUTextA8Instance::deviceQuad), target)
+
+internal fun preparedTextQuadBounds(quads: List<List<Float>>, target: GPUTargetFacts): GPUBounds? {
+    val coordinates = quads.flatten()
+    if (coordinates.size != quads.size * 8 || coordinates.any { coordinate -> !coordinate.isFinite() }) return null
     val xs = coordinates.filterIndexed { index, _ -> index % 2 == 0 }
     val ys = coordinates.filterIndexed { index, _ -> index % 2 == 1 }
     val left = xs.minOrNull()?.coerceIn(0f, target.width.toFloat()) ?: return null
@@ -51,3 +53,10 @@ internal fun GPUTextA8Instance.preparedTextPixelBounds(
         bottom = ceil(ys.max()).toInt().coerceIn(target.top, target.bottom),
     ).takeUnless(GPUPixelBounds::isEmpty)
 }
+
+/** Same integral projection used by the Vertices semantic payload and its CPU inventory. */
+internal fun GPUBounds.preparedVerticesPixelBounds(target: GPUPixelBounds): GPUPixelBounds = GPUPixelBounds(
+    floor(left.toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
+    floor(top.toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt(),
+    ceil(right.toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
+    ceil(bottom.toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt())

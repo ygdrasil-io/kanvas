@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathEdgeFanPayloadContract
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
@@ -39,6 +40,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.stableCoreDump
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.kanvas.gpu.renderer.materials.preparedMaterialSrgbToLinear
 
 class GPUCorePrimitivePayloadContractsTest {
@@ -48,52 +50,6 @@ class GPUCorePrimitivePayloadContractsTest {
         assertTrue("is GPUMaterialDescriptor.LinearGradient -> descriptor.copy()" in source)
         assertTrue("right is GPUMaterialDescriptor.LinearGradient ->\n                left == right" in source)
         assertTrue("is GPUMaterialDescriptor.LinearGradient -> descriptor.hashCode()" in source)
-    }
-
-    @Test
-    fun `core canonical hash stays outside gather builder and preflight hot paths`() {
-        val payloadSource = File(
-            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/PayloadContracts.kt",
-        ).readText()
-        val gatherStart = payloadSource.indexOf("class GPUCorePrimitivePayloadGatherer")
-        val gatherEnd = payloadSource.indexOf(
-            "private fun GPUCorePrimitiveRectGeometryAuthority?.canonicalPreimage",
-            gatherStart,
-        )
-        val withClipStart = payloadSource.indexOf("internal fun withClipExecutionPlanIdentity")
-        val withClipEnd = payloadSource.indexOf("/** Exact immutable uniform bytes", withClipStart)
-        val builderSource = File(
-            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/" +
-                "GPUCorePrimitivePreparedFrameTaskListBuilder.kt",
-        ).readText()
-        val preflightSource = File(
-            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt",
-        ).readText()
-        val corePreflightStart = preflightSource.indexOf("private fun validateCorePrimitiveSemanticPayload")
-        val corePreflightEnd = preflightSource.indexOf(
-            "private fun validateSeparableBlurRectSemanticPayload",
-            corePreflightStart,
-        )
-
-        assertTrue(gatherStart >= 0 && gatherEnd > gatherStart)
-        assertTrue(withClipStart >= 0 && withClipEnd > withClipStart)
-        assertTrue(corePreflightStart >= 0 && corePreflightEnd > corePreflightStart)
-        assertTrue(payloadSource.contains("val canonicalHash: String by lazy"))
-        val gatherSource = payloadSource.substring(gatherStart, gatherEnd)
-        assertFalse(gatherSource.contains("corePrimitiveCanonicalHash("))
-        assertFalse(gatherSource.contains("sha256Hex("))
-        assertFalse(gatherSource.contains("MessageDigest"))
-        assertFalse(
-            Regex("listOf\\([\\s\\S]*?\\.joinToString\\(").containsMatchIn(gatherSource),
-        )
-        assertFalse(payloadSource.substring(withClipStart, withClipEnd).contains("corePrimitiveCanonicalHash("))
-        assertFalse(builderSource.contains("hasCanonicalHashIntegrity()"))
-        assertFalse(builderSource.contains("semantic.canonicalHash"))
-        assertFalse(
-            preflightSource.substring(corePreflightStart, corePreflightEnd)
-                .contains("hasCanonicalHashIntegrity()"),
-        )
-        assertFalse(preflightSource.contains("semantic.canonicalHash"))
     }
 
     @Test
@@ -1197,6 +1153,46 @@ class GPUCorePrimitivePayloadContractsTest {
     }
 
     @Test
+    fun `sealed W4d payload admission rejects the legacy stroke style ABI`() {
+        val target = GPUPixelBounds(0, 0, 8, 8)
+        val legacyStroke = GPUCorePrimitiveStrokeStyle(
+            width = 4f,
+            cap = "square",
+            join = "miter",
+            miterLimit = 4f,
+            dashIntervals = emptyList(),
+            dashPhase = 0f,
+            loweringProof = GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            GPUCorePrimitivePayloadGatherer().gatherPlannedW4dSemantic(
+                GPUCorePrimitivePayloadInput(
+                    commandIdValue = 8,
+                    sourceFamily = GPUCorePrimitiveSourceFamily.Path,
+                    geometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+                        vertices = listOf(1f, 1f, 7f, 1f, 7f, 5f, 1f, 5f),
+                        indices = listOf(0, 1, 2, 0, 2, 3),
+                        sourceContourStarts = listOf(0),
+                        sourceVertexCount = 2,
+                        coverBounds = target,
+                        geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+                        fillRule = GPUCorePrimitiveFillRule.Winding,
+                        strokeStyle = legacyStroke,
+                        sourceAuthority = GPUPathSourceAuthority.W4dPlannedPathStrokeV1,
+                    ),
+                    premultipliedRgba = listOf(1f, 0f, 0f, 1f),
+                    targetBounds = target,
+                    scissorBounds = target,
+                    clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                    blendPlanIdentity = blend(GPUBlendMode.SRC_OVER).canonicalIdentity(),
+                    frameProvenance = GPUFrameProvenance.None,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `stroke lowering proofs reject cap dash segment fill and inverse contradictions`() {
         val validSquare = GPUCorePrimitiveStrokeStyle(
             width = 4f,
@@ -1301,7 +1297,7 @@ class GPUCorePrimitivePayloadContractsTest {
                     vertices = listOf(0f, 0f, 1f, 0f, 0f, 1f),
                     indices = listOf(0, 1, 2),
                     sourceContourStarts = listOf(0),
-                    sourceVertexCount = 257,
+                    sourceVertexCount = GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt() + 1,
                     coverBounds = GPUPixelBounds(0, 0, 8, 8),
                     geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
                 ),

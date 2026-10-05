@@ -25,6 +25,7 @@ internal sealed interface GPUPreparedTextFrameInventoryPreparation {
     data class Ready(
         val inventory: PreparedTextFrameInventory,
         val metrics: GPUPreparedTextFrameMetrics,
+        val elidedNoOps: List<GPUPreparedElidedNoOpOperation> = emptyList(),
     ) : GPUPreparedTextFrameInventoryPreparation
 
     data class Refused(val refusal: GPUPreparedOperationRefusal) :
@@ -40,9 +41,10 @@ internal object GPUPreparedTextFramePreparer {
         capabilities: GPUCapabilities,
         generation: GPUTextArtifactGeneration,
         limits: PreparedTextFrameInventoryLimits = defaultLimits(target, capabilities),
+        materialBridge: W5aPreparedTextMaterialBridge? = null,
     ): GPUPreparedTextFramePreparation {
         val inventoryPreparation = prepareInventory(
-            operations, target, capabilities, generation, limits,
+            operations, target, capabilities, generation, limits, materialBridge,
         )
         val ready = when (inventoryPreparation) {
             is GPUPreparedTextFrameInventoryPreparation.Ready -> inventoryPreparation
@@ -68,9 +70,11 @@ internal object GPUPreparedTextFramePreparer {
         capabilities: GPUCapabilities,
         generation: GPUTextArtifactGeneration,
         limits: PreparedTextFrameInventoryLimits = defaultLimits(target, capabilities),
+        materialBridge: W5aPreparedTextMaterialBridge? = null,
     ): GPUPreparedTextFrameInventoryPreparation {
         val preparedDraws = ArrayList<GPUPreparedTextDraw>()
         val elidedTextOperationIndices = linkedSetOf<Int>()
+        val elidedNoOps = ArrayList<GPUPreparedElidedNoOpOperation>()
         val loweringStartedAt = System.nanoTime()
         operations.forEachIndexed { operationIndex, operation ->
             if (operation !is DisplayOp.DrawText) return@forEachIndexed
@@ -84,15 +88,23 @@ internal object GPUPreparedTextFramePreparer {
                     operationIndex = operationIndex,
                     target = target,
                     capabilities = capabilities,
+                    materialBridge = materialBridge,
                 )
             ) {
                 is GPUPreparedTextLowering.Ready -> {
                     if (lowered.draw.blendPlan is GPUBlendPlan.NoOp) {
+                        lowered.draw.materialPlan?.let { material ->
+                            if (material.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1) {
+                                elidedNoOps += GPUPreparedElidedNoOpOperation.fromValidated(
+                                    operationIndex, material.table, material.ref, material.blend)
+                            }
+                        }
                         elidedTextOperationIndices += operationIndex
                     } else {
                         preparedDraws += lowered.draw
                     }
                 }
+                is GPUPreparedTextLowering.GeometryReady -> error("Geometry-only admission cannot publish a prepared draw")
                 is GPUPreparedTextLowering.Refused ->
                     return GPUPreparedTextFrameInventoryPreparation.Refused(
                         GPUPreparedOperationRefusal(
@@ -146,6 +158,7 @@ internal object GPUPreparedTextFramePreparer {
         }
         return GPUPreparedTextFrameInventoryPreparation.Ready(
             inventory = inventory,
+            elidedNoOps = java.util.Collections.unmodifiableList(ArrayList(elidedNoOps)),
             metrics = inventory.metrics.copy(
                 loweringNanoseconds = loweringNanoseconds,
                 rasterNanoseconds = inventoryResult.rasterNanoseconds,
@@ -154,7 +167,7 @@ internal object GPUPreparedTextFramePreparer {
         )
     }
 
-    private fun defaultLimits(
+    internal fun defaultLimits(
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
     ): PreparedTextFrameInventoryLimits {

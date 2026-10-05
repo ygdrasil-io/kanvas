@@ -1,12 +1,5 @@
 package org.graphiks.math.geometry
 
-import org.graphiks.math.geometry.PathOpsEpsilon.almostBEqualUlps
-import org.graphiks.math.geometry.PathOpsEpsilon.almostBetweenUlps
-import org.graphiks.math.geometry.PathOpsEpsilon.almostEqualUlps
-import org.graphiks.math.geometry.PathOpsEpsilon.almostEqualUlpsPin
-import org.graphiks.math.geometry.PathOpsEpsilon.between
-import org.graphiks.math.geometry.PathOpsEpsilon.pinT
-import org.graphiks.math.geometry.PathOpsEpsilon.roughlyEqualUlps
 import org.graphiks.math.vector.Vector2F64
 import kotlin.math.max
 import kotlin.math.min
@@ -79,13 +72,13 @@ public class Line2F64(source: Array<Point2F64>) {
      * `Line::nearPoint`.
      */
     fun nearPoint(xy: Point2F64, unequal: BooleanArray? = null): Double {
-        if (!almostBetweenUlps(pts[0].x, xy.x, pts[1].x)
-            || !almostBetweenUlps(pts[0].y, xy.y, pts[1].y)) return -1.0
+        if (!almostBetweenUlpsF64(pts[0].x, xy.x, pts[1].x)
+            || !almostBetweenUlpsF64(pts[0].y, xy.y, pts[1].y)) return -1.0
         val len: Vector2F64 = pts[1] - pts[0]
         val denom = len.x * len.x + len.y * len.y
         val ab0: Vector2F64 = xy - pts[0]
         val numer = len.dot(ab0)
-        if (!between(0.0, numer, denom)) return -1.0
+        if (!isBetweenF64(0.0, numer, denom)) return -1.0
         if (denom == 0.0) return 0.0
         var t = numer / denom
         val realPt: Point2F64 = ptAtT(t)
@@ -93,11 +86,11 @@ public class Line2F64(source: Array<Point2F64>) {
         val tiniest = min(min(min(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         var largest = max(max(max(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         largest = max(largest, -tiniest)
-        if (!almostEqualUlpsPin(largest, largest + dist)) return -1.0
+        if (!PathPredicatesF64.almostEqualUlps(largest, largest + dist)) return -1.0
         if (unequal != null && unequal.isNotEmpty()) {
             unequal[0] = largest.toFloat() != (largest + dist).toFloat()
         }
-        t = pinT(t)
+        t = pinUnitIntervalF64(t)
         return t
     }
 
@@ -116,7 +109,12 @@ public class Line2F64(source: Array<Point2F64>) {
         val tiniest = min(min(min(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         var largest = max(max(max(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         largest = max(largest, -tiniest)
-        return roughlyEqualUlps(largest, largest + dist)
+        return PathPredicatesF64.almostEqualUlps(
+            largest,
+            largest + dist,
+            maxUlps = 256,
+            nearZeroMaxUlps = 1_024,
+        )
     }
 
     override fun equals(other: Any?): Boolean {
@@ -140,17 +138,17 @@ public class Line2F64(source: Array<Point2F64>) {
 
         /** Performs the computation. */
         fun nearPointH(xy: Point2F64, left: Double, right: Double, y: Double): Double {
-            if (!almostBEqualUlps(xy.y, y)) return -1.0
-            if (!almostBetweenUlps(left, xy.x, right)) return -1.0
+            if (!PathPredicatesF64.almostEqualUlps(xy.y, y, maxUlps = 2)) return -1.0
+            if (!almostBetweenUlpsF64(left, xy.x, right)) return -1.0
             var t = (xy.x - left) / (right - left)
-            t = pinT(t)
+            t = pinUnitIntervalF64(t)
             val realPtX = (1 - t) * left + t * right
             val dx = xy.y - y; val dy = xy.x - realPtX
             val dist = sqrt(dx * dx + dy * dy)
             val tiniest = min(min(y, left), right)
             var largest = max(max(y, left), right)
             largest = max(largest, -tiniest)
-            if (!almostEqualUlps(largest, largest + dist)) return -1.0
+            if (!PathPredicatesF64.almostEqualUlps(largest, largest + dist)) return -1.0
             return t
         }
 
@@ -165,17 +163,17 @@ public class Line2F64(source: Array<Point2F64>) {
 
         /** Performs the computation. */
         fun nearPointV(xy: Point2F64, top: Double, bottom: Double, x: Double): Double {
-            if (!almostBEqualUlps(xy.x, x)) return -1.0
-            if (!almostBetweenUlps(top, xy.y, bottom)) return -1.0
+            if (!PathPredicatesF64.almostEqualUlps(xy.x, x, maxUlps = 2)) return -1.0
+            if (!almostBetweenUlpsF64(top, xy.y, bottom)) return -1.0
             var t = (xy.y - top) / (bottom - top)
-            t = pinT(t)
+            t = pinUnitIntervalF64(t)
             val realPtY = (1 - t) * top + t * bottom
             val dx = xy.x - x; val dy = xy.y - realPtY
             val dist = sqrt(dx * dx + dy * dy)
             val tiniest = min(min(x, top), bottom)
             var largest = max(max(x, top), bottom)
             largest = max(largest, -tiniest)
-            if (!almostEqualUlps(largest, largest + dist)) return -1.0
+            if (!PathPredicatesF64.almostEqualUlps(largest, largest + dist)) return -1.0
             return t
         }
     }
@@ -186,4 +184,19 @@ private fun pathOpsDistanceTo(from: Point2F64, to: Point2F64): Double {
     val dx = from.x - to.x
     val dy = from.y - to.y
     return sqrt(dx * dx + dy * dy)
+}
+
+private fun almostBetweenUlpsF64(a: Double, b: Double, c: Double): Boolean {
+    val lower = min(a, c)
+    val upper = max(a, c)
+    return (b >= lower || PathPredicatesF64.almostEqualUlps(lower, b, maxUlps = 2)) &&
+        (b <= upper || PathPredicatesF64.almostEqualUlps(b, upper, maxUlps = 2))
+}
+
+private fun isBetweenF64(a: Double, b: Double, c: Double): Boolean = (a - b) * (c - b) <= 0.0
+
+private fun pinUnitIntervalF64(t: Double): Double = when {
+    t < PathPredicatesF64.EPSILON_F64 * 4.0 -> 0.0
+    t > 1.0 - PathPredicatesF64.EPSILON_F64 * 4.0 -> 1.0
+    else -> t
 }

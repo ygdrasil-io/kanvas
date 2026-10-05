@@ -35,5 +35,6 @@ sealed interface ColorFilter {
         val effect: org.graphiks.kanvas.pipeline.RuntimeEffect,
         val uniforms: UniformBlock,
         val children: Map<String, ColorFilter> = emptyMap(),
+        val resources: org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings = org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings.Empty,
     ) : ColorFilter
 }

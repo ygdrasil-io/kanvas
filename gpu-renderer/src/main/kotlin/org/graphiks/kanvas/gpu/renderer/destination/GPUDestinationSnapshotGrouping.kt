@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.destination
 
 import java.math.BigInteger
 import java.util.Locale
+import org.graphiks.kanvas.gpu.plan.DestinationVersionI64
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -25,6 +26,8 @@ data class GPUDestinationSnapshotGroupKey(
     val colorInterpretation: GPUColorInterpretation,
     val sampleContinuation: GPUSampleContinuationKey?,
     val sourceIntermediate: GPUIntermediateIdentity?,
+    /** Logical color write version, independent of the physical target generation. */
+    val destinationVersion: DestinationVersionI64? = null,
 ) {
     init {
         require(targetGeneration >= 0L) {
@@ -749,6 +752,7 @@ private fun GPUDestinationSnapshotGroupKey.dumpLabel(): String {
             "depthStencilAttachment=${value.depthStencilAttachment?.value ?: "none"};"
     } ?: "sampleContinuation=none;"
     return "target=${target.value};targetGeneration=$targetGeneration;" +
+        "destinationVersion=${destinationVersion?.valueI64 ?: "legacy"};" +
         "deviceGeneration=${deviceGeneration.value};format=${format.value};" +
         "color=${colorInterpretation.value};$continuation" +
         "sourceIntermediate=${sourceIntermediate?.value ?: "none"}"

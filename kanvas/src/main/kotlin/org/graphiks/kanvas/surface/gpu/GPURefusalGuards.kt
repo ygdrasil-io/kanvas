@@ -17,11 +17,29 @@ private const val PERSPECTIVE_CAPTURE_REFUSAL = "unsupported_transform:Perspecti
 
 /** Returns the stable refusal for any command whose clip was captured under perspective. */
 internal fun GPUClipFacts.perspectiveCaptureRefusalReasonOrNull(): String? =
-    perspectiveCaptureRefusal.takeIf { it }?.let { PERSPECTIVE_CAPTURE_REFUSAL }
+    clipTransformRefusal ?: perspectiveCaptureRefusal.takeIf { it }?.let { PERSPECTIVE_CAPTURE_REFUSAL }
 
 /** Returns the same stable refusal before a [DisplayOp] reaches any GPU encoding route. */
 internal fun DisplayOp.perspectiveCaptureRefusalReasonOrNull(): String? =
-    clipOrNull()?.perspectiveCaptureRefusal?.takeIf { it }?.let { PERSPECTIVE_CAPTURE_REFUSAL }
+    typedClipTransformRefusalOrNull()
+
+/** Returns a typed clip-transform refusal without entering a legacy planner. */
+internal fun DisplayOp.typedClipTransformRefusalOrNull(): String? =
+    clipOrNull()?.typedClipTransformRefusalOrNull()?.preparedClipTransformDiagnostic()
+
+/** Consumes a typed clip snapshot before a legacy coverage planner can classify it. */
+internal fun DisplayOp.clipTransformRefusalOrNull(target: org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts): String? =
+    clipOrNull()?.toGPUClipFacts(target)?.clipTransformRefusal?.preparedClipTransformDiagnostic()
+
+/**
+ * A typed singular affine clip has the same public terminal as the other
+ * transform consumers.  Preserve legacy wire labels in [GPUClipFacts], but do
+ * not leak that transitional label through prepared/public Surface routes.
+ */
+private fun String.preparedClipTransformDiagnostic(): String = when (this) {
+    "unsupported_clip_transform:Singular" -> "unsupported.transform.affine_singular"
+    else -> this
+}
 
 private fun DisplayOp.clipOrNull(): ClipStack? = when (this) {
     is DisplayOp.DrawRect -> clip

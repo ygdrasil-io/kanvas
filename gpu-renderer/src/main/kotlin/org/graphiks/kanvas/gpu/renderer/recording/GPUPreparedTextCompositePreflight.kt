@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -34,15 +36,18 @@ object GPUPreparedTextNativeBlendDomain {
 
     fun refusalCodeOrNull(blendPlans: List<GPUBlendPlan?>): String? =
         REFUSAL_CODE.takeIf {
-            blendPlans.any { blendPlan -> blendPlan !is GPUBlendPlan.FixedFunctionBlend }
+            blendPlans.any { blendPlan ->
+                blendPlan !is GPUBlendPlan.FixedFunctionBlend &&
+                    blendPlan !is GPUBlendPlan.ShaderBlendWithDstRead
+            }
         }
 }
 
 /**
  * Pure Task 5 native-domain gate shared by recording and execution preflight.
  *
- * Non-fixed plans retain their semantic identity for later routes, but cannot enter the current
- * Prepared TextA8 native handoff.
+ * Prepared TextA8 admits fixed-function and sealed destination-read plans. Other plan kinds retain
+ * their semantic identity but cannot enter the native handoff.
  */
 internal fun preparedTextNativeBlendDomainRefusal(
     blendPlans: List<GPUBlendPlan?>,
@@ -51,7 +56,8 @@ internal fun preparedTextNativeBlendDomainRefusal(
         GPUPreparedTextCompositePreflightRefusal(
             code = GPUPreparedTextCompositePreflightRefusalCodes.NATIVE_BLEND,
             message =
-                "Prepared TextA8 native materialization requires a fixed-function blend plan.",
+                "Prepared TextA8 native materialization requires a fixed-function or " +
+                    "destination-read blend plan.",
         )
     } else {
         null
@@ -70,7 +76,7 @@ internal object GPUPreparedTextCompositePreflight {
     fun validate(
         binding: GPUPreparedTextRenderBinding,
         semantic: GPUDrawSemanticPayload.TextA8,
-        capabilities: GPUCapabilities,
+        capabilities: GPUCapabilities?,
         framePlan: GPUFramePlan,
         renderSourceStepIndex: Int,
     ): GPUPreparedTextCompositePreflightRefusal? {
@@ -99,6 +105,20 @@ internal object GPUPreparedTextCompositePreflight {
                 "Prepared TextA8 semantic, capability, binding, and frame identities diverged.",
             )
         }
+        val materialPlan = semantic.materialPlanProvenance
+        val semanticAdmissionToken = semantic.material.preparedTextW5aAdmissionToken
+        if (materialPlan?.validates(semantic.payloadRef.commandIdValue, semantic.material) == false ||
+            binding.preflightSeal.materialPlanProvenanceIdentity != materialPlan?.canonicalIdentity() ||
+            binding.preflightSeal.materialPlanAdmissionToken !== semanticAdmissionToken ||
+            (materialPlan == null) != (semanticAdmissionToken == null && semantic.material.commonSource == null) ||
+            materialPlan?.matchesAdmissionToken(
+                binding.preflightSeal.materialPlanAdmissionToken,
+            ) == false
+        ) {
+            return bindingLayoutRefusal(
+                "Prepared TextA8 sealed W5a material table, reference, version, or command changed.",
+            )
+        }
         val compositeSeal = binding.preflightSeal.textA8Composite
             ?: return bindingLayoutRefusal(
                 "Prepared TextA8 binding requires one composite preflight seal.",
@@ -120,7 +140,7 @@ internal object GPUPreparedTextCompositePreflight {
                 "Prepared TextA8 composite requires one exact target descriptor.",
             )
         val expectedFragment = runCatching {
-            semantic.material.authenticatedSnapshot().composableFragment
+            semantic.material.authenticatedSnapshot().let { if (it.commonSource == null) it.composableFragment else null }
         }.getOrElse { failure ->
             return sourceRefusal(
                 "Prepared TextA8 material could not be re-authenticated: " +
@@ -151,10 +171,11 @@ internal object GPUPreparedTextCompositePreflight {
             render,
             preparations,
         )?.let { return it }
+        val observedCapabilities = capabilities ?: return null
         validateDrawUniform(
             binding,
             semantic,
-            capabilities,
+            observedCapabilities,
         )?.let { return it }
         validateProgramSourceAndAbi(
             binding.compositeProgram,
@@ -216,22 +237,33 @@ internal object GPUPreparedTextCompositePreflight {
 
     private fun validateBindingLayout(
         actual: GPUPreparedTextCompositeProgram,
-        expectedFragment: GPUPreparedMaterialFragment,
+        expectedFragment: GPUPreparedMaterialFragment?,
         render: GPUFrameStep.RenderPassStep,
     ): GPUPreparedTextCompositePreflightRefusal? {
         val coverageMaskVariant =
             actual.clipVariant ==
                 org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant.CoverageMask
+        val common = expectedFragment == null
+        val destinationVariant = actual.destinationBlend != null && !common
+        val destinationGroup = if (coverageMaskVariant) 4 else 3
         if (actual.bindingPlan.drawUniformGroup != 0 ||
             actual.bindingPlan.drawUniformBinding != 0 ||
-            actual.bindingPlan.atlasTextureGroup != 2 ||
-            actual.bindingPlan.atlasTextureBinding != 0 ||
-            actual.bindingPlan.atlasSamplerGroup != 2 ||
-            actual.bindingPlan.atlasSamplerBinding != 1 ||
+            actual.bindingPlan.atlasTextureGroup != (if (common) 0 else 2) ||
+            actual.bindingPlan.atlasTextureBinding != (if (common) 1 else 0) ||
+            actual.bindingPlan.atlasSamplerGroup != (if (common) 0 else 2) ||
+            actual.bindingPlan.atlasSamplerBinding != (if (common) 2 else 1) ||
             actual.bindingPlan.coverageMaskTextureGroup !=
             3.takeIf { coverageMaskVariant } ||
             actual.bindingPlan.coverageMaskTextureBinding !=
             0.takeIf { coverageMaskVariant } ||
+            actual.bindingPlan.destinationTextureGroup !=
+            destinationGroup.takeIf { destinationVariant } ||
+            actual.bindingPlan.destinationTextureBinding !=
+            0.takeIf { destinationVariant } ||
+            actual.bindingPlan.destinationSamplerGroup !=
+            destinationGroup.takeIf { destinationVariant } ||
+            actual.bindingPlan.destinationSamplerBinding !=
+            1.takeIf { destinationVariant } ||
             !actual.bindingPlan.materialFragment.matches(expectedFragment)
         ) {
             return bindingLayoutRefusal(
@@ -262,7 +294,8 @@ internal object GPUPreparedTextCompositePreflight {
             render.resourceUses.take(drawUniformIndex).any { use ->
                 use.role != GPUFrameResourceRole.GlyphAtlas &&
                     use.role != GPUFrameResourceRole.VertexData &&
-                    use.role != GPUFrameResourceRole.ClipMask
+                    use.role != GPUFrameResourceRole.ClipMask &&
+                    use.role != GPUFrameResourceRole.DestinationSnapshot
             } ||
             render.resourceUses.drop(drawUniformIndex + 1).any { use ->
                 use.role == GPUFrameResourceRole.GlyphAtlas ||
@@ -502,11 +535,11 @@ internal object GPUPreparedTextCompositePreflight {
                 affine[0],
                 affine[1],
                 affine[2],
-                0f.toRawBits(),
+                semantic.preparedDestinationBounds(target).left.toFloat().toRawBits(),
                 affine[3],
                 affine[4],
                 affine[5],
-                0f.toRawBits(),
+                semantic.preparedDestinationBounds(target).top.toFloat().toRawBits(),
             )
         } + when (val clipPlan = seal.clipPlan) {
             is GPUPreparedTextClipPlan.Direct -> List(8) { 0f.toRawBits() }
@@ -616,9 +649,10 @@ internal object GPUPreparedTextCompositePreflight {
         return null
     }
 
-    private fun GPUPreparedMaterialFragment.matches(
-        expected: GPUPreparedMaterialFragment,
+    private fun GPUPreparedMaterialFragment?.matches(
+        expected: GPUPreparedMaterialFragment?,
     ): Boolean =
+        if (this == null || expected == null) this === expected else
         declarationsWgsl == expected.declarationsWgsl &&
             evaluationFunctionWgsl == expected.evaluationFunctionWgsl &&
             uniformBinding == expected.uniformBinding &&

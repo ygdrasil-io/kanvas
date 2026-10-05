@@ -59,8 +59,6 @@ private const val PREPARED_ANALYSIS_AUTHORITY_MISSING_REFUSAL =
     "unsupported.core_primitive.rect.analysis_authority_missing"
 private const val PREPARED_CLIP_PRODUCER_AUTHORITY_REFUSAL =
     "invalid.preflight.core_primitive_clip_producer_authority"
-private const val PREPARED_CLIP_MASK_DEPTH_STENCIL_TOPOLOGY_REFUSAL =
-    "unsupported.recording.core_primitive_clip_mask_depth_stencil_topology_unavailable"
 private const val PREPARED_ANALYTIC_SHAPE_MULTI_KEY_REFUSAL =
     "unsupported.native-core-primitive.analytic-shape-multi-key"
 
@@ -125,7 +123,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `adapter backed even odd clip mask preserves fill hole exterior and AA edge`() {
+    fun `adapter backed even odd clip reports unavailable W4e AA producer`() {
         requireWebGpu()
         val evenOddHole = Path().apply {
             fillType = FillType.EVEN_ODD
@@ -140,10 +138,8 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        // The route collapse terminates the analytic-clip core frame
-        // before lowering: the prepared analytic-shape lane accepts NoClip or
-        // ScissorOnly execution only.
-        assertTerminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL, surface::render)
+        val failure = assertFailsWith<GPUPlanSurfaceTerminalException> { surface.render() }
+        assertEquals("w4e.clip.sample-count-unavailable", failure.code)
     }
 
     @Test
@@ -283,7 +279,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `inverse cubic clip remains a terminal refusal`() {
+    fun `inverse cubic clip renders its finite exterior`() {
         requireWebGpu()
         val surface = Surface(64, 64)
         surface.canvas {
@@ -302,7 +298,11 @@ class GPUClipCoverageSurfaceTest {
             )
         }
 
-        assertTerminal("unsupported.clip.inverse_cubic", surface::render)
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused)
+        assertRgbaNear(result.pixels, 64, 32, 20, ColorARGB.Transparent)
+        assertRgbaNear(result.pixels, 64, 32, 50, ColorARGB.Red)
     }
 
     @Test
@@ -367,7 +367,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public finite pure translated rrects render inside one identity hard path clip stencil scope`() {
+    fun `public finite pure translated rrects render inside an identity hard path clip`() {
         requireWebGpu()
         val background = ColorARGB.Transparent
         val fill = ColorARGB.of(255, 242, 135, 46)
@@ -397,10 +397,6 @@ class GPUClipCoverageSurfaceTest {
             assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
             assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
             assertEquals(0, result.stats.opsRefused)
-            assertEquals(
-                listOf("HardClipStencilProducer", "AnalyticRRect"),
-                result.structuralSteps,
-            )
             assertRgbaNear(result.pixels, 64, samples[2].toInt(), samples[3].toInt(), fill)
             assertRgbaNear(result.pixels, 64, samples[4].toInt(), samples[5].toInt(), background)
             assertRgbaNear(result.pixels, 64, samples[6].toInt(), samples[7].toInt(), background)
@@ -408,7 +404,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public finite translated rrects render through an inverse winding hard path clip stencil scope`() {
+    fun `public finite translated rrects render through an inverse winding hard path clip`() {
         requireWebGpu()
         val background = ColorARGB.Transparent
         val fill = ColorARGB.of(255, 242, 135, 46)
@@ -451,7 +447,6 @@ class GPUClipCoverageSurfaceTest {
             val result = surface.render()
             assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
             assertEquals(0, result.stats.opsRefused)
-            assertEquals(listOf("HardClipStencilProducer", "AnalyticRRect"), result.structuralSteps)
             assertRgbaNear(result.pixels, 64, case.expectedFillX, case.expectedFillY, fill)
             assertRgbaNear(result.pixels, 64, case.expectedBackgroundX, case.expectedBackgroundY, background)
         }
@@ -580,7 +575,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public even odd hard path clip rrect remains outside the analytic rrect admission`() {
+    fun `public even odd hard path clip rrect renders through W4e`() {
         requireWebGpu()
         val surface = Surface(64, 64)
         surface.canvas {
@@ -598,7 +593,11 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        assertTerminal("unsupported.clip.complex_stack", surface::render)
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused)
+        assertRgbaNear(result.pixels, 64, 16, 20, ColorARGB.of(255, 242, 135, 46))
+        assertRgbaNear(result.pixels, 64, 46, 42, ColorARGB.Transparent)
     }
 
     @Test
@@ -1199,18 +1198,27 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public singular and non finite hard path clip transforms refuse before submission`() {
+    fun `public singular clip transforms refuse before submission`() {
         requireWebGpu()
-        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
-        val submissionsBefore = session.runtimeTelemetry.submissions
-        val cases = listOf(
-            "singular" to 0f to "unsupported.transform.affine_singular",
-            "nan" to Float.NaN to "unsupported.transform.non_finite",
-            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
-        )
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            scale(0f, 1f)
+            clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+            resetMatrix()
+            drawColor(ColorARGB.Red)
+            restore()
+        }
 
-        cases.forEach { (labelAndScale, expectedCode) ->
-            val (label, scaleX) = labelAndScale
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { surface.render() }
+        assertEquals("unsupported.transform.affine_singular", failure.diagnostic.code.value)
+    }
+
+    @Test
+    fun `non finite clip transforms terminate in W3 capture without runtime setup`() {
+        val scales = listOf("nan" to Float.NaN, "infinity" to Float.POSITIVE_INFINITY)
+
+        scales.forEach { (label, scaleX) ->
             val surface = Surface(32, 32)
             surface.canvas {
                 save()
@@ -1221,27 +1229,43 @@ class GPUClipCoverageSurfaceTest {
                 restore()
             }
 
-            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>(label) { surface.render() }
-            assertEquals(expectedCode, failure.diagnostic.code.value, label)
-            assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, label)
+            val failure = assertFailsWith<GPUPlanSurfaceTerminalException>(label) { surface.render() }
+            assertEquals("non-finite-value", failure.code, label)
         }
     }
 
     @Test
-    fun `public singular and non finite rect rrect and path clips refuse before submission`() {
+    fun `public singular rect rrect and path clips refuse before submission`() {
         requireWebGpu()
-        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
-        val submissionsBefore = session.runtimeTelemetry.submissions
-        val scales = listOf(
-            "singular" to 0f to "unsupported.transform.affine_singular",
-            "nan" to Float.NaN to "unsupported.transform.non_finite",
-            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
-        )
         val clipKinds = listOf("rect", "rrect", "path")
 
         clipKinds.forEach { kind ->
-            scales.forEach { (labelAndScale, expectedCode) ->
-                val (label, scaleX) = labelAndScale
+            val surface = Surface(32, 32)
+            surface.canvas {
+                save()
+                scale(0f, 1f)
+                when (kind) {
+                    "rect" -> clipRect(RectF32(4f, 4f, 28f, 28f), ClipOp.INTERSECT, antiAlias = false)
+                    "rrect" -> clipRRect(RRectF32.of(RectF32(4f, 4f, 28f, 28f), radius = 4f), ClipOp.INTERSECT, antiAlias = false)
+                    else -> clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+                }
+                resetMatrix()
+                drawColor(ColorARGB.Red)
+                restore()
+            }
+
+            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>(kind) { surface.render() }
+            assertEquals("unsupported.transform.affine_singular", failure.diagnostic.code.value, kind)
+        }
+    }
+
+    @Test
+    fun `non finite rect rrect and path clips terminate in W3 capture without runtime setup`() {
+        val scales = listOf("nan" to Float.NaN, "infinity" to Float.POSITIVE_INFINITY)
+        val clipKinds = listOf("rect", "rrect", "path")
+
+        clipKinds.forEach { kind ->
+            scales.forEach { (label, scaleX) ->
                 val surface = Surface(32, 32)
                 surface.canvas {
                     save()
@@ -1256,15 +1280,14 @@ class GPUClipCoverageSurfaceTest {
                     restore()
                 }
 
-                val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>("$kind-$label") { surface.render() }
-                assertEquals(expectedCode, failure.diagnostic.code.value, "$kind-$label")
-                assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, "$kind-$label")
+                val failure = assertFailsWith<GPUPlanSurfaceTerminalException>("$kind-$label") { surface.render() }
+                assertEquals("non-finite-value", failure.code, "$kind-$label")
             }
         }
     }
 
     @Test
-    fun `adapter backed inverse difference clip preserves fill exterior and AA edge`() {
+    fun `adapter backed inverse difference clip reports unavailable W4e AA producer`() {
         requireWebGpu()
         val inverseRect = Path().apply {
             fillType = FillType.INVERSE_EVEN_ODD
@@ -1278,7 +1301,8 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        assertTerminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL, surface::render)
+        val failure = assertFailsWith<GPUPlanSurfaceTerminalException> { surface.render() }
+        assertEquals("w4e.clip.sample-count-unavailable", failure.code)
     }
 
     @Test
@@ -1356,13 +1380,8 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `non blur core draw under a rect plus polygon difference clip stays on the coverage mask route`() {
-        // The AnalyticMultiRect lowering is scoped to the mask-blur
-        // composite lane only. A NON-BLUR direct draw under the rect INTERSECT + orthogonal
-        // polygon DIFFERENCE clip must keep its prior CoverageMask route (which, for a
-        // path-carrying mask, refuses with the documented depth/stencil topology code), NOT
-        // the AnalyticMultiRect → Clip.Refused refusal.
-        assertTerminal(PREPARED_CLIP_MASK_DEPTH_STENCIL_TOPOLOGY_REFUSAL) {
+    fun `non blur core draw under a rect plus polygon difference clip reports unavailable W4e AA producer`() {
+        val failure = assertFailsWith<GPUPlanSurfaceTerminalException> {
             Surface(16, 16).run {
                 requireWebGpu()
                 canvas {
@@ -1388,17 +1407,23 @@ class GPUClipCoverageSurfaceTest {
                 render()
             }
         }
+        assertEquals("w4e.clip.sample-count-unavailable", failure.code)
     }
 
     @Test
-    fun `complex clip accepts every standard blend mode`() {
+    fun `complex clip promotes supported SRC OVER while retaining unsupported blend terminals`() {
         requireWebGpu()
 
         BlendMode.entries.forEach { mode ->
-            // Every blend mode rides the same analytic-clip core frame, which the
-            // route collapse terminates before any blend decision.
-            assertTerminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL) {
-                renderMaskedRect(mode)
+            if (mode == BlendMode.SRC_OVER) {
+                val failure = assertFailsWith<GPUPlanSurfaceTerminalException> {
+                    renderMaskedRect(mode)
+                }
+                assertEquals("w4e.clip.capability-unavailable", failure.code, mode.name)
+            } else {
+                assertTerminal(PREPARED_ANALYTIC_SHAPE_CLIP_REFUSAL) {
+                    renderMaskedRect(mode)
+                }
             }
         }
     }

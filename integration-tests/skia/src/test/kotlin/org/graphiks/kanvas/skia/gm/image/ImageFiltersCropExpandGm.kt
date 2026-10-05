@@ -17,7 +17,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.color.ColorARGB
-import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
 
 /** Port of Skia's `gm/imagefilterscropexpand.cpp`.
@@ -44,7 +44,7 @@ class ImageFiltersCropExpandGm : SkiaGm {
         )))
 
         val margin = 12f
-        val pointLocation = Point2F32(0f, 0f)
+        val pointLocation = Point3F32(0f, 0f, 10f)
 
         canvas.translate(margin, margin)
 

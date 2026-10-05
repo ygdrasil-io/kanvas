@@ -8,6 +8,7 @@ value class GPUColorFormat(val value: String) {
     }
 
     companion object {
+        val R8Unorm: GPUColorFormat = GPUColorFormat("r8unorm")
         val RGBA8Unorm: GPUColorFormat = GPUColorFormat("rgba8unorm")
         val RGBA8UnormSrgb: GPUColorFormat = GPUColorFormat("rgba8unorm-srgb")
         val BGRA8Unorm: GPUColorFormat = GPUColorFormat("bgra8unorm")

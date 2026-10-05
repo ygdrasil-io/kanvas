@@ -20,7 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedRectSnapshot
-import org.graphiks.math.color.ColorARGB
+import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedLayerChildrenSpec
@@ -39,12 +39,12 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
-import org.graphiks.kanvas.paint.BlendMode
 
 internal data class GPUPreparedSurfaceFrameBuildRequest(
     val candidate: GPUPreparedSurfaceEligibility.Candidate,
@@ -117,16 +117,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
         validateTargetFormat(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         validateFrameIdentities(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         return try {
-            // Destination-reading frames whose first visual op is the reader fuse the
-            // scene-target clear into that reader's render pass, while the destination
-            // snapshot copy is ordered before the pass. On a fresh target the copy
-            // accidentally captures the cleared state; on a retained prepared session
-            // target it captures the previous frame's pixels. Synthesize
-            // the frame's implicit clear as an explicit leading op so the copy always
-            // captures the cleared target.
-            val operations = request.candidate.operations.withSynthesizedDstReadSceneClear(
-                interpretation = request.candidate.color.interpretation,
-            )
+            val operations = request.candidate.operations
             val hasCompositeOps = operations.any { operation ->
                 operation is DisplayOp.BeginLayer ||
                     operation is DisplayOp.EndLayer ||
@@ -218,11 +209,37 @@ internal object GPUPreparedSurfaceFrameBuilder {
             } else {
                 0
             }
-            val textPreparation = GPUPreparedTextFramePreparer.prepareInventory(
+            val commonSources = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul &&
+                request.includeReadback && GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
+                W5hPreparedMaterialFrameV6.prepare(request, frameGeneration) else null
+            val pointSources = if (commonSources == null && request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul &&
+                request.includeReadback && GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
+                W5aPreparedFrameMaterialRegistry.capturePointSources(operations, request.targetBounds.width, request.targetBounds.height,
+                    if (GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
+                        org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.UnitInterval
+                    else org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.Unavailable,
+                    request.targetFacts, request.candidate.config, request.capabilities)
+                else emptyMap()
+            val coreMaterialCandidates = commonSources?.corePlans ?: if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
+                W5aPreparedFrameMaterialRegistry.captureCoreCandidates(
+                    operations, request.targetBounds.width, request.targetBounds.height,
+                    if (GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
+                        org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.UnitInterval
+                    else org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.Unavailable,
+                    deferredOperationIndices = pointSources.keys,
+                )
+            } else emptyMap()
+            val textMaterials = if (commonSources == null && request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
+                W5aPreparedTextMaterialBridge.capture(
+                    operations, request.targetBounds.width, request.targetBounds.height,
+                )
+            } else null
+            val textPreparation = commonSources?.text ?: GPUPreparedTextFramePreparer.prepareInventory(
                 operations = operations,
                 target = request.targetFacts,
                 capabilities = request.capabilities,
                 generation = GPUTextArtifactGeneration(frameGeneration),
+                materialBridge = textMaterials,
             )
             if (textPreparation is GPUPreparedTextFrameInventoryPreparation.Refused) {
                 val refusal = textPreparation.refusal
@@ -239,16 +256,21 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 )
             }
             textPreparation as GPUPreparedTextFrameInventoryPreparation.Ready
+            var zeroSurvivorCandidate: GPUPreparedZeroSurvivorCandidate? = null
             val verticesPreparation = GPUPreparedVerticesFramePreparer.prepare(
                 operations = operations,
                 target = request.targetFacts,
                 config = request.candidate.config,
                 capabilities = request.capabilities,
                 preparedTextInventory = textPreparation.inventory,
-                mappingBoundary = flatElidedOperationIndices.let { elided ->
+                commonInventory = commonSources?.vertices,
+                mappingBoundary = (flatElidedOperationIndices + commonSources?.elidedOperationIndices.orEmpty()).let { elided ->
                     GPUPreparedFrameMappingBoundary { operations, target, config, capabilities,
                         textInventory, verticesInventory ->
-                        GPUOpMapper.mapOperations(
+                        if (commonSources != null) return@GPUPreparedFrameMappingBoundary commonSources.mapping
+                        zeroSurvivorCandidate = operations.zeroSurvivorCandidate(
+                            request.candidate.color.interpretation, textPreparation, verticesInventory, coreMaterialCandidates)
+                        fun mapWithSceneClear(synthesizeSceneClear: Boolean) = GPUOpMapper.mapOperations(
                             operations = operations,
                             target = target,
                             config = config,
@@ -256,7 +278,21 @@ internal object GPUPreparedSurfaceFrameBuilder {
                             preparedTextInventory = textInventory,
                             preparedVerticesInventory = verticesInventory,
                             elidedOperationIndices = elided,
+                            w5aPointMaterialRefs = coreMaterialCandidates.mapValues { it.value.root } + pointSources.mapValues { it.value.sourceRef },
+                            synthesizeSceneClear = synthesizeSceneClear,
                         )
+                        // Pure first pass authenticates geometry/clip culling and operation
+                        // command ownership. Only its real survivors may decide initialization.
+                        val tentative = mapWithSceneClear(false)
+                        if (tentative.preparedRefusal != null) tentative
+                        else if (zeroSurvivorCandidate != null || operations.requiresDstReadSceneClear(
+                                interpretation = request.candidate.color.interpretation,
+                                textInventory = textInventory,
+                                verticesInventory = verticesInventory,
+                                corePlansByOperationIndex = coreMaterialCandidates,
+                                pointSourcesByOperationIndex = pointSources,
+                                mapping = tentative,
+                            )) mapWithSceneClear(true) else tentative
                     }
                 },
             )
@@ -281,7 +317,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 mapping = mapping,
                 operations = operations,
                 inventory = textPreparation.inventory,
-                elidedOperationIndices = flatElidedOperationIndices,
+                elidedOperationIndices = flatElidedOperationIndices + commonSources?.elidedOperationIndices.orEmpty(),
+                commonCoreOperationIndices = commonSources?.corePlans?.keys.orEmpty(),
             )
             if (preparedImages is PreparedImageVisuals.Refused) {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(preparedImages.diagnostic)
@@ -366,18 +403,18 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     culledTextOperationIndices = mapping.culledTextOperationIndices,
                 )
             }
-            val recorder = GPURecorder(
-                recordingId = request.recordingId,
-                frameId = request.frameId,
-                capabilities = request.capabilities,
-                deviceGeneration = request.deviceGeneration,
-            )
-            val normalizedCommands = (
+            val normalizedCommands = commonSources?.recording?.recordedCommands ?: (
                 preparedMapping.visualCommands.map(GPUFramePathVisualCommand::normalized) +
                     verticesInventory.normalizedCommands(request.targetFacts, request.capabilities)
                 ).sortedBy { command -> command.commandId.value }
-            normalizedCommands.forEach(recorder::record)
-            val recording = recorder.close()
+            val recording = commonSources?.recording ?: GPURecorder(request.recordingId, request.frameId,
+                request.capabilities, request.deviceGeneration).let { recorder ->
+                normalizedCommands.forEach(recorder::record)
+                recorder.close()
+            }
+            require(recording.recordedCommands.size == normalizedCommands.size && normalizedCommands.indices.all {
+                recording.recordedCommands[it] === normalizedCommands[it]
+            } || commonSources == null) { "Common recording must retain the exact final normalized commands" }
             recording.taskList.diagnostics.firstOrNull { diagnostic -> diagnostic.isTerminal }?.let {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(it.atSurfaceBoundary())
             }
@@ -394,7 +431,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         diagnostic(gathered.code, gathered.message, gathered.facts),
                     )
             }
-            val semantics = when (val gathered = GPUPreparedSurfaceSemanticBuilder.gather(
+            val validatedSemantics = when (val gathered = GPUPreparedSurfaceSemanticBuilder.gather(
                 visualCommands = preparedMapping.visualCommands,
                 normalizedCommands = normalizedCommands,
                 recording = recording,
@@ -402,24 +439,108 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 imageArtifactsByCommandId = preparedImages.artifactsByCommandId,
                 textSemanticsByCommandId = preparedTextSemantics,
                 verticesSemanticsByCommandId = verticesSemantics,
+                capturedCoreSemantics = commonSources?.coreSemantics,
             )) {
                 is GPUPreparedSurfaceSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
                 is GPUPreparedSurfaceSemanticGatherResult.Refused ->
                     return GPUPreparedSurfaceFrameBuildResult.Refused(gathered.diagnostic)
             }
-            preflightUnmaterializedPreparedVertices(recording, semantics)?.let { diagnostic ->
+            preflightUnmaterializedPreparedVertices(recording, validatedSemantics)?.let { diagnostic ->
                 return GPUPreparedSurfaceFrameBuildResult.Refused(diagnostic)
+            }
+            // The real mapper/recorder/semantic lowerers have now validated geometry, clip,
+            // budgets and elision. Only their admitted payloads acquire frame material ownership.
+            val validatedCorePlansByCommandId = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
+                coreMaterialCandidates[operationIndex]?.let { candidate -> commandIds.map { it to candidate } }.orEmpty()
+            }.toMap()
+            val zeroProjection = zeroSurvivorCandidate?.projectValidated(
+                mapping, recording.taskList, validatedSemantics, validatedCorePlansByCommandId)
+            val admittedSemantics = zeroProjection?.semantics ?: validatedSemantics
+            val corePlansByCommandId = if (zeroProjection == null) validatedCorePlansByCommandId
+                else validatedCorePlansByCommandId.filterKeys(admittedSemantics::containsKey)
+            val admittedPointSources = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
+                pointSources[operationIndex]?.let { source -> commandIds.filter(admittedSemantics::containsKey).map { it to source } }.orEmpty()
+            }.toMap()
+            val frameMaterials = if (commonSources != null) commonSources.sourceFrame?.let { sourceFrame ->
+                val refs = sourceFrame.operationIndicesI32.filter(admittedSemantics::containsKey)
+                    .associateWith(sourceFrame::ref)
+                W5aPreparedFrameMaterialRegistry(sourceFrame.table, refs)
+            } else W5aPreparedFrameMaterialRegistry.seal(admittedSemantics,
+                corePlansByCommandId.filterKeys { it !in admittedPointSources })
+            val pointClipCandidates = W5aPreparedFrameMaterialRegistry.capturePointClips(operations)
+            val pointClips = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
+                pointClipCandidates[operationIndex]?.let { clip -> commandIds.filter(admittedSemantics::containsKey).map { it to clip } }.orEmpty()
+            }.toMap()
+            val semantics = admittedSemantics.mapValues { (commandId, semantic) ->
+                val ref = frameMaterials?.refsByCommandId?.get(commandId)
+                if (ref == null || commonSources != null) semantic else when (semantic) {
+                    is GPUDrawSemanticPayload.TextA8 -> semantic.withW5aFrameMaterial(frameMaterials.table, ref)
+                    is GPUDrawSemanticPayload.Vertices -> semantic.withW5aFrameMaterial(frameMaterials.table, ref)
+                    else -> semantic
+                }
             }
             when (val prepared = taskListBuilder.build(
                 GPUPreparedSurfaceFrameRequest(
-                    baseTaskList = recording.taskList,
+                    baseTaskList = zeroProjection?.taskList ?: recording.taskList,
                     capabilities = request.capabilities,
                     target = request.target,
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = semantics,
+                    w5bPointBlends = corePlansByCommandId.mapValues { it.value.blend } + admittedPointSources.mapValues { it.value.blend },
+                    w5hPointSources = admittedPointSources,
+                    w5hPointBudget = if (admittedPointSources.isEmpty()) null else org.graphiks.kanvas.gpu.plan.PlanBudget(
+                        request.candidate.config.frameLocalBudgetBytes,
+                        org.graphiks.kanvas.gpu.plan.MaterialFrameLimits(request.candidate.config.maxNoiseOctaveEvaluationsI64)),
+                    synthesizedSceneClearCommandIdI32 = 0.takeIf { mapping.hasSynthesizedSceneClear },
+                    w5bPointClips = pointClips,
+                    w5bPointCaptures = if (commonSources != null) emptyMap() else recording.pointAuthorities.mapNotNull { (commandId, authority) ->
+                        val original = admittedSemantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive
+                        val materials = frameMaterials
+                        val ref = materials?.refsByCommandId?.get(commandId)
+                        val source = admittedPointSources[commandId]
+                        val blend = source?.blend ?: corePlansByCommandId[commandId]?.blend
+                        // Only W5b's exact DirectTriangles point lane acquires this join. Other
+                        // W5a Points keep their original geometry and prepared route.
+                        val directPoint = (original?.geometry as?
+                            org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath)
+                            ?.geometryMode == org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode.DirectTriangles
+                        if (original == null || !directPoint || blend == null) null
+                        else if (source != null) commandId to authority.capturePrepared(original, blend, pointClips[commandId], source)
+                        else if (ref == null) null else commandId to
+                            authority.capturePrepared(original, blend, pointClips[commandId], materials.table, ref)
+                    }.toMap(),
+                    w5aCoreMaterialAuthority = frameMaterials?.let { materials ->
+                        val refs = materials.refsByCommandId.filterKeys { commandId ->
+                            (semantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive)?.material is
+                                org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
+                        }
+                        if (refs.isEmpty()) null else requireNotNull(
+                            org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
+                                materials.table, refs, authoritiesByCommandIdI32 = refs.mapValues { (commandId, ref) ->
+                                    when (val authority = corePlansByCommandId.getValue(commandId).materialAuthority) {
+                                        is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1 -> authority.copy(ref = ref)
+                                        is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2 -> authority.copy(ref = ref)
+                                        is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV5 -> authority.also {
+                                            require(commonSources != null && it.ref == ref)
+                                        }
+                                        else -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
+                                    }
+                                }, sourcePlansByCommandIdI32 = refs.keys.associateWith { commandId ->
+                                    corePlansByCommandId.getValue(commandId).let { it.table to it.root }
+                                },
+                                finalBlendsByCommandIdI32 = refs.keys.associateWith { commandId ->
+                                    corePlansByCommandId.getValue(commandId).blend
+                                },
+                                packedV4ByCommandIdI32 = commonSources?.let { common -> refs.keys.associateWith { commandId ->
+                                    requireNotNull(common.sourceFrame).packedSource(commandId)
+                                } }.orEmpty(),
+                            ),
+                        ) { "invalid.material.w5a_core_authority" }
+                    },
                     readbackRequestId = request.readbackRequestId.takeIf { request.includeReadback },
                     targetFormat = GPUColorFormat(request.targetFacts.colorFormat),
                     maskBlurIntermediateBudgetBytes = request.candidate.config.maxMaskBlurIntermediateBytes.toLong(),
+                    coreGeometryInventory = commonSources?.coreGeometryInventory,
                 ),
                 allowEmptyBaseTaskList = compositeScheduling != null,
             )) {
@@ -472,12 +593,41 @@ internal object GPUPreparedSurfaceFrameBuilder {
                                 mapping.commandIdsByOperationIndex,
                             ),
                         )
+                    val mappedVerticesByCommandId = verticesInventory.mappedCommands.associateBy { it.commandId }
+                    val survivingVerticesOperationIndices = splitTaskList.tasks
+                        .asSequence()
+                        .filterIsInstance<GPUTask.Render>()
+                        .flatMap { render -> render.drawPackets.asSequence() }
+                        .filter { packet -> packet.role == GPUDrawPacketRole.Shading }
+                        .mapNotNull { packet ->
+                            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.Vertices
+                                ?: return@mapNotNull null
+                            val mapped = mappedVerticesByCommandId[packet.commandIdValue]
+                                ?: return@mapNotNull null
+                            if (semantic.payloadRef.commandIdValue != packet.commandIdValue ||
+                                semantic.w5bFinalBlendPlan == BlendPlan.NoOpV1 ||
+                                packet.blendPlan is GPUBlendPlan.NoOp ||
+                                mapped.commandId in layerChildrenCommandIds
+                            ) {
+                                return@mapNotNull null
+                            }
+                            mapped.operationIndex
+                        }
+                        .toSet()
+                    val legacyVisualOperationCount = preparedMapping.visualCommands.count { visual ->
+                        val commandId = visual.normalized.commandId.value
+                        commandId !in layerChildrenCommandIds &&
+                            !(mapping.hasSynthesizedSceneClear && commandId == 0) &&
+                            (zeroProjection == null || commandId in admittedSemantics)
+                    }
                     GPUPreparedSurfaceFrameBuildResult.Ready(
                         taskList = splitTaskList,
-                        readbackRequestId = request.readbackRequestId,
-                        visualOperationCount = preparedMapping.visualCommands.count { visual ->
-                            visual.normalized.commandId.value !in layerChildrenCommandIds
-                        },
+                        readbackRequestId = splitTaskList.tasks.filterIsInstance<GPUTask.Readback>()
+                            .singleOrNull()?.request?.requestId ?: request.readbackRequestId,
+                        visualOperationCount = Math.addExact(
+                            legacyVisualOperationCount,
+                            survivingVerticesOperationIndices.size,
+                        ),
                         stateEventCount = mapping.stateEvents.count { event ->
                             event.kind == GPUFramePathStateKind.Transform ||
                                 event.kind == GPUFramePathStateKind.Clip ||
@@ -514,37 +664,136 @@ internal object GPUPreparedSurfaceFrameBuilder {
     }
 }
 
-/**
- * Destination-reading prepared frames whose first visual op IS the reader fuse the scene-target
- * clear into that reader's render pass (`loadOp = "clear"` on the first scene render), while the
- * destination snapshot copy is ordered before that pass. On a fresh target the copy accidentally
- * captures the cleared state; on a retained prepared-session target it captures the
- * previous frame's pixels. Synthesize the frame's implicit clear as an explicit leading
- * [DisplayOp.Clear] so the copy always captures the cleared target, on fresh and retained sessions
- * alike.
- *
- * Evidence contract of the synthesized clear: the [DisplayOp.Clear] is a REAL op in the visual
- * stream. It maps to one full-target solid command, so the built frame reports
- * `visualOperationCount` N+1 (N recorded visuals), the native evidence reports one extra render
- * pass, draw, and pipeline bind, and the executor's `opsDispatched` is N+1 by design — the clear
- * IS a dispatched op. The synthesis never flips a builder-NoOp frame to Ready: it fires only for
- * frames whose first visual op is a non-empty destination-reading text op (empty-glyph text ops
- * are skipped when locating the first visual, and empty-glyph-only frames stay NoOp).
- *
- * Known non-synthesized shapes (documented, not handled): elidable non-empty text first ops whose
- * blend is outside [PREPARED_DST_READ_TEXT_BLEND_MODES] (e.g. an opaque DST_IN text elides to a
- * no-op while a later dst-read text fuses the clear). Such frames keep the retained-target
- * behavior above; no current test shape exercises them. LCD (subpixel) text cannot reach this
- * lane: its blend plan is always `ShaderBlendWithDstRead` (GPUSubpixelLcd.lcdBlendPlan), which the
- * prepared-surface lane refuses for TextA8 at `invalid.preflight.text.blend`
- * (GPUPreparedSurfaceFrameTaskListBuilder), so no LCD frame ever renders through the copy lane.
- */
-private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
+/** Only exhaustive, already-validated prepared NoOps may request zero-survivor initialization. */
+private fun List<DisplayOp>.zeroSurvivorCandidate(
     interpretation: GPUColorInterpretation,
-): List<DisplayOp> {
+    text: GPUPreparedTextFrameInventoryPreparation.Ready,
+    vertices: PreparedVerticesFrameInventory,
+    corePlans: Map<Int, org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner.Result.Ready>,
+): GPUPreparedZeroSurvivorCandidate? {
+    if (interpretation != GPUColorInterpretation.LinearPremul || any {
+            it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer || it is DisplayOp.DrawPicture
+        }) return null
+    val visuals = withIndex().filter { it.value.isVisualDraw() }
+    val prepared = visuals.filter { it.value is DisplayOp.DrawText ||
+        it.value is DisplayOp.DrawVertices || it.value is DisplayOp.DrawMesh }
+    if (prepared.isEmpty()) return null // Core-only keeps its historical authority.
+    val core = visuals.filterNot { it in prepared }.associate { visual ->
+        val plan = corePlans[visual.index]?.takeIf { it.blend == BlendPlan.NoOpV1 } ?: return null
+        visual.index to plan
+    }
+    val noOps = text.elidedNoOps + vertices.elidedNoOps
+    if ((noOps.map { it.operationIndexI32 } + core.keys).sorted() != visuals.map { it.index }) return null
+    val inventory = text.inventory
+    require(inventory.pages.isEmpty() && inventory.subRunsByOperationIndex.isEmpty() &&
+        inventory.strokePathsByOperationIndex.isEmpty() && inventory.maskIdentityByGlyphUse.isEmpty() &&
+        inventory.elidedTextOperationIndices == visuals.filter { it.value is DisplayOp.DrawText }.map { it.index }.toSet() &&
+        vertices.commands.isEmpty() && vertices.mappedCommands.isEmpty() && vertices.artifactsByKey.isEmpty() &&
+        vertices.materialsByKey.isEmpty() && vertices.artifactKeyByOperationIndex.isEmpty() &&
+        vertices.vertexUploadRanges.isEmpty() && vertices.indexUploadRanges.isEmpty() &&
+        vertices.elidedVerticesOperationIndices == prepared.filter { it.value !is DisplayOp.DrawText }.map { it.index }.toSet()) {
+        "invalid.w5b.elided-source-inventory"
+    }
+    return GPUPreparedZeroSurvivorCandidate(java.util.Collections.unmodifiableMap(LinkedHashMap(core)))
+}
+
+/** A request for initialization, not authority to omit an unvalidated Core operation. */
+private class GPUPreparedZeroSurvivorCandidate(
+    private val corePlans: Map<Int, org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner.Result.Ready>,
+) {
+    class Projection(val taskList: GPUTaskList, val semantics: Map<Int, GPUDrawSemanticPayload>)
+
+    fun projectValidated(
+        mapping: GPUOpMapping,
+        base: GPUTaskList,
+        semantics: Map<Int, GPUDrawSemanticPayload>,
+        plansByCommandId: Map<Int, org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner.Result.Ready>,
+    ): Projection {
+        require(mapping.hasSynthesizedSceneClear)
+        val noOpIds = corePlans.flatMap { (operationIndexI32, source) ->
+            val ids = mapping.commandIdsByOperationIndex[operationIndexI32].orEmpty()
+            require(ids.isNotEmpty() || operationIndexI32 in mapping.culledCoreOperationIndices)
+            ids.onEach { id -> require(plansByCommandId[id] === source && source.blend == BlendPlan.NoOpV1) }
+        }
+        require(noOpIds.distinct().size == noOpIds.size && 0 !in noOpIds)
+        val renders = base.tasks.filterIsInstance<GPUTask.Render>()
+        val packets = renders.flatMap { it.drawPackets }
+        require(base.tasks.size == renders.size && base.compositeCommands.isEmpty() &&
+            base.memoryBudget.allocations.isEmpty() && base.memoryBudget.diagnostic == null &&
+            base.diagnostics.none { it.isTerminal } && packets.all { it.diagnostics.isEmpty() } &&
+            renders.all { it.resourceUses.isEmpty() && it.preparedImageBindingsByPacketId.isEmpty() &&
+                it.preparedTextBindingsByPacketId.isEmpty() && it.compositeMembership == null })
+        val ids = packets.map { it.commandIdValue }
+        require(ids.distinct().size == ids.size && ids.toSet() == noOpIds.toSet() + 0 &&
+            semantics.keys == ids.toSet() && semantics.all { (id, semantic) ->
+                semantic.payloadRef.commandIdValue == id && semantic is GPUDrawSemanticPayload.CorePrimitive
+            } && packets.filter { it.commandIdValue in noOpIds }.all { it.blendPlan is GPUBlendPlan.NoOp }) {
+            "invalid.surface.prepared.zero-survivor-projection"
+        }
+        val clear = renders.single { render -> render.drawPackets.any { it.commandIdValue == 0 } }
+        require(clear.drawPackets.size == 1 && packets.first() === clear.drawPackets.single())
+        val taskOrder = base.tasks.map { it.taskId }
+        require(taskOrder.distinct().size == taskOrder.size && base.dependencies.all { edge ->
+            val from = taskOrder.indexOf(edge.fromTaskId)
+            val to = taskOrder.indexOf(edge.toTaskId)
+            from >= 0 && to > from && edge.reasonCode == "preserve.paint.order"
+        })
+        return Projection(GPUTaskList(base.frameId, base.capabilitySeal, base.recordingSeals,
+            base.expectedReplayKeyHash, listOf(clear), emptyList(), base.phaseOrder,
+            base.memoryBudget, base.diagnostics, base.compositeCommands),
+            java.util.Collections.singletonMap(0, semantics.getValue(0)))
+    }
+}
+
+/**
+ * A leading destination reader needs a separate scene clear before its snapshot, because its
+ * own render-pass loadOp executes after the copy. Decide from the already-prepared draw's sealed
+ * final blend, after mapper-owned Core/text culling and Vertices command binding. The mapper inserts the clear before
+ * assigning command IDs while preserving the inventories' original operation indices.
+ * Unpromoted draws retain their prepared legacy blend authority; no public mode is reclassified.
+ */
+private fun List<DisplayOp>.requiresDstReadSceneClear(
+    interpretation: GPUColorInterpretation,
+    textInventory: PreparedTextFrameInventory?,
+    verticesInventory: PreparedVerticesFrameInventory,
+    corePlansByOperationIndex: Map<Int, org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner.Result.Ready>,
+    pointSourcesByOperationIndex: Map<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6>,
+    mapping: GPUOpMapping,
+): Boolean {
+    val survivingOperationIndices = mapping.commandIdsByOperationIndex.filterValues { it.isNotEmpty() }.keys +
+        mapping.preparedVerticesInventory?.mappedCommands.orEmpty().map { it.operationIndex }
+    val admitted = survivingOperationIndices.filterTo(linkedSetOf()) { index ->
+        index !in textInventory?.elidedTextOperationIndices.orEmpty() &&
+            index !in verticesInventory.elidedVerticesOperationIndices &&
+            (pointSourcesByOperationIndex[index]?.blend ?: corePlansByOperationIndex[index]?.blend) != BlendPlan.NoOpV1
+    }
+    return requiresPreparedDstReadSceneClear(interpretation, admitted) { index ->
+        when (this[index]) {
+            is DisplayOp.DrawText -> {
+                val draw = textInventory?.subRunsByOperationIndex?.get(index)?.firstOrNull()?.draw
+                    ?: textInventory?.strokePathsByOperationIndex?.get(index)?.firstOrNull()?.draw
+                draw?.materialPlan?.let { it.blend is BlendPlan.DestinationReadV1 }
+                    ?: (draw?.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead)
+            }
+            is DisplayOp.DrawVertices, is DisplayOp.DrawMesh -> {
+                val draw = verticesInventory.commandsByOperationIndex[index]?.draw
+                draw?.materialPlan?.let { it.blend is BlendPlan.DestinationReadV1 }
+                    ?: (draw?.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead)
+            }
+            else -> (pointSourcesByOperationIndex[index]?.blend ?: corePlansByOperationIndex[index]?.blend) is BlendPlan.DestinationReadV1
+        }
+    }
+}
+
+/** Shared survivor-based initialization decision; never requires a provisional command ID. */
+internal fun List<DisplayOp>.requiresPreparedDstReadSceneClear(
+    interpretation: GPUColorInterpretation,
+    survivingOperationIndices: Set<Int>,
+    requiresDestination: (Int) -> Boolean,
+): Boolean {
     // EncodedPremulSrgb targets refuse translucent solids (unsupported.surface.prepared.
     // encoded-premul-srgb.translucent-solid); those frames keep today's fused-clear behavior.
-    if (interpretation == GPUColorInterpretation.EncodedPremulSrgb) return this
+    if (interpretation == GPUColorInterpretation.EncodedPremulSrgb) return false
     // Composite frames own their background through the saveLayer pipeline.
     if (any { operation ->
             operation is DisplayOp.BeginLayer ||
@@ -552,20 +801,13 @@ private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
                 operation is DisplayOp.DrawPicture
         }
     ) {
-        return this
+        return false
     }
-    // Locate the first visual op that will actually paint: empty-glyph text ops are elided by
-    // the prepared-text inventory, so they do not own the fused scene clear and must not block
-    // the synthesis for a later destination-reading text op.
-    val firstVisual = firstOrNull { visual ->
+    val firstVisual = withIndex().firstOrNull { (index, visual) ->
         visual.isVisualDraw() &&
-            (visual !is DisplayOp.DrawText || visual.blob.glyphRuns.any { run -> run.glyphs.isNotEmpty() })
-    } ?: return this
-    val text = firstVisual as? DisplayOp.DrawText ?: return this
-    if (text.paint.blendMode !in PREPARED_DST_READ_TEXT_BLEND_MODES) return this
-    return listOf(
-        DisplayOp.Clear(ColorARGB.Transparent),
-    ) + this
+            index in survivingOperationIndices
+    } ?: return false
+    return requiresDestination(firstVisual.index)
 }
 
 private fun DisplayOp.isVisualDraw(): Boolean = when (this) {
@@ -588,42 +830,6 @@ private fun DisplayOp.isVisualDraw(): Boolean = when (this) {
     else -> false
 }
 
-/**
- * Text blend modes whose canonical scalar-coverage blend plan samples the destination texture
- * (`ShaderBlendWithDstRead`), mirroring GPUBlendPlanning's scalar-coverage fallback branch for
- * text semantics. A leading destination-reading draw therefore sees the frame's cleared state.
- *
- * The set is pinned by `GPUPreparedSurfaceFrameBuilderTextTest` against the planner itself
- * (`GPUBlendPlanner.plan` with scalar coverage and a non-proven-opaque source), so drift fails
- * loudly. Over-approximation is intentional: for a PROVEN-OPAQUE source alpha the planner
- * downgrades SRC/SRC_IN/SRC_OUT/DST_ATOP to fixed-function blends (no destination read), so the
- * mirror may synthesize a clear for an opaque non-reading text op — harmless, because the clear
- * rect writes transparent and the fused-clear render would have cleared the target anyway.
- * LCD (subpixel) coverage reads the destination regardless of mode, but LCD text never reaches
- * this lane (see [withSynthesizedDstReadSceneClear]); the mirror therefore does not model it.
- */
-internal val PREPARED_DST_READ_TEXT_BLEND_MODES: Set<BlendMode> = setOf(
-    BlendMode.SRC,
-    BlendMode.SRC_IN,
-    BlendMode.SRC_OUT,
-    BlendMode.DST_ATOP,
-    BlendMode.PLUS,
-    BlendMode.MULTIPLY,
-    BlendMode.OVERLAY,
-    BlendMode.DARKEN,
-    BlendMode.LIGHTEN,
-    BlendMode.COLOR_DODGE,
-    BlendMode.COLOR_BURN,
-    BlendMode.HARD_LIGHT,
-    BlendMode.SOFT_LIGHT,
-    BlendMode.DIFFERENCE,
-    BlendMode.EXCLUSION,
-    BlendMode.HUE,
-    BlendMode.SATURATION,
-    BlendMode.COLOR,
-    BlendMode.LUMINOSITY,
-)
-
 private fun GPUTaskList.authenticatedDestinationReadEvidence(
     semantics: Map<Int, GPUDrawSemanticPayload>,
     operationFamilyByCommandId: Map<Int, String>,
@@ -640,6 +846,8 @@ private fun GPUTaskList.authenticatedDestinationReadEvidence(
             require(
                 semantics[commandId] is GPUDrawSemanticPayload.ColorGlyph ||
                     semantics[commandId] is GPUDrawSemanticPayload.CorePrimitive ||
+                    semantics[commandId] is GPUDrawSemanticPayload.TextA8 ||
+                    semantics[commandId] is GPUDrawSemanticPayload.Vertices ||
                     semantics[commandId] is GPUDrawSemanticPayload.MaskBlur,
             )
             val render = rendersByTaskId.getValue(consumer.renderTaskId)
@@ -649,9 +857,17 @@ private fun GPUTaskList.authenticatedDestinationReadEvidence(
             }
             val blend = packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead
                 ?: error("Prepared destination evidence requires shader blending")
+            val semantic = requireNotNull(semantics[commandId])
             GPUPreparedSurfaceDestinationReadEvidence(
                 commandId = commandId,
                 operationFamily = operationFamilyByCommandId[commandId]
+                    ?: (semantic as? GPUDrawSemanticPayload.Vertices)?.let { vertices ->
+                        if (vertices.drawProvenance == "drawMesh:no-program") {
+                            DisplayOp.DrawMesh::class.java.simpleName
+                        } else {
+                            DisplayOp.DrawVertices::class.java.simpleName
+                        }
+                    }
                     ?: error("Prepared destination evidence requires one exact source operation"),
                 sourceLabel = packet.vertexSourceLabel,
                 snapshotLabel = copy.snapshot.value,
@@ -1005,6 +1221,10 @@ private sealed interface PreparedImageVisuals {
 private sealed interface PreparedVisualSource {
     val operationIndex: Int
 
+    data object SceneClear : PreparedVisualSource {
+        override val operationIndex: Int = -1 // The implicit frame clear has no caller operation.
+    }
+
     data class Image(
         override val operationIndex: Int,
         val image: org.graphiks.kanvas.image.Image,
@@ -1029,6 +1249,7 @@ private fun collectPreparedImageVisuals(
     operations: List<DisplayOp>,
     inventory: PreparedTextFrameInventory,
     elidedOperationIndices: Set<Int> = emptySet(),
+    commonCoreOperationIndices: Set<Int> = emptySet(),
 ): PreparedImageVisuals {
     val textOperationIndices = operations.withIndex()
         .filter { indexed -> indexed.value is DisplayOp.DrawText }
@@ -1070,13 +1291,15 @@ private fun collectPreparedImageVisuals(
             )
         }
     }
-    val visualSources = operations.withIndex().flatMap { indexed ->
+    val visualSources = listOfNotNull(PreparedVisualSource.SceneClear.takeIf { mapping.hasSynthesizedSceneClear }) +
+        operations.withIndex().flatMap { indexed ->
         val operationIndex = indexed.index
         if (operationIndex in elidedOperationIndices ||
             operationIndex in mapping.culledCoreOperationIndices
         ) {
             return@flatMap emptyList()
         }
+        if (operationIndex in commonCoreOperationIndices) return@flatMap listOf(PreparedVisualSource.Core(operationIndex))
         when (val operation = indexed.value) {
             is DisplayOp.DrawImage ->
                 listOf(PreparedVisualSource.Image(operationIndex, operation.image))
@@ -1168,7 +1391,7 @@ private fun collectPreparedImageVisuals(
             )
         }
         previousVisualCommandId = visualCommandId
-        if (source is PreparedVisualSource.Core) {
+        if (source is PreparedVisualSource.Core || source is PreparedVisualSource.SceneClear) {
             if (visual.normalized is NormalizedDrawCommand.DrawImageRect ||
                 visual.preparedImage != null
             ) {

@@ -1,0 +1,559 @@
+package org.graphiks.kanvas.gpu.plan
+
+import java.security.MessageDigest
+import java.util.Collections
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.render.ir.BlendMode
+import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.CanonicalId
+import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
+import org.graphiks.kanvas.render.ir.RenderDiagnostic
+import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
+import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
+import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
+import org.graphiks.kanvas.render.ir.RenderPlanResult
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.SceneCommand
+import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.SizeI32
+import org.graphiks.math.matrix.Matrix3x3F32
+
+/** W3's closed capability: pixel-aligned solid rectangles and SrcOver only. */
+public class W3SolidRectPlanCompiler internal constructor(private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
+    override fun select(
+        scene: SceneSnapshot,
+        target: RenderTargetDescriptor,
+    ): GpuPlanSelection = selectValidated(scene, target, target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED &&
+        scene.all { it is SceneCommand.Annotation || it is SceneCommand.SetTransform || it is SceneCommand.SetClip })
+
+    /** Internal construction seam after W5e has retained and authenticated every
+     * original semantic NoOp. Ordinary W3 admission still requires its own draw. */
+    internal fun selectEmptyW5eConstruction(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
+        require(scene.all { it is SceneCommand.Annotation || it is SceneCommand.SetTransform || it is SceneCommand.SetClip })
+        return selectValidated(scene, target, true)
+    }
+
+    private fun selectValidated(scene: SceneSnapshot, target: RenderTargetDescriptor, allowMetadataOnly: Boolean): GpuPlanSelection {
+        if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
+            return invalidSelection(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
+        }
+        if (scene.commandCount > MAX_W3_COMMANDS) {
+            return notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 accepts at most 512 total commands"))
+        }
+        val targetClamp = targetFormat(target).blendTargetClampV1()
+        when (val recognition = recognize(scene, targetClamp, target.compositionDomain, allowMetadataOnly)) {
+            is Recognition.MaterialRefused -> return if (target.colorSpace == ColorSpace.SRGB) {
+                GpuPlanSelection.MaterialOnlyRefusal(W5A_CAPABILITY_ID, scene.canonicalId, target, recognition.refusals)
+            } else notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
+            is Recognition.Gap -> return notCandidate(recognition.diagnostic)
+            is Recognition.Invalid -> return invalidSelection(recognition.diagnostic)
+            is Recognition.Accepted -> return if (target.colorSpace != ColorSpace.SRGB) {
+                notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
+            } else {
+                GpuPlanSelection.Candidate(W3Candidate(this, scene.canonicalId, target, recognition.draws, recognition.materialPlanTable,
+                    recognition.capabilityId,recognition.sourceTable))
+            }
+        }
+    }
+
+    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
+        if (!hasPendingSources(candidate))
+            return construct(candidate,capabilities,budget).publishConstructionResult()
+        return when (val deferred = constructSources(candidate,capabilities,budget)) {
+            is RenderPlanResult.Ready -> when (val layout = FrameSourceLayoutV4.standalone(deferred.plan)) {
+                is SourceConstructionResultV4.Refused -> layout.failure
+                is SourceConstructionResultV4.Built -> when (val constructed = layout.value.prepareAndConstruct()) {
+                    is SourceConstructionResultV4.Refused -> constructed.failure
+                    is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(constructed.value).publishConstructionResult()
+                }
+            }
+            is RenderPlanResult.GapNotMigrated -> deferred
+            is RenderPlanResult.GapOnPromotedScope -> deferred
+            is RenderPlanResult.InvalidScene -> deferred
+            is RenderPlanResult.ResourceLimitExceeded -> deferred
+        }
+    }
+
+    internal fun construct(
+        candidate: GpuPlanCandidate,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): RenderPlanResult<RenderGraphConstruction> = constructChecked(candidate,capabilities,budget) { selected,extent,targetBytes,stagingBytes,memory ->
+        require(!hasPendingSources(selected)) { W5fPlanDiagnostics.Schema }
+        val id = PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget,selected.capabilityId))
+        if (selected.draws.any { it.blend is BlendPlan.DestinationReadV1 }) RenderPlanResult.Ready(
+            W5bDestinationGraphSealer.construct(id,selected.capabilityId,extent,capabilities,budget,selected.draws,
+                requireNotNull(selected.materialPlanTable),targetBytes,stagingBytes,memory.readbackBytesPerRow))
+        else {
+            val topology = ordinaryTopology(selected.draws,extent,targetBytes,stagingBytes,memory,targetFormat(selected.target))
+            RenderPlanResult.Ready(RenderGraph.construct(id,selected.capabilityId,extent,targetFormat(selected.target),capabilities,budget,
+                selected.draws.size,topology.resources,topology.passes,topology.dependencies,topology.peakI64,selected.materialPlanTable))
+        }
+    }
+
+    internal fun constructSources(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> =
+        constructChecked(candidate,capabilities,budget) { selected,extent,targetBytes,stagingBytes,memory ->
+            val frozenColors = selected.draws.all { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }
+            val sources = if (frozenColors) when (val empty = MaterialSourceConstructionTableV4.of(emptyList())) {
+                is SourceConstructionResultV4.Built -> empty.value
+                is SourceConstructionResultV4.Refused -> return@constructChecked empty.failure
+            } else selected.sourceTable ?: run {
+                require(selected.draws.isEmpty()) { W5fPlanDiagnostics.Schema }
+                when (val empty = MaterialSourceConstructionTableV4.of(emptyList())) {
+                    is SourceConstructionResultV4.Built -> empty.value
+                    is SourceConstructionResultV4.Refused -> return@constructChecked empty.failure
+                }
+            }
+            // DrawColor is already a sealed color operand. It has no W5 source ownership and
+            // must remain frozen for W6's ordered plain-layer publication.
+            val draws = if (frozenColors) selected.draws else if (selected.capabilityId == W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID) {
+                var materialOrdinal = 0
+                selected.draws.map { draw ->
+                    if (draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) draw
+                    else draw.withMaterialRef(MaterialPlanRef(materialOrdinal++))
+                }
+            } else selected.draws.mapIndexed { ordinal,draw -> draw.withMaterialRef(MaterialPlanRef(ordinal)) }
+            val id = PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget,selected.capabilityId))
+            val topology = if (draws.any { it.blend is BlendPlan.DestinationReadV1 })
+                W5bDestinationGraphSealer.describeSources(selected.capabilityId,extent,capabilities,budget,draws,
+                    targetBytes,stagingBytes,memory.readbackBytesPerRow)
+                else ordinaryTopology(draws,extent,targetBytes,stagingBytes,memory,targetFormat(selected.target))
+            when (val result = SourceDeferredRenderConstructionV4.of(id,selected.capabilityId,extent,topology.format,
+                capabilities,budget,selected.draws.size,topology.resources,topology.passes,topology.dependencies,sources,
+                DeferredLaneTopologyV4.Ordinary,null,emptyList(),emptyMap(),emptyMap(),
+                preparedIdentity = { scene, _, _ -> PlanId(planIdentity(scene, selected.target, capabilities, budget, selected.capabilityId)) })) {
+                is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
+                is SourceConstructionResultV4.Refused -> result.failure
+            }
+        }
+
+    internal fun hasPendingSources(candidate: GpuPlanCandidate): Boolean =
+        (candidate as? W3Candidate)?.let { selected ->
+            selected.capabilityId == W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID ||
+                selected.sourceTable?.sources()?.any { it.pending } == true
+        } == true
+
+    private fun ordinaryTopology(draws: List<SolidRectDraw>,extent: SizeI32,targetBytes: Long,stagingBytes: Long,
+        memory: PlanMemoryBudgetResult.WithinBudget, format: PlanLogicalColorFormat): W5bDestinationGraphSealer.DestinationTopologyV4 {
+        val target = PlanResource.of(PlanResourceRole.LogicalTarget,0,PlanResourceKind.Texture2D,PlanTextureFormat.Color(format),
+            extent,targetBytes,setOf(PlanResourceUsage.RenderAttachment,PlanResourceUsage.CopySource),PlanResourceLifetime.FrameLocal,0,2)
+        val staging = PlanResource.of(PlanResourceRole.ReadbackStaging,0,PlanResourceKind.Buffer,null,null,stagingBytes,
+            setOf(PlanResourceUsage.CopyDestination,PlanResourceUsage.MapRead),PlanResourceLifetime.FrameLocal,1,2)
+        val render = PlanPass.RenderPass(0,target.id,draws,AttachmentLoadPlan.ClearTransparent,AttachmentStorePlan.Store,
+            destinationVersionAfter=if (draws.isEmpty()) DestinationVersionI64(0L) else null)
+        val readback = PlanPass.ReadbackPass(0,target.id,staging.id,memory.readbackBytesPerRow)
+        return W5bDestinationGraphSealer.DestinationTopologyV4(format,listOf(target,staging),listOf(render,readback),
+            listOf(PlanPassDependency(render.id,readback.id)),memory.peakBytes)
+    }
+
+    private fun <T: Any> constructChecked(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,budget: PlanBudget,
+        finish: (W3Candidate,SizeI32,Long,Long,PlanMemoryBudgetResult.WithinBudget) -> RenderPlanResult<T>): RenderPlanResult<T> {
+        val selected = candidate as? W3Candidate
+            ?: return invalidCandidate()
+        if (selected.owner !== this || !selected.hasMatchingFingerprints()) {
+            return invalidCandidate()
+        }
+        val target = selected.target
+
+        val targetExtent = SizeI32(target.extent.width, target.extent.height)
+        if (targetExtent.width > capabilities.maxTextureDimension2D || targetExtent.height > capabilities.maxTextureDimension2D) {
+            return promoted(diag(W3PlanDiagnostics.CapabilityTextureDimension, RenderDiagnosticDomain.CAPABILITY, "Target extent exceeds device texture limits"))
+        }
+        if (targetFormat(target) !in capabilities.supportedFormats()) {
+            return promoted(diag(W3PlanDiagnostics.CapabilityFormat, RenderDiagnosticDomain.CAPABILITY, "W3 target format is unavailable"))
+        }
+        val memory = PlanMemoryBudget.calculate(targetExtent, PIXEL_BYTES, capabilities.copyBytesPerRowAlignment, budget)
+        val withinBudget = when (memory) {
+            is PlanMemoryBudgetResult.WithinBudget -> memory
+            is PlanMemoryBudgetResult.Exceeded -> return resourceLimit(
+                diag(W3PlanDiagnostics.BudgetFrameLocalExceeded, RenderDiagnosticDomain.RESOURCE, "Frame-local memory budget is exceeded"),
+            )
+            is PlanMemoryBudgetResult.Invalid -> return resourceLimit(
+                diag(W3PlanDiagnostics.SizeOverflow, RenderDiagnosticDomain.RESOURCE, "Frame-local size calculation overflowed"),
+            )
+        }
+        val targetBytes = try {
+            Math.multiplyExact(Math.multiplyExact(target.extent.width.toLong(), target.extent.height.toLong()), PIXEL_BYTES)
+        } catch (_: ArithmeticException) {
+            return resourceLimit(diag(W3PlanDiagnostics.SizeOverflow, RenderDiagnosticDomain.RESOURCE, "Target size overflowed"))
+        }
+        val stagingBytes = try {
+            Math.multiplyExact(withinBudget.readbackBytesPerRow, target.extent.height.toLong())
+        } catch (_: ArithmeticException) {
+            return resourceLimit(diag(W3PlanDiagnostics.SizeOverflow, RenderDiagnosticDomain.RESOURCE, "Readback size overflowed"))
+        }
+        if (stagingBytes > capabilities.maxBufferSizeBytes) {
+            return promoted(diag(W3PlanDiagnostics.CapabilityBufferSize, RenderDiagnosticDomain.CAPABILITY, "Readback buffer exceeds device limits"))
+        }
+
+        return try {
+            finish(selected,targetExtent,targetBytes,stagingBytes,withinBudget)
+        } catch (failure: IllegalArgumentException) {
+            val reason = failure.message.orEmpty()
+            if (reason.startsWith("unsupported.w5b.") || reason.startsWith("unsupported.material.gradient.")) promoted(diag(RenderDiagnosticCode(reason), RenderDiagnosticDomain.CAPABILITY, reason))
+            else if (reason.startsWith("resource-limit.w5b.") || reason.startsWith("resource.material.gradient.")) resourceLimit(diag(RenderDiagnosticCode(reason), RenderDiagnosticDomain.RESOURCE, reason))
+            else promoted(diag(W3PlanDiagnostics.PlanIdentityInvalid, RenderDiagnosticDomain.TARGET, "W3 graph invariants were not satisfied: $reason"))
+        } catch (_: ArithmeticException) {
+            resourceLimit(diag(W3PlanDiagnostics.SizeOverflow, RenderDiagnosticDomain.RESOURCE, "W5b destination size/version overflow"))
+        }
+    }
+
+    private fun recognize(scene: SceneSnapshot, targetClamp: BlendTargetClampV1,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain, allowMetadataOnly: Boolean = false): Recognition {
+        if (scene.colorSpace != ColorSpace.SRGB) return Recognition.Gap(
+            diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 supports only sRGB scenes"),
+        )
+        val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
+        val draws = mutableListOf<SolidRectDraw>()
+        val materialEntries = mutableListOf<MaterialPlanEntry>()
+        val sourceOccurrences = mutableListOf<MaterialSourceConstructionV4>()
+        val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
+        var elidedNoOpsI32 = 0
+        for ((index, command) in scene.withIndex()) {
+            when (command) {
+                is SceneCommand.Draw -> when (val result = recognizeDraw(command.node, index, targetBounds, materialEntries, sourceOccurrences,targetClamp, compositionDomain)) {
+                    DrawRecognition.NoOp -> elidedNoOpsI32++
+                    is DrawRecognition.MaterialRefused -> materialRefusals += result.refusal
+                    is DrawRecognition.Accepted -> draws += result.draw
+                    is DrawRecognition.Gap -> return Recognition.Gap(result.diagnostic)
+                    is DrawRecognition.Invalid -> return Recognition.Invalid(result.diagnostic)
+                }
+                is SceneCommand.DrawColor -> when (val result = recognizeDrawColor(command, index, targetBounds, compositionDomain)) {
+                    DrawRecognition.NoOp -> elidedNoOpsI32++
+                    is DrawRecognition.MaterialRefused -> materialRefusals += result.refusal
+                    is DrawRecognition.Accepted -> draws += result.draw
+                    is DrawRecognition.Gap -> return Recognition.Gap(result.diagnostic)
+                    is DrawRecognition.Invalid -> return Recognition.Invalid(result.diagnostic)
+                }
+                is SceneCommand.SetTransform -> when (val result = recognizeProvenanceTransform(command.matrix)) {
+                    is ProvenanceRecognition.Accepted -> Unit
+                    is ProvenanceRecognition.Gap -> return Recognition.Gap(result.diagnostic)
+                    is ProvenanceRecognition.Invalid -> return Recognition.Invalid(result.diagnostic)
+                }
+                is SceneCommand.SetClip -> when (val result = recognizeClip(command.clip)) {
+                    is ClipRecognition.Accepted -> Unit
+                    is ClipRecognition.Gap -> return Recognition.Gap(result.diagnostic)
+                    is ClipRecognition.Invalid -> return Recognition.Invalid(result.diagnostic)
+                }
+                is SceneCommand.Annotation -> if (!finite(command.copyBounds())) return Recognition.Invalid(
+                    diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Annotation bounds are non-finite"),
+                )
+                else -> return Recognition.Gap(
+                    diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "Scene command is outside W3"),
+                )
+            }
+        }
+        if (materialRefusals.isNotEmpty()) {
+            if (draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }) return Recognition.Gap(
+                diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W5a graphs cannot mix legacy colours and material references"),
+            )
+            return Recognition.MaterialRefused(materialRefusals)
+        }
+        val pending = sourceOccurrences.any { it.pending }
+        val hasLegacyColors = draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }
+        val hasMaterialDraws = draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
+        val hasV4Source = sourceOccurrences.any { source -> source.pending ||
+            source.resolvedSource?.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 }
+        val mixedColorMaterial = hasLegacyColors && hasMaterialDraws
+        val mixedCapability = mixedColorMaterial &&
+            compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR && hasV4Source &&
+            draws.all { draw ->
+                draw.blend == BlendPlan.SrcOver ||
+                    (draw.blend as? BlendPlan.FixedFunctionV1)?.mode == BlendMode.SRC_OVER
+            }
+        return if (draws.isEmpty() && elidedNoOpsI32 == 0 && !allowMetadataOnly) Recognition.Gap(
+            diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 requires at least one visible draw"),
+        ) else if (mixedColorMaterial && !mixedCapability) {
+            Recognition.Gap(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W5a graphs cannot mix legacy colours and material references"))
+        } else Recognition.Accepted(
+            if (pending || mixedCapability) {
+                var materialOrdinal = 0
+                draws.map { draw ->
+                    if (mixedCapability && draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) draw
+                    else draw.withMaterialRef(MaterialPlanRef(materialOrdinal++))
+                }
+            } else draws,
+            materialEntries.takeIf { it.isNotEmpty() && !pending && !mixedCapability }?.let(MaterialPlanTable::of),
+            when {
+                mixedCapability -> W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID
+                materialEntries.isNotEmpty() || pending -> W5A_CAPABILITY_ID
+                else -> CAPABILITY_ID
+            },
+            if (sourceOccurrences.isNotEmpty()) (MaterialSourceConstructionTableV4.of(sourceOccurrences) as SourceConstructionResultV4.Built).value else null,
+        )
+    }
+
+    private fun recognizeDraw(
+        node: DrawNode,
+        index: Int,
+        target: RectI32,
+        materialEntries: MutableList<MaterialPlanEntry>,
+        sourceOccurrences: MutableList<MaterialSourceConstructionV4>,
+        targetClamp: BlendTargetClampV1,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain,
+    ): DrawRecognition {
+        val geometryNode = node.geometry as? GeometryNode.Rect
+            ?: return semanticGap("Draw geometry or material is outside W3")
+        if (node.origin != DrawOrigin.RECT) {
+            return semanticGap("Draw geometry or material is outside W3")
+        }
+        if (!w3Blend(node.blend, targetClamp) || node.effects !is EffectStack.Empty && node.paint?.colorFilter == null || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint, true)) {
+            return semanticGap("Draw state is outside W3")
+        }
+        if (!materialMatchesPaintAuthority(node)) {
+            return semanticGap("Draw material disagrees with paint authority")
+        }
+        if (node.coverage != CoverageRequest.HARD_EDGE && node.coverage != CoverageRequest.ANTIALIASED) return semanticGap("Coverage is outside W3")
+        val sourceBounds = geometryNode.copyBounds()
+        if (!finite(sourceBounds) || !finite(node.transform)) {
+            return DrawRecognition.Invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Draw geometry or transform is non-finite"))
+        }
+        if (sourceBounds.isEmpty) return geometryGap("Source geometry is empty or inverted")
+        val geometry = resolveTransformed(sourceBounds, node.transform) ?: return geometryGap("Geometry is not pixel aligned")
+        val clip = when (val recognizedClip = recognizeClip(node.clip)) {
+            is ClipRecognition.Accepted -> recognizedClip.bounds
+            is ClipRecognition.Gap -> return DrawRecognition.Gap(recognizedClip.diagnostic)
+            is ClipRecognition.Invalid -> return DrawRecognition.Invalid(recognizedClip.diagnostic)
+        }
+        val visible = intersect(target, geometry) ?: return semanticGap("Draw is outside the target")
+        val clipped = if (clip == null) visible else intersect(visible, clip)
+            ?: return semanticGap("Draw is fully clipped out")
+        return when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node,targetClamp,clipped,legacyGradientBoundsI32=null,runtimeCatalog=runtimeCatalog,compositionDomain=compositionDomain)) {
+                EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> DrawRecognition.NoOp
+                is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> DrawRecognition.MaterialRefused(EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode))
+                is EffectiveMaterialPlanner.SourceNormalizationV4.Source -> {
+                    val source = planned.captured
+                    sourceOccurrences += source
+                    val resolved = source.resolvedSource
+                    val root = if (resolved == null) MaterialPlanRef(sourceOccurrences.lastIndex)
+                        else appendMaterialPlan(materialEntries,resolved.table,resolved.root)
+                    DrawRecognition.Accepted(
+                        SolidRectDraw.ofMaterial(
+                            index,
+                            root,
+                            clipped,
+                            clipped,
+                            blend = source.blend,
+                            coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
+                            coordinatesV2 = resolved?.table?.coordinatesV2(resolved.root),
+                            coordinatesV4 = if (source.pending) source.coordinates else resolved?.table?.coordinatesV4(resolved.root),
+                            sourceRasterBoundsI32 = geometry,
+                        ),
+                    )
+                }
+        }
+    }
+
+    private fun recognizeDrawColor(command: SceneCommand.DrawColor, index: Int, target: RectI32,
+        compositionDomain: org.graphiks.kanvas.render.ir.CompositionDomain): DrawRecognition =
+        when (val result = W3DrawColorAdmissionV1.recognize(command, index, target, compositionDomain)) {
+            is W3DrawColorAdmissionResultV1.Accepted -> DrawRecognition.Accepted(result.draw)
+            is W3DrawColorAdmissionResultV1.Gap -> DrawRecognition.Gap(result.diagnostic)
+            is W3DrawColorAdmissionResultV1.Invalid -> DrawRecognition.Invalid(result.diagnostic)
+        }
+
+    private fun recognizeProvenanceTransform(matrix: Matrix3x3F32): ProvenanceRecognition = when {
+        !finite(matrix) -> ProvenanceRecognition.Invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Transform is non-finite"))
+        matrix.isIdentity || matrix.isScaleTranslate() -> ProvenanceRecognition.Accepted
+        else -> ProvenanceRecognition.Gap(diag(W3PlanDiagnostics.GeometryNotPixelAligned, RenderDiagnosticDomain.SCENE, "Transform is outside W3"))
+    }
+
+    private fun recognizeClip(clip: ClipStackNode): ClipRecognition =
+        when (val result = W3DrawColorAdmissionV1.recognizeClip(clip)) {
+            is W3DrawColorAdmissionV1.ClipRecognition.Accepted -> ClipRecognition.Accepted(result.bounds)
+            is W3DrawColorAdmissionV1.ClipRecognition.Gap -> ClipRecognition.Gap(result.diagnostic)
+            is W3DrawColorAdmissionV1.ClipRecognition.Invalid -> ClipRecognition.Invalid(result.diagnostic)
+        }
+
+    private fun resolveTransformed(bounds: RectF32, matrix: Matrix3x3F32): RectI32? {
+        if (!finite(bounds) || !finite(matrix) || !(matrix.isIdentity || matrix.isScaleTranslate())) return null
+        val points = listOf(
+            matrix.transform(Point2F32(bounds.left, bounds.top)),
+            matrix.transform(Point2F32(bounds.right, bounds.top)),
+            matrix.transform(Point2F32(bounds.right, bounds.bottom)),
+            matrix.transform(Point2F32(bounds.left, bounds.bottom)),
+        )
+        if (points.any { !it.x.isFinite() || !it.y.isFinite() }) return null
+        return toIntegralRect(RectF32(
+            points.minOf { it.x }, points.minOf { it.y }, points.maxOf { it.x }, points.maxOf { it.y },
+        ))
+    }
+
+    private fun toIntegralRect(bounds: RectF32): RectI32? {
+        return W3DrawColorAdmissionV1.integralRect(bounds)
+    }
+
+    private fun intersect(first: RectI32, second: RectI32): RectI32? = W3DrawColorAdmissionV1.intersect(first, second)
+
+    private fun w3Blend(blend: BlendNode, targetClamp: BlendTargetClampV1): Boolean = FinalBlendPlanner.plan(
+        blend,
+        CoveragePlan.FullOrScissor,
+        SamplePlan.SingleSample,
+        targetClamp,
+    ) != null
+
+    private fun w3Paint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (
+        (paint.shader == null || acceptsMaterialShader) && paint.blender == null &&
+            paint.maskFilter == null &&
+            paint.pathEffect == null && paint.imageFilter == null && paint.style == PaintStyleNode.FILL
+        )
+
+    /**
+     * Material is normalized from Paint for every non-image draw.  Reject an
+     * externally assembled DrawNode when its two public authorities disagree.
+     */
+    private fun materialMatchesPaintAuthority(node: DrawNode): Boolean {
+        if (node.origin in imageOrigins) return true
+        val paint = node.paint ?: return false
+        val paintMaterial = paint.shader ?: MaterialNode.Solid(paint.color)
+        return node.material.canonicalId == paintMaterial.canonicalId
+    }
+
+    private fun targetFormat(target: RenderTargetDescriptor): PlanLogicalColorFormat = when (target.compositionDomain) {
+        org.graphiks.kanvas.render.ir.CompositionDomain.LINEAR -> PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+        org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED -> PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL
+    }
+
+    private val imageOrigins: Set<DrawOrigin> = setOf(
+        DrawOrigin.IMAGE,
+        DrawOrigin.IMAGE_NINE,
+        DrawOrigin.IMAGE_LATTICE,
+        DrawOrigin.ATLAS,
+    )
+
+    private fun appendMaterialPlan(
+        entries: MutableList<MaterialPlanEntry>,
+        incoming: MaterialPlanTable,
+        root: MaterialPlanRef,
+    ): MaterialPlanRef {
+        val offset = entries.size
+        incoming.entries().forEach { entry ->
+            entries += entry
+        }
+        return MaterialPlanRef(offset + root.indexI32)
+    }
+
+    private fun finite(bounds: RectF32): Boolean = W3DrawColorAdmissionV1.isFinite(bounds)
+    private fun finite(matrix: Matrix3x3F32): Boolean = W3DrawColorAdmissionV1.isFinite(matrix)
+
+    private fun semanticGap(message: String): DrawRecognition.Gap = DrawRecognition.Gap(
+        diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, message),
+    )
+    private fun geometryGap(message: String): DrawRecognition.Gap = DrawRecognition.Gap(
+        diag(W3PlanDiagnostics.GeometryNotPixelAligned, RenderDiagnosticDomain.SCENE, message),
+    )
+    private fun diag(code: org.graphiks.kanvas.render.ir.RenderDiagnosticCode, domain: RenderDiagnosticDomain, message: String): RenderDiagnostic =
+        W3PlanDiagnostics.diagnostic(code, domain, message)
+    private fun notCandidate(diagnostic: RenderDiagnostic): GpuPlanSelection.NotCandidate =
+        GpuPlanSelection.NotCandidate(listOf(diagnostic))
+    private fun invalidSelection(diagnostic: RenderDiagnostic): GpuPlanSelection.InvalidScene =
+        GpuPlanSelection.InvalidScene(listOf(diagnostic))
+    private fun invalidCandidate(): RenderPlanResult<Nothing> = invalid(RenderDiagnostic(
+        RenderDiagnosticCode("gpu-plan.selection.invalid-candidate"),
+        RenderDiagnosticDomain.SCENE,
+        RenderDiagnosticSeverity.ERROR,
+        "W3 candidate does not belong to this compiler.",
+    ))
+    private fun promoted(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.GapOnPromotedScope(listOf(diagnostic))
+    private fun invalid(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.InvalidScene(listOf(diagnostic))
+    private fun resourceLimit(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.ResourceLimitExceeded(listOf(diagnostic))
+
+    private fun planIdentity(
+        sceneCanonicalId: CanonicalId,
+        target: RenderTargetDescriptor,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        capabilityId: String,
+    ): String {
+        val fields = listOf(
+            capabilityId, sceneCanonicalId.value, target.extent.width.toString(), target.extent.height.toString(),
+            target.colorSpace.name, target.colorSpace.transferFunction.name, target.colorSpace.gamut.name,
+            capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(),
+            capabilities.copyBytesPerRowAlignment.toString(), capabilities.identitySupportedFormats(target).map { it.name }.sorted().joinToString(","),
+            capabilities.minUniformBufferOffsetAlignment.toString(), capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(),
+            capabilities.supportedOperations().map { it.name }.sorted().joinToString(","),
+            capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
+            capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name,
+            budget.maxFrameLocalBytes.toString(),
+        ) + (if (target.compositionDomain == org.graphiks.kanvas.render.ir.CompositionDomain.SRGB_ENCODED)
+            listOf(target.compositionDomain.name) else emptyList()) + planCapabilityIdentityFacts(capabilities, target)
+        val digest = MessageDigest.getInstance("SHA-256")
+        fields.forEach { field ->
+            val bytes = field.encodeToByteArray()
+            digest.update(bytes.size.toString().encodeToByteArray())
+            digest.update(0)
+            digest.update(bytes)
+            digest.update(0)
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private sealed interface Recognition {
+        data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition
+        data class Accepted(
+            val draws: List<SolidRectDraw>,
+            val materialPlanTable: MaterialPlanTable?,
+            val capabilityId: String,
+            val sourceTable: MaterialSourceConstructionTableV4?,
+        ) : Recognition
+        data class Gap(val diagnostic: RenderDiagnostic) : Recognition
+        data class Invalid(val diagnostic: RenderDiagnostic) : Recognition
+    }
+
+    private class W3Candidate(
+        val owner: W3SolidRectPlanCompiler,
+        override val sceneCanonicalId: CanonicalId,
+        override val target: RenderTargetDescriptor,
+        draws: List<SolidRectDraw>,
+        val materialPlanTable: MaterialPlanTable?,
+        override val capabilityId: String,
+        val sourceTable: MaterialSourceConstructionTableV4?,
+    ) : GpuPlanCandidate {
+        val draws: List<SolidRectDraw> = Collections.unmodifiableList(draws.toList())
+        private val sceneFingerprint: CanonicalId = sceneCanonicalId
+        private val targetFingerprint: CanonicalId = target.canonicalId
+
+        fun hasMatchingFingerprints(): Boolean =
+            capabilityId in setOf(CAPABILITY_ID, W5A_CAPABILITY_ID, W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID) &&
+                sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
+    }
+    private sealed interface DrawRecognition {
+        data object NoOp : DrawRecognition
+        data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused) : DrawRecognition
+        data class Accepted(val draw: SolidRectDraw) : DrawRecognition
+        data class Gap(val diagnostic: RenderDiagnostic) : DrawRecognition
+        data class Invalid(val diagnostic: RenderDiagnostic) : DrawRecognition
+    }
+    private sealed interface ClipRecognition {
+        data class Accepted(val bounds: RectI32?) : ClipRecognition
+        data class Gap(val diagnostic: RenderDiagnostic) : ClipRecognition
+        data class Invalid(val diagnostic: RenderDiagnostic) : ClipRecognition
+    }
+    private sealed interface ProvenanceRecognition {
+        data object Accepted : ProvenanceRecognition
+        data class Gap(val diagnostic: RenderDiagnostic) : ProvenanceRecognition
+        data class Invalid(val diagnostic: RenderDiagnostic) : ProvenanceRecognition
+    }
+
+    public companion object {
+        public const val CAPABILITY_ID: String = "solid-rect-pixel-aligned-simple-clip-src-over-srgb-v1"
+        public const val W5A_CAPABILITY_ID: String = "w5a-solid-opacity-rect-v1"
+        public const val W7_MIXED_COLOR_MATERIAL_CAPABILITY_ID: String = "w7.w3.root-drawcolor-material.v1"
+        private val FORMAT: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+        private const val PIXEL_BYTES: Long = 4L
+        private const val MAX_W3_COMMANDS: Int = 512
+    }
+}

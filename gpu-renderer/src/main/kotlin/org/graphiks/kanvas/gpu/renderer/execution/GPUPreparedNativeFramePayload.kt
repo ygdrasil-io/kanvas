@@ -192,12 +192,50 @@ internal data class GPUPreparedNativeRenderCommandEvidence(
 internal fun preparedNativeRenderCommandEvidence(
     render: GPUPreparedNativeScopeOperand.Render,
 ): List<GPUPreparedNativeRenderCommandEvidence> =
-    preparedNativeRenderCommandEvidence(render.commands, render.semanticPayloads)
+    if (render.semanticPayloads.singleOrNull() is GPUDrawSemanticPayload.PathStencilProducer) {
+        preparedNativeScanSpanEvidence(render)
+    } else {
+        preparedNativeRenderCommandEvidence(render.commands, render.semanticPayloads)
+    }
 
 internal fun preparedNativeRenderCommandEvidence(
     render: GPUPreparedNativeScopeOperand.PreparedTextRenderRun,
 ): List<GPUPreparedNativeRenderCommandEvidence> =
     preparedNativeRenderCommandEvidence(render.commands, render.semanticPayloads)
+
+/**
+ * Evidence for one scan-span producer.  A single prepared packet may intentionally expand into
+ * N fullscreen Draw(3) commands while retaining exactly one semantic per prepared packet.
+ * Empty is the unique zero-draw case and must not be represented by a dummy draw.
+ */
+internal fun preparedNativeScanSpanEvidence(
+    render: GPUPreparedNativeScopeOperand.Render,
+): List<GPUPreparedNativeRenderCommandEvidence> {
+    require(render.commands.none { it is GPUPreparedNativeRenderCommand.DrawIndexed })
+    val draws = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.Draw>()
+    require(draws.all { it.drawCall.vertexCount == 3 })
+    val semantic = render.semanticPayloads.singleOrNull() as? GPUDrawSemanticPayload.PathStencilProducer
+        ?: error("A scan-span native render must retain its single producer semantic packet")
+    val evidence = ArrayList<GPUPreparedNativeRenderCommandEvidence>(draws.size)
+    var bindGroupsSinceDraw = 0
+    render.commands.forEach { command ->
+        when (command) {
+            is GPUPreparedNativeRenderCommand.SetBindGroup -> bindGroupsSinceDraw += 1
+            is GPUPreparedNativeRenderCommand.Draw -> {
+                evidence += GPUPreparedNativeRenderCommandEvidence(
+                    commandIdValue = semantic.payloadRef.commandIdValue,
+                    draws = 1,
+                    drawIndexed = 0,
+                    bindGroups = bindGroupsSinceDraw,
+                )
+                bindGroupsSinceDraw = 0
+            }
+            else -> Unit
+        }
+    }
+    require(bindGroupsSinceDraw == 0) { "A scan-span native render has an unconsumed bind group" }
+    return immutableList(evidence)
+}
 
 private fun preparedNativeRenderCommandEvidence(
     commands: List<GPUPreparedNativeRenderCommand>,
@@ -321,6 +359,7 @@ internal class GPUPreparedNativeCompositeFrameLeaseLifecycle(
     }
 
     private val children = lifecycles.toList()
+    internal fun contains(lifecycle: GPUPreparedNativeFrameLeaseLifecycle?): Boolean = children.any { it === lifecycle }
     private val childStates = MutableList(children.size) { State.CheckedOut }
     private var state = State.CheckedOut
 
@@ -591,6 +630,7 @@ internal enum class GPUPreparedNativeRenderPipelineBindingPolicy {
     NoBindings,
 }
 
+/** One native pipeline operand with a private, typed binding authority. */
 internal class GPUPreparedNativeRenderPipelineOperand private constructor(
     val pipeline: GPURenderPipeline,
     override val deviceGeneration: GPUDeviceGenerationID,
@@ -604,6 +644,9 @@ internal class GPUPreparedNativeRenderPipelineOperand private constructor(
     internal val hasPreparedTextAcquisitionAuthority: Boolean
         get() = bindingAuthority is
             GPUPreparedNativeRenderPipelineBindingAuthority.PreparedTextAcquired
+    internal val w6InverseMaskScanSpanPipelineWitnessV1: GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty?
+        get() = (bindingAuthority as? GPUPreparedNativeRenderPipelineBindingAuthority.W6InverseMaskScanSpanProducer)
+            ?.witness
 
     internal constructor(
         pipeline: GPURenderPipeline,
@@ -617,6 +660,26 @@ internal class GPUPreparedNativeRenderPipelineOperand private constructor(
     )
 
     companion object {
+        internal fun noBindings(
+            pipeline: GPURenderPipeline,
+            deviceGeneration: GPUDeviceGenerationID,
+            ownership: GPUPreparedNativeOperandOwnership = GPUPreparedNativeOperandOwnership.Borrowed,
+        ) = GPUPreparedNativeRenderPipelineOperand(
+            pipeline,
+            deviceGeneration,
+            ownership,
+            GPUPreparedNativeRenderPipelineBindingAuthority.NoBindings,
+        )
+
+        internal fun w6InverseMaskScanSpanProducer(
+            witness: GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty,
+        ) = GPUPreparedNativeRenderPipelineOperand(
+            witness.pipeline,
+            witness.deviceGeneration,
+            GPUPreparedNativeOperandOwnership.Borrowed,
+            GPUPreparedNativeRenderPipelineBindingAuthority.W6InverseMaskScanSpanProducer(witness),
+        )
+
         internal fun fromCorePrimitiveAcquisition(
             acquired: GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired,
             deviceGeneration: GPUDeviceGenerationID,
@@ -662,6 +725,16 @@ private sealed interface GPUPreparedNativeRenderPipelineBindingAuthority {
 
     data object BindGroupRequired : GPUPreparedNativeRenderPipelineBindingAuthority {
         override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
+    }
+
+    data object NoBindings : GPUPreparedNativeRenderPipelineBindingAuthority {
+        override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
+    }
+
+    class W6InverseMaskScanSpanProducer(
+        val witness: GPUW6InverseMaskScanSpanPipelineWitnessV1.NonEmpty,
+    ) : GPUPreparedNativeRenderPipelineBindingAuthority {
+        override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
     }
 
     class CorePrimitiveAcquired(
@@ -998,6 +1071,16 @@ internal sealed interface GPUPreparedNativeScopeOperand {
     val exactOperandKeys: List<GPUPreparedNativeOperandKey>
         get() = emptyList()
 
+    /** A preflight-projected omission of one frozen semantic scope; it has no native operands. */
+    class NoOp(
+        override val sourceStepIndex: Int,
+        override val operationKind: GPUEncoderOperationKind,
+        expectedOperandKeys: List<GPUPreparedNativeOperandKey>,
+    ) : GPUPreparedNativeScopeOperand {
+        override val operands: List<GPUPreparedNativeOperand> = emptyList()
+        val expectedOperandKeys: List<GPUPreparedNativeOperandKey> = immutableList(expectedOperandKeys)
+    }
+
     /**
      * Explicit native render-pass grouping for semantic scopes that must share one WebGPU pass.
      *
@@ -1035,9 +1118,33 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             GPUPreparedNativeRenderOperandLayout.CommandOrder,
         operationKindOverride: GPUEncoderOperationKind? = null,
         val passSegment: RenderPassSegment? = null,
+        w5aSourceBindingsV2: List<GPUW5aNativeSourceBindingV2> = emptyList(),
+        val w5bInitialClearV3: org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3? = null,
+        val w6aPassV1: org.graphiks.kanvas.gpu.plan.PlanPass? = null,
+        val w6InverseMaskScanSpanPipelineWitnessV1: GPUW6InverseMaskScanSpanPipelineWitnessV1? = null,
     ) : GPUPreparedNativeScopeOperand {
         val commands = immutableList(commands)
         val semanticPayloads = immutableList(semanticPayloads)
+        val w5aSourceBindingsV2 = immutableList(w5aSourceBindingsV2)
+        /** V2 fragment-only bindings are a separate, explicitly sealed command partition. */
+        val encodingCommands: List<GPUPreparedNativeRenderCommand> = if (w5aSourceBindingsV2.isEmpty()) this.commands else buildList {
+            val byDraw = w5aSourceBindingsV2.associateBy { it.drawOrdinalI32 }
+            require(byDraw.size == w5aSourceBindingsV2.size)
+            var base: GPUPreparedNativeRenderPipelineOperand? = null
+            var ordinalI32 = 0
+            this@Render.commands.forEach { command ->
+                if (command is GPUPreparedNativeRenderCommand.SetPipeline) base = command.pipeline
+                if (command is GPUPreparedNativeRenderCommand.Draw || command is GPUPreparedNativeRenderCommand.DrawIndexed) {
+                    val source = byDraw[ordinalI32++]
+                    add(GPUPreparedNativeRenderCommand.SetPipeline(source?.pipeline ?: requireNotNull(base)))
+                    source?.let { add(GPUPreparedNativeRenderCommand.SetBindGroup(1, it.bindGroup)) }
+                    source?.destinationGroupV3?.let { add(GPUPreparedNativeRenderCommand.SetBindGroup(2, it)) }
+                    source?.coverageGroupV4?.let { add(GPUPreparedNativeRenderCommand.SetBindGroup(3, it)) }
+                }
+                add(command)
+            }
+            require(byDraw.keys.all { it in 0 until ordinalI32 })
+        }
         override val operationKind: GPUEncoderOperationKind =
             operationKindOverride ?: GPUEncoderOperationKind.Render
         override val operands: List<GPUPreparedNativeOperand> =
@@ -1357,7 +1464,21 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         }
 
         init {
-            require(this.commands.any {
+            val scanSpanEmptyProducer = this.semanticPayloads.singleOrNull() is
+                GPUDrawSemanticPayload.PathStencilProducer && this.commands.none { command ->
+                    command is GPUPreparedNativeRenderCommand.Draw ||
+                        command is GPUPreparedNativeRenderCommand.DrawIndexed
+                }
+            require(if (scanSpanEmptyProducer)
+                this.commands.isEmpty() && pass.depthStencilTarget != null &&
+                pass.stencilLoadOperation == GPUPreparedNativeLoadOperation.Clear &&
+                pass.stencilStoreOperation == GPUPreparedNativeStoreOperation.Store &&
+                !pass.stencilReadOnly
+                else if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass && w6aPassV1.draws().isEmpty())
+                this.commands.isEmpty() && this.semanticPayloads.isEmpty() && pass.loadOperation == GPUPreparedNativeLoadOperation.Clear
+                else if (w5bInitialClearV3 != null) this.commands.isEmpty() && this.semanticPayloads.isEmpty() &&
+                this.w5aSourceBindingsV2.isEmpty() && pass.loadOperation == GPUPreparedNativeLoadOperation.Clear &&
+                pass.clearColor == GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else this.commands.any {
                 it is GPUPreparedNativeRenderCommand.Draw || it is GPUPreparedNativeRenderCommand.DrawIndexed
             }) {
                 "Render payload requires at least one closed typed draw"
@@ -1966,6 +2087,7 @@ internal class GPUPreparedNativeFramePayload(
 private fun GPUPreparedNativeScopeOperand.declaredOperandDescriptors(): List<
     Pair<GPUPreparedNativeOperandKind, GPUPreparedNativeOperandOwnership>,
 > = when (this) {
+    is GPUPreparedNativeScopeOperand.NoOp -> expectedOperandKeys.map { it.kind to it.ownership }
     is GPUPreparedNativeScopeOperand.TextureUpload -> listOf(
         data.key.kind to data.key.ownership,
         destination.nativeKind() to destination.ownership,
@@ -2083,6 +2205,21 @@ internal class GPUPreparedNativeFrameDraft internal constructor(
             }
         }
 
+    /** Transfers a constituent journal into the one composite draft that owns its lease and handles. */
+    internal fun transferOwnershipToComposite(replacement: GPUPreparedNativeFrameDraft): Boolean = synchronized(this) {
+        synchronized(replacement) {
+            val lifecycle = replacement.payload.leaseLifecycle as? GPUPreparedNativeCompositeFrameLeaseLifecycle
+                ?: return@synchronized false
+            if (ownershipState != OwnershipState.Draft || replacement.ownershipState != OwnershipState.Draft ||
+                !lifecycle.contains(payload.leaseLifecycle) || pendingOwnedHandles.any { source ->
+                    replacement.pendingOwnedHandles.none { it === source }
+                }) return@synchronized false
+            pendingOwnedHandles.clear()
+            ownershipState = OwnershipState.Released
+            true
+        }
+    }
+
     @Synchronized
     internal fun pendingOwnedHandlesSnapshot(): List<AutoCloseable> = pendingOwnedHandles.toList()
 
@@ -2168,6 +2305,7 @@ internal interface GPUPreparedNativeFramePayloadMaterializer {
 
     fun materializeReusable(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
@@ -2193,6 +2331,12 @@ internal sealed interface GPUPreparedNativeFramePayloadMaterialization {
     ) : GPUPreparedNativeFramePayloadMaterialization
 }
 
+/** Terminal disposition of a submitted native lease after output mapping has finalized. */
+internal enum class GPUPreparedNativeFrameOutputLeaseFinalization {
+    ReleaseAfterReadback,
+    QuarantineUncertain,
+}
+
 /** One-way executor access to the adapter-owned registry. */
 internal interface GPUPreparedNativeFramePayloadAccess {
     fun consumePreparedNativeFramePayload(
@@ -2204,7 +2348,11 @@ internal interface GPUPreparedNativeFramePayloadAccess {
     fun markPreparedNativeFrameSubmitted(token: GPUPreparedNativeFrameToken): Boolean
     fun releasePreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean
     fun claimOutputOwnedPreparedNativeFramePayloadMapping(token: GPUPreparedNativeFrameToken): Boolean = false
-    fun releaseOutputOwnedPreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean = false
+    fun closeOutputOwnedPreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean = false
+    fun finalizeOutputOwnedPreparedNativeFramePayload(
+        token: GPUPreparedNativeFrameToken,
+        finalization: GPUPreparedNativeFrameOutputLeaseFinalization,
+    ): Boolean = false
     fun quarantinePreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean
     fun quarantineOutputOwnedPreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean = false
     fun bindLateSurface(
@@ -2226,8 +2374,11 @@ internal class GPUPreparedNativeFrameOwnership internal constructor(
     internal fun releaseAfterCompletion(): Boolean = access.releasePreparedNativeFramePayload(token)
     internal fun claimOutputMapping(): Boolean =
         access.claimOutputOwnedPreparedNativeFramePayloadMapping(token)
-    internal fun releaseOutputAfterReadback(): Boolean =
-        access.releaseOutputOwnedPreparedNativeFramePayload(token)
+    internal fun closeOutputAfterReadback(): Boolean =
+        access.closeOutputOwnedPreparedNativeFramePayload(token)
+    internal fun finalizeOutputAfterReadback(
+        finalization: GPUPreparedNativeFrameOutputLeaseFinalization,
+    ): Boolean = access.finalizeOutputOwnedPreparedNativeFramePayload(token, finalization)
     internal fun quarantine(): Boolean = access.quarantinePreparedNativeFramePayload(token)
     internal fun quarantineOutputAfterReadback(): Boolean =
         access.quarantineOutputOwnedPreparedNativeFramePayload(token)
@@ -2253,12 +2404,15 @@ internal class GPUPreparedNativeFrameBoundary private constructor(
 
     internal fun materializeReusable(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        require(sourceWitness.authenticates(framePlan)) { "W5h source witness belongs to another frame root" }
         val result = materializer.materializeReusable(
             framePlan,
+            sourceWitness,
             encoderPlan,
             resources,
             generationSeal,

@@ -9,6 +9,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -92,5 +93,29 @@ class GmCanvasTest {
         val clip = surface.snapshotOps().filterIsInstance<DisplayOp.SetClip>().single().clip
         val element = (clip as ClipStack.Complex).ops.single()
         assertTrue(element is ClipStackOp.PathOp)
+    }
+
+    @Test
+    fun `projective path transforms remain in the recorded canvas state`() {
+        val surface = Surface(width = 40, height = 40)
+        val canvas = GmCanvas(surface.canvas(), width = 40, height = 40)
+        val path = Path {
+            moveTo(1f, 1f)
+            quadTo(10f, 20f, 20f, 1f)
+        }
+        val perspective = Matrix3x3F32.of(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0.01f, 0f, 1f,
+        )
+
+        canvas.concat(perspective)
+        canvas.drawPath(path, Paint())
+
+        val draw = surface.snapshotOps().filterIsInstance<DisplayOp.DrawPath>().single()
+        assertTrue(draw.path.isInterpolatable(path))
+        assertEquals(path.computeBounds(), draw.path.computeBounds())
+        assertEquals(perspective, draw.transform)
+        assertTrue(surface.snapshotScene() is org.graphiks.kanvas.render.ir.SceneCaptureResult.Captured)
     }
 }

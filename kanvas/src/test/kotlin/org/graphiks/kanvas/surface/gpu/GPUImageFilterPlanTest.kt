@@ -24,7 +24,9 @@ import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.vector.Vector3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -149,12 +151,12 @@ class GPUImageFilterPlanTest {
                 ImageFilter.Blend(org.graphiks.kanvas.paint.BlendMode.SRC_OVER, nestedBlur, nestedBlur),
                 ImageFilter.Dilate(1f, 1f),
                 ImageFilter.Erode(1f, 1f),
-                ImageFilter.DistantLitDiffuse(Vector2F32(1f, 1f), ColorARGB.White, 1f, 1f),
-                ImageFilter.PointLitDiffuse(Point2F32(1f, 1f), ColorARGB.White, 1f, 1f),
-                ImageFilter.SpotLitDiffuse(Point2F32(1f, 1f), Point2F32(0f, 0f), 1f, 1f, ColorARGB.White, 1f, 1f),
-                ImageFilter.DistantLitSpecular(Vector2F32(1f, 1f), ColorARGB.White, 1f, 1f, 1f),
-                ImageFilter.PointLitSpecular(Point2F32(1f, 1f), ColorARGB.White, 1f, 1f, 1f),
-                ImageFilter.SpotLitSpecular(Point2F32(1f, 1f), Point2F32(0f, 0f), 1f, 1f, ColorARGB.White, 1f, 1f, 1f),
+                ImageFilter.DistantLitDiffuse(Vector3F32(1f, 1f, 1f), ColorARGB.White, 1f, 1f),
+                ImageFilter.PointLitDiffuse(Point3F32(1f, 1f, 1f), ColorARGB.White, 1f, 1f),
+                ImageFilter.SpotLitDiffuse(Point3F32(1f, 1f, 1f), Point3F32(0f, 0f, 1f), 1f, 1f, ColorARGB.White, 1f, 1f),
+                ImageFilter.DistantLitSpecular(Vector3F32(1f, 1f, 1f), ColorARGB.White, 1f, 1f, 1f),
+                ImageFilter.PointLitSpecular(Point3F32(1f, 1f, 1f), ColorARGB.White, 1f, 1f, 1f),
+                ImageFilter.SpotLitSpecular(Point3F32(1f, 1f, 1f), Point3F32(0f, 0f, 1f), 1f, 1f, ColorARGB.White, 1f, 1f, 1f),
                 ImageFilter.Offset(1f, 1f),
                 ImageFilter.Tile(defaultDst, defaultDst),
                 ImageFilter.Merge(listOf(nestedBlur)),

@@ -1,0 +1,236 @@
+package org.graphiks.kanvas.gpu.plan
+
+import org.graphiks.kanvas.render.ir.RenderDiagnostic
+import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
+import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
+import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
+import org.graphiks.kanvas.render.ir.RenderPlanResult
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.SceneSnapshot
+
+/** Selects the first semantic capability candidate, preserving ordered gaps. */
+public class CapabilityCompilerChain private constructor(
+    private val compilers: List<GpuPlanCompiler>,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+    /** Only the public captured scene is subject to whole-scene composition admission. */
+    private val enforceCompositionAdmission: Boolean,
+) : GpuPlanCompiler {
+    override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
+        if (enforceCompositionAdmission) {
+            CompositionAdmissionV1.validate(scene, target).firstOrNull()?.let { diagnostic ->
+                return GpuPlanSelection.InvalidScene(listOf(diagnostic))
+            }
+        }
+        val hasLayerBoundary = scene.any {
+            it is org.graphiks.kanvas.render.ir.SceneCommand.BeginLayer || it is org.graphiks.kanvas.render.ir.SceneCommand.EndLayer
+        }
+        val ownsW6b = W6bFilterGraphConstruction.owns(scene)
+        val ownsW7Deferred = W6aLayerPlanCompiler.ownsAaDeferred(scene, target, runtimeCatalog)
+        val ownsW7HardPicture = W6aLayerPlanCompiler.ownsHardPictureStream(scene)
+        val ownsW7RootRect = W6aLayerPlanCompiler.ownsRootAaDeferredRect(scene, target)
+        val w6Index = compilers.indexOfFirst { it is W6aLayerPlanCompiler }
+        // A direct root image frame has an established whole-frame W5e authority.  A separate
+        // AA Porter-Duff Rect must not split that frame into W6 source lanes: ImageLattice is a
+        // valid W5e root operation but deliberately not a W6 occurrence source.  Prefer W5e only
+        // when it actually selects; regular W7 ownership and every layer/filter path stay below.
+        if (w6Index >= 0 && !hasLayerBoundary && !ownsW6b && ownsW7Deferred) {
+            val imageIndex = compilers.indexOfFirst { it is W5eImagePlanCompiler }
+            if (imageIndex >= 0) {
+                val imageCompiler = compilers[imageIndex]
+                val selection = imageCompiler.select(scene, target)
+                if (selection is GpuPlanSelection.Candidate) {
+                    return GpuPlanSelection.Candidate(ChainCandidate(this, imageIndex, imageCompiler, selection.candidate))
+                }
+            }
+        }
+        // Layer ownership precedes all remaining geometry/source admission, including composed-source gaps.
+        if (hasLayerBoundary || ownsW6b || ownsW7Deferred || ownsW7RootRect || ownsW7HardPicture) {
+            if (w6Index >= 0) {
+                val compiler = compilers[w6Index]
+                return when (val selection = compiler.select(scene, target)) {
+                    is GpuPlanSelection.Candidate -> GpuPlanSelection.Candidate(ChainCandidate(this, w6Index, compiler, selection.candidate))
+                    else -> selection
+                }
+            }
+        }
+        if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
+            return GpuPlanSelection.InvalidScene(listOf(
+                diagnostic("gpu-plan.selection.scene-target-mismatch", "Scene and target descriptors disagree."),
+            ))
+        }
+
+        // Source admission does not replace each compiler's geometry authority.
+        scene.forEach { command ->
+            val draw = (command as? org.graphiks.kanvas.render.ir.SceneCommand.Draw)?.node ?: return@forEach
+            // The pre-publication Point adapter owns geometry/coverage admission itself.
+            // A chain without that adapter retains its historical composed-source boundary.
+            val pointSourceLane = compilers.any { it is W5bPointPlanCompiler } &&
+                draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.POINT, org.graphiks.kanvas.render.ir.DrawOrigin.POINTS) &&
+                (draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.Points)?.mode == org.graphiks.kanvas.render.ir.PointMode.POINTS
+            val verticesSourceLane = compilers.any { it is W5bVerticesPlanCompiler } &&
+                draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.VERTICES, org.graphiks.kanvas.render.ir.DrawOrigin.MESH) &&
+                draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.IndexedMesh
+            if (MaterialSourceConstructionV4.containsComposed(draw.material) &&
+                (!(pointSourceLane || verticesSourceLane || draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,org.graphiks.kanvas.render.ir.DrawOrigin.RRECT,
+                        org.graphiks.kanvas.render.ir.DrawOrigin.PATH) && draw.paint?.style == org.graphiks.kanvas.render.ir.PaintStyleNode.FILL ||
+                    draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.PATH && draw.paint?.style == org.graphiks.kanvas.render.ir.PaintStyleNode.STROKE) ||
+                    draw.resource != null || draw.operationBlendMode != null && !verticesSourceLane))
+                return GpuPlanSelection.InvalidScene(listOf(diagnostic(W5gPlanDiagnostics.Unpromoted,
+                    "This composed source origin is outside the promoted geometry source lanes.")))
+        }
+
+        val gaps = mutableListOf<RenderDiagnostic>()
+        compilers.forEachIndexed { index, compiler ->
+            when (val selection = compiler.select(scene, target)) {
+                is GpuPlanSelection.Candidate -> return GpuPlanSelection.Candidate(
+                    ChainCandidate(this, index, compiler, selection.candidate),
+                )
+                is GpuPlanSelection.NotCandidate -> gaps += selection.diagnostics()
+                is GpuPlanSelection.MaterialOnlyRefusal -> return selection
+                is GpuPlanSelection.InvalidScene -> return selection
+                is GpuPlanSelection.ResourceLimitExceeded -> return selection
+            }
+        }
+        return GpuPlanSelection.NotCandidate(gaps)
+    }
+
+    override fun plan(
+        candidate: GpuPlanCandidate,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): RenderPlanResult<RenderGraph> {
+        val chained = candidate as? ChainCandidate
+            ?: return invalidCandidate()
+        if (chained.owner !== this || compilers.getOrNull(chained.index) !== chained.compiler) {
+            return invalidCandidate()
+        }
+        return chained.compiler.plan(chained.candidate, capabilities, budget)
+    }
+
+    /** Private candidate ownership is checked before the selected compiler exposes metadata. */
+    internal fun constructSourceLayout(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        overlay: (SourceDeferredRenderConstructionV4)->SourceConstructionResultV4<SourceDeferredRenderConstructionV4>,
+    ): RenderPlanResult<FrameSourceLayoutV4> {
+        val lanes = when (val result = constructSourceLanes(candidate,capabilities,budget)) {
+            is RenderPlanResult.Ready -> result.plan
+            is RenderPlanResult.GapNotMigrated -> return result
+            is RenderPlanResult.GapOnPromotedScope -> return result
+            is RenderPlanResult.InvalidScene -> return result
+            is RenderPlanResult.ResourceLimitExceeded -> return result
+        }
+        return sourceLayoutV4(lanes,overlay)
+    }
+
+    /** Complete geometry validation precedes any overlay, resource capture or publication. */
+    internal fun constructSourceLanes(input: OccurrenceSourceInputV1, capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<List<SourceDeferredRenderConstructionV4>> {
+        val domain = input.copyDomainDeviceI32()
+        val extent = org.graphiks.kanvas.render.ir.SceneExtent(domain.width(), domain.height())
+        val carrier = input.materialCoordinateDraw()
+        val scene = SceneSnapshot.of(extent, input.captured.scene.colorSpace,
+            List(input.commandIndexI32 + 1) { index ->
+                if (index == input.commandIndexI32) org.graphiks.kanvas.render.ir.SceneCommand.Draw(carrier)
+                else org.graphiks.kanvas.render.ir.SceneCommand.Annotation.of(
+                    org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6.occurrence", index.toString())
+            }, input.captured.scene.graphLimits)
+        val childTarget = RenderTargetDescriptor(extent, scene.colorSpace,
+            compositionDomain = input.renderTarget.compositionDomain)
+        return when (val selection = select(scene, childTarget)) {
+            is GpuPlanSelection.Candidate -> when (val constructed = constructSourceLanes(selection.candidate, capabilities, budget)) {
+                is RenderPlanResult.Ready -> RenderPlanResult.Ready(constructed.plan.map { it.withOccurrenceSceneV1(scene) })
+                else -> constructed
+            }
+            is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selection.diagnostics())
+            is GpuPlanSelection.ResourceLimitExceeded -> RenderPlanResult.ResourceLimitExceeded(selection.diagnostics())
+            is GpuPlanSelection.MaterialOnlyRefusal -> RenderPlanResult.GapOnPromotedScope(selection.diagnostics())
+            is GpuPlanSelection.NotCandidate -> RenderPlanResult.GapOnPromotedScope(selection.diagnostics())
+        }
+    }
+
+    /** Ordinary and occurrence-local inputs share this exact source-lane authority. */
+    internal fun constructSourceLanes(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<List<SourceDeferredRenderConstructionV4>> {
+        val chained = candidate as? ChainCandidate ?: return invalidCandidate()
+        if (chained.owner !== this || compilers.getOrNull(chained.index) !== chained.compiler) return invalidCandidate()
+        if (chained.compiler is W5aCompositePlanCompiler)
+            return chained.compiler.constructSourceLanes(chained.candidate,capabilities,budget)
+        if (chained.compiler is W5eImagePlanCompiler)
+            return chained.compiler.constructDirectSourceLanes(chained.candidate,capabilities,budget)
+        return when (val result = chained.compiler.constructSourceLaneV4(chained.candidate,capabilities,budget)) {
+            is RenderPlanResult.Ready -> RenderPlanResult.Ready(listOf(result.plan))
+            is RenderPlanResult.GapNotMigrated -> result
+            is RenderPlanResult.GapOnPromotedScope -> result
+            is RenderPlanResult.InvalidScene -> result
+            is RenderPlanResult.ResourceLimitExceeded -> result
+        }
+    }
+
+    private fun invalidCandidate(): RenderPlanResult.InvalidScene = RenderPlanResult.InvalidScene(listOf(
+        diagnostic("gpu-plan.selection.invalid-candidate", "Candidate does not belong to this compiler chain."),
+    ))
+
+    private fun diagnostic(code: String, message: String): RenderDiagnostic = RenderDiagnostic(
+        RenderDiagnosticCode(code),
+        RenderDiagnosticDomain.SCENE,
+        RenderDiagnosticSeverity.ERROR,
+        message,
+    )
+
+    private class ChainCandidate(
+        val owner: CapabilityCompilerChain,
+        val index: Int,
+        val compiler: GpuPlanCompiler,
+        val candidate: GpuPlanCandidate,
+    ) : GpuPlanCandidate {
+        override val capabilityId: String = candidate.capabilityId
+        override val sceneCanonicalId = candidate.sceneCanonicalId
+        override val target: RenderTargetDescriptor = candidate.target
+    }
+
+    public companion object {
+        /** Unbound legacy callers cannot admit a positive runtime source. */
+        public fun of(compilers: List<GpuPlanCompiler>): CapabilityCompilerChain =
+            of(compilers, RuntimeEffectSemanticCatalogSnapshot.Unbound)
+
+        public fun of(compilers: List<GpuPlanCompiler>, runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): CapabilityCompilerChain =
+            create(compilers, runtimeCatalog, true)
+
+        /** Internal only: the caller has already admitted its original public scene. */
+        internal fun ofProjected(compilers: List<GpuPlanCompiler>, runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): CapabilityCompilerChain =
+            create(compilers, runtimeCatalog, false)
+
+        private fun create(compilers: List<GpuPlanCompiler>, runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+            enforceCompositionAdmission: Boolean): CapabilityCompilerChain {
+            require(compilers.isNotEmpty()) { "CapabilityCompilerChain requires at least one compiler" }
+            val ordered = compilers.toMutableList()
+            val lastNarrowPathIndex = ordered.indexOfLast { compiler ->
+                compiler is W4cPathFillPlanCompiler || compiler is W4dPathStrokePlanCompiler
+            }
+            if (lastNarrowPathIndex >= 0 && ordered.none { it is W4dGeneralPathPlanCompiler }) {
+                ordered.add(lastNarrowPathIndex + 1, W4dGeneralPathPlanCompiler())
+            }
+            val w4dGeneralIndex = ordered.indexOfLast { it is W4dGeneralPathPlanCompiler }
+            if (w4dGeneralIndex >= 0 && ordered.none { it is W4eClipPlanCompiler }) {
+                ordered.add(w4dGeneralIndex + 1, W4eClipPlanCompiler())
+            }
+            return CapabilityCompilerChain(ordered.map { it.bindRuntimeCatalog(runtimeCatalog) }, runtimeCatalog,
+                enforceCompositionAdmission)
+        }
+    }
+}
+
+/** Bind by immutable copy before selection; no compiler mutates its semantic scope. */
+internal fun GpuPlanCompiler.bindRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): GpuPlanCompiler = when (this) {
+    is W3SolidRectPlanCompiler -> W3SolidRectPlanCompiler(catalog)
+    is W4aAnalyticRectPlanCompiler -> W4aAnalyticRectPlanCompiler(catalog)
+    is W4bAnalyticRRectPlanCompiler -> W4bAnalyticRRectPlanCompiler(catalog)
+    is W4cPathFillPlanCompiler -> W4cPathFillPlanCompiler(catalog)
+    is W4dPathStrokePlanCompiler -> withRuntimeCatalog(catalog)
+    is W4dGeneralPathPlanCompiler -> withRuntimeCatalog(catalog)
+    is W4eClipPlanCompiler -> withRuntimeCatalog(catalog)
+    is W5eImagePlanCompiler -> W5eImagePlanCompiler(catalog)
+    is W5aCompositePlanCompiler -> withRuntimeCatalog(catalog)
+    is W6aLayerPlanCompiler -> W6aLayerPlanCompiler(catalog)
+    else -> this
+}

@@ -171,6 +171,10 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
                 fixture.dispatcher.materializeReusable(
                     input.framePlan,
+                    when (val preflight = preflightW5hFrameSourcesV1(input.framePlan)) {
+                        is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                        is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                    },
                     input.encoderPlan,
                     input.resources,
                     input.generationSeal,
@@ -202,6 +206,10 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
                 fixture.dispatcher.materializeReusable(
                     input.framePlan,
+                    when (val preflight = preflightW5hFrameSourcesV1(input.framePlan)) {
+                        is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                        is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                    },
                     input.encoderPlan,
                     input.resources,
                     input.generationSeal,

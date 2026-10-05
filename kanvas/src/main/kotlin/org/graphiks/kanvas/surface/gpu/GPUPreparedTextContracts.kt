@@ -8,13 +8,16 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.plan.BlendPlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Immutable font-source snapshot retained by a prepared text draw. */
 @ConsistentCopyVisibility
-data class GPUPreparedFontFaceSnapshot private constructor(
+internal data class GPUPreparedFontFaceSnapshot private constructor(
     val sourceId: FontSourceID,
     val typefaceId: TypefaceID,
     val faceIndex: Int,
@@ -46,7 +49,7 @@ data class GPUPreparedFontFaceSnapshot private constructor(
 }
 
 /** Renderer-relevant source representation proven for one shaped glyph. */
-enum class GPUPreparedTextSourceRepresentation {
+internal enum class GPUPreparedTextSourceRepresentation {
     OUTLINE,
     COLRV0,
     CBDT_CBLC,
@@ -57,14 +60,26 @@ enum class GPUPreparedTextSourceRepresentation {
 }
 
 /** Prepared representation admitted for later mask/atlas inventory work. */
-enum class GPUPreparedTextRepresentation {
+internal enum class GPUPreparedTextRepresentation {
     A8_MASK,
     COLRV0,
 }
 
+/** Sealed W5a material authority selected before prepared glyph lowering starts. */
+internal data class GPUPreparedTextMaterialPlan(
+    val table: MaterialPlanTable,
+    val ref: MaterialPlanRef,
+    val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
+    val commonProgram: GPUPreparedMaterialProgram? = null,
+) {
+    init {
+        table.entry(ref)
+    }
+}
+
 /** Per-draw representation selection in exact flattened glyph order. */
 @ConsistentCopyVisibility
-data class GPUPreparedTextRepresentationPolicy private constructor(
+internal data class GPUPreparedTextRepresentationPolicy private constructor(
     val representations: List<GPUPreparedTextRepresentation>,
 ) {
     companion object {
@@ -99,7 +114,7 @@ data class GPUPreparedTextRepresentationPolicy private constructor(
  * shift rotation/skew subpixel phase.
  */
 @ConsistentCopyVisibility
-data class GPUPreparedGlyphInput private constructor(
+internal data class GPUPreparedGlyphInput private constructor(
     val glyphId: Int,
     val positionX: Float,
     val positionY: Float,
@@ -124,38 +139,98 @@ data class GPUPreparedGlyphInput private constructor(
     }
 }
 
+/** Existing geometry/coverage inputs shared by the legacy and material-free inventories. */
+internal interface GPUPreparedTextGeometryInput {
+    val operationIndex: Int
+    val face: GPUPreparedFontFaceSnapshot
+    val glyphs: List<GPUPreparedGlyphInput>
+    val originX: Float
+    val originY: Float
+    val transform: Matrix3x3F32
+    val clipContentKey: String
+    val clip: ClipStack
+    val coveragePaintStyle: org.graphiks.kanvas.paint.PaintStyle
+    val coverageMaskFilter: org.graphiks.kanvas.paint.MaskFilter?
+    val foregroundColor: ColorARGB
+    val targetColorFormat: String
+    val capabilitySnapshotHash: String
+    val representationPolicy: GPUPreparedTextRepresentationPolicy
+}
+
+/** No shader, filter, material plan/program, source snapshot, or GPU owner. */
+internal class GPUPreparedTextGeometry(
+    override val operationIndex: Int,
+    override val face: GPUPreparedFontFaceSnapshot,
+    override val glyphs: List<GPUPreparedGlyphInput>,
+    override val originX: Float,
+    override val originY: Float,
+    override val transform: Matrix3x3F32,
+    override val clipContentKey: String,
+    override val clip: ClipStack,
+    override val targetColorFormat: String,
+    override val capabilitySnapshotHash: String,
+    override val representationPolicy: GPUPreparedTextRepresentationPolicy,
+    val coveragePlan: org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan,
+    val clipFacts: org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts,
+    val clipExecution: org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan,
+) : GPUPreparedTextGeometryInput {
+    override val coveragePaintStyle get() = org.graphiks.kanvas.paint.PaintStyle.FILL
+    override val coverageMaskFilter: org.graphiks.kanvas.paint.MaskFilter? get() = null
+    override val foregroundColor: ColorARGB get() = error("A8 coverage has no foreground material")
+    init { require(representationPolicy.representations.all { it == GPUPreparedTextRepresentation.A8_MASK }) }
+
+    fun bind(paint: Paint, plan: GPUPreparedTextMaterialPlan): GPUPreparedTextDraw {
+        val program = requireNotNull(plan.commonProgram)
+        return GPUPreparedTextDraw.create(operationIndex, face, glyphs, originX, originY, transform,
+            clipContentKey, clip, paint, program, plan,
+            org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanEmission.common(program),
+            org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lowerForRecording(plan.blend),
+            targetColorFormat, capabilitySnapshotHash, representationPolicy, sourceGeometry = this)
+    }
+}
+
 /** Pure, handle-free, transactionally prepared text draw. */
-class GPUPreparedTextDraw private constructor(
-    val operationIndex: Int,
-    val face: GPUPreparedFontFaceSnapshot,
-    val glyphs: List<GPUPreparedGlyphInput>,
-    val originX: Float,
-    val originY: Float,
-    val transform: Matrix3x3F32,
-    val clipContentKey: String,
+internal class GPUPreparedTextDraw private constructor(
+    override val operationIndex: Int,
+    override val face: GPUPreparedFontFaceSnapshot,
+    override val glyphs: List<GPUPreparedGlyphInput>,
+    override val originX: Float,
+    override val originY: Float,
+    override val transform: Matrix3x3F32,
+    override val clipContentKey: String,
     clip: ClipStack,
     paint: Paint,
     val material: GPUPreparedMaterialProgram,
+    val materialPlan: GPUPreparedTextMaterialPlan?,
+    val materialPlanEmission:
+        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanEmission?,
     val blendPlan: GPUBlendPlan,
-    val targetColorFormat: String,
-    val capabilitySnapshotHash: String,
-    val representationPolicy: GPUPreparedTextRepresentationPolicy,
-) {
+    override val targetColorFormat: String,
+    override val capabilitySnapshotHash: String,
+    override val representationPolicy: GPUPreparedTextRepresentationPolicy,
+    val sourceGeometry: GPUPreparedTextGeometry?,
+) : GPUPreparedTextGeometryInput {
     init {
         require(targetColorFormat.isNotBlank()) { "Prepared text target format must not be blank" }
         require(clipContentKey.isNotBlank()) { "Prepared text clipContentKey must not be blank" }
         require(capabilitySnapshotHash.isNotBlank()) {
             "Prepared text capability snapshot hash must not be blank"
         }
+        require((materialPlan == null) == (materialPlanEmission == null)) {
+            "Prepared text W5a plan and compiler emission must be retained together"
+        }
     }
     private val clipSnapshot: ClipStack = clip.snapshotForPreparedText()
-    private val paintSnapshot: Paint = paint.snapshotForPreparedText()
+    private val paintSnapshot: Paint? = if (materialPlan?.commonProgram == null) paint.snapshotForPreparedText() else null
+    override val coveragePaintStyle = paint.style
+    override val coverageMaskFilter = paint.maskFilter
+    private val capturedForegroundColor = paint.color
 
     /**
      * Returns a fresh deep copy so mutable [Path] values inside [ClipStack]
      * cannot alter the validated prepared draw.
      */
-    val clip: ClipStack
+    override val clip: ClipStack
         get() = clipSnapshot.snapshotForPreparedText()
 
     /**
@@ -163,11 +238,11 @@ class GPUPreparedTextDraw private constructor(
      * runtime-effect graphs cannot alter the validated prepared draw.
      */
     val paint: Paint
-        get() = paintSnapshot.snapshotForPreparedText()
+        get() = requireNotNull(paintSnapshot) { "Common A8 material belongs exclusively to its V6 source owner" }.snapshotForPreparedText()
 
     /** Immutable foreground color without re-snapshotting an unrelated shader graph. */
-    internal val foregroundColor: ColorARGB
-        get() = paintSnapshot.color
+    override val foregroundColor: ColorARGB
+        get() = capturedForegroundColor
 
     companion object {
         @JvmSynthetic
@@ -182,10 +257,14 @@ class GPUPreparedTextDraw private constructor(
             clip: ClipStack,
             paint: Paint,
             material: GPUPreparedMaterialProgram,
+            materialPlan: GPUPreparedTextMaterialPlan? = null,
+            materialPlanEmission:
+                org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanEmission? = null,
             blendPlan: GPUBlendPlan,
             targetColorFormat: String,
             capabilitySnapshotHash: String,
             representationPolicy: GPUPreparedTextRepresentationPolicy,
+            sourceGeometry: GPUPreparedTextGeometry? = null,
         ): GPUPreparedTextDraw = GPUPreparedTextDraw(
             operationIndex = operationIndex,
             face = GPUPreparedFontFaceSnapshot.create(
@@ -207,18 +286,23 @@ class GPUPreparedTextDraw private constructor(
             clip = clip,
             paint = paint,
             material = material,
+            materialPlan = materialPlan,
+            materialPlanEmission = materialPlanEmission,
             blendPlan = blendPlan,
             targetColorFormat = targetColorFormat,
             capabilitySnapshotHash = capabilitySnapshotHash,
             representationPolicy = GPUPreparedTextRepresentationPolicy.create(
                 representationPolicy.representations,
             ),
+            sourceGeometry = sourceGeometry,
         )
     }
 }
 
 /** Terminal result of pure prepared-text lowering. */
-sealed interface GPUPreparedTextLowering {
+internal sealed interface GPUPreparedTextLowering {
+    /** Same lowerer predicates, stopped before any material capture or compilation. */
+    data class GeometryReady(val geometry: GPUPreparedTextGeometry?) : GPUPreparedTextLowering
     @ConsistentCopyVisibility
     data class Ready private constructor(
         val draw: GPUPreparedTextDraw,

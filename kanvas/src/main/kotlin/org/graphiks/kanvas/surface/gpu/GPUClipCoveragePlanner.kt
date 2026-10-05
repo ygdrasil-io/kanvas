@@ -12,7 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.isSimpleAnalyticIntersection
 import org.graphiks.kanvas.surface.RenderConfig
 
 /** Chooses the immutable coverage strategy before any GPU intermediate allocation. */
-object GPUClipCoveragePlanner {
+internal object GPUClipCoveragePlanner {
     private const val RGBA8_BYTES_PER_PIXEL = 4L
     private const val DEPTH24_STENCIL8_BYTES_PER_PIXEL = 4L
     private const val AA_SAMPLE_COUNT = 4
@@ -149,7 +149,7 @@ object GPUClipCoveragePlanner {
  * Materialized WebGPU masks run through the prepared coverage-mask route
  * (GPUWgpu4kCoverageMaskProducerMaterializer), whose scope is one prepared frame.
  */
-class GPUClipCoverageCache {
+internal class GPUClipCoverageCache {
     private val masks = ConcurrentHashMap<String, GPUClipCoveragePlan.Mask>()
 
     fun acquire(mask: GPUClipCoveragePlan.Mask): GPUClipCoveragePlan.Mask =

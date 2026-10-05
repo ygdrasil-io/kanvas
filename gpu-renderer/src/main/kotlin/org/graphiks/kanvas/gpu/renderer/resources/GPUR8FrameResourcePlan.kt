@@ -86,15 +86,11 @@ class GPUR8FrameResourcePlan private constructor(
                 "R8 texture exceeds the observed maxTextureDimension2D limit"
             }
 
-            val logicalBytesPerRow = artifact.width.toLong()
             val requiredCopyBytesPerRowAlignment = leastCommonMultipleR8(
                 WEBGPU_TEXTURE_COPY_BYTES_PER_ROW_ALIGNMENT,
                 limits.copyBytesPerRowAlignment,
             )
-            val stagingBytesPerRow = alignUpR8(
-                logicalBytesPerRow,
-                requiredCopyBytesPerRowAlignment,
-            )
+            val stagingBytesPerRow = preparedR8StagingRowBytesI64(artifact.width, limits.copyBytesPerRowAlignment)
             val stagingByteSize = Math.multiplyExact(
                 stagingBytesPerRow,
                 artifact.height.toLong(),
@@ -236,6 +232,13 @@ private fun alignUpR8(value: Long, alignment: Long): Long {
     require(value >= 0L && alignment > 0L)
     val remainder = value % alignment
     return if (remainder == 0L) value else Math.addExact(value, alignment - remainder)
+}
+
+/** Physical row layout shared with geometry-only pre-publication accounting. */
+fun preparedR8StagingRowBytesI64(widthI32: Int, copyAlignmentI64: Long): Long {
+    require(widthI32 > 0)
+    return alignUpR8(widthI32.toLong(), leastCommonMultipleR8(
+        WEBGPU_TEXTURE_COPY_BYTES_PER_ROW_ALIGNMENT, copyAlignmentI64))
 }
 
 private fun leastCommonMultipleR8(first: Long, second: Long): Long {

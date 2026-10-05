@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.plan.aaCoverageBindingOrNullV1
+
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayout
 
 import java.io.ByteArrayOutputStream
@@ -24,6 +26,10 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameScratchSubmissionResult
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceSubmissionID
+import org.graphiks.kanvas.gpu.renderer.resources.GPUScratchCompletionFailure
+import org.graphiks.kanvas.gpu.renderer.resources.GPUScratchLifecycleResult
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
@@ -147,13 +153,43 @@ class GPUCommandEncoderScopePlan internal constructor(
         private set
     internal var allowsClipStencilPrefixDepthStencil: Boolean = false
         private set
+    /** Task 8 W4d.2 owns its sealed D24 bindings without reusing a historical route seal. */
+    internal var allowsW4dGeneralDepthStencil: Boolean = false
+        private set
+    /** W4e owns a sealed clip-producer D24S8 attachment independently of legacy stencil lanes. */
+    internal var allowsW4ePreparedDepthStencil: Boolean = false
+        private set
+    /** Reference to the sole frozen multi-target authority, never an independent route seal. */
+    internal var w6aFrameV1: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan? = null
+        private set
 
     internal fun attachNativeOperandKeys(
         keys: List<GPUPreparedNativeOperandKey>,
         allowsClipStencilPrefixDepthStencil: Boolean = false,
+        allowsW4dGeneralDepthStencil: Boolean = false,
+        allowsW4ePreparedDepthStencil: Boolean = false,
+        w6aFrameV1: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan? = null,
     ): GPUCommandEncoderScopePlan {
         check(nativeOperandKeys.isEmpty()) { "Native operand keys are already attached" }
         require(keys.isNotEmpty()) { "Native operand keys must not be empty" }
+        val w6aStep = w6aFrameV1?.steps?.get(sourceStepIndex)
+        if (w6aFrameV1 != null) require(w6aStep != null && sourceTaskIds == w6aStep.sourceTaskIds &&
+            sourcePacketIds == (w6aStep as? org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep)
+                ?.drawPackets.orEmpty().map { it.packetId }) { "W6 encoder scope must retain its frozen step" }
+        val w6aPass = (w6aStep as? org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep)?.w6aPassV1
+        val w6aNative = w6aPass?.let { w6aFrameV1?.physical?.w4eGeometryBinding(it.id)?.nativePass(it.id) }
+        val w6aStencil = w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
+            w6aPass?.aaCoverageBindingOrNullV1()?.passes()?.firstOrNull()?.depthStencil != null ||
+            (w6aPass as? org.graphiks.kanvas.gpu.plan.PlanPass.AaCoverageSourcePass)?.binding
+                ?.let { it as? org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1 }
+                ?.passes()?.firstOrNull()?.depthStencil != null ||
+            w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
+            w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass && w6aPass.depthStencil != null ||
+            w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass &&
+                (w6aPass.rasterBinding?.depthStencil != null ||
+                    w6aPass.aaCoverageBinding?.passes()?.firstOrNull()?.depthStencil != null) ||
+            w6aNative is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskProducer && w6aNative.depthStencil != null ||
+            w6aNative is org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass && w6aNative.depthStencil != null
         val pathSealed = corePrimitivePathStencilNativeRouteSeal is
             GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
             corePrimitivePathStencilNativeRouteSeal is
@@ -175,7 +211,9 @@ class GPUCommandEncoderScopePlan internal constructor(
             it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
         }
         require(
-            if (pathSealed || clipStencilSealed || allowsClipStencilPrefixDepthStencil) {
+            if (pathSealed || clipStencilSealed || allowsClipStencilPrefixDepthStencil ||
+                allowsW4dGeneralDepthStencil || allowsW4ePreparedDepthStencil || w6aStencil
+            ) {
                 depthStencilKeys.size == 1 &&
                     depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
                     depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
@@ -190,6 +228,25 @@ class GPUCommandEncoderScopePlan internal constructor(
         ) {
             "Only the direct prefix of a clip-stencil route may retain an unsealed D24S8 operand"
         }
+        require(!allowsW4dGeneralDepthStencil ||
+            !pathSealed && !clipStencilSealed && !coverageMaskSealed &&
+                !allowsClipStencilPrefixDepthStencil
+        ) {
+            "Only sealed W4d.2 materialization may retain an otherwise unsealed D24S8 operand"
+        }
+        require(!allowsW4ePreparedDepthStencil ||
+            !pathSealed && !clipStencilSealed && !coverageMaskSealed &&
+                !allowsClipStencilPrefixDepthStencil && !allowsW4dGeneralDepthStencil
+        ) {
+            "Only sealed W4e materialization may retain an otherwise unsealed clip-producer D24S8 operand"
+        }
+        this.allowsW4dGeneralDepthStencil = allowsW4dGeneralDepthStencil
+        this.allowsW4ePreparedDepthStencil = allowsW4ePreparedDepthStencil
+        require(w6aFrameV1 == null || !pathSealed && !clipStencilSealed && !coverageMaskSealed &&
+            !allowsClipStencilPrefixDepthStencil && !allowsW4dGeneralDepthStencil && !allowsW4ePreparedDepthStencil) {
+            "W6 scopes must not acquire a second geometry route authority"
+        }
+        this.w6aFrameV1 = w6aFrameV1
         if (coverageMaskSealed && coverageMaskSeal.units().size > 1) {
             val units = coverageMaskSeal.units()
             val producers = units.filterIsInstance<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>()
@@ -1064,13 +1121,21 @@ class GPUFrameRollback internal constructor(
     private val completionProvider: GPUQueueCompletionProvider? = null,
     completionTicket: GPUQueueCompletionTicket? = null,
 ) {
-    private enum class State { Open, SubmitEntered, RolledBack }
+    private enum class State { Open, SubmitRefused, SubmitEntered, RolledBack }
 
     private var state = State.Open
     private var acquiredSurfaceOutput: GPUAcquiredSurfaceOutput? = acquiredSurfaceOutput
     private var nativePayloadOwnership: GPUPreparedNativeFrameOwnership? = nativePayloadOwnership
     private var completionTicket: GPUQueueCompletionTicket? = completionTicket
     private var result: GPUFrameRollbackResult? = null
+    private var scratchSubmission: GPUResourceSubmissionID? = null
+    private var scratchTicket: GPUQueueCompletionTicket? = null
+    private var scratchTerminal = false
+    private var submissionUncertain = false
+    private var nativeTransferredBeforeRefusal = false
+    private var nativeCompleted = false
+    private var nativeQuarantined = false
+    private val ownershipDiagnostics = mutableListOf<GPUDiagnostic>()
 
     init {
         require(completionTicket == null || completionProvider != null) {
@@ -1128,6 +1193,21 @@ class GPUFrameRollback internal constructor(
             "failed.frame-execution.submit-ownership",
             "Frame rollback ownership is no longer open.",
         )
+        val ticket = completionTicket ?: return GPUPreparedNativeFrameBindingResult.Refused(
+            "failed.frame-execution.submit-ticket",
+            "Frame scratch ownership requires the adopted completion ticket.",
+        )
+        when (val scratch = resourceProvider.submitFrameScratch(ownerScope, ticket.deviceGeneration)) {
+            GPUFrameScratchSubmissionResult.NoScratch -> Unit
+            is GPUFrameScratchSubmissionResult.Submitted -> {
+                scratchSubmission = scratch.submissionId
+                scratchTicket = ticket
+            }
+            is GPUFrameScratchSubmissionResult.Refused -> return GPUPreparedNativeFrameBindingResult.Refused(
+                scratch.diagnostic.code.value,
+                scratch.diagnostic.message,
+            )
+        }
         val ownership = nativePayloadOwnership
         if (ownership != null) {
             val marked = try {
@@ -1135,20 +1215,56 @@ class GPUFrameRollback internal constructor(
             } catch (_: Throwable) {
                 false
             }
-            if (!marked) return GPUPreparedNativeFrameBindingResult.Refused(
-                "failed.native-frame-payload.submit-transition",
-                "Native payload could not enter submitted ownership.",
-            )
+            if (!marked) {
+                // A refused native transition may be uncertain. Never undo a transferred owner.
+                state = State.SubmitRefused
+                nativeTransferredBeforeRefusal = true
+                quarantineNativeAfterSubmit()
+                ownershipDiagnostics += preflightDiagnostic(
+                    "failed.preflight.submit_handoff_quarantined",
+                    "Submit handoff failed; transferred or uncertain owners are retained for quarantine, not rolled back.",
+                    mapOf("ownerScope" to ownerScope, "nativeToken" to ownership.token.value),
+                )
+                return GPUPreparedNativeFrameBindingResult.Refused(
+                    "failed.native-frame-payload.submit-transition",
+                    "Native payload could not enter submitted ownership; uncertain owners were retained. " +
+                        ownershipDiagnostics.joinToString { it.code.value },
+                )
+            }
         }
         state = State.SubmitEntered
         return GPUPreparedNativeFrameBindingResult.Ready
     }
 
     @Synchronized
-    internal fun releaseNativeAfterCompletion(): Boolean = try {
-        nativePayloadOwnership?.releaseAfterCompletion() ?: true
-    } catch (_: Throwable) {
-        false
+    internal fun releaseNativeAfterCompletion(ticket: GPUQueueCompletionTicket): Boolean {
+        if (state != State.SubmitEntered || submissionUncertain || completionTicket !== ticket ||
+            (scratchSubmission != null && scratchTicket !== ticket)
+        ) return false
+        val submission = scratchSubmission
+        if (submission != null && !scratchTerminal) {
+            val completed = try {
+                resourceProvider.acceptScratchCompletion(submission, ticket.deviceGeneration)
+            } catch (_: Throwable) {
+                null
+            }
+            if (completed !is GPUScratchLifecycleResult.Accepted) {
+                ownershipDiagnostics += (completed as? GPUScratchLifecycleResult.Refused)?.diagnostic
+                    ?: preflightDiagnostic(
+                        "failed.scratch_texture.completion",
+                        "Scratch completion failed without a typed result; ownership remains retained.",
+                    )
+                return false
+            }
+            scratchTerminal = true
+        }
+        if (nativeQuarantined) return false
+        if (nativeCompleted) return true
+        return try {
+            (nativePayloadOwnership?.releaseAfterCompletion() ?: true).also { nativeCompleted = it }
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     @Synchronized
@@ -1159,8 +1275,17 @@ class GPUFrameRollback internal constructor(
     }
 
     @Synchronized
-    internal fun releaseNativeReadbackAfterOutput(): Boolean = try {
-        nativePayloadOwnership?.releaseOutputAfterReadback() ?: true
+    internal fun closeNativeReadbackAfterOutput(): Boolean = try {
+        nativePayloadOwnership?.closeOutputAfterReadback() ?: true
+    } catch (_: Throwable) {
+        false
+    }
+
+    @Synchronized
+    internal fun finalizeNativeReadbackAfterOutput(
+        finalization: GPUPreparedNativeFrameOutputLeaseFinalization,
+    ): Boolean = try {
+        nativePayloadOwnership?.finalizeOutputAfterReadback(finalization) ?: true
     } catch (_: Throwable) {
         false
     }
@@ -1173,10 +1298,49 @@ class GPUFrameRollback internal constructor(
     }
 
     @Synchronized
-    internal fun quarantineNativeAfterSubmit(): Boolean = try {
-        nativePayloadOwnership?.quarantine() ?: true
-    } catch (_: Throwable) {
-        false
+    internal fun quarantineNativeAfterSubmit(): Boolean {
+        submissionUncertain = true
+        val submission = scratchSubmission
+        var scratchSafe = scratchTerminal || submission == null
+        if (!scratchSafe) {
+            val rejected = try {
+                resourceProvider.rejectScratchCompletion(
+                    requireNotNull(submission),
+                    requireNotNull(scratchTicket).deviceGeneration,
+                    GPUScratchCompletionFailure.Uncertain,
+                )
+            } catch (_: Throwable) {
+                null
+            }
+            scratchSafe = rejected is GPUScratchLifecycleResult.Accepted
+            scratchTerminal = scratchSafe
+            if (!scratchSafe) ownershipDiagnostics += (rejected as? GPUScratchLifecycleResult.Refused)?.diagnostic
+                ?: preflightDiagnostic(
+                    "failed.scratch_texture.quarantine",
+                    "Scratch quarantine failed without a typed result; submission ownership remains retained.",
+                    mapOf("submissionId" to submission.toString()),
+                )
+        }
+        val nativeSafe = nativeCompleted || nativeQuarantined || try {
+            (nativePayloadOwnership?.quarantine() ?: true).also { nativeQuarantined = it }
+        } catch (_: Throwable) {
+            false
+        }
+        if (!nativeSafe) ownershipDiagnostics += preflightDiagnostic(
+            "failed.native-frame-payload.quarantine",
+            "Native quarantine failed; uncertain ownership remains retained.",
+            mapOf("ownerScope" to ownerScope),
+        )
+        return scratchSafe && nativeSafe
+    }
+
+    @Synchronized
+    internal fun withOwnershipDiagnostics(diagnostic: GPUDiagnostic?): GPUDiagnostic? {
+        if (ownershipDiagnostics.isEmpty()) return diagnostic
+        val primary = diagnostic ?: ownershipDiagnostics.first()
+        return primary.copy(facts = primary.facts + ownershipDiagnostics.mapIndexed { index, retained ->
+            "ownershipFailure$index" to "${retained.code.value}: ${retained.message} ${retained.facts}"
+        })
     }
 
     @Synchronized
@@ -1195,7 +1359,7 @@ class GPUFrameRollback internal constructor(
         }
         state = State.RolledBack
         val releases = mutableListOf<String>()
-        val diagnostics = mutableListOf<GPUDiagnostic>()
+        val diagnostics = ownershipDiagnostics.toMutableList()
         acquiredSurfaceOutput?.let { output ->
             try {
                 when (val release = surfaceProvider.release(output)) {
@@ -1237,6 +1401,7 @@ class GPUFrameRollback internal constructor(
             }
         }
         nativePayloadOwnership?.let { ownership ->
+            if (nativeTransferredBeforeRefusal) return@let
             try {
                 if (ownership.rollback()) {
                     releases += "native-payload:${ownership.token.value}"
@@ -1277,6 +1442,8 @@ class GPUFrameRollback internal constructor(
                     mapOf("failureClass" to failure::class.simpleName.orEmpty()),
                 )
         }
+        ownershipDiagnostics.clear()
+        ownershipDiagnostics.addAll(diagnostics)
         return GPUFrameRollbackResult(releases, diagnostics).also { result = it }
     }
 }
@@ -1332,6 +1499,10 @@ internal class PreparedGPUFrame(
         require(rollback.ownsCompletionTicket(completionTicket)) {
             "PreparedGPUFrame rollback must own the exact completion ticket instance"
         }
+        val sealedW6a = semanticPlan.w6aLayerFrameV1?.let { authority ->
+            require(authority.validates(semanticPlan)) { "Invalid frozen W6a frame" }
+            true
+        } ?: false
         require(this.stepPartition.map { it.sourceStepIndex } == semanticPlan.steps.indices.toList()) {
             "PreparedGPUFrame.stepPartition must cover every semantic step exactly once and in order"
         }
@@ -1344,6 +1515,7 @@ internal class PreparedGPUFrame(
         }
         encoderPlan.scopes.forEach { scope ->
             val step = semanticPlan.steps[scope.sourceStepIndex]
+            require(scope.w6aFrameV1 === semanticPlan.w6aLayerFrameV1) { "W6 scope authority must be the complete frozen frame" }
             require(scope.sourceTaskIds == step.sourceTaskIds) {
                 "PreparedGPUFrame encoder scope tasks must exactly match the semantic step"
             }
@@ -1380,7 +1552,14 @@ internal class PreparedGPUFrame(
             require(scope.resourceGenerationLabels == expectedResources) {
                 "PreparedGPUFrame encoder resource generations must exactly match the semantic step"
             }
-            if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep) {
+            if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep &&
+                scope.operationKind == GPUEncoderOperationKind.Render) {
+                step.drawPackets.firstOrNull()?.w5bFinalFrameWitnessV3?.takeIf { it.w4eLane != null }?.let { witness ->
+                    require(witness.validates(semanticPlan)) { "Prepared W4e final-color scopes require their complete sealed frame" }
+                }
+                val sealedW4e = step.drawPackets.isNotEmpty() && step.drawPackets.all { packet ->
+                    packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
+                }
                 require(scope.corePrimitiveDirectNativeRouteSeal !== GPUCorePrimitiveDirectNativeRouteSeal.Missing) {
                     "PreparedGPUFrame render scopes require a pure-preflight CorePrimitive route seal"
                 }
@@ -1405,11 +1584,24 @@ internal class PreparedGPUFrame(
                 require(scope.corePrimitiveNativeScopeRouteSeal !== GPUCorePrimitiveNativeScopeRouteSeal.Missing) {
                     "PreparedGPUFrame render scopes require a pure-preflight unified CorePrimitive route seal"
                 }
-                val pathSealed = scope.corePrimitivePathStencilNativeRouteSeal is
+                val w6aPath = sealedW6a && !sealedW4e && (step.w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
+                    step.w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover)
+                // W6b replays the already-selected W4 producer and cover together when
+                // materializing a stencil-backed mask coverage source.  It is intentionally
+                // not a new path route: the two packets and the borrowed stencil attachment
+                // are the frozen W4 authority carried by the typed source binding.
+                val w6bStencilCoverage = sealedW6a && !sealedW4e && (
+                    step.w6aPassV1?.aaCoverageBindingOrNullV1()?.passes()?.firstOrNull()?.depthStencil != null ||
+                    (step.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)
+                        ?.let { coverage ->
+                            coverage.rasterBinding?.depthStencil != null ||
+                                coverage.aaCoverageBinding?.passes()?.firstOrNull()?.depthStencil != null
+                        } == true)
+                val pathSealed = w6aPath || scope.corePrimitivePathStencilNativeRouteSeal is
                     GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
                     scope.corePrimitivePathStencilNativeRouteSeal is
                     GPUCorePrimitivePathStencilNativeRouteSeal.Continued
-                val unifiedContainsPath = (
+                val unifiedContainsPath = w6aPath || (
                     scope.corePrimitiveNativeScopeRouteSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
                     )?.orderedUnits?.any { unit ->
                     unit is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
@@ -1440,10 +1632,140 @@ internal class PreparedGPUFrame(
                 // path render may retain a non-writable stencil authority too.
                 val hasPathStencilLoadStore = pathUses.size == 1 &&
                     step.depthStencilLoadStore != null
+                val compositeAuthority = step.drawPackets.firstOrNull()?.w5aCompositeFrameAuthority
+                if (compositeAuthority != null) require(compositeAuthority.validates(semanticPlan,
+                    semanticPlan.steps.filterIsInstance<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep>())) {
+                    "Prepared composite frames require their exact ordered lane authority"
+                }
+                val w5bPathWitness = step.drawPackets.singleOrNull()?.let { packet ->
+                    packet.corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.takeIf {
+                        it.scratchFor(packet) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath
+                    }
+                }
+                if (w5bPathWitness != null) require(w5bPathWitness.validates(semanticPlan)) {
+                    "Prepared W5b path scopes require the exact compiler-owned frame"
+                }
+                val plannedPathFrame = if (w6aPath || w5bPathWitness != null) true else if (compositeAuthority != null) {
+                    step.drawPackets.all { it.corePrimitivePreparedAuthority?.let { authority ->
+                        authority.w4cSessionScratch != null || authority.w4dSessionScratch != null
+                    } == true }
+                } else semanticPlan.hasSealedW4cSessionMarker() || semanticPlan.hasSealedW4dSessionMarker()
+                val plannedPathPacket = step.drawPackets.singleOrNull()
+                val plannedPathAuthority = plannedPathPacket?.corePrimitivePreparedAuthority
+                // W4d.2-general has a separate, sealed Task 7 materialization table.  Its
+                // V/I/U/D24 operands are materialized by Task 8 rather than by the historical
+                // W4c/W4d scratch route seals, so it must not be reclassified as one of them.
+                val w4dGeneralScope = sealedW4e || plannedPathAuthority
+                    ?.w4dGeneralFrameMaterializationAuthority != null
                 val depthStencilKeys = scope.nativeOperandKeys.filter {
                     it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
                 }
-                require(
+                // W6 owns AA colour-source stencil phases through its frozen source binding.
+                // They have a real D24S8 attachment, but must not acquire a historical W4
+                // path-pair route or inherit the W4d.2-general exemption.
+                val w6aAaPass = step.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass
+                val w6aAaAuthority = w6aAaPass?.let { pass ->
+                    scope.w6aFrameV1?.w4dAaAuthorities?.entries?.singleOrNull { (binding, _) ->
+                        binding.passes().any { it === pass }
+                    }?.value
+                }
+                val w6aAaDepthId = w6aAaPass?.depthStencil
+                val expectedW6aAaStencilLoadStore = when (w6aAaPass?.depthStencilLoadStore) {
+                    org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore.ClearZeroStore ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                                0u,
+                            )
+                    org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore.LoadStoreTestReset ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load,
+                                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                                null,
+                            )
+                    null -> null
+                }
+                val w6aAaStencilContract = w6aAaAuthority != null &&
+                    w6aAaDepthId != null &&
+                    expectedW6aAaStencilLoadStore != null &&
+                    scope.w6aFrameV1?.validatesW4dAaSources(semanticPlan) == true &&
+                    !pathSealed && !unifiedContainsPath && !clipStencilSealed && !coverageMaskSealed &&
+                    pathUses.size == 1 &&
+                    pathUses.single().resource == scope.w6aFrameV1?.refs?.get(w6aAaDepthId) &&
+                    pathUses.single().usage == GPUFrameResourceUsage.RenderAttachment &&
+                    pathUses.single().write &&
+                    step.depthStencilLoadStore == expectedW6aAaStencilLoadStore &&
+                    depthStencilKeys.size == 1 &&
+                    depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
+                    depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
+                val hasPlannedPathAuthority = w6aPath || plannedPathAuthority?.w4cSessionScratch != null ||
+                    plannedPathAuthority?.w4dSessionScratch != null || w5bPathWitness != null
+                val expectedPlannedPathLoadStore = when (plannedPathPacket?.role) {
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                                0u,
+                            )
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load,
+                                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                                null,
+                            )
+                    else -> null
+                }
+                val unplannedWritablePathLoad =
+                    step.depthStencilLoadStore as?
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil
+                if (plannedPathFrame) {
+                    require(plannedPathPacket != null && hasPlannedPathAuthority) {
+                        "Prepared planned-path frames require one matching packet authority per render scope"
+                    }
+                    if (pathSealed) {
+                        require(
+                            expectedPlannedPathLoadStore != null &&
+                                step.depthStencilLoadStore == expectedPlannedPathLoadStore &&
+                                pathUses.singleOrNull()?.write == true,
+                        ) {
+                            "Prepared planned-path scopes require their exact producer or writable-load cover authority"
+                        }
+                    } else {
+                        require(
+                            plannedPathPacket.role ==
+                                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.Shading &&
+                                step.depthStencilLoadStore == null && pathUses.isEmpty(),
+                        ) {
+                            "Prepared planned-path direct scopes must remain color-only shading packets"
+                        }
+                    }
+                } else if (!w4dGeneralScope && !w6aAaStencilContract &&
+                    unplannedWritablePathLoad?.loadOperation ==
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
+                ) {
+                    require(false) {
+                        "WritableStencil(Load, Store, null) is reserved for planned path covers"
+                    }
+                }
+                val w6bStencilCoverageContract = w6bStencilCoverage &&
+                    pathUses.size == 1 &&
+                    pathUses.single().usage == GPUFrameResourceUsage.RenderAttachment &&
+                    pathUses.single().write &&
+                    step.depthStencilLoadStore ==
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil(
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                        org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                        0u,
+                    ) &&
+                    depthStencilKeys.size == 1 &&
+                    depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
+                    depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
+                require(w4dGeneralScope || w6bStencilCoverageContract || w6aAaStencilContract || (
                     pathSealed == unifiedContainsPath &&
                         pathSealed == (pathUses.size == 1) &&
                         pathSealed == hasPathStencilLoadStore &&
@@ -1456,8 +1778,8 @@ internal class PreparedGPUFrame(
                                 GPUPreparedNativeOperandOwnership.Borrowed
                             )) &&
                         (pathSealed || clipStencilSealed ||
-                            scope.allowsClipStencilPrefixDepthStencil || depthStencilKeys.isEmpty()),
-                ) {
+                            scope.allowsClipStencilPrefixDepthStencil || depthStencilKeys.isEmpty())
+                    )) {
                     "Prepared path seal, unified pair, writable attachment use, load/store, and native operand must agree exactly"
                 }
                 require(listOf(pathSealed, clipStencilSealed, coverageMaskSealed).count { it } <= 1 &&
@@ -1505,16 +1827,19 @@ internal class PreparedGPUFrame(
                 require(scope.sourcePacketIds == expectedPackets) {
                     "PreparedGPUFrame render packet identities must exactly match the semantic step"
                 }
-                require(stream.sourcePacketIds == step.expectedRenderCommandPacketIds(scope)) {
+                require(sealedW4e || stream.sourcePacketIds == step.expectedRenderCommandPacketIds(scope)) {
                     "PreparedGPUFrame render command stream must have exact per-packet command structure"
                 }
-                require(stream.sourcePassIds == step.drawPackets.map { it.passId }.distinct()) {
+                val expectedPassIds = step.w6aPassV1?.let { require(sealedW6a); listOf(it.id.value) }
+                    ?: step.w5bInitialClearV3?.let { listOf("w5b.${it.graph.id.value}.initial-clear") }
+                    ?: step.drawPackets.map { it.passId }.distinct()
+                require(stream.sourcePassIds == expectedPassIds) {
                     "PreparedGPUFrame render command stream must retain original pass identities"
                 }
                 require(stream.commandLabels == scope.facadeOperationClasses) {
                     "PreparedGPUFrame render facade operations must exactly match its command stream"
                 }
-                require(stream.operandBridge.size >= expectedPackets.size * 2) {
+                require(sealedW4e || sealedW6a || stream.operandBridge.size >= expectedPackets.size * 2) {
                     "PreparedGPUFrame render command stream must bridge at least pipeline and bind group operands per packet"
                 }
             } else {
@@ -1917,7 +2242,11 @@ private fun GPUFrameResourceRef.typedLabel(): String = "${this::class.simpleName
 
 internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEncoderOperationKind():
     GPUEncoderOperationKind = when (this) {
-    is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> GPUEncoderOperationKind.Render
+    is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep ->
+        if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite ||
+            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.PathAaColorComposite ||
+            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.AaDeferredComposite
+        ) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ComputePassStep -> GPUEncoderOperationKind.Compute
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.UploadResourceStep -> GPUEncoderOperationKind.Upload
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.CopyResourceStep -> GPUEncoderOperationKind.Copy
@@ -1930,12 +2259,43 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEnc
     else -> error("Non-encodable semantic step has no encoder operation kind")
 }
 
+private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep.hasW6aAaSourceBinding(
+    scope: GPUCommandEncoderScopePlan,
+): Boolean {
+    val coverage = w6aPassV1?.aaCoverageBindingOrNullV1()
+    if (coverage != null) return scope.w6aFrameV1?.w4dAaCoverageAuthorities?.get(coverage)?.owner === w6aPassV1
+    val pass = w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass ?: return false
+    return scope.w6aFrameV1?.physical?.w4dAaSourceBindings()?.singleOrNull { pass in it.passes() } != null
+}
+
 internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFacadeOperations(
     scope: GPUCommandEncoderScopePlan,
 ): List<String> =
     when (this) {
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> buildList {
             add("beginRenderPass")
+            val w6aAaSource = hasW6aAaSourceBinding(scope)
+            if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite ||
+                w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.PathAaColorComposite ||
+                w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.AaDeferredComposite
+            ) {
+                addAll(listOf("setRenderPipeline", "setBindGroup", "draw", "endRenderPass"))
+                return@buildList
+            }
+            if (w5bInitialClearV3 != null) {
+                add("endRenderPass")
+                return@buildList
+            }
+            if (drawPackets.isNotEmpty() && drawPackets.all { packet ->
+                    packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
+                }
+            ) {
+                val sourceOwnedW7 = (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.AaCoverageSourcePass)
+                    ?.binding is org.graphiks.kanvas.gpu.plan.PlanW4eInverseAaCoverageSourceBindingV1
+                repeat(if (sourceOwnedW7) drawPackets.size else 1) { add("draw") }
+                add("endRenderPass")
+                return@buildList
+            }
             drawPackets.forEach { packet ->
                 add("setRenderPipeline")
                 val clipStencilProducer =
@@ -1944,7 +2304,7 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                 if (!clipStencilProducer) add("setBindGroup")
                 val verticesSemantic = packet.semanticPayload as?
                     org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
-                if (verticesSemantic != null) add("setBindGroup")
+                if (verticesSemantic != null && verticesSemantic.material.commonSource == null) add("setBindGroup")
                 val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
                     GPUCorePrimitiveDirectNativeRouteSeal.Routes
                 val clipStencilSealed =
@@ -1959,11 +2319,16 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
                 val clipStencilPrefix = scope.allowsClipStencilPrefixDepthStencil
                 if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
-                    verticesSemantic != null ||
+                    (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)?.drawDataResources != null ||
+                    (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)
+                        ?.rasterBinding?.drawDataResources != null ||
+                    w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
+                    w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
+                    verticesSemantic != null || w6aAaSource ||
                     directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
                     clipStencilSealed || coverageMaskConsumer || clipStencilPrefix) {
                     add("setVertexBuffer")
-                    if (verticesSemantic == null ||
+                    if (w6aAaSource || verticesSemantic == null ||
                         verticesSemantic.artifact.indexCount != null
                     ) {
                         add("setIndexBuffer")
@@ -1998,6 +2363,7 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
 
 internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep
     .expectedRenderCommandPacketIds(scope: GPUCommandEncoderScopePlan): List<GPUDrawPacketID> = buildList {
+    val w6aAaSource = hasW6aAaSourceBinding(scope)
     val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
         GPUCorePrimitiveDirectNativeRouteSeal.Routes
     val clipStencilSealed =
@@ -2019,13 +2385,18 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassS
         if (!clipStencilProducer) add(packet.packetId)
         val verticesSemantic = packet.semanticPayload as?
             org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
-        if (verticesSemantic != null) add(packet.packetId)
+        if (verticesSemantic != null && verticesSemantic.material.commonSource == null) add(packet.packetId)
         if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
-            verticesSemantic != null ||
+            (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)?.drawDataResources != null ||
+            (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)
+                ?.rasterBinding?.drawDataResources != null ||
+            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
+            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
+            verticesSemantic != null || w6aAaSource ||
             directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
             clipStencilSealed || coverageMaskConsumer || clipStencilPrefix) {
             add(packet.packetId)
-            if (verticesSemantic == null || verticesSemantic.artifact.indexCount != null) {
+            if (w6aAaSource || verticesSemantic == null || verticesSemantic.artifact.indexCount != null) {
                 add(packet.packetId)
             }
         }

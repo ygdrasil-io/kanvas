@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 /**
  * Port of Skia's gm/hardstop_gradients_many.cpp.
  * 100 stacked rows of horizontal linear gradients with hardstops.
- * @see https://github.com/google/skia/blob/main/gm/hardstop_gradients_many.cpp
+ * @see https://github.com/google/skia/blob/8019e2e0629f3516b9d829737de2553b1d0ecb4a/gm/hardstop_gradients_many.cpp
  */
 class HardstopGradientsManyGm : SkiaGm {
     override val name = "hardstop_gradients_many"
@@ -31,19 +31,20 @@ class HardstopGradientsManyGm : SkiaGm {
 
         for (row in 1..NUM_ROWS) {
             val stops = mutableListOf<GradientStop>()
-            for (k in 0 until row) {
+            stops.add(GradientStop(0f, ColorARGB.Blue))
+            for (k in 1 until row) {
                 val place = k.toFloat() / row.toFloat()
-                stops.add(GradientStop(place, ColorARGB.Blue))
                 stops.add(GradientStop(place, ColorARGB.White))
+                stops.add(GradientStop(place, ColorARGB.Blue))
             }
             stops.add(GradientStop(1f, ColorARGB.White))
 
             val paint = Paint(shader = Shader.LinearGradient(
                 start = p0, end = p1,
                 stops = stops, tileMode = TileMode.CLAMP,
-            ))
+            ), antiAlias = false)
             canvas.drawRect(
-                RectF32(0f, PAD_HEIGHT.toFloat(), WIDTH.toFloat(), RECT_HEIGHT.toFloat()),
+                RectF32.ofOriginSize(0f, PAD_HEIGHT.toFloat(), WIDTH.toFloat(), RECT_HEIGHT.toFloat()),
                 paint
             )
             canvas.translate(0f, CELL_HEIGHT.toFloat())

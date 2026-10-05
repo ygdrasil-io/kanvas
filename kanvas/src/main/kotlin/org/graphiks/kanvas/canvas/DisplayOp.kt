@@ -19,6 +19,8 @@ import org.graphiks.math.geometry.Point2F32
 
 internal enum class DrawPathSourceOperation(internal val stableName: String) {
     DRAW_PATH("drawPath"),
+    DRAW_POINTS_LINES("drawPoints.lines"),
+    DRAW_POINTS_POLYGON("drawPoints.polygon"),
     TEXT_EXPANDED("text-expanded"),
     ;
 
@@ -88,6 +90,7 @@ sealed interface DisplayOp {
     data class DrawImage(
         val image: Image, val src: RectF32, val dst: RectF32,
         val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack,
+        val sampling: SamplingOptions = SamplingOptions.NEAREST,
     ) : DisplayOp
 
     /** Draw a text blob at the given position. */

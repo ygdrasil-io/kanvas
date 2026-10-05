@@ -249,6 +249,49 @@ sealed class GPUUniformSlabPlanningResult {
     }
 }
 
+/** Source-free payload sizes; the same planner owns all alignment and overflow decisions. */
+internal data class GPUUniformSlabPayloadFootprint(val slotLabel: String, val payloadBytesI64: Long)
+
+internal data class GPUUniformSlabLayoutRange(
+    val slotLabel: String,
+    val payloadBytes: Long,
+    val alignedOffset: Long,
+    val allocatedBytes: Long,
+)
+
+/** Immutable physical layout, before any source bytes or their hashes exist. */
+internal class GPUUniformSlabLayout internal constructor(
+    val sourceLabel: String,
+    val deviceGeneration: Long,
+    val alignmentBytes: Long,
+    val totalBytes: Long,
+    val uploadBudgetBytes: Long,
+    slots: List<GPUUniformSlabLayoutRange>,
+) {
+    val slots: List<GPUUniformSlabLayoutRange> = Collections.unmodifiableList(ArrayList(slots))
+
+    /** Bind exact payloads without repeating layout, alignment, admission or allocation. */
+    fun bind(payloads: List<GPUUniformSlabPayload>): GPUUniformSlabPlan {
+        require(payloads.size == slots.size) { "Uniform slab binding must retain its admitted slots" }
+        val bound = slots.zip(payloads).map { (range, payload) ->
+            val bytes = payload.bytes
+            require(range.slotLabel == payload.slotLabel && range.payloadBytes == bytes.size.toLong()) {
+                "Uniform slab binding must retain its admitted byte ranges"
+            }
+            GPUUniformSlabSlot(range.slotLabel, sha256Hex(bytes), range.payloadBytes,
+                range.alignedOffset, range.allocatedBytes)
+        }
+        return GPUUniformSlabPlan(uniformSlabPlanHash(sourceLabel, deviceGeneration,
+            alignmentBytes, uploadBudgetBytes, bound), sourceLabel, deviceGeneration,
+            alignmentBytes, totalBytes, uploadBudgetBytes, bound)
+    }
+}
+
+internal sealed interface GPUUniformSlabLayoutResult {
+    data class Accepted(val plan: GPUUniformSlabLayout) : GPUUniformSlabLayoutResult
+    data class Refused(val diagnostic: GPUUniformSlabDiagnostic) : GPUUniformSlabLayoutResult
+}
+
 /** Backend-neutral uniform slab planner. */
 object GPUUniformSlabPlanner {
     fun plan(
@@ -259,7 +302,24 @@ object GPUUniformSlabPlanner {
         payloads: List<GPUUniformSlabPayload>,
         maxBufferSize: Long = Long.MAX_VALUE,
         maxDynamicUniformBuffersPerPipelineLayout: Long = Long.MAX_VALUE,
-    ): GPUUniformSlabPlanningResult {
+    ): GPUUniformSlabPlanningResult = when (val layout = layout(
+        sourceLabel, deviceGeneration, alignmentBytes, uploadBudgetBytes,
+        payloads.map { GPUUniformSlabPayloadFootprint(it.slotLabel, it.bytes.size.toLong()) },
+        maxBufferSize, maxDynamicUniformBuffersPerPipelineLayout,
+    )) {
+        is GPUUniformSlabLayoutResult.Accepted -> GPUUniformSlabPlanningResult.Accepted(layout.plan.bind(payloads))
+        is GPUUniformSlabLayoutResult.Refused -> GPUUniformSlabPlanningResult.Refused(layout.diagnostic)
+    }
+
+    internal fun layout(
+        sourceLabel: String,
+        deviceGeneration: Long,
+        alignmentBytes: Long,
+        uploadBudgetBytes: Long,
+        payloads: List<GPUUniformSlabPayloadFootprint>,
+        maxBufferSize: Long = Long.MAX_VALUE,
+        maxDynamicUniformBuffersPerPipelineLayout: Long = Long.MAX_VALUE,
+    ): GPUUniformSlabLayoutResult {
         if (!isDumpSafeUniformSlabValue(sourceLabel)) {
             return refused(
                 code = "unsupported.uniform_slab_dump_unsafe",
@@ -302,7 +362,7 @@ object GPUUniformSlabPlanner {
             )
         }
 
-        if (payloads.isEmpty() || payloads.any { payload -> payload.bytes.isEmpty() }) {
+        if (payloads.isEmpty() || payloads.any { payload -> payload.payloadBytesI64 <= 0L }) {
             return refused(
                 code = "unsupported.uniform_slab_empty_payload",
                 facts = mapOf("payloadCount" to payloads.size.toString()),
@@ -320,13 +380,11 @@ object GPUUniformSlabPlanner {
             )
         }
 
-        val slots = mutableListOf<GPUUniformSlabSlot>()
+        val slots = mutableListOf<GPUUniformSlabLayoutRange>()
         try {
             var nextOffset = 0L
             payloads.forEach { payload ->
-                val payloadBytesSnapshot = payload.bytes
-                val payloadBytes = payloadBytesSnapshot.size.toLong()
-                val payloadHash = sha256Hex(payloadBytesSnapshot)
+                val payloadBytes = payload.payloadBytesI64
                 val alignedOffset = alignUpChecked(nextOffset, alignmentBytes)
                 val allocatedBytes = alignUpChecked(payloadBytes, alignmentBytes)
                 if (alignedOffset > UInt.MAX_VALUE.toLong()) {
@@ -337,9 +395,8 @@ object GPUUniformSlabPlanner {
                 }
                 Math.addExact(alignedOffset, payloadBytes)
                 slots +=
-                    GPUUniformSlabSlot(
+                    GPUUniformSlabLayoutRange(
                         slotLabel = payload.slotLabel,
-                        payloadHash = payloadHash,
                         payloadBytes = payloadBytes,
                         alignedOffset = alignedOffset,
                         allocatedBytes = allocatedBytes,
@@ -395,17 +452,8 @@ object GPUUniformSlabPlanner {
             )
         }
 
-        val planHash = uniformSlabPlanHash(
-            sourceLabel,
-            deviceGeneration,
-            alignmentBytes,
-            uploadBudgetBytes,
-            slots,
-        )
-
-        return GPUUniformSlabPlanningResult.Accepted(
-            GPUUniformSlabPlan(
-                planHash = planHash,
+        return GPUUniformSlabLayoutResult.Accepted(
+            GPUUniformSlabLayout(
                 sourceLabel = sourceLabel,
                 deviceGeneration = deviceGeneration,
                 alignmentBytes = alignmentBytes,
@@ -416,8 +464,8 @@ object GPUUniformSlabPlanner {
         )
     }
 
-    private fun refused(code: String, facts: Map<String, String>): GPUUniformSlabPlanningResult.Refused =
-        GPUUniformSlabPlanningResult.Refused(
+    private fun refused(code: String, facts: Map<String, String>): GPUUniformSlabLayoutResult.Refused =
+        GPUUniformSlabLayoutResult.Refused(
             GPUUniformSlabDiagnostic(
                 code = code,
                 terminal = true,

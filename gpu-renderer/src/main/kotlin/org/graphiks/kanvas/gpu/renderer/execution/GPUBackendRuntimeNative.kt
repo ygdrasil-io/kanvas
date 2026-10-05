@@ -291,6 +291,7 @@ internal fun observedMaxBufferSize(value: ULong): Long? = when {
 private fun wgpuQueueCompletionRuntime(
     deviceGeneration: GPUDeviceGenerationID,
     queue: GPUQueue,
+    onQueueFailure: () -> Unit = {},
 ): GPUQueueCompletionAdapter = GPUQueueCompletionAdapter(
     deviceGeneration = deviceGeneration,
     requirement = GPUQueueCompletionCapabilityRequirement(
@@ -302,7 +303,14 @@ private fun wgpuQueueCompletionRuntime(
         capability = WGPU4K_QUEUE_COMPLETION_CAPABILITY,
         accepted = true,
     ),
-    invoker = GPUQueueCompletionInvoker { queue.onSubmittedWorkDone() },
+    invoker = GPUQueueCompletionInvoker {
+        try { queue.onSubmittedWorkDone() } catch (failure: Throwable) {
+            // The facade exposes no typed device-loss result. Any failed completion retires
+            // decoded resources conservatively, before ordinary completion cleanup releases leases.
+            try { onQueueFailure() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+            throw failure
+        }
+    },
 )
 private val TARGET_SNAPSHOT_WGSL: String = """
 struct Uniforms {
@@ -996,6 +1004,7 @@ object GPUBackendRuntimeNativeFactory {
     private var sharedInner: GPUBackendSession? = null
     private var shutdownHook: Thread? = null
     private val generationCounter = AtomicLong(0L)
+    private val lifecycleEpochCounter = AtomicLong(0L)
 
     /** Original backend creation implementation used when no test seam is installed. */
     internal val defaultBackendCreator: () -> GPUBackendSession? = ::createGlfwBackendSession
@@ -1006,6 +1015,9 @@ object GPUBackendRuntimeNativeFactory {
     /** Stamps the next factory-owned device generation; every session creation consumes exactly one. */
     internal fun nextDeviceGeneration(): GPUDeviceGenerationID =
         GPUDeviceGenerationID(generationCounter.incrementAndGet())
+
+    /** Changes after every process-wide disposal, including repeated disposals. */
+    internal fun lifecycleEpoch(): Long = lifecycleEpochCounter.get()
 
     private fun createGlfwBackendSession(): GPUBackendSession? = try {
         val glfw = runBlocking {
@@ -1055,6 +1067,7 @@ object GPUBackendRuntimeNativeFactory {
                 sharedInner?.close()
             } finally {
                 sharedInner = null
+                lifecycleEpochCounter.incrementAndGet()
             }
         }
     }
@@ -1155,6 +1168,9 @@ private class WgpuBackendSession(
     private val queueCompletionRuntime = wgpuQueueCompletionRuntime(
         deviceGeneration = deviceGeneration,
         queue = glfw.wgpuContext.device.queue,
+        onQueueFailure = {
+            try { decodedImageCache.retireGeneration() } finally { runtimeResourceCache.retireGeneration(); spatialFilterCache.retireGeneration() }
+        },
     )
     private val preparedSceneChildren = GPUPreparedSceneChildRegistry(::closeRuntimeResources)
     private val preparedSceneSetupRollbackQuarantine = GPUPreparedSceneSetupRollbackQuarantine()
@@ -1200,6 +1216,9 @@ private class WgpuBackendSession(
                                 addAll(quarantinedMaskBlurCaches)
                                 addAll(quarantinedDestinationCopyCaches)
                                 addAll(quarantinedSurfaceBlitCaches)
+                                if (!decodedImageCache.isClosed) add(decodedImageCache)
+                                if (!runtimeResourceCache.isClosed) add(runtimeResourceCache)
+                                if (!spatialFilterCache.isClosed) add(spatialFilterCache)
                             }
                         }
                     },
@@ -1255,10 +1274,27 @@ private class WgpuBackendSession(
             maxBufferSize = observedMaxBufferSize(deviceLimits.maxBufferSize),
             maxDynamicUniformBuffersPerPipelineLayout =
                 deviceLimits.maxDynamicUniformBuffersPerPipelineLayout.toLong(),
+            maxBindGroupsI32 = deviceLimits.maxBindGroups.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxBindingsPerBindGroupI32 = deviceLimits.maxBindingsPerBindGroup.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxSamplersPerShaderStageI32 = deviceLimits.maxSamplersPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxSampledTexturesPerShaderStageI32 = deviceLimits.maxSampledTexturesPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxUniformBuffersPerShaderStageI32 = deviceLimits.maxUniformBuffersPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxUniformBufferBindingSizeBytesI64 = observedMaxBufferSize(deviceLimits.maxUniformBufferBindingSize),
+            maxStorageBufferBindingSizeBytesI64 = observedMaxBufferSize(deviceLimits.maxStorageBufferBindingSize),
+            maxStorageBuffersPerShaderStageI32 = deviceLimits.maxStorageBuffersPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
             source = "device.limits",
         )
     }
     private var offscreenTargetOrdinalCounter = 0L
+    private val decodedImageCache = GPUW5eDecodedImageSessionCache(
+        glfw.wgpuContext.device, glfw.wgpuContext.device.queue, deviceGeneration.value,
+        requireNotNull(backendLimits.copyBytesPerRowAlignment), requireNotNull(backendLimits.maxBufferSize),
+    )
+    private val runtimeResourceCache = GPUW5hRuntimeResourceSessionCache(
+        glfw.wgpuContext.device,glfw.wgpuContext.device.queue,deviceGeneration.value,
+    )
+    private val spatialFilterCache = GPUW6cSpatialFilterSessionCache(glfw.wgpuContext.device, deviceGeneration.value)
+    private val srgb4xResolveSupported = probeSrgb4xResolveSupport(glfw.wgpuContext.device)
 
     override val adapterInfo: GPUBackendAdapterSummary? = adapterSummary(glfw.wgpuContext.adapter.info)
 
@@ -1294,7 +1330,8 @@ private class WgpuBackendSession(
                         resolveSourceSampleCounts = setOf(4),
                     ),
                     GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
-                        renderAttachmentSampleCounts = setOf(1),
+                        renderAttachmentSampleCounts = if (srgb4xResolveSupported) setOf(1, 4) else setOf(1),
+                        resolveSourceSampleCounts = if (srgb4xResolveSupported) setOf(4) else emptySet(),
                     ),
                     GPUTextureFormat.BGRA8Unorm to GPUTextureSampleCountSupport(
                         renderAttachmentSampleCounts = setOf(1, 4),
@@ -1311,7 +1348,9 @@ private class WgpuBackendSession(
                 GPURendererFeature.Readback,
                 GPURendererFeature.UniformBuffer,
                 GPURendererFeature.TextureSampling,
-            ),
+            ) + if (glfw.wgpuContext.device.limits.maxStorageBuffersPerShaderStage > 0u &&
+                glfw.wgpuContext.device.limits.maxStorageBufferBindingSize > 0uL)
+                setOf(GPURendererFeature.StorageBuffer) else emptySet(),
         )
 
     override val runtimeTelemetry: GPUBackendRuntimeTelemetry
@@ -1483,12 +1522,54 @@ private class WgpuBackendSession(
                         }
                         val target = preparation?.resource as? GPUFrameTargetRef
                         val descriptor = preparation?.descriptor as? GPUFrameTextureDescriptor
+                        val sealedW4dGeneralFrame = target?.let { sceneTarget ->
+                            val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+                            val packets = renders.flatMap(GPUTask.Render::drawPackets)
+                            val authority = packets.firstOrNull()?.corePrimitivePreparedAuthority
+                                ?.w4dGeneralFrameMaterializationAuthority
+                            val readback = taskList.tasks.filterIsInstance<GPUTask.Readback>().singleOrNull()
+                            authority != null &&
+                                packets.isNotEmpty() &&
+                                renders.all { it.drawPackets.size == 1 } &&
+                                packets.all { packet ->
+                                    packet.corePrimitivePreparedAuthority
+                                        ?.w4dGeneralFrameMaterializationAuthority === authority
+                                } &&
+                                authority.deviceGeneration == deviceGeneration &&
+                                authority.capabilitySealHash == taskList.capabilitySeal.sealHash &&
+                                authority.pathPassFacts.size == renders.size &&
+                                authority.pathPassFacts.zip(renders).all { (fact, render) ->
+                                    render.drawPackets.single().passId == fact.pathPassId &&
+                                        render.target == authority.resource(fact.targetResourceId)
+                                } &&
+                                renderTargets == authority.pathPassFacts.mapNotNull { fact ->
+                                    authority.resource(fact.targetResourceId) as? GPUFrameTargetRef
+                                }.distinct() &&
+                                authority.resource(authority.readbackSourceResourceId) == sceneTarget &&
+                                authority.resource(authority.readbackStagingResourceId) == readback?.staging &&
+                                readback?.source == sceneTarget &&
+                                authority.pathPassFacts.lastOrNull()?.let { fact ->
+                                    fact.targetResourceId == authority.readbackSourceResourceId ||
+                                        fact.resolveTargetResourceId == authority.readbackSourceResourceId
+                                } == true
+                        } ?: false
+                        val sealedW4eRootResolve = target?.let { sceneTarget ->
+                            val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+                            val packets = renders.flatMap(GPUTask.Render::drawPackets)
+                            val readback = taskList.tasks.filterIsInstance<GPUTask.Readback>().singleOrNull()
+                            val authority = packets.firstOrNull()?.w4ePreparedFrameAuthority
+                            authority != null && packets.isNotEmpty() &&
+                                packets.all { it.w4ePreparedFrameAuthority === authority } &&
+                                authority.validatesRootResolve(
+                                    taskList.frameId.value, taskList.capabilitySeal.sealHash, sceneTarget, readback, renders,
+                                )
+                        } ?: false
                         when {
-                            target == null || target !in renderTargets -> executionDiagnostic(
+                            target == null || (target !in renderTargets && !sealedW4dGeneralFrame && !sealedW4eRootResolve) -> executionDiagnostic(
                                 "unsupported.prepared-scene-session.target-count",
                                 "A prepared scene frame requires exactly one declared scene target used by rendering.",
                             )
-                            renderTargets.any { renderTarget ->
+                            !sealedW4dGeneralFrame && renderTargets.any { renderTarget ->
                                 renderTarget != target &&
                                     renderTarget.value !in declaredLayerTargetLabels &&
                                     !textureDeclared(renderTarget)
@@ -1496,7 +1577,7 @@ private class WgpuBackendSession(
                                 "unsupported.prepared-scene-session.target-count",
                                 "Every prepared render target beyond the scene target must be declared as a layer target or carry one exact texture declaration.",
                             )
-                            renderTargets.any { renderTarget ->
+                            !sealedW4dGeneralFrame && renderTargets.any { renderTarget ->
                                 when {
                                     renderTarget == target -> !textureDeclared(renderTarget)
                                     renderTarget.value in declaredLayerTargetLabels ->
@@ -1622,6 +1703,9 @@ private class WgpuBackendSession(
                     surfaceTargetResolver = surfaceTargetResolver,
                     corePrimitiveLimits = backendLimits,
                     preparedSurfaceMixedMaterializer = preparedSurfaceMixedMaterializer,
+                    decodedImageCache = decodedImageCache,
+                    runtimeResourceCache = runtimeResourceCache,
+                    spatialFilterCache = spatialFilterCache,
                     onDestinationSnapshotCreated =
                         preparedSurfaceDestinationSnapshots::recordCreation,
                 )
@@ -1641,6 +1725,7 @@ private class WgpuBackendSession(
                         resourceProvider,
                         materializer,
                     ),
+                    spatialFilterCache = materializer.spatialFilterCacheOrNull(),
                 )
                 GPUFrameCoordinator(
                     preflighter = GPUFramePreflightPort { framePlan ->
@@ -1665,7 +1750,9 @@ private class WgpuBackendSession(
                     ),
                 )
             },
-            closeAction = childTeardown::close,
+            closeAction = {
+                childTeardown.close()
+            },
             renderCountersFactory = {
                 val encoding = encodingBackend.counters()
                 val corePrimitive = corePrimitiveCache.counters()

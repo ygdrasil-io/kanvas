@@ -9,6 +9,7 @@ package org.graphiks.kanvas.skia.gm.clip
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
@@ -33,8 +34,10 @@ class InverseClipGm : SkiaGm {
             cubicTo(371.905f, 105.23f, 292.905f, 31f, 195.448f, 31f)
             close()
         }.apply { fillType = FillType.INVERSE_WINDING }
-        canvas.clipRect(RectF32(0f, 0f, 400f, 400f))
-        canvas.drawRect(RectF32(0f, 0f, 400f, 400f), Paint(color = ColorARGB.Blue))
-        canvas.drawPath(clip, Paint(color = ColorARGB.White))
+        canvas.clipPath(clip, ClipOp.INTERSECT, antiAlias = true)
+        canvas.drawRect(
+            RectF32(0f, 0f, 400f, 400f),
+            Paint(color = ColorARGB.Blue, antiAlias = false),
+        )
     }
 }

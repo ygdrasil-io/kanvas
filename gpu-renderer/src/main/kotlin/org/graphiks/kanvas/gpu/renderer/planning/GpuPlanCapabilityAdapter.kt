@@ -1,0 +1,286 @@
+package org.graphiks.kanvas.gpu.renderer.planning
+
+import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
+import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
+import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
+import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
+import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
+import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
+import org.graphiks.kanvas.gpu.plan.PlanTextureResolveSupport
+import org.graphiks.kanvas.gpu.plan.PlanTextureSampleSupport
+import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.resources.CORE_PRIMITIVE_FRAME_POOL_INDEX_FLOOR_BYTES
+import org.graphiks.kanvas.gpu.renderer.resources.CORE_PRIMITIVE_FRAME_POOL_UNIFORM_FLOOR_BYTES
+import org.graphiks.kanvas.gpu.renderer.resources.CORE_PRIMITIVE_FRAME_POOL_VERTEX_FLOOR_BYTES
+import org.graphiks.kanvas.render.ir.RenderDiagnostic
+import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
+import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
+import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
+
+public sealed interface GpuPlanCapabilityAdapterResult {
+    public data class Supported(public val snapshot: PlanCapabilitySnapshot) : GpuPlanCapabilityAdapterResult
+    public data class Unsupported(public val diagnostic: RenderDiagnostic) : GpuPlanCapabilityAdapterResult
+}
+
+/** Converts the selected renderer session's observed limits to a handle-free planning snapshot. */
+public fun GPUCapabilities.toPlanCapabilitySnapshot(
+    deviceGeneration: GPUDeviceGenerationID,
+): GpuPlanCapabilityAdapterResult {
+    val observedLimits = limits ?: return unsupported(
+        message = "Renderer limits were not observed for this device session.",
+        code = W3PlanDiagnostics.CapabilityBufferSize,
+    )
+    val maxBuffer = observedLimits.maxBufferSize ?: return unsupported(
+        message = "Renderer maxBufferSize was not observed for this device session.",
+        code = W3PlanDiagnostics.CapabilityBufferSize,
+    )
+    if (observedLimits.maxTextureDimension2D > Int.MAX_VALUE ||
+        observedLimits.copyBytesPerRowAlignment > Int.MAX_VALUE ||
+        observedLimits.minUniformBufferOffsetAlignment > Int.MAX_VALUE ||
+        observedLimits.maxDynamicUniformBuffersPerPipelineLayout?.let { it > Int.MAX_VALUE } == true ||
+        !observedLimits.copyBytesPerRowAlignment.isPositivePowerOfTwo()
+    ) {
+        return unsupported("Renderer capabilities cannot represent the W3 sRGB target contract.")
+    }
+    val srgbSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
+        ?.renderAttachmentSampleCounts
+    val encodedSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+        ?.renderAttachmentSampleCounts
+    val hasLinearTarget = GPUTextureFormat.RGBA8UnormSrgb in supportedTextureFormats &&
+        1 in srgbSamples.orEmpty()
+    val hasEncodedTarget = GPUTextureFormat.RGBA8Unorm in supportedTextureFormats &&
+        1 in encodedSamples.orEmpty()
+    if (!hasLinearTarget && !hasEncodedTarget) {
+        return unsupported(
+            message = "Renderer capabilities do not support a single-sample RGBA8 render target for either composition domain.",
+            code = W3PlanDiagnostics.CapabilityFormat,
+        )
+    }
+    val oneSampleColorUsages = supportedTextureUsage?.let { observed ->
+        buildSet {
+            if (observed.supports(GPUTextureUsage.RenderAttachment)) {
+                add(PlanResourceUsage.RenderAttachment)
+            }
+            if (observed.supports(GPUTextureUsage.CopySrc)) {
+                add(PlanResourceUsage.CopySource)
+            }
+            if (observed.supports(GPUTextureUsage.CopyDst)) {
+                add(PlanResourceUsage.CopyDestination)
+            }
+            if (observed.supports(GPUTextureUsage.TextureBinding)) {
+                add(PlanResourceUsage.Sampled)
+            }
+        }
+    }.orEmpty()
+    val hasW4dTextureUsages = supportedTextureUsage?.supports(
+        GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+    ) == true
+    // W4c's historical single-sample depth/stencil contract predates the optional
+    // physical-usage observation.  Its sample evidence remains authoritative; the
+    // stricter W4d.2 physical topology is deliberately confined to 4x/resolve/mask.
+    val depthStencilSamples = textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
+        ?.renderAttachmentSampleCounts.orEmpty()
+    val hasSingleSampleD24S8 = 1 in depthStencilSamples
+    // D24S8 is intentionally table-only: CapabilityContracts accepts its sample
+    // evidence for the exact RenderAttachment request even when the broad-format
+    // observation omits it.  W4d needs both attachment sample counts, never a
+    // synthetic broad-format entry.
+    val hasW4dD24S8RenderAttachmentEvidence = 1 in depthStencilSamples && 4 in depthStencilSamples
+    val hasW4dBroadColorFormats = setOf(
+        GPUTextureFormat.RGBA8UnormSrgb,
+        GPUTextureFormat.RGBA8Unorm,
+    ).all { format -> format in supportedTextureFormats }
+    val hasW4dPhysicalTopology = hasW4dBroadColorFormats &&
+        hasW4dTextureUsages && hasW4dD24S8RenderAttachmentEvidence
+    val hasFourSampleSrgb = hasW4dPhysicalTopology && 4 in srgbSamples.orEmpty()
+    val hasFourSampleEncoded = hasW4dPhysicalTopology && 4 in encodedSamples.orEmpty()
+    val operations = rendererFeatures.mapNotNull { feature ->
+        when (feature) {
+            GPURendererFeature.RenderPass -> PlanOperationCapability.RenderPass
+            GPURendererFeature.CopyUpload -> PlanOperationCapability.CopyUpload
+            GPURendererFeature.UniformBuffer -> PlanOperationCapability.UniformBuffer
+            GPURendererFeature.StorageBuffer -> PlanOperationCapability.StorageBuffer
+            GPURendererFeature.Readback -> PlanOperationCapability.Readback
+            else -> null
+        }
+    }.toMutableSet()
+    if (facts.any { it.name == "vertices.uint32_index" && it.value == "supported" }) operations += PlanOperationCapability.Uint32Index
+    val depthStencilFormats = mutableSetOf<PlanDepthStencilFormat>()
+    if (hasSingleSampleD24S8) {
+        operations += PlanOperationCapability.DepthStencilAttachment
+        operations += PlanOperationCapability.StencilCover
+        depthStencilFormats += PlanDepthStencilFormat.Depth24PlusStencil8
+    }
+    val maskSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+        ?.renderAttachmentSampleCounts.orEmpty()
+    val hasHardMaskTopology =
+        GPUTextureFormat.RGBA8Unorm in supportedTextureFormats &&
+            supportedTextureUsage?.supports(
+                GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+            ) == true &&
+            1 in maskSamples
+    val sampleSupports = buildSet {
+        if (supportedTextureUsage?.supports(GPUTextureUsage.TextureBinding or GPUTextureUsage.CopyDst) == true) {
+            listOf(GPUTextureFormat.RGBA8Unorm to org.graphiks.kanvas.gpu.plan.ImagePhysicalFormatV1.RGBA8_UNORM,
+                GPUTextureFormat.R8Unorm to org.graphiks.kanvas.gpu.plan.ImagePhysicalFormatV1.R8_UNORM)
+                .filter { it.first in supportedTextureFormats }.forEach { (_, format) ->
+                    add(PlanTextureSampleSupport.of(PlanTextureFormat.ImageV1(format), 1,
+                        setOf(PlanResourceUsage.Sampled, PlanResourceUsage.CopyDestination)))
+                }
+        }
+        if (hasLinearTarget && oneSampleColorUsages.isNotEmpty()) {
+            add(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    1,
+                    oneSampleColorUsages,
+                ),
+            )
+        }
+        // Do not borrow the historical sRGB attachment proof for the encoded
+        // target.  The physical RGBA8Unorm table entry is its own authority.
+        if (hasEncodedTarget && oneSampleColorUsages.isNotEmpty()) {
+            add(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL),
+                    1,
+                    oneSampleColorUsages,
+                ),
+            )
+        }
+        if (hasFourSampleSrgb) {
+            add(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    4,
+                    setOf(PlanResourceUsage.RenderAttachment),
+                ),
+            )
+        }
+        if (hasFourSampleEncoded) {
+            add(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL),
+                    4,
+                    setOf(PlanResourceUsage.RenderAttachment),
+                ),
+            )
+        }
+        depthStencilSamples
+            .filter { sampleCount -> hasSingleSampleD24S8 && sampleCount in setOf(1, 4) }
+            .forEach { sampleCount ->
+                add(
+                    PlanTextureSampleSupport.of(
+                        PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+                        sampleCount,
+                        setOf(PlanResourceUsage.DepthStencilAttachment),
+                    ),
+                )
+            }
+        if (hasHardMaskTopology) {
+            add(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.CoverageMask,
+                    1,
+                    setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+                ),
+            )
+        }
+        if (hasW4dPhysicalTopology && hasFourSampleSrgb && 4 in maskSamples) {
+            add(PlanTextureSampleSupport.of(
+                PlanTextureFormat.CoverageMask,
+                4,
+                setOf(PlanResourceUsage.RenderAttachment),
+            ))
+        }
+    }
+    val resolveSupports = buildSet {
+        if (hasFourSampleSrgb && 4 in textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
+                ?.resolveSourceSampleCounts.orEmpty()
+        ) {
+            add(
+                PlanTextureResolveSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    4,
+                    1,
+                ),
+            )
+        }
+        if (hasFourSampleEncoded && 4 in textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+                ?.resolveSourceSampleCounts.orEmpty()
+        ) {
+            add(
+                PlanTextureResolveSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL),
+                    4,
+                    1,
+                ),
+            )
+        }
+        if (hasW4dPhysicalTopology && hasFourSampleSrgb &&
+            4 in textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+                ?.resolveSourceSampleCounts.orEmpty()
+        ) {
+            add(PlanTextureResolveSupport.of(PlanTextureFormat.CoverageMask, 4, 1))
+        }
+    }
+    return try {
+        val snapshot = PlanCapabilitySnapshot.of(
+            deviceGeneration = deviceGeneration.value,
+            maxTextureDimension2D = observedLimits.maxTextureDimension2D.toInt(),
+            maxBufferSizeBytes = maxBuffer,
+            copyBytesPerRowAlignment = observedLimits.copyBytesPerRowAlignment.toInt(),
+            supportedFormats = buildSet {
+                if (hasLinearTarget) add(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+                if (hasEncodedTarget) add(PlanLogicalColorFormat.RGBA8_UNORM_ENCODED_SRGB_PREMUL)
+            },
+            minUniformBufferOffsetAlignment = observedLimits.minUniformBufferOffsetAlignment.toInt(),
+            maxDynamicUniformBuffersPerPipelineLayout =
+                observedLimits.maxDynamicUniformBuffersPerPipelineLayout?.toInt() ?: 0,
+            supportedOperations = operations,
+            bufferAllocationPolicy = PlanBufferAllocationPolicy.of(
+                CORE_PRIMITIVE_FRAME_POOL_VERTEX_FLOOR_BYTES,
+                CORE_PRIMITIVE_FRAME_POOL_INDEX_FLOOR_BYTES,
+                CORE_PRIMITIVE_FRAME_POOL_UNIFORM_FLOOR_BYTES,
+            ),
+            supportedDepthStencilFormats = depthStencilFormats,
+            supportedTextureSampleSupports = sampleSupports,
+            supportedTextureResolveSupports = resolveSupports,
+            maxBindGroupsI32 = observedLimits.maxBindGroupsI32,
+            maxBindingsPerBindGroupI32 = observedLimits.maxBindingsPerBindGroupI32,
+            maxSamplersPerShaderStageI32 = observedLimits.maxSamplersPerShaderStageI32,
+            maxSampledTexturesPerShaderStageI32 = observedLimits.maxSampledTexturesPerShaderStageI32,
+            maxUniformBuffersPerShaderStageI32 = observedLimits.maxUniformBuffersPerShaderStageI32,
+            maxUniformBufferBindingSizeBytesI64 = observedLimits.maxUniformBufferBindingSizeBytesI64,
+            maxStorageBufferBindingSizeBytesI64 = observedLimits.maxStorageBufferBindingSizeBytesI64,
+            maxStorageBuffersPerShaderStageI32 = observedLimits.maxStorageBuffersPerShaderStageI32,
+        )
+        GpuPlanCapabilityAdapterResult.Supported(snapshot)
+    } catch (_: IllegalArgumentException) {
+        unsupported("Renderer capabilities are incoherent for W3 planning.")
+    }
+}
+
+private fun Long.isPositivePowerOfTwo(): Boolean = this > 0L && this and (this - 1L) == 0L
+
+private fun GPUTextureUsage.supports(required: GPUTextureUsage): Boolean =
+    (value and required.value) == required.value
+
+private fun unsupported(
+    message: String,
+    code: RenderDiagnosticCode = RenderDiagnosticCode("w3.lowering.unsupported_capability"),
+): GpuPlanCapabilityAdapterResult.Unsupported =
+    GpuPlanCapabilityAdapterResult.Unsupported(
+        RenderDiagnostic(
+            code,
+            RenderDiagnosticDomain.CAPABILITY,
+            RenderDiagnosticSeverity.ERROR,
+            message,
+        ),
+    )

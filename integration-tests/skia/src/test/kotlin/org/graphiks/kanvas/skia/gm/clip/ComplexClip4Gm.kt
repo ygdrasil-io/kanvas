@@ -14,10 +14,9 @@ import org.graphiks.math.geometry.RectF32
  * Port of Skia's `gm/complexclip4.cpp::ComplexClip4GM` (970 × 780).
  *
  * Exercises clip-rect / clip-path / clip-rrect replacement after a
- * "device clip restriction" pass. This port simulates the restriction
- * by wrapping the green fill in `save()` + `clipRect(restrictRect)` +
- * `drawColor(green)` + `restore()`, which leaves the parent clip state
- * unchanged for the subsequent clip operation.
+ * "device clip restriction" pass. This scene-level adaptation installs
+ * persistent hard path restrictions in the corresponding save scopes; it
+ * does not provide general Android ResetClip support.
  * @see https://github.com/google/skia/blob/main/gm/complexclip4.cpp
  */
 open class ComplexClip4Gm(
@@ -38,7 +37,8 @@ open class ComplexClip4Gm(
         canvas.save()
 
         canvas.save()
-        greenIn(canvas, RectF32.ofLTRB(100f, 100f, 300f, 300f))
+        restrictDeviceClip(canvas, RectF32.ofLTRB(100f, 100f, 300f, 300f))
+        canvas.drawColor(0f, 1f, 0f)
         canvas.clipPath(
             Path { }.apply { addRect(RectF32.ofLTRB(100f, 200f, 400f, 500f)) },
             antiAlias = doAAClip,
@@ -47,7 +47,8 @@ open class ComplexClip4Gm(
         canvas.restore()
 
         canvas.save()
-        greenIn(canvas, RectF32.ofLTRB(500f, 100f, 800f, 300f))
+        restrictDeviceClip(canvas, RectF32.ofLTRB(500f, 100f, 800f, 300f))
+        canvas.drawColor(0f, 1f, 0f)
         val pathClip = Path {
             moveTo(650f, 200f)
             lineTo(900f, 300f)
@@ -60,7 +61,8 @@ open class ComplexClip4Gm(
         canvas.restore()
 
         canvas.save()
-        greenIn(canvas, RectF32.ofLTRB(500f, 500f, 800f, 700f))
+        restrictDeviceClip(canvas, RectF32.ofLTRB(500f, 500f, 800f, 700f))
+        canvas.drawColor(0f, 1f, 0f)
         val rrect = RRectF32.of(RectF32.ofLTRB(500f, 600f, 900f, 750f), radius = 0f).copy(
             topLeft = org.graphiks.math.geometry.CornerRadiiF32.of(200f, 75f),
             topRight = org.graphiks.math.geometry.CornerRadiiF32.of(200f, 75f),
@@ -77,26 +79,18 @@ open class ComplexClip4Gm(
             antiAlias = doAAClip,
         )
         canvas.drawColor(0f, 1f, 0f)
+        restrictDeviceClip(canvas, RectF32.ofLTRB(150f, 450f, 250f, 700f))
         canvas.rotate(20f)
         canvas.translate(50f, 50f)
-        canvas.save()
-        canvas.clipPath(
-            Path { }.apply { addRect(RectF32.ofLTRB(150f, 450f, 250f, 700f)) },
-            antiAlias = doAAClip,
-        )
+        // Scene-specific: the transformed viewport fully covers the hard device restriction.
         canvas.drawColor(1f, 1f, 0f)
         canvas.restore()
-        canvas.restore()
 
         canvas.restore()
     }
 
-    private fun greenIn(canvas: GmCanvas, restrict: RectF32) {
-        canvas.save()
-        canvas.clipPath(Path { }.apply { addRect(restrict) }, antiAlias = doAAClip)
-        canvas.drawColor(0f, 1f, 0f)
-        canvas.restore()
-    }
+    private fun restrictDeviceClip(canvas: GmCanvas, restrict: RectF32) =
+        canvas.clipPath(Path { }.apply { addRect(restrict) }, antiAlias = false)
 }
 
 class ComplexClip4BwGm : ComplexClip4Gm("complexclip4_bw", false) {

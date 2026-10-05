@@ -46,6 +46,7 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.surface.PreparedImageRoute
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
@@ -60,7 +61,7 @@ import kotlin.math.min
  * physical upload contract: straight encoded sRGB in `RGBA8UnormSrgb` for color images, or
  * linear `RGBA8Unorm` coverage for A8 images.
  */
-data class GPUPreparedImageDrawFacts(
+internal data class GPUPreparedImageDrawFacts(
     val artifact: GPUPreparedImageUploadArtifact,
     val sampling: GPUPreparedImageSampling,
     val routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
@@ -70,12 +71,13 @@ data class GPUPreparedImageDrawFacts(
     val atlasSourceBlend: GPUPreparedAtlasSourceBlend? = null,
 )
 
-sealed interface GPUPreparedDrawImageLowering {
+internal sealed interface GPUPreparedDrawImageLowering {
     data class Ready(val command: GPUFramePathVisualCommand) : GPUPreparedDrawImageLowering
     data class Refused(val code: String, val facts: Map<String, String>) :
         GPUPreparedDrawImageLowering
 }
 
+/** Legacy semantic lowering only for unadmitted whole frames; owned W5e never calls this. */
 internal object GPUPreparedDrawImageLowerer {
     fun lower(
         operation: DisplayOp.DrawImage,
@@ -148,9 +150,9 @@ internal object GPUPreparedDrawImageLowerer {
                 ),
             )
         }
-        val requestedSampling = requestedImageShader?.sampling
-        val boundedW28 = config.preparedImageRouteCapability ==
-            GPUPreparedImageRouteCapability.BoundedNearest1To1
+        val requestedSampling = operation.sampling
+        val routeCapability = config.preparedImageRoute.toGpuRouteCapability()
+        val boundedW28 = routeCapability == GPUPreparedImageRouteCapability.BoundedNearest1To1
         val sampling = when (requestedSampling) {
             SamplingOptions.NEAREST -> GPUPreparedImageSampling.Nearest
             SamplingOptions.LINEAR -> if (boundedW28) {
@@ -159,7 +161,6 @@ internal object GPUPreparedDrawImageLowerer {
                     mapOf("sourceId" to image.sourceId, "sampling" to "linear", "supportedSampling" to "nearest"),
                 )
             } else GPUPreparedImageSampling.Linear
-            null -> GPUPreparedImageSampling.Nearest
             is SamplingOptions.Cubic -> return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.SAMPLING_CUBIC,
                 mapOf("sourceId" to image.sourceId),
@@ -423,7 +424,7 @@ internal object GPUPreparedDrawImageLowerer {
             preparedImage = GPUPreparedImageDrawFacts(
                 artifact = artifact,
                 sampling = sampling,
-                routeCapability = config.preparedImageRouteCapability,
+                routeCapability = routeCapability,
                 geometry = geometry,
                 tintPremultipliedRgba = tintPremultipliedRgba,
             ),
@@ -491,6 +492,7 @@ internal object GPUPreparedDrawImageLowerer {
                 paint = operation.paint.copy(shader = imageShader),
                 transform = operation.transform,
                 clip = operation.clip,
+                sampling = imageShader.sampling,
             ),
             commandId = commandId,
             paintOrder = paintOrder,
@@ -539,6 +541,11 @@ internal object GPUPreparedDrawImageLowerer {
             capabilities = capabilities,
         )
     }
+}
+
+private fun PreparedImageRoute.toGpuRouteCapability(): GPUPreparedImageRouteCapability = when (this) {
+    PreparedImageRoute.GENERIC_NATIVE -> GPUPreparedImageRouteCapability.GenericNative
+    PreparedImageRoute.BOUNDED_NEAREST_1_TO_1 -> GPUPreparedImageRouteCapability.BoundedNearest1To1
 }
 
 internal fun Shader?.findBaseImageShaderOrNull(): Shader.Image? = when (this) {

@@ -42,20 +42,20 @@ import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.pow
 
-data class GPUPreparedMaterialMapping(
+internal data class GPUPreparedMaterialMapping(
     val descriptor: GPUMaterialDescriptor,
     val paintAlpha: Float,
 )
 
 /** Exact MeshProgram material mapping; final target blend remains a separate draw fact. */
-data class GPUPreparedMeshProgramMapping(
+internal data class GPUPreparedMeshProgramMapping(
     val descriptor: GPUMaterialDescriptor.RuntimeEffect,
     val paintAlpha: Float,
     val finalTargetBlendMode: GPUBlendMode? = null,
 )
 
 /** Typed, deterministic result used by later prepared lowering without exceptions or fallback. */
-sealed interface GPUPreparedMeshProgramMappingResult {
+internal sealed interface GPUPreparedMeshProgramMappingResult {
     data class Ready(
         val mapping: GPUPreparedMeshProgramMapping,
     ) : GPUPreparedMeshProgramMappingResult
@@ -458,11 +458,18 @@ private class PreparedMeshProgramChildMapper(
     }
 }
 
-internal fun Paint.toMaterial(): GPUMaterialDescriptor =
-    mapMaterial(
+internal fun Paint.toMaterial(): GPUMaterialDescriptor {
+    if (shader?.containsPremultipliedLinearGradient() == true) {
+        return GPUMaterialDescriptorAssemblySession().preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.GRADIENT_ALPHA_MODE,
+            GPUMaterialKind.LinearGradient,
+        )
+    }
+    return mapMaterial(
         shaderMapper = { shader -> shader.toMaterial() },
         preserveRuntimePayload = false,
     )
+}
 
 private fun Paint.mapMaterial(
     shaderMapper: (Shader) -> GPUMaterialDescriptor,
@@ -520,37 +527,50 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         b = this.color.b,
         a = this.color.a,
     )
+    // Opacity is a W5 material operation.  Legacy descriptors must not fold it into a solid
+    // colour: doing so would select a second, incompatible semantic authority.
+    is Shader.Opacity -> GPUMaterialDescriptor.Unsupported(
+        reason = GPUPreparedMaterialUnsupportedReason.OPACITY_CHILD,
+        originalKind = materialKind(),
+    )
     is Shader.LinearGradient -> {
-        val first = this.stops.first()
-        val last = this.stops.last()
-        val allPos = FloatArray(this.stops.size) { this.stops[it].position }
-        val allCol = FloatArray(this.stops.size * 4) { i ->
-            val stop = this.stops[i / 4]
-            when (i % 4) { 0 -> stop.color.r; 1 -> stop.color.g; 2 -> stop.color.b; else -> stop.color.a }
-        }
-        val tileMode = when (this.tileMode) {
-            org.graphiks.kanvas.paint.TileMode.CLAMP -> "clamp"
-            org.graphiks.kanvas.paint.TileMode.REPEAT -> "repeat"
-            org.graphiks.kanvas.paint.TileMode.MIRROR -> "mirror"
-            org.graphiks.kanvas.paint.TileMode.DECAL -> "decal"
-        }
-        val desc = GPUMaterialDescriptor.LinearGradient(
-            startX = this.start.x, startY = this.start.y,
-            endX = this.end.x, endY = this.end.y,
-            startR = first.color.r, startG = first.color.g, startB = first.color.b, startA = first.color.a,
-            endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
-            tileMode = tileMode,
-            allStopPositions = allPos, allStopColors = allCol,
-        ).withGradientFacts(
-            GPUMaterialDescriptor.GradientFacts(
-                interpolation = this.interpolation.toDescriptorInterpolation(),
-            ),
-        )
-        if (GradientWgslShaderProvider.canHandle(desc)) {
-            val hash = GradientWgslShaderProvider.uniformLayoutHashFor(desc)
-            desc.copy(snippetSourceHash = hash)
+        if (alphaMode == org.graphiks.kanvas.paint.GradientAlphaMode.PREMULTIPLIED) {
+            GPUMaterialDescriptor.Unsupported(
+                reason = GPUPreparedMaterialUnsupportedReason.GRADIENT_ALPHA_MODE,
+                originalKind = GPUMaterialKind.LinearGradient,
+            )
         } else {
-            desc
+            val first = this.stops.first()
+            val last = this.stops.last()
+            val allPos = FloatArray(this.stops.size) { this.stops[it].position }
+            val allCol = FloatArray(this.stops.size * 4) { i ->
+                val stop = this.stops[i / 4]
+                when (i % 4) { 0 -> stop.color.r; 1 -> stop.color.g; 2 -> stop.color.b; else -> stop.color.a }
+            }
+            val tileMode = when (this.tileMode) {
+                org.graphiks.kanvas.paint.TileMode.CLAMP -> "clamp"
+                org.graphiks.kanvas.paint.TileMode.REPEAT -> "repeat"
+                org.graphiks.kanvas.paint.TileMode.MIRROR -> "mirror"
+                org.graphiks.kanvas.paint.TileMode.DECAL -> "decal"
+            }
+            val desc = GPUMaterialDescriptor.LinearGradient(
+                startX = this.start.x, startY = this.start.y,
+                endX = this.end.x, endY = this.end.y,
+                startR = first.color.r, startG = first.color.g, startB = first.color.b, startA = first.color.a,
+                endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
+                tileMode = tileMode,
+                allStopPositions = allPos, allStopColors = allCol,
+            ).withGradientFacts(
+                GPUMaterialDescriptor.GradientFacts(
+                    interpolation = this.interpolation.toDescriptorInterpolation(),
+                ),
+            )
+            if (GradientWgslShaderProvider.canHandle(desc)) {
+                val hash = GradientWgslShaderProvider.uniformLayoutHashFor(desc)
+                desc.copy(snippetSourceHash = hash)
+            } else {
+                desc
+            }
         }
     }
     is Shader.RadialGradient -> {
@@ -853,6 +873,12 @@ private class PreparedShaderMapper(
 private fun Shader.toPreparedMaterial(
     mapper: PreparedShaderMapper,
 ): GPUMaterialDescriptor {
+    if (containsPremultipliedLinearGradient()) {
+        return mapper.descriptorAssembly.preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.GRADIENT_ALPHA_MODE,
+            GPUMaterialKind.LinearGradient,
+        )
+    }
     val hasEmptyGradientStops = when (this) {
         is Shader.LinearGradient -> stops.isEmpty()
         is Shader.RadialGradient -> stops.isEmpty()
@@ -869,6 +895,10 @@ private fun Shader.toPreparedMaterial(
 
     return when (this) {
         is Shader.SolidColor -> toMaterial()
+        is Shader.Opacity -> mapper.descriptorAssembly.preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.OPACITY_CHILD,
+            materialKind(),
+        )
         is Shader.LinearGradient ->
             if (interpolation != ColorSpaceInterpolation.SRGB) {
                 mapper.descriptorAssembly.preparedUnsupported(
@@ -1350,6 +1380,7 @@ private fun Shader.preparedGraphChildren(): List<Shader> =
         is Shader.WithColorFilter -> listOf(shader)
         is Shader.WithWorkingColorSpace -> listOf(shader)
         is Shader.CoordClamp -> listOf(shader)
+        is Shader.Opacity -> listOf(shader)
         is Shader.SolidColor,
         is Shader.LinearGradient,
         is Shader.RadialGradient,
@@ -1360,6 +1391,21 @@ private fun Shader.preparedGraphChildren(): List<Shader> =
         is Shader.FractalNoise,
         -> emptyList()
     }
+
+/** Legacy descriptors have no alpha-mode field, so any wrapped PREMULTIPLIED leaf must refuse. */
+private fun Shader.containsPremultipliedLinearGradient(): Boolean {
+    val pending = ArrayDeque<Shader>()
+    val seen = Collections.newSetFromMap(IdentityHashMap<Shader, Boolean>())
+    pending += this
+    while (pending.isNotEmpty()) {
+        val current = pending.removeFirst()
+        if (!seen.add(current)) continue
+        if (current is Shader.LinearGradient &&
+            current.alphaMode == org.graphiks.kanvas.paint.GradientAlphaMode.PREMULTIPLIED) return true
+        current.preparedGraphChildren().forEach(pending::addLast)
+    }
+    return false
+}
 
 private fun ColorFilter.preparedGraphChildren(): List<ColorFilter> =
     when (this) {
@@ -1395,6 +1441,7 @@ private fun Shader.materialKind(): GPUMaterialKind {
             is Shader.WithColorFilter -> current = shader.shader
             is Shader.WithWorkingColorSpace -> current = shader.shader
             is Shader.CoordClamp -> current = shader.shader
+            is Shader.Opacity -> current = shader.shader
             is Shader.PerlinNoise,
             is Shader.FractalNoise,
             -> return GPUMaterialKind.SolidColor

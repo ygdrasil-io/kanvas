@@ -1,8 +1,16 @@
 package org.graphiks.kanvas.gpu.renderer.payloads
 
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRouteGeometryAnalysis
+import org.graphiks.kanvas.gpu.renderer.commands.deferredSourceOccurrence
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGeometrySnapshot
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingGeometryAnalysis
 import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
@@ -19,6 +27,8 @@ import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialP
 import org.graphiks.kanvas.gpu.renderer.materials.preparedMaterialSrgbToLinear
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.math.geometry.PathFillLimitsI32
 
 /** Opaque payload slot identifier. */
 @JvmInline
@@ -232,6 +242,8 @@ enum class GPUCorePrimitiveMaterialKind(val wireId: String) {
     RadialGradient("radial"),
     SweepGradient("sweep"),
     LinearGradient("linear"),
+    /** Sealed W5a plan reference. It must materialize before a native uniform is packed. */
+    W5aMaterialPlanRef("w5a-material-plan-ref"),
 }
 
 /**
@@ -243,13 +255,26 @@ enum class GPUCorePrimitiveMaterialKind(val wireId: String) {
  * finite nine-value matrices and does not interpret them.
  */
 sealed interface GPUCorePrimitiveMaterialPayload {
+    /** Opaque source owner; geometry bridges never decode the carrier's color payload. */
+    val materialSourceAuthority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.MaterializedSolidV2?
+        get() = null
     val kind: GPUCorePrimitiveMaterialKind
     val tileMode: String
     val interpolation: String
     val materialHash: String
 
     /** Existing solid CorePrimitive color, already linear-light and premultiplied. */
-    class SolidColor(premultipliedRgba: List<Float>) : GPUCorePrimitiveMaterialPayload {
+    class SolidColor private constructor(
+        premultipliedRgba: List<Float>,
+        internal val w5aAuthority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.MaterializedSolidV2?,
+    ) : GPUCorePrimitiveMaterialPayload {
+        override val materialSourceAuthority get() = w5aAuthority
+        constructor(premultipliedRgba: List<Float>) : this(premultipliedRgba, null)
+
+        internal constructor(
+            authority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.MaterializedSolidV2,
+        ) : this(authority.premultipliedRgbaF32, authority)
+
         val premultipliedRgba: List<Float> = immutableList(premultipliedRgba)
         override val kind: GPUCorePrimitiveMaterialKind = GPUCorePrimitiveMaterialKind.SolidColor
         override val tileMode: String = "none"
@@ -264,12 +289,32 @@ sealed interface GPUCorePrimitiveMaterialPayload {
 
         override fun equals(other: Any?): Boolean = this === other || (
             other is SolidColor &&
-                premultipliedRgba.rawBits() == other.premultipliedRgba.rawBits()
+                premultipliedRgba.rawBits() == other.premultipliedRgba.rawBits() &&
+                w5aAuthority === other.w5aAuthority
             )
 
         override fun hashCode(): Int = premultipliedRgba.rawBits().hashCode()
 
         override fun toString(): String = canonicalPreimage()
+    }
+
+    /**
+     * Opaque W5a material authority carried by a prepared core command.  Numeric source values
+     * are intentionally absent here; [MaterialPlanRef] is resolved once by the frame-owned
+     * material authority at the color-writing boundary.
+     */
+    class W5aMaterialPlanRefV1(val ref: MaterialPlanRef) : GPUCorePrimitiveMaterialPayload {
+        override val kind: GPUCorePrimitiveMaterialKind = GPUCorePrimitiveMaterialKind.W5aMaterialPlanRef
+        override val tileMode: String = "none"
+        override val interpolation: String = "none"
+        override val materialHash: String = "w5a-material-ref-v1:${ref.indexI32}"
+
+        override fun equals(other: Any?): Boolean =
+            other is W5aMaterialPlanRefV1 && ref == other.ref
+
+        override fun hashCode(): Int = ref.hashCode()
+
+        override fun toString(): String = materialHash
     }
 
     /** Linear gradient facts admitted by the CorePrimitive material ABI. */
@@ -515,6 +560,10 @@ private fun GPUCorePrimitiveMaterialPayload.canonicalPreimage(): String = when (
         colors = colors,
         materialHash = materialHash,
     )
+    is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 -> listOf(
+        "kind=${kind.wireId}",
+        "materialPlanRef=${ref.indexI32}",
+    ).joinToString("\n")
 }
 
 private fun corePrimitiveGradientMaterialPreimage(
@@ -611,6 +660,8 @@ private fun validateGradientMaterial(
         }
         GPUCorePrimitiveMaterialKind.SolidColor ->
             error("Solid colors do not use gradient validation")
+        GPUCorePrimitiveMaterialKind.W5aMaterialPlanRef ->
+            error("W5a material references do not use gradient validation")
     }
 }
 
@@ -729,6 +780,11 @@ class GPUCorePrimitiveRectGeometryAuthority private constructor(
     private val transformSkewXBits: Int,
     private val transformSkewYBits: Int,
 ) {
+    internal fun isIdentityFullTarget(bounds: GPUPixelBounds): Boolean =
+        transformType == GPUCorePrimitiveRectTransformType.Identity && exactTransformOrNull() != null &&
+            rectLeftBits == bounds.left.toFloat().toRawBits() && rectTopBits == bounds.top.toFloat().toRawBits() &&
+            rectRightBits == bounds.right.toFloat().toRawBits() && rectBottomBits == bounds.bottom.toFloat().toRawBits()
+
     init {
         require(issuerProof === GPUCorePrimitiveRectGeometryAuthorityIssuerProof) {
             "FillRect geometry authority requires the gpu-renderer issuer proof"
@@ -1248,6 +1304,72 @@ sealed interface GPUCorePrimitiveGeometry {
     }
 }
 
+/** Source-free planning input; all geometry is still validated by the existing payload gatherer. */
+data class GPUCorePrimitiveGeometryPlanInput(
+    val commandIdValue: Int,
+    val sourceFamily: GPUCorePrimitiveSourceFamily,
+    val geometry: GPUCorePrimitiveGeometryInput,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipCoveragePlan: GPUClipCoveragePlan,
+    val clipExecutionPlanIdentity: String? = null,
+    val frameProvenance: GPUFrameProvenance,
+    val coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+    val analysisRecordId: String? = null,
+    val analysisCommandFamily: String? = null,
+    val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
+    val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+    val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+    val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+)
+
+/** ID-free geometry input tied to the exact first-route occurrence analysis. */
+data class GPUCorePrimitiveSourceGeometryInput(
+    val analysis: GPUFirstRouteGeometryAnalysis,
+    val sourceFamily: GPUCorePrimitiveSourceFamily,
+    val geometry: GPUCorePrimitiveGeometryInput,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipCoveragePlan: GPUClipCoveragePlan,
+    val clipExecutionPlanIdentity: String?,
+    val frameProvenance: GPUFrameProvenance,
+    val coverageMode: GPUCorePrimitiveCoverageMode,
+)
+
+/** Opaque admitted snapshot, before numerical command identity or any source authority exists. */
+class GPUCorePrimitiveCapturedGeometry internal constructor(
+    internal val analysis: GPUFirstRouteGeometryAnalysis,
+    internal val snapshot: GPUCorePrimitiveGeometrySnapshot,
+)
+
+private data class CorePrimitiveGeometryAdmissionInput(
+    val sourceFamily: GPUCorePrimitiveSourceFamily,
+    val geometry: GPUCorePrimitiveGeometryInput,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipCoveragePlan: GPUClipCoveragePlan,
+    val clipExecutionPlanIdentity: String?,
+    val frameProvenance: GPUFrameProvenance,
+    val coverageMode: GPUCorePrimitiveCoverageMode,
+    val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+    val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+)
+
+/** Opaque admitted geometry; source binding cannot rerun its snapshot or geometry algorithms. */
+class GPUCorePrimitiveGeometryPlan internal constructor(
+    internal val authority: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGeometryAuthority,
+)
+
+private fun GPUCorePrimitivePayloadInput.geometryInput(): GPUCorePrimitiveGeometryPlanInput =
+    GPUCorePrimitiveGeometryPlanInput(commandIdValue, sourceFamily, geometry, targetBounds, scissorBounds,
+        clipCoveragePlan, clipExecutionPlanIdentity, frameProvenance, coverageMode, analysisRecordId,
+        analysisCommandFamily, rectRouteAuthority, rectGeometryAuthority, rrectGeometryAuthority,
+        drrectOuterGeometryAuthority, drrectInnerGeometryAuthority)
+
 /** Construction input whose mutable collections are snapshotted by the gatherer. */
 data class GPUCorePrimitivePayloadInput(
     val commandIdValue: Int,
@@ -1428,6 +1550,9 @@ data class GPUPreparedTextA8PayloadInput(
     val pageIndex: Int,
     val instances: List<GPUTextA8Instance>,
     val material: GPUPreparedMaterialProgram,
+    val materialPlanProvenance:
+        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance? = null,
+    val w5bFinalBlendPlan: org.graphiks.kanvas.gpu.plan.BlendPlan? = null,
     val deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
@@ -1466,6 +1591,12 @@ sealed interface GPUDrawSemanticPayload {
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
     }
 
+    /** One sealed path-stencil producer packet; scan spans may expand it only during native encoding. */
+    class PathStencilProducer internal constructor(payloadRef: GPUDrawPayloadRef) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "PathStencilProducer"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+    }
+
     /** Exact core geometry, material, target, and typed clip plan for Slice 12A. */
     class CorePrimitive internal constructor(
         payloadRef: GPUDrawPayloadRef,
@@ -1488,6 +1619,7 @@ sealed interface GPUDrawSemanticPayload {
         val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
         val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
         material: GPUCorePrimitiveMaterialPayload? = null,
+        internal val geometryPlan: GPUCorePrimitiveGeometryPlan? = null,
     ) : GPUDrawSemanticPayload {
         override val canonicalType: String = "CorePrimitive"
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
@@ -1521,16 +1653,12 @@ sealed interface GPUDrawSemanticPayload {
         }
 
         internal fun hasStructuralIntegrity(): Boolean =
-            payloadRef.renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
-                payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
-                payloadRef.uniformBlock?.byteSize == corePrimitiveUniformByteSize(material).toLong() &&
-                payloadRef.uniformBlock.bytes.size == corePrimitiveUniformByteSize(material) &&
-                payloadRef.uniformBlock.bytes == corePrimitiveUniformBytes(targetBounds, material) &&
-                (payloadRef.corePrimitiveMaterial == null || payloadRef.corePrimitiveMaterial == material) &&
-                (material is GPUCorePrimitiveMaterialPayload.SolidColor &&
-                    material.premultipliedRgba == premultipliedRgba ||
-                    material !is GPUCorePrimitiveMaterialPayload.SolidColor) &&
-                premultipliedRgba.isPremultipliedRgba() &&
+            hasGeometryStructuralIntegrity() && hasMaterialStructuralIntegrity()
+
+        /** Source-free admission: an unbound material reference may retain geometry, never execution. */
+        internal fun hasGeometryStructuralIntegrity(): Boolean =
+            (geometryPlan?.authority?.matches(this) != false) &&
+                payloadRef.renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
                 targetBounds.containsRegisteredUniformRect(scissorBounds) &&
                 clipCoveragePlan !is GPUClipCoveragePlan.Refused &&
                 (clipExecutionPlanIdentity == null || clipExecutionPlanIdentity.isNotBlank()) &&
@@ -1548,6 +1676,27 @@ sealed interface GPUDrawSemanticPayload {
                     drrectOuterGeometryAuthority,
                     drrectInnerGeometryAuthority,
                 )
+
+        /** Historical ref-envelope validation is distinct from a completed executable binding. */
+        internal fun hasMaterialStructuralIntegrity(): Boolean =
+                ((material as? GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority
+                    ?.validates(payloadRef.commandIdValue) != false) &&
+                (if (material is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1) {
+                    payloadRef.uniformSlot == null &&
+                        payloadRef.uniformBlock == null &&
+                        payloadRef.corePrimitiveMaterial == material &&
+                        premultipliedRgba.isEmpty()
+                } else {
+                    payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
+                        payloadRef.uniformBlock?.byteSize == corePrimitiveUniformByteSize(material).toLong() &&
+                        payloadRef.uniformBlock.bytes.size == corePrimitiveUniformByteSize(material) &&
+                        payloadRef.uniformBlock.bytes == corePrimitiveUniformBytes(targetBounds, material) &&
+                        (payloadRef.corePrimitiveMaterial == null || payloadRef.corePrimitiveMaterial == material) &&
+                        (material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                            material.premultipliedRgba == premultipliedRgba ||
+                            material !is GPUCorePrimitiveMaterialPayload.SolidColor) &&
+                        premultipliedRgba.isPremultipliedRgba()
+                })
 
         internal fun hasCanonicalHashIntegrity(): Boolean =
             hasStructuralIntegrity() &&
@@ -1596,6 +1745,30 @@ sealed interface GPUDrawSemanticPayload {
                 drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
             )
         }
+
+        /** Rebase only the selected final blend after the enclosing timeline assigns its read. */
+        internal fun withW5bBlendIdentity(identity: String): CorePrimitive = CorePrimitive(
+            payloadRef = payloadRef,
+            sourceFamily = sourceFamily,
+            geometry = geometry,
+            premultipliedRgba = premultipliedRgba,
+            material = material,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+            blendPlanIdentity = identity,
+            frameProvenance = frameProvenance,
+            coverageMode = coverageMode,
+            analysisRecordId = analysisRecordId,
+            analysisCommandFamily = analysisCommandFamily,
+            rectRouteAuthority = rectRouteAuthority,
+            rectGeometryAuthority = rectGeometryAuthority,
+            rrectGeometryAuthority = rrectGeometryAuthority,
+            drrectOuterGeometryAuthority = drrectOuterGeometryAuthority,
+            drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
+            geometryPlan = geometryPlan,
+        )
     }
 
     /** Exact immutable uniform bytes for one shader from the closed prepared program registry. */
@@ -1719,7 +1892,9 @@ sealed interface GPUDrawSemanticPayload {
         val artifact = snapshot.artifact
         val material = snapshot.material
         val materialIdentity = snapshot.materialIdentity
+        val materialPlanProvenance = snapshot.materialPlanProvenance
         val topologyIdentity: GPUPreparedVerticesTopologyIdentity = snapshot.topologyIdentity
+        val conservativeDrawBounds = snapshot.conservativeDrawBounds
         val transformBytes: List<Int> = snapshot.transformBytes
         val targetBounds = snapshot.targetBounds
         val scissorBounds = snapshot.scissorBounds
@@ -1728,11 +1903,22 @@ sealed interface GPUDrawSemanticPayload {
         val clipCoverageIdentity = snapshot.clipCoverageIdentity
         val primitiveColorPresent = snapshot.primitiveColorPresent
         val primitiveBlendIdentity = snapshot.primitiveBlendIdentity
+        val primitiveBlendPlan = snapshot.primitiveBlendPlan
+        val w5bFinalBlendPlan = snapshot.w5bFinalBlendPlan
         val finalBlendIdentity = snapshot.finalBlendIdentity
         val capabilitySnapshotHash = snapshot.capabilitySnapshotHash
         val drawProvenance = snapshot.drawProvenance
         val frameProvenance = snapshot.frameProvenance
         val canonicalHash = snapshot.canonicalHash
+
+        fun withW5aFrameMaterial(
+            table: org.graphiks.kanvas.gpu.plan.MaterialPlanTable,
+            ref: org.graphiks.kanvas.gpu.plan.MaterialPlanRef,
+        ): Vertices = Vertices(snapshot.withW5aFrameMaterial(table, ref))
+
+        fun withW5bFinalBlendPlan(
+            plan: org.graphiks.kanvas.gpu.plan.BlendPlan,
+        ): Vertices = Vertices(snapshot.withW5bFinalBlendPlan(plan))
 
         fun hasCanonicalHashIntegrity(): Boolean =
             canonicalHash == snapshot.canonicalHash()
@@ -1746,6 +1932,9 @@ sealed interface GPUDrawSemanticPayload {
         val pageIndex: Int,
         instances: List<GPUTextA8Instance>,
         material: GPUPreparedMaterialProgram,
+        materialPlanProvenance:
+            org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance? = null,
+        val w5bFinalBlendPlan: org.graphiks.kanvas.gpu.plan.BlendPlan? = null,
         deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
         val targetBounds: GPUPixelBounds,
         val scissorBounds: GPUPixelBounds,
@@ -1759,7 +1948,35 @@ sealed interface GPUDrawSemanticPayload {
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
         val instances: List<GPUTextA8Instance> = immutableList(instances)
         val material: GPUPreparedMaterialProgram = material.preparedTextSnapshot()
+        val materialPlanProvenance = materialPlanProvenance
         val deviceToLocal: GPUPreparedTextDeviceToLocalAffine = deviceToLocal.copy()
+
+        fun withW5aFrameMaterial(
+            table: org.graphiks.kanvas.gpu.plan.MaterialPlanTable,
+            ref: org.graphiks.kanvas.gpu.plan.MaterialPlanRef,
+        ): TextA8 {
+            val provenance = requireNotNull(materialPlanProvenance).remap(table, ref)
+            return TextA8(payloadRef, atlas, atlasGeneration, pageIndex, instances, material,
+                provenance, w5bFinalBlendPlan, deviceToLocal, targetBounds, scissorBounds, clipIdentity, blendPlanIdentity,
+                capabilitySnapshotHash, frameProvenance, preparedTextA8CanonicalHash(
+                    payloadRef, atlas, atlasGeneration, pageIndex, instances, material, provenance,
+                    w5bFinalBlendPlan, deviceToLocal, targetBounds, scissorBounds, clipIdentity, blendPlanIdentity,
+                    capabilitySnapshotHash, frameProvenance,
+                ))
+        }
+
+        fun withW5bFinalBlendPlan(
+            plan: org.graphiks.kanvas.gpu.plan.BlendPlan,
+        ): TextA8 = TextA8(
+            payloadRef, atlas, atlasGeneration, pageIndex, instances, material,
+            materialPlanProvenance, plan, deviceToLocal, targetBounds, scissorBounds,
+            clipIdentity, blendPlanIdentity, capabilitySnapshotHash, frameProvenance,
+            preparedTextA8CanonicalHash(
+                payloadRef, atlas, atlasGeneration, pageIndex, instances, material,
+                materialPlanProvenance, plan, deviceToLocal, targetBounds, scissorBounds,
+                clipIdentity, blendPlanIdentity, capabilitySnapshotHash, frameProvenance,
+            ),
+        )
 
         internal fun hasCanonicalHashIntegrity(): Boolean =
             canonicalHash == preparedTextA8CanonicalHash(
@@ -1769,6 +1986,8 @@ sealed interface GPUDrawSemanticPayload {
                 pageIndex = pageIndex,
                 instances = instances,
                 material = material,
+                materialPlanProvenance = materialPlanProvenance,
+                w5bFinalBlendPlan = w5bFinalBlendPlan,
                 deviceToLocal = deviceToLocal,
                 targetBounds = targetBounds,
                 scissorBounds = scissorBounds,
@@ -2017,6 +2236,13 @@ class GPUPreparedTextPayloadGatherer {
         )
         val instances = immutableList(input.instances)
         val material = input.material.preparedTextSnapshot()
+        require(
+            (input.materialPlanProvenance == null) ==
+                (material.preparedTextW5aAdmissionToken == null && material.commonSource == null) &&
+                input.materialPlanProvenance?.validates(input.commandIdValue, material) != false,
+        ) {
+            "Prepared text W5a material provenance does not match its command or program"
+        }
         return GPUDrawSemanticPayload.TextA8(
             payloadRef = payloadRef,
             atlas = input.atlas,
@@ -2024,6 +2250,8 @@ class GPUPreparedTextPayloadGatherer {
             pageIndex = input.pageIndex,
             instances = instances,
             material = material,
+            materialPlanProvenance = input.materialPlanProvenance,
+            w5bFinalBlendPlan = input.w5bFinalBlendPlan,
             deviceToLocal = input.deviceToLocal.copy(),
             targetBounds = input.targetBounds,
             scissorBounds = input.scissorBounds,
@@ -2038,6 +2266,8 @@ class GPUPreparedTextPayloadGatherer {
                 pageIndex = input.pageIndex,
                 instances = instances,
                 material = material,
+                materialPlanProvenance = input.materialPlanProvenance,
+                w5bFinalBlendPlan = input.w5bFinalBlendPlan,
                 deviceToLocal = input.deviceToLocal,
                 targetBounds = input.targetBounds,
                 scissorBounds = input.scissorBounds,
@@ -2054,52 +2284,161 @@ const val TEXT_A8_RENDER_STEP_IDENTITY: String = "text.a8_mask.sample"
 
 /** Gathers one immutable Slice 12A semantic without allocating native resources. */
 class GPUCorePrimitivePayloadGatherer {
-    fun gatherSemantic(input: GPUCorePrimitivePayloadInput): GPUDrawSemanticPayload.CorePrimitive {
-        require(input.commandIdValue >= 0) { "Core primitive command id must be non-negative" }
-        require(input.premultipliedRgba.isPremultipliedRgba()) {
-            "Core primitive color must be finite premultiplied RGBA"
+    fun gatherSemantic(input: GPUCorePrimitivePayloadInput): GPUDrawSemanticPayload.CorePrimitive =
+        gatherSemantic(input, CorePrimitivePathAuthorityAdmission.Generic)
+
+    fun gatherGeometry(input: GPUCorePrimitiveGeometryPlanInput): GPUCorePrimitiveGeometryPlan =
+        gatherGeometry(input, CorePrimitivePathAuthorityAdmission.Generic)
+
+    /** Source-free occurrence admission reuses the historical snapshot/geometry checks once. */
+    fun captureSourceGeometry(input: GPUCorePrimitiveSourceGeometryInput): GPUCorePrimitiveCapturedGeometry {
+        val facts = input.analysis.facts
+        val unboundIdentity = when (val command = input.analysis.capturedCommand) {
+            is org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRect -> !command.hasBoundCommandIdentity
+            is org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRRect -> !command.hasBoundCommandIdentity
+            is org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillPath -> !command.hasBoundCommandIdentity
+            else -> false
         }
-        require(input.targetBounds.left == 0 && input.targetBounds.top == 0 &&
-            input.targetBounds.right > 0 && input.targetBounds.bottom > 0) {
-            "Core primitive target must be a non-empty zero-origin target"
+        require(unboundIdentity && input.analysis.capturedCommand.deferredSourceOccurrence != null && facts.refusalCode == null) {
+            "Source-free geometry requires an admitted recorded occurrence"
         }
-        require(input.targetBounds.containsRegisteredUniformRect(input.scissorBounds)) {
-            "Core primitive scissor must be non-empty and contained by its target"
+        val expectedFamily = when (input.sourceFamily) {
+            GPUCorePrimitiveSourceFamily.Rect -> "FillRect"
+            GPUCorePrimitiveSourceFamily.RRect -> "FillRRect"
+            GPUCorePrimitiveSourceFamily.PointLine, GPUCorePrimitiveSourceFamily.Path -> "FillPath"
+            else -> error("Source family is outside source-free occurrence admission")
         }
-        require(input.clipCoveragePlan !is GPUClipCoveragePlan.Refused) {
-            "Refused clip coverage cannot enter a core semantic payload"
+        require(facts.commandFamily == expectedFamily)
+        val snapshot = admitGeometry(
+            CorePrimitiveGeometryAdmissionInput(
+                input.sourceFamily, input.geometry, input.targetBounds, input.scissorBounds,
+                input.clipCoveragePlan, input.clipExecutionPlanIdentity, input.frameProvenance,
+                input.coverageMode, facts.corePrimitiveRectRouteAuthority,
+                facts.corePrimitiveRectGeometryAuthority, facts.corePrimitiveRRectGeometryAuthority,
+                null, null,
+            ),
+            CorePrimitivePathAuthorityAdmission.Generic,
+        )
+        return GPUCorePrimitiveCapturedGeometry(input.analysis, snapshot)
+    }
+
+    /** Checks the recorder's exact occurrence-to-ID join, without recapturing or resealing geometry. */
+    fun bindSourceGeometryIdentity(
+        captured: GPUCorePrimitiveCapturedGeometry,
+        recording: GPURecordingGeometryAnalysis,
+    ): GPUCorePrimitiveGeometryPlan {
+        val sourceGeometry = requireNotNull(recording.sourceGeometry)
+        require(sourceGeometry.commandGeometry.any { it === captured.analysis })
+        val occurrence = requireNotNull(captured.analysis.capturedCommand.deferredSourceOccurrence)
+        val command = recording.commands.single { it.deferredSourceOccurrence === occurrence }
+        val record = recording.analysis.records.single { it.commandIdValue == command.commandId.value }
+        require(record.commandFamily == captured.analysis.facts.commandFamily &&
+            record.corePrimitiveRectRouteAuthority == captured.snapshot.rectRouteAuthority &&
+            record.corePrimitiveRectGeometryAuthority === captured.snapshot.rectGeometryAuthority &&
+            record.corePrimitiveRRectGeometryAuthority === captured.snapshot.rrectGeometryAuthority)
+        val hasAnalysisIdentity = captured.snapshot.sourceFamily in setOf(
+            GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveSourceFamily.RRect,
+        )
+        require(hasCorePrimitiveAnalysisIdentityIntegrity(
+            command.commandId.value, captured.snapshot.sourceFamily,
+            record.recordId.takeIf { hasAnalysisIdentity }, record.commandFamily.takeIf { hasAnalysisIdentity },
+        )) { "Final analysis identity does not match its captured geometry occurrence" }
+        return GPUCorePrimitiveGeometryPlan(GPUCorePrimitiveGeometryAuthority.bindRecordedSnapshot(
+            command.commandId.value, captured.snapshot, record.recordId.takeIf { hasAnalysisIdentity },
+            record.commandFamily.takeIf { hasAnalysisIdentity },
+        ))
+    }
+
+    internal fun gatherPlannedW4cSemantic(
+        input: GPUCorePrimitivePayloadInput,
+    ): GPUDrawSemanticPayload.CorePrimitive =
+        gatherSemantic(input, CorePrimitivePathAuthorityAdmission.SealedW4c)
+
+    internal fun gatherPlannedW4dSemantic(
+        input: GPUCorePrimitivePayloadInput,
+    ): GPUDrawSemanticPayload.CorePrimitive =
+        gatherSemantic(input, CorePrimitivePathAuthorityAdmission.SealedW4d)
+
+    private fun gatherSemantic(
+        input: GPUCorePrimitivePayloadInput,
+        pathAuthorityAdmission: CorePrimitivePathAuthorityAdmission,
+    ): GPUDrawSemanticPayload.CorePrimitive {
+        val w5aMaterial = input.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
+        require(
+            if (w5aMaterial != null) input.premultipliedRgba.isEmpty()
+            else input.premultipliedRgba.isPremultipliedRgba(),
+        ) {
+            "Core primitive material must carry either a sealed W5a reference or finite premultiplied RGBA"
         }
         require(input.blendPlanIdentity.isNotBlank()) {
             "Core primitive blend identity must not be blank"
         }
-
-        val geometry = input.geometry.snapshotAndValidate(input.targetBounds)
-        require(
-            hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
-                input.commandIdValue,
-                input.sourceFamily,
-                geometry,
-                input.targetBounds,
-                input.coverageMode,
-                input.analysisRecordId,
-                input.analysisCommandFamily,
-                input.rectRouteAuthority,
-                input.rectGeometryAuthority,
-                input.rrectGeometryAuthority,
-                input.drrectOuterGeometryAuthority,
-                input.drrectInnerGeometryAuthority,
-            ),
-        ) {
-            "Core primitive analysis authority must match source family, identity, and exact geometry"
-        }
+        val geometryPlan = gatherGeometry(input.geometryInput(), pathAuthorityAdmission)
         val color = input.premultipliedRgba.toList()
         val material = input.material ?: GPUCorePrimitiveMaterialPayload.SolidColor(color)
+        return bindCapturedMaterial(geometryPlan, color, material, input.blendPlanIdentity)
+    }
+
+    /** The generated clear has a real solid source; joining it never re-admits its geometry. */
+    internal fun bindGeneratedClear(
+        geometryPlan: GPUCorePrimitiveGeometryPlan,
+        command: NormalizedDrawCommand.FillRect,
+        blendPlanIdentity: String,
+        geometryUniform: GPUCorePrimitiveGeometryUniformBytes,
+    ): GPUDrawSemanticPayload.CorePrimitive {
+        val source = command.material as? GPUMaterialDescriptor.SolidColor
+        require(command.commandId.value == geometryPlan.authority.commandIdI32 && command.commandId.value == 0 &&
+            command.source.operation == "clear" && command.deferredSourceOccurrence == null &&
+            source != null && source.r == 0f && source.g == 0f && source.b == 0f && source.a == 0f)
+        val color = listOf(source.r, source.g, source.b, source.a)
+        return bindCapturedMaterial(geometryPlan, color, GPUCorePrimitiveMaterialPayload.SolidColor(color),
+            blendPlanIdentity, geometryUniform)
+    }
+
+    private fun bindCapturedMaterial(
+        geometryPlan: GPUCorePrimitiveGeometryPlan,
+        color: List<Float>,
+        material: GPUCorePrimitiveMaterialPayload,
+        blendPlanIdentity: String,
+        geometryUniform: GPUCorePrimitiveGeometryUniformBytes? = null,
+    ): GPUDrawSemanticPayload.CorePrimitive {
+        val input = geometryPlan.authority
+        val geometry = input.geometry
         if (material is GPUCorePrimitiveMaterialPayload.SolidColor) {
             require(material.premultipliedRgba == color) {
                 "Core primitive solid material must match premultiplied RGBA"
             }
         }
-        val uniformBytes = corePrimitiveUniformBytes(input.targetBounds, material)
+        if (material is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1) {
+            return GPUDrawSemanticPayload.CorePrimitive(
+                payloadRef = GPUDrawPayloadRef(
+                    commandIdValue = input.commandIdI32,
+                    renderStepIdentity = CORE_PRIMITIVE_RENDER_STEP_IDENTITY,
+                    corePrimitiveMaterial = material,
+                ),
+                sourceFamily = input.sourceFamily,
+                geometry = geometry,
+                premultipliedRgba = emptyList(),
+                material = material,
+                targetBounds = input.targetBounds,
+                scissorBounds = input.scissorBounds,
+                clipCoveragePlan = geometryPlan.authority.clipCoveragePlan,
+                clipExecutionPlanIdentity = input.clipExecutionPlanIdentity,
+                blendPlanIdentity = blendPlanIdentity,
+                frameProvenance = input.frameProvenance,
+                coverageMode = input.coverageMode,
+                analysisRecordId = input.analysisRecordId,
+                analysisCommandFamily = input.analysisCommandFamily,
+                rectRouteAuthority = input.rectRouteAuthority,
+                rectGeometryAuthority = input.rectGeometryAuthority,
+                rrectGeometryAuthority = input.rrectGeometryAuthority,
+                drrectOuterGeometryAuthority = input.drrectOuterGeometryAuthority,
+                drrectInnerGeometryAuthority = input.drrectInnerGeometryAuthority,
+                geometryPlan = geometryPlan,
+            )
+        }
+        val uniformBytes = if (geometryUniform == null) corePrimitiveUniformBytes(input.targetBounds, material)
+            else geometryUniform.bindSourceColor(color).map { it.toInt() and 0xff }
         val fingerprint = corePrimitiveUniformFingerprint(uniformBytes)
         val gradient = material !is GPUCorePrimitiveMaterialPayload.SolidColor
         val block = GPUUniformPayloadBlock(
@@ -2116,10 +2455,10 @@ class GPUCorePrimitivePayloadGatherer {
             fields = corePrimitiveUniformFields(material),
         )
         val ref = GPUDrawPayloadRef(
-            commandIdValue = input.commandIdValue,
+            commandIdValue = input.commandIdI32,
             renderStepIdentity = CORE_PRIMITIVE_RENDER_STEP_IDENTITY,
             uniformSlot = GPUUniformPayloadSlot(
-                slotId = GPUPayloadSlotID("core-primitive:${input.commandIdValue}"),
+                slotId = GPUPayloadSlotID("core-primitive:${input.commandIdI32}"),
                 fingerprint = fingerprint,
                 byteOffset = 0L,
             ),
@@ -2134,9 +2473,9 @@ class GPUCorePrimitivePayloadGatherer {
             material = material,
             targetBounds = input.targetBounds,
             scissorBounds = input.scissorBounds,
-            clipCoveragePlan = input.clipCoveragePlan.snapshot(),
+            clipCoveragePlan = geometryPlan.authority.clipCoveragePlan,
             clipExecutionPlanIdentity = input.clipExecutionPlanIdentity,
-            blendPlanIdentity = input.blendPlanIdentity,
+            blendPlanIdentity = blendPlanIdentity,
             frameProvenance = input.frameProvenance,
             coverageMode = input.coverageMode,
             analysisRecordId = input.analysisRecordId,
@@ -2146,8 +2485,177 @@ class GPUCorePrimitivePayloadGatherer {
             rrectGeometryAuthority = input.rrectGeometryAuthority,
             drrectOuterGeometryAuthority = input.drrectOuterGeometryAuthority,
             drrectInnerGeometryAuthority = input.drrectInnerGeometryAuthority,
+            geometryPlan = geometryPlan,
         )
     }
+
+    private fun gatherGeometry(
+        input: GPUCorePrimitiveGeometryPlanInput,
+        pathAuthorityAdmission: CorePrimitivePathAuthorityAdmission,
+    ): GPUCorePrimitiveGeometryPlan {
+        require(input.commandIdValue >= 0) { "Core primitive command id must be non-negative" }
+        val snapshot = admitGeometry(
+            CorePrimitiveGeometryAdmissionInput(
+                input.sourceFamily, input.geometry, input.targetBounds, input.scissorBounds,
+                input.clipCoveragePlan, input.clipExecutionPlanIdentity, input.frameProvenance,
+                input.coverageMode, input.rectRouteAuthority, input.rectGeometryAuthority,
+                input.rrectGeometryAuthority, input.drrectOuterGeometryAuthority, input.drrectInnerGeometryAuthority,
+            ),
+            pathAuthorityAdmission,
+        )
+        require(hasCorePrimitiveAnalysisIdentityIntegrity(
+            input.commandIdValue, input.sourceFamily, input.analysisRecordId, input.analysisCommandFamily,
+        )) { "Core primitive analysis authority must match source family, identity, and exact geometry" }
+        return GPUCorePrimitiveGeometryPlan(GPUCorePrimitiveGeometryAuthority.bindRecordedSnapshot(
+            input.commandIdValue, snapshot, input.analysisRecordId, input.analysisCommandFamily,
+        ))
+    }
+
+    private fun admitGeometry(
+        input: CorePrimitiveGeometryAdmissionInput,
+        pathAuthorityAdmission: CorePrimitivePathAuthorityAdmission,
+    ): GPUCorePrimitiveGeometrySnapshot {
+        require(input.targetBounds.left == 0 && input.targetBounds.top == 0 &&
+            input.targetBounds.right > 0 && input.targetBounds.bottom > 0) {
+            "Core primitive target must be a non-empty zero-origin target"
+        }
+        require(input.targetBounds.containsRegisteredUniformRect(input.scissorBounds)) {
+            "Core primitive scissor must be non-empty and contained by its target"
+        }
+        require(input.clipCoveragePlan !is GPUClipCoveragePlan.Refused) {
+            "Refused clip coverage cannot enter a core semantic payload"
+        }
+        if (pathAuthorityAdmission != CorePrimitivePathAuthorityAdmission.Generic) {
+            val requiredAuthority = when (pathAuthorityAdmission) {
+                CorePrimitivePathAuthorityAdmission.SealedW4c -> GPUPathSourceAuthority.W4cPlannedPathFillV1
+                CorePrimitivePathAuthorityAdmission.SealedW4d -> GPUPathSourceAuthority.W4dPlannedPathStrokeV1
+                CorePrimitivePathAuthorityAdmission.Generic -> error("Generic admission has no sealed path authority")
+            }
+            require((input.geometry as? GPUCorePrimitiveGeometryInput.TriangulatedPath)?.sourceAuthority == requiredAuthority) {
+                "Sealed path gathering requires its matching planned path authority."
+            }
+        }
+        val geometry = input.geometry.snapshotAndValidate(input.targetBounds, pathAuthorityAdmission)
+        require(hasCorePrimitiveGeometryAuthorityIntegrity(
+            input.sourceFamily, geometry, input.targetBounds, input.coverageMode,
+            input.rectRouteAuthority,
+            input.rectGeometryAuthority, input.rrectGeometryAuthority, input.drrectOuterGeometryAuthority,
+            input.drrectInnerGeometryAuthority,
+        )) { "Core primitive analysis authority must match source family, identity, and exact geometry" }
+        return GPUCorePrimitiveGeometrySnapshot(
+            CORE_PRIMITIVE_RENDER_STEP_IDENTITY, input.sourceFamily, geometry, input.targetBounds,
+            input.scissorBounds, input.clipCoveragePlan.snapshot(), input.clipExecutionPlanIdentity,
+            input.frameProvenance, input.coverageMode, input.rectRouteAuthority, input.rectGeometryAuthority,
+            input.rrectGeometryAuthority, input.drrectOuterGeometryAuthority, input.drrectInnerGeometryAuthority,
+        )
+    }
+
+    /** Post-publication reference join; geometry and all its seals are retained by identity. */
+    fun bindSourceReference(
+        geometryPlan: GPUCorePrimitiveGeometryPlan,
+        ref: org.graphiks.kanvas.gpu.plan.MaterialPlanRef,
+        blendPlanIdentity: String,
+    ): GPUDrawSemanticPayload.CorePrimitive {
+        require(blendPlanIdentity.isNotBlank())
+        val geometry = geometryPlan.authority
+        val material = GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1(ref)
+        return GPUDrawSemanticPayload.CorePrimitive(
+            payloadRef = GPUDrawPayloadRef(geometry.commandIdI32, geometry.renderStepIdentity,
+                corePrimitiveMaterial = material),
+            sourceFamily = geometry.sourceFamily,
+            geometry = geometry.geometry,
+            premultipliedRgba = emptyList(),
+            material = material,
+            targetBounds = geometry.targetBounds,
+            scissorBounds = geometry.scissorBounds,
+            clipCoveragePlan = geometry.clipCoveragePlan,
+            clipExecutionPlanIdentity = geometry.clipExecutionPlanIdentity,
+            blendPlanIdentity = blendPlanIdentity,
+            frameProvenance = geometry.frameProvenance,
+            coverageMode = geometry.coverageMode,
+            analysisRecordId = geometry.analysisRecordId,
+            analysisCommandFamily = geometry.analysisCommandFamily,
+            rectRouteAuthority = geometry.rectRouteAuthority,
+            rectGeometryAuthority = geometry.rectGeometryAuthority,
+            rrectGeometryAuthority = geometry.rrectGeometryAuthority,
+            drrectOuterGeometryAuthority = geometry.drrectOuterGeometryAuthority,
+            drrectInnerGeometryAuthority = geometry.drrectInnerGeometryAuthority,
+            geometryPlan = geometryPlan,
+        )
+    }
+}
+
+/**
+ * Resolves one sealed W5a core material at the prepared-frame color-writing boundary.
+ * Geometry, coverage, clip, blend, and ordering authorities are copied verbatim; only the
+ * material reference acquires the frame source-stage witness and a neutral geometry
+ * uniform slot. Its actual color is evaluated from raw bindings in the fragment.
+ */
+internal fun GPUDrawSemanticPayload.CorePrimitive.materializeW5aSolid(
+    authority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.MaterializedSolidV2,
+    geometryUniform: GPUCorePrimitiveGeometryUniformBytes? = null,
+): GPUDrawSemanticPayload.CorePrimitive {
+    require(material is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1) {
+        "Only a sealed W5a core material reference may materialize through this bridge"
+    }
+    require(authority.validates(payloadRef.commandIdValue) && material.ref == authority.sourceRef) {
+        "W5a material authority must retain the exact frame command and material reference"
+    }
+    val premultipliedRgba = authority.premultipliedRgbaF32
+    require(premultipliedRgba.isPremultipliedRgba()) {
+        "W5a material lowering must produce finite premultiplied RGBA"
+    }
+    val solid = GPUCorePrimitiveMaterialPayload.SolidColor(authority)
+    val uniformBytes = geometryUniform?.bindSourceColor(premultipliedRgba)?.map { it.toInt() and 0xff }
+        ?: corePrimitiveUniformBytes(targetBounds, solid)
+    val fingerprint = corePrimitiveUniformFingerprint(uniformBytes)
+    val block = GPUUniformPayloadBlock(
+        fingerprint = fingerprint,
+        packingPlanHash = "core-primitive.uniform32-v1",
+        byteSize = corePrimitiveUniformByteSize(solid).toLong(),
+        zeroedPadding = true,
+        scope = "pass.core-primitive.prepared",
+        bytes = uniformBytes,
+        fields = corePrimitiveUniformFields(solid),
+    )
+    return GPUDrawSemanticPayload.CorePrimitive(
+        payloadRef = GPUDrawPayloadRef(
+            commandIdValue = payloadRef.commandIdValue,
+            renderStepIdentity = CORE_PRIMITIVE_RENDER_STEP_IDENTITY,
+            uniformSlot = GPUUniformPayloadSlot(
+                slotId = GPUPayloadSlotID("core-primitive:${payloadRef.commandIdValue}"),
+                fingerprint = fingerprint,
+                byteOffset = 0L,
+            ),
+            uniformBlock = block,
+            corePrimitiveMaterial = solid,
+        ),
+        sourceFamily = sourceFamily,
+        geometry = geometry,
+        premultipliedRgba = premultipliedRgba,
+        material = solid,
+        targetBounds = targetBounds,
+        scissorBounds = scissorBounds,
+        clipCoveragePlan = clipCoveragePlan,
+        clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+        blendPlanIdentity = blendPlanIdentity,
+        frameProvenance = frameProvenance,
+        coverageMode = coverageMode,
+        analysisRecordId = analysisRecordId,
+        analysisCommandFamily = analysisCommandFamily,
+        rectRouteAuthority = rectRouteAuthority,
+        rectGeometryAuthority = rectGeometryAuthority,
+        rrectGeometryAuthority = rrectGeometryAuthority,
+        drrectOuterGeometryAuthority = drrectOuterGeometryAuthority,
+        drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
+        geometryPlan = geometryPlan,
+    )
+}
+
+private enum class CorePrimitivePathAuthorityAdmission {
+    Generic,
+    SealedW4c,
+    SealedW4d,
 }
 
 private const val CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX = "core-primitive.uniform32-v1:"
@@ -2249,14 +2757,44 @@ private fun hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
     rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
     drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
     drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+): Boolean = hasCorePrimitiveAnalysisIdentityIntegrity(
+    commandIdValue, sourceFamily, analysisRecordId, analysisCommandFamily,
+) && hasCorePrimitiveGeometryAuthorityIntegrity(
+    sourceFamily, geometry, targetBounds, coverageMode, rectRouteAuthority, rectGeometryAuthority,
+    rrectGeometryAuthority, drrectOuterGeometryAuthority, drrectInnerGeometryAuthority,
+)
+
+private fun hasCorePrimitiveAnalysisIdentityIntegrity(
+    commandIdValue: Int,
+    sourceFamily: GPUCorePrimitiveSourceFamily,
+    analysisRecordId: String?,
+    analysisCommandFamily: String?,
+): Boolean = when (sourceFamily) {
+    GPUCorePrimitiveSourceFamily.Rect ->
+        analysisRecordId == "analysis.fill_rect.$commandIdValue" && analysisCommandFamily == "FillRect"
+    GPUCorePrimitiveSourceFamily.RRect ->
+        analysisRecordId == "analysis.fill_rrect.$commandIdValue" && analysisCommandFamily == "FillRRect"
+    GPUCorePrimitiveSourceFamily.DRRect ->
+        analysisRecordId == "analysis.fill_drrect.$commandIdValue" && analysisCommandFamily == "FillDRRect"
+    else -> analysisRecordId == null && analysisCommandFamily == null
+}
+
+private fun hasCorePrimitiveGeometryAuthorityIntegrity(
+    sourceFamily: GPUCorePrimitiveSourceFamily,
+    geometry: GPUCorePrimitiveGeometry,
+    targetBounds: GPUPixelBounds,
+    coverageMode: GPUCorePrimitiveCoverageMode,
+    rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+    rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+    drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
 ): Boolean {
     return when (sourceFamily) {
         GPUCorePrimitiveSourceFamily.Rect -> {
             if (rectRouteAuthority == null ||
                 rectGeometryAuthority == null ||
-                rrectGeometryAuthority != null ||
-                analysisRecordId != "analysis.fill_rect.$commandIdValue" ||
-                analysisCommandFamily != "FillRect"
+                rrectGeometryAuthority != null
             ) return false
             when (rectRouteAuthority) {
                 GPUCorePrimitiveRectRouteAuthority.RectAxisAligned ->
@@ -2292,8 +2830,6 @@ private fun hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
             rectRouteAuthority == null &&
                 rectGeometryAuthority == null &&
                 rrectGeometryAuthority != null &&
-                analysisRecordId == "analysis.fill_rrect.$commandIdValue" &&
-                analysisCommandFamily == "FillRRect" &&
                 coverageMode in setOf(
                     GPUCorePrimitiveCoverageMode.FullOrScissor,
                     GPUCorePrimitiveCoverageMode.ScalarAA,
@@ -2308,8 +2844,6 @@ private fun hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
             rectRouteAuthority == null && rectGeometryAuthority == null &&
                 rrectGeometryAuthority == null &&
                 drrectOuterGeometryAuthority != null && drrectInnerGeometryAuthority != null &&
-                analysisRecordId == "analysis.fill_drrect.$commandIdValue" &&
-                analysisCommandFamily == "FillDRRect" &&
                 coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
                 GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
                     drrectOuterGeometryAuthority,
@@ -2323,9 +2857,7 @@ private fun hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
             rectRouteAuthority == null &&
                 rectGeometryAuthority == null &&
                 rrectGeometryAuthority == null &&
-                drrectOuterGeometryAuthority == null && drrectInnerGeometryAuthority == null &&
-                analysisRecordId == null &&
-                analysisCommandFamily == null
+                drrectOuterGeometryAuthority == null && drrectInnerGeometryAuthority == null
     }
 }
 
@@ -2381,6 +2913,7 @@ private fun List<Float>.rawBits(): List<Int> = map(Float::toRawBits)
 
 private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
     target: GPUPixelBounds,
+    pathAuthorityAdmission: CorePrimitivePathAuthorityAdmission,
 ): GPUCorePrimitiveGeometry = when (this) {
     is GPUCorePrimitiveGeometryInput.Rect -> {
         require(listOf(left, top, right, bottom).all(Float::isFinite) && left < right && top < bottom) {
@@ -2417,6 +2950,18 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
         )
     }
     is GPUCorePrimitiveGeometryInput.TriangulatedPath -> {
+        require(
+            pathAuthorityAdmission != CorePrimitivePathAuthorityAdmission.SealedW4d || strokeStyle == null,
+        ) { "Sealed W4d path geometry retains stroke style only in its prepared authority." }
+        require(
+            when (sourceAuthority) {
+                GPUPathSourceAuthority.W4cPlannedPathFillV1 ->
+                    pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4c
+                GPUPathSourceAuthority.W4dPlannedPathStrokeV1 ->
+                    pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4d
+                else -> pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.Generic
+            },
+        ) { "Planned path source authority requires its matching sealed gathering route." }
         require(vertices.size >= 6 && vertices.size % 2 == 0 && vertices.all(Float::isFinite)) {
             "Core path geometry requires at least three finite xy vertices"
         }
@@ -2457,7 +3002,12 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(stroke == null) {
                     "Fill stencil edge fans cannot retain stroke lowering facts"
                 }
-                require(sourceVertexCount <= GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt()) {
+                val maxStencilEdges = if (pathAuthorityAdmission != CorePrimitivePathAuthorityAdmission.Generic) {
+                    PathFillLimitsI32().maxAttemptedEdgesPerPathI32
+                } else {
+                    GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt()
+                }
+                require(sourceVertexCount <= maxStencilEdges) {
                     CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC
                 }
                 require(sourceContourStarts.hasCanonicalContourLengths(sourceVertexCount)) {
@@ -2617,22 +3167,67 @@ private const val CORE_PRIMITIVE_GRADIENT_HEADER_BYTES = 80
 private const val CORE_PRIMITIVE_GRADIENT_MAX_STOPS = 16
 private const val CORE_PRIMITIVE_GRADIENT_STOP_BYTES = 32
 
+/** Packed geometry segments of the existing ABI; the source-color range is deliberately absent. */
+internal class GPUCorePrimitiveGeometryUniformBytes(
+    header: ByteArray,
+    geometry: ByteArray,
+) {
+    private val headerSnapshot = header.copyOf()
+    private val geometrySnapshot = geometry.copyOf()
+    val byteCountI32 = Math.addExact(Math.addExact(header.size, 16), geometry.size)
+
+    init {
+        require(headerSnapshot.size == 16 && byteCountI32 in setOf(32, 64, 80, 128, 160) ||
+            headerSnapshot.size == 32 && byteCountI32 == 64)
+    }
+
+    /** Only source bytes are encoded here; the geometry segments are copied verbatim. */
+    fun bindSourceColor(premultipliedRgba: List<Float>): ByteArray {
+        return ByteArray(byteCountI32).also {
+            copyGeometryInto(it, 0)
+            bindSourceColorInto(it, 0, premultipliedRgba)
+        }
+    }
+
+    fun copyGeometryInto(destination: ByteArray, offset: Int) {
+        require(offset >= 0 && offset <= destination.size - byteCountI32)
+        headerSnapshot.copyInto(destination, offset)
+        geometrySnapshot.copyInto(destination, Math.addExact(offset, headerSnapshot.size + 16))
+    }
+
+    fun bindSourceColorInto(destination: ByteArray, offset: Int, premultipliedRgba: List<Float>) {
+        require(offset >= 0 && offset <= destination.size - byteCountI32)
+        require(premultipliedRgba.isPremultipliedRgba()) { "Core source binding must be finite premultiplied RGBA" }
+        ByteBuffer.wrap(destination).order(ByteOrder.LITTLE_ENDIAN).apply {
+            position(Math.addExact(offset, headerSnapshot.size))
+            premultipliedRgba.forEach(::putFloat)
+        }
+    }
+}
+
+internal fun corePrimitiveGeometryUniformBytes(targetBounds: GPUPixelBounds): GPUCorePrimitiveGeometryUniformBytes =
+    GPUCorePrimitiveGeometryUniformBytes(ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putFloat(targetBounds.width.toFloat())
+        putFloat(targetBounds.height.toFloat())
+        putFloat(0f)
+        putFloat(0f)
+    }.array(), byteArrayOf())
+
 internal fun corePrimitiveUniformBytes(
     targetBounds: GPUPixelBounds,
     premultipliedRgba: List<Float>,
-): List<Int> = ByteBuffer.allocate(CORE_PRIMITIVE_UNIFORM_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
-    putFloat(targetBounds.width.toFloat())
-    putFloat(targetBounds.height.toFloat())
-    putFloat(0f)
-    putFloat(0f)
-    premultipliedRgba.forEach(::putFloat)
-}.array().map { it.toInt() and 0xff }
+): List<Int> = corePrimitiveGeometryUniformBytes(targetBounds).bindSourceColor(premultipliedRgba)
+    .map { it.toInt() and 0xff }
 
 internal fun corePrimitiveUniformByteSize(material: GPUCorePrimitiveMaterialPayload): Int =
-    if (material is GPUCorePrimitiveMaterialPayload.SolidColor) {
-        CORE_PRIMITIVE_UNIFORM_BYTES
-    } else {
-        CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
+    when (material) {
+        is GPUCorePrimitiveMaterialPayload.SolidColor -> CORE_PRIMITIVE_UNIFORM_BYTES
+        is GPUCorePrimitiveMaterialPayload.LinearGradient,
+        is GPUCorePrimitiveMaterialPayload.RadialGradient,
+        is GPUCorePrimitiveMaterialPayload.SweepGradient,
+        -> CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
+        is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 ->
+            error("A W5a material reference must materialize before core uniform packing")
     }
 
 private fun corePrimitiveUniformFields(material: GPUCorePrimitiveMaterialPayload): List<GPUUniformPayloadField> =
@@ -2707,6 +3302,8 @@ private fun corePrimitiveUniformFields(material: GPUCorePrimitiveMaterialPayload
                 zeroFilled = true,
             ),
         )
+        is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 ->
+            error("A W5a material reference must materialize before core uniform packing")
     }
 
 internal fun corePrimitiveUniformBytes(
@@ -2721,6 +3318,8 @@ internal fun corePrimitiveUniformBytes(
         gradientCorePrimitiveUniformBytes(targetBounds, material)
     is GPUCorePrimitiveMaterialPayload.SweepGradient ->
         gradientCorePrimitiveUniformBytes(targetBounds, material)
+    is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 ->
+        error("A W5a material reference must materialize before core uniform packing")
 }
 
 private fun gradientCorePrimitiveUniformBytes(
@@ -2733,6 +3332,8 @@ private fun gradientCorePrimitiveUniformBytes(
         is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.positions
         is GPUCorePrimitiveMaterialPayload.SolidColor ->
             error("Solid colors use the 32-byte CorePrimitive ABI")
+        is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 ->
+            error("W5a material references must materialize before core uniform packing")
     }
     val colors = when (material) {
         is GPUCorePrimitiveMaterialPayload.LinearGradient -> material.colors
@@ -2740,6 +3341,8 @@ private fun gradientCorePrimitiveUniformBytes(
         is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.colors
         is GPUCorePrimitiveMaterialPayload.SolidColor ->
             error("Solid colors use the 32-byte CorePrimitive ABI")
+        is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 ->
+            error("W5a material references must materialize before core uniform packing")
     }
     return ByteBuffer.allocate(CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES)
     .order(ByteOrder.LITTLE_ENDIAN)
@@ -2772,6 +3375,8 @@ private fun gradientCorePrimitiveUniformBytes(
             }
             is GPUCorePrimitiveMaterialPayload.SolidColor ->
                 error("Solid colors use the 32-byte CorePrimitive ABI")
+            is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 ->
+                error("W5a material references must materialize before core uniform packing")
         }
         repeat((CORE_PRIMITIVE_GRADIENT_HEADER_BYTES - position()) / Float.SIZE_BYTES) {
             putFloat(0f)
@@ -2799,6 +3404,8 @@ private fun GPUCorePrimitiveMaterialKind.wireValue(): Int = when (this) {
     GPUCorePrimitiveMaterialKind.RadialGradient -> 1
     GPUCorePrimitiveMaterialKind.SweepGradient -> 2
     GPUCorePrimitiveMaterialKind.LinearGradient -> 3
+    GPUCorePrimitiveMaterialKind.W5aMaterialPlanRef ->
+        error("W5a material references have no CorePrimitive native ABI tag")
 }
 
 /** Packs one closed registered shader payload without carrying source code or native handles. */
@@ -3374,6 +3981,9 @@ private fun preparedTextA8CanonicalHash(
     pageIndex: Int,
     instances: List<GPUTextA8Instance>,
     material: GPUPreparedMaterialProgram,
+    materialPlanProvenance:
+        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance?,
+    w5bFinalBlendPlan: org.graphiks.kanvas.gpu.plan.BlendPlan?,
     deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
     targetBounds: GPUPixelBounds,
     scissorBounds: GPUPixelBounds,
@@ -3422,6 +4032,13 @@ private fun preparedTextA8CanonicalHash(
         appendCanonicalField("material.paintAlpha", material.paintAlpha.toRawBits().toString())
         appendCanonicalField("material.sourceKind", material.sourceKind.name)
         appendCanonicalField("material.abiHash", material.abiHash)
+        materialPlanProvenance?.let { provenance ->
+            appendCanonicalField("material.w5aProvenance", provenance.canonicalIdentity())
+        }
+        appendCanonicalField(
+            "blend.w5bPlan",
+            w5bFinalBlendPlan?.canonicalLabel.orEmpty(),
+        )
         appendCanonicalField(
             "deviceToLocal",
             deviceToLocal.rawBits().joinToString(","),

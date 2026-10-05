@@ -196,6 +196,10 @@ internal object GPUPreparedStrokeRectLowerer {
                         ),
                     )
                 }
+                if (shader.alphaMode == org.graphiks.kanvas.paint.GradientAlphaMode.PREMULTIPLIED) {
+                    return refused("unsupported.material.gradient.alpha-mode", operationIndex,
+                        mapOf("alphaMode" to shader.alphaMode.name))
+                }
                 if (paint.colorFilter != null || !shader.isAdmittedStrokeGradient()) {
                     return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
                 }
@@ -547,6 +551,7 @@ private fun Shader.LinearGradient.isAdmittedStrokeGradient(): Boolean {
     val lengthSquared = dx * dx + dy * dy
     return tileMode == TileMode.CLAMP &&
         interpolation == ColorSpaceInterpolation.SRGB &&
+        alphaMode == org.graphiks.kanvas.paint.GradientAlphaMode.STRAIGHT &&
         start.x.isFinite() && start.y.isFinite() && end.x.isFinite() && end.y.isFinite() &&
         dx.isFinite() && dy.isFinite() && lengthSquared.isFinite() && lengthSquared > 0f &&
         stops.size in 1..16 &&

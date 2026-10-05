@@ -5,6 +5,13 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilAccess
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
+import org.graphiks.kanvas.gpu.plan.PlanResourceKind
+import org.graphiks.kanvas.gpu.plan.PlanResourceRole
+import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
@@ -16,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
@@ -334,6 +342,21 @@ internal class GPUFrameExecutor(
             }
         }
 
+        preparedFramePayloadPlannedPathDiagnostic(preparedFrame, consumedNativePayload)?.let { diagnostic ->
+            preparedFrame.rollbackAfterExecutionClaim()
+            telemetry.record(
+                GPUFrameStructuralPhase.Preflight,
+                GPUFrameStructuralEventKind.PreflightRefused,
+            )
+            return completedFailure(
+                attemptId,
+                diagnostic,
+                GPUFrameStructuralPhase.Preflight,
+                telemetry,
+                GPUFrameImmediateState.FailedBeforeSubmit(diagnostic),
+            )
+        }
+
         preparedFramePayloadMsaaDiagnostic(preparedFrame, consumedNativePayload)?.let { diagnostic ->
             preparedFrame.rollbackAfterExecutionClaim()
             telemetry.record(
@@ -473,10 +496,14 @@ internal class GPUFrameExecutor(
             is GPUPreparedNativeFrameBindingResult.Refused -> {
                 val discard = backend.safeDiscard(commandBuffer)
                 preparedFrame.rollbackAfterExecutionClaim()
-                val diagnostic = executionDiagnostic(
-                    submitOwnership.code,
-                    submitOwnership.message,
-                    mapOf("commandBufferDiscard" to discard.dumpLabel()),
+                val diagnostic = requireNotNull(
+                    preparedFrame.rollback.withOwnershipDiagnostics(
+                        executionDiagnostic(
+                            submitOwnership.code,
+                            submitOwnership.message,
+                            mapOf("commandBufferDiscard" to discard.dumpLabel()),
+                        ),
+                    ),
                 )
                 return completedFailure(
                     attemptId,
@@ -496,13 +523,14 @@ internal class GPUFrameExecutor(
                 counter = GPUFrameStructuralCounter.QueueSubmit,
             )
         } catch (failure: Throwable) {
-            val diagnostic = discardSurfaceAfterSubmit() ?: executionDiagnostic(
+            var diagnostic = discardSurfaceAfterSubmit() ?: executionDiagnostic(
                 "failed.frame-execution.submit",
                 "Frame submission failed synchronously.",
                 mapOf("failureClass" to failure::class.simpleName.orEmpty()),
             )
             retentionLedger.quarantine(registration, diagnostic)
             preparedFrame.rollback.quarantineNativeAfterSubmit()
+            diagnostic = requireNotNull(preparedFrame.rollback.withOwnershipDiagnostics(diagnostic))
             runCatching { completion.cancel(ticket) }
             telemetry.record(
                 GPUFrameStructuralPhase.Submitted,
@@ -533,21 +561,24 @@ internal class GPUFrameExecutor(
                     discardSurfaceAfterSubmit()
                     retentionLedger.quarantine(registration, submitted.diagnostic)
                     preparedFrame.rollback.quarantineNativeAfterSubmit()
+                    val diagnostic = requireNotNull(
+                        preparedFrame.rollback.withOwnershipDiagnostics(submitted.diagnostic),
+                    )
                     runCatching { completion.cancel(ticket) }
                     val snapshot = telemetry.seal(
                         GPUFrameStructuralPhase.Submitted,
                         GPUFrameStructuralOutcome.Failed,
-                        submitted.diagnostic.code.value,
+                        diagnostic.code.value,
                     )
                     return GPUFrameExecutionHandle(
                         attemptId,
-                        GPUFrameImmediateState.FailedAfterSubmit(ticket.ticketId, submitted.diagnostic),
+                        GPUFrameImmediateState.FailedAfterSubmit(ticket.ticketId, diagnostic),
                         CompletableFuture.completedFuture(
                             GPUFrameExecutionCompletedResult(
                                 attemptId,
                                 GPUFrameStructuralPhase.Submitted,
                                 GPUFrameStructuralOutcome.Failed,
-                                submitted.diagnostic,
+                                diagnostic,
                                 encodedKinds,
                                 snapshot,
                             ),
@@ -568,10 +599,11 @@ internal class GPUFrameExecutor(
         var postSubmitPresentDiagnostic: GPUDiagnostic? = null
 
         fun finishTerminal(
-            diagnostic: GPUDiagnostic?,
+            initialDiagnostic: GPUDiagnostic?,
             completedReadback: GPUFrameExecutionReadback? = null,
         ) {
             if (!finalized.compareAndSet(false, true)) return
+            val diagnostic = preparedFrame.rollback.withOwnershipDiagnostics(initialDiagnostic)
             val structuralOutcome = if (diagnostic == null) {
                 GPUFrameStructuralOutcome.Succeeded
             } else {
@@ -626,8 +658,8 @@ internal class GPUFrameExecutor(
                         )
                         else -> null
                     }
-                    val nativeReleased = preparedFrame.rollback.releaseNativeReadbackAfterOutput()
-                    if (!nativeReleased) {
+                    val nativeClosed = preparedFrame.rollback.closeNativeReadbackAfterOutput()
+                    if (!nativeClosed) {
                         diagnostic = executionDiagnostic(
                             "failed.native-frame-payload.readback-release",
                             "Output-owned native readback payload could not be released after unmap.",
@@ -638,12 +670,27 @@ internal class GPUFrameExecutor(
                         readback.finalizeAfterNativeClose(
                             expected,
                             operand,
-                            if (nativeReleased) {
+                            if (nativeClosed) {
                                 GPUFrameReadbackNativeOutputSafety.Released
                             } else {
                                 GPUFrameReadbackNativeOutputSafety.Quarantined
                             },
                         )
+                    }
+                    if (nativeClosed) {
+                        val finalization = if (finalizedPool == GPUFrameReadbackLifecycleResult.Applied) {
+                            GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback
+                        } else {
+                            GPUPreparedNativeFrameOutputLeaseFinalization.QuarantineUncertain
+                        }
+                        if (!preparedFrame.rollback.finalizeNativeReadbackAfterOutput(finalization) &&
+                            finalizedPool == GPUFrameReadbackLifecycleResult.Applied
+                        ) {
+                            diagnostic = executionDiagnostic(
+                                "failed.native-frame-payload.readback-release",
+                                "Output-owned native readback lease could not be finalized safely.",
+                            )
+                        }
                     }
                     if (finalizedPool is GPUFrameReadbackLifecycleResult.Refused) {
                         diagnostic = finalizedPool.diagnostic
@@ -658,27 +705,34 @@ internal class GPUFrameExecutor(
                     }
                 }
                 is GPUFrameReadbackMapDelivery.Failed -> {
-                    val nativeReleased = when (delivery.safety) {
+                    val nativeClosed = when (delivery.safety) {
                         GPUFrameReadbackMapFailureSafety.SafeToRelease -> {
-                            preparedFrame.rollback.releaseNativeReadbackAfterOutput().also { released ->
-                                if (!released) preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
+                            preparedFrame.rollback.closeNativeReadbackAfterOutput().also { closed ->
+                                if (!closed) preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                             }
                         }
-                        GPUFrameReadbackMapFailureSafety.Quarantine -> {
-                            preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
-                            false
-                        }
+                        GPUFrameReadbackMapFailureSafety.Quarantine -> false
                     }
                     val finalizedPool = safeReadbackLifecycle("finalizeAfterNativeClose") {
                         readback.finalizeAfterNativeClose(
                             expected,
                             operand,
-                            if (nativeReleased) {
+                            if (nativeClosed) {
                                 GPUFrameReadbackNativeOutputSafety.Released
                             } else {
                                 GPUFrameReadbackNativeOutputSafety.Quarantined
                             },
                         )
+                    }
+                    if (nativeClosed) {
+                        val finalization = if (finalizedPool == GPUFrameReadbackLifecycleResult.Applied) {
+                            GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback
+                        } else {
+                            GPUPreparedNativeFrameOutputLeaseFinalization.QuarantineUncertain
+                        }
+                        preparedFrame.rollback.finalizeNativeReadbackAfterOutput(finalization)
+                    } else {
+                        preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                     }
                     if (finalizedPool is GPUFrameReadbackLifecycleResult.Refused) {
                         finishTerminal(finalizedPool.diagnostic)
@@ -715,9 +769,7 @@ internal class GPUFrameExecutor(
             if (completionDiagnostic == null) {
                 when (val release = retentionLedger.complete(registration, delivery.outcome)) {
                     GPUFrameRetentionLedgerResult.Applied -> {
-                        if (preparedFrame.hasNativePayload &&
-                            !preparedFrame.rollback.releaseNativeAfterCompletion()
-                        ) {
+                        if (!preparedFrame.rollback.releaseNativeAfterCompletion(ticket)) {
                             completionDiagnostic = executionDiagnostic(
                                 "failed.native-frame-payload.release",
                                 "Completed native frame payload could not be released safely.",
@@ -767,7 +819,6 @@ internal class GPUFrameExecutor(
             }
             var diagnostic = completionDiagnostic ?: postSubmitPresentDiagnostic
             if (diagnostic != null && completionDiagnostic == null && preparedReadbackOutput != null) {
-                preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                 val finalizedPool = safeReadbackLifecycle("finalizeAfterNativeClose") {
                     readback.finalizeAfterNativeClose(
                         preparedReadbackOutput,
@@ -775,6 +826,7 @@ internal class GPUFrameExecutor(
                         GPUFrameReadbackNativeOutputSafety.Quarantined,
                     )
                 }
+                preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                 if (finalizedPool is GPUFrameReadbackLifecycleResult.Refused) {
                     diagnostic = finalizedPool.diagnostic
                 }
@@ -799,7 +851,6 @@ internal class GPUFrameExecutor(
                 return
             }
             if (!preparedFrame.rollback.claimNativeReadbackMapping()) {
-                preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                 val claimDiagnostic = executionDiagnostic(
                     "failed.native-frame-payload.readback-mapping-claim",
                     "Output-owned native readback payload could not be claimed for mapping.",
@@ -811,6 +862,7 @@ internal class GPUFrameExecutor(
                         GPUFrameReadbackNativeOutputSafety.Quarantined,
                     )
                 }
+                preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                 finishTerminal(
                     (finalizedPool as? GPUFrameReadbackLifecycleResult.Refused)?.diagnostic
                         ?: claimDiagnostic,
@@ -866,6 +918,7 @@ internal class GPUFrameExecutor(
                     }
                 }
                 runCatching { completion.cancel(ticket) }
+                diagnostic = requireNotNull(preparedFrame.rollback.withOwnershipDiagnostics(diagnostic))
                 telemetry.record(
                     GPUFrameStructuralPhase.Submitted,
                     GPUFrameStructuralEventKind.CompletionArmFailed,
@@ -986,6 +1039,7 @@ internal class GPUFrameExecutor(
                 }
             }
             runCatching { completion.cancel(ticket) }
+            diagnostic = requireNotNull(preparedFrame.rollback.withOwnershipDiagnostics(diagnostic))
             telemetry.record(
                 GPUFrameStructuralPhase.Submitted,
                 GPUFrameStructuralEventKind.CompletionArmFailed,
@@ -1115,6 +1169,12 @@ internal class GPUFrameExecutor(
                 "Prepared-frame MSAA authority requires one sealed native payload.",
             )
         }
+        if (frame.hasW4dGeneralMsaaPackets()) {
+            return if (frame.validatesW4dGeneralMsaa(sceneTarget)) null else executionDiagnostic(
+                "invalid.msaa.w4d_general_authority",
+                "W4d.2 MSAA scopes must match their complete sealed physical attachments and final resolve.",
+            )
+        }
         indexedRequests.forEachIndexed { sequenceIndex, (stepIndex, render, request) ->
             val key = request.key
             val expectedResolveBinding = preparedSceneTargetBindingKey(frame, render)
@@ -1216,6 +1276,14 @@ internal class GPUFrameExecutor(
             "unsupported.msaa.prepared_frame_payload_missing",
             "Prepared-frame MSAA authority requires one consumed native payload.",
         )
+        if (frame.hasW4dGeneralMsaaPackets()) {
+            return if (frame.validatesW4dGeneralMsaa(sceneTarget, exactPayload) {
+                backend.isCanonicalSceneTargetView(sceneTarget, it)
+            }) null else executionDiagnostic(
+                "invalid.msaa.w4d_general_native_operands",
+                "W4d.2 native MSAA attachments, continuity, or final resolve differ from the sealed frame.",
+            )
+        }
         val retainedViews = mutableMapOf<String, Any>()
         val canonicalResolveViews = mutableMapOf<String, Any>()
         val retainedDepthStencilViews = mutableMapOf<String, Any>()
@@ -1349,6 +1417,485 @@ internal class GPUFrameExecutor(
                 )
             }
             canonicalResolveViews[expectedResolveBinding] = resolve.view
+        }
+        return null
+    }
+
+    private fun preparedFramePayloadPlannedPathDiagnostic(
+        frame: PreparedGPUFrame,
+        payload: GPUPreparedNativeFramePayload?,
+    ): GPUDiagnostic? {
+        frame.semanticPlan.w6aLayerFrameV1?.let { authority ->
+            return if (authority.validatesNativePathPayload(frame, payload)) null else executionDiagnostic(
+                "w6a.layer.invalid_native_path", "W6 path operands differ from the frozen graph's stencil IDs, ordering or load/store.")
+        }
+        val allRenders = frame.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val composite = allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5aCompositeFrameAuthority }.firstOrNull()
+        if (composite != null && !composite.validates(frame.semanticPlan, allRenders)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5a-composite", "Composite execution requires its exact lane and packet authority.")
+        val w4eFinal = allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5bFinalFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.w4eLane != null }
+        if (w4eFinal != null && !w4eFinal.validates(frame.semanticPlan)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5b-w4e", "W4e execution requires its complete final-color frame.")
+        val w5bGeometry = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.geometryLanes.any { lane -> lane is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath } }
+        if (w5bGeometry != null && !w5bGeometry.validates(frame.semanticPlan)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5b-path-authority", "W5b path execution lost its exact geometry/color frame authority.")
+        val w5bGeneral = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.geometryLanes.any { lane -> lane is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General } }
+        if (w5bGeneral != null && !w5bGeneral.validates(frame.semanticPlan)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5b-general-authority", "General execution lost the complete sealed W5b frame.")
+        val renders = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
+            (step as? GPUFrameStep.RenderPassStep)?.let { render -> Triple(stepIndex, render, render.drawPackets.singleOrNull()) }
+        }.filter { (_, render, _) -> if (w4eFinal != null) render.drawPackets.any(requireNotNull(w4eFinal.w4eLane)::owns)
+        else if (w5bGeneral != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
+            w5bGeneral.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General
+        } else if (w5bGeometry != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
+            w5bGeometry.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath
+        } else composite == null || render.drawPackets.all {
+            it.corePrimitivePreparedAuthority?.let { authority -> authority.w4cSessionScratch != null || authority.w4dSessionScratch != null } == true
+        } }
+        val writableLoads = renders.filter { (_, render, _) ->
+            (render.depthStencilLoadStore as?
+                org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                    .WritableStencil)?.loadOperation ==
+                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
+        }
+        val hasW4c = frame.semanticPlan.hasSealedW4cSessionMarker() || w5bGeometry != null
+        val hasW4d = frame.semanticPlan.hasSealedW4dSessionMarker()
+        val pointWitness = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+        val hasW4e = renders.isNotEmpty() && renders.all { (_, _, packet) ->
+            packet?.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
+        }
+        if (hasW4e || pointWitness != null || w4eFinal != null) {
+            val renderSteps = frame.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            val w4ePackets = renderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+                .filter { packet -> packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared }
+            val authority = w4ePackets.firstOrNull()?.w4ePreparedFrameAuthority
+            if (pointWitness != null && !pointWitness.validates(frame.semanticPlan)) return executionDiagnostic(
+                "invalid.native-frame-payload.w5b-clip-frame-authority", "Point execution requires its exact clip-prefix and color frame authority.")
+            val w4eSteps = when {
+                w4eFinal != null -> renderSteps.filter { step -> step.drawPackets.any(requireNotNull(w4eFinal.w4eLane)::owns) }
+                pointWitness != null -> renderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size)
+                else -> renderSteps
+            }
+            if (w4ePackets.size != w4eSteps.size || authority == null || !authority.validatesRenderSteps(
+                    frame.semanticPlan.frameId.value,
+                    frame.semanticPlan.capabilitySeal.sealHash,
+                    w4eSteps,
+                )
+            ) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-frame-authority",
+                    "A W4e execution requires the same sealed graph, frame, resource-use, order, and atomic-group authority.",
+                )
+            }
+            val exactPayload = payload ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4e-missing",
+                "A sealed W4e frame requires its native payload before encoding.",
+            )
+            w4eSceneContinuationPayloadDiagnostic(frame, exactPayload)?.let { return it }
+            val renderScopes = exactPayload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .filter { w4eFinal == null || it.sourceStepIndex in renders.map { row -> row.first } }
+            return if (renderScopes.size != renders.size ||
+                renderScopes.map(GPUPreparedNativeScopeOperand.Render::sourceStepIndex) !=
+                    renders.map { (stepIndex, _, _) -> stepIndex }
+            ) {
+                executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-scope",
+                    "A sealed W4e frame requires one ordered native render operand per prepared pass.",
+                )
+            } else {
+                null
+            }
+        }
+        val w4dGeneralAuthority = renders.firstOrNull()?.third
+            ?.corePrimitivePreparedAuthority
+            ?.w4dGeneralFrameMaterializationAuthority
+        val hasW4dGeneral = w4dGeneralAuthority != null && renders.isNotEmpty() && renders.all { (_, _, packet) ->
+            packet?.corePrimitivePreparedAuthority?.w4dGeneralFrameMaterializationAuthority ===
+                w4dGeneralAuthority
+        }
+        if (!hasW4c && !hasW4d && !hasW4dGeneral) {
+            return if (writableLoads.isEmpty()) {
+                null
+            } else {
+                executionDiagnostic(
+                    "invalid.native-frame-payload.planned-path-writable-load",
+                    "Writable stencil Load is reserved for a sealed planned-path cover scope.",
+                )
+            }
+        }
+        if (hasW4dGeneral) {
+            val exactPayload = payload ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4d-general-missing",
+                "W4d.2 requires its sealed native payload before encoding.",
+            )
+            fun exactD24Authority(): Boolean {
+                fun matchesExpectedViews(
+                    actual: Map<Int, *>,
+                    expected: Map<Int, Any>,
+                ): Boolean = actual.keys == expected.keys && expected.all { (stepIndex, view) ->
+                    actual[stepIndex] === view
+                }
+
+                val expectedPathViews = linkedMapOf<Int, Any>()
+                val expectedClipViews = linkedMapOf<Int, Any>()
+                val stencilPairs = linkedMapOf<Pair<String, String>, MutableList<Triple<Int, PlanDepthStencilLoadStore, Any>>>()
+                if (w4dGeneralAuthority.pathPassFacts.size != renders.size) return false
+                renders.forEachIndexed { index, (stepIndex, render, packet) ->
+                    val fact = w4dGeneralAuthority.pathPassFacts[index]
+                    val scopeIndex = frame.encoderPlan.scopes.indexOfFirst { scope ->
+                        scope.sourceStepIndex == stepIndex
+                    }
+                    val native = exactPayload.scopeOperands.getOrNull(scopeIndex) as?
+                        GPUPreparedNativeScopeOperand.Render ?: return false
+                    if (native.sourceStepIndex != stepIndex ||
+                        packet?.passId != fact.pathPassId ||
+                        packet.commandIdValue != fact.commandIdValue ||
+                        render.samplePlan.sampleCount != fact.sampleCountI32
+                    ) {
+                        return false
+                    }
+                    val depthResourceId = fact.depthStencilResourceId
+                    if (depthResourceId == null) {
+                        if (render.resourceUses.any { use ->
+                                use.role == GPUFrameResourceRole.PathDepthStencil
+                            } || native.pass.depthStencilTarget != null ||
+                            native.pass.stencilLoadOperation != null ||
+                            native.pass.stencilStoreOperation != null ||
+                            native.pass.stencilClearValue != null
+                        ) {
+                            return false
+                        }
+                        return@forEachIndexed
+                    }
+                    val resource = w4dGeneralAuthority.resource(depthResourceId) ?: return false
+                    val resourceFact = w4dGeneralAuthority.resourceFact(depthResourceId) ?: return false
+                    if (resourceFact.kind != PlanResourceKind.Texture2D ||
+                        resourceFact.format != PlanTextureFormat.DepthStencil(
+                            PlanDepthStencilFormat.Depth24PlusStencil8,
+                        ) ||
+                        resourceFact.width != w4dGeneralAuthority.targetBounds.width ||
+                        resourceFact.height != w4dGeneralAuthority.targetBounds.height ||
+                        resourceFact.sampleCountI32 != fact.sampleCountI32 ||
+                        PlanResourceUsage.DepthStencilAttachment !in resourceFact.usages
+                    ) {
+                        return false
+                    }
+                    // The standalone AA graph retains its D24S8 attachment on a direct
+                    // color phase, but both aspects are read-only and perform no operations.
+                    if (fact.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleDirectColor &&
+                        fact.depthStencilAccess == null && fact.depthStencilLoadStore == null
+                    ) {
+                        val view = native.pass.depthStencilTarget ?: return false
+                        val use = render.resourceUses.singleOrNull { it.role == GPUFrameResourceRole.PathDepthStencil }
+                        if (fact.sampleCountI32 != 4 || resourceFact.role != PlanResourceRole.DepthStencil ||
+                            use?.resource != resource || use.usage != GPUFrameResourceUsage.RenderAttachment || !use.write ||
+                            render.depthStencilLoadStore != null ||
+                            exactPayload.pathDepthStencilViewAuthority[stepIndex] !== view.view ||
+                            view.deviceGeneration != frame.generationSeal.deviceGeneration ||
+                            view.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                            !native.pass.depthReadOnly || !native.pass.stencilReadOnly ||
+                            native.pass.depthLoadOperation != null || native.pass.depthStoreOperation != null ||
+                            native.pass.depthClearValue != null || native.pass.stencilLoadOperation != null ||
+                            native.pass.stencilStoreOperation != null || native.pass.stencilClearValue != null
+                        ) return false
+                        expectedPathViews[stepIndex] = view.view
+                        return@forEachIndexed
+                    }
+                    val expectedState = when (fact.depthStencilLoadStore) {
+                        PlanDepthStencilLoadStore.ClearZeroStore -> Triple(
+                            PlanDepthStencilAccess.Write,
+                            GPUPreparedNativeLoadOperation.Clear,
+                            0u,
+                        )
+                        PlanDepthStencilLoadStore.LoadStoreTestReset -> Triple(
+                            PlanDepthStencilAccess.ReadWrite,
+                            GPUPreparedNativeLoadOperation.Load,
+                            null,
+                        )
+                        null -> return false
+                    }
+                    val expectedPacketRole = when (fact.depthStencilLoadStore) {
+                        PlanDepthStencilLoadStore.ClearZeroStore ->
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer
+                        PlanDepthStencilLoadStore.LoadStoreTestReset ->
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover
+                    }
+                    val expectedLoadStore = org.graphiks.kanvas.gpu.renderer.recording
+                        .GPUDepthStencilLoadStorePlan.WritableStencil(
+                            if (expectedState.second == GPUPreparedNativeLoadOperation.Clear) {
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear
+                            } else {
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
+                            },
+                            org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                            expectedState.third,
+                        )
+                    val pathUse = render.resourceUses.singleOrNull { use ->
+                        use.role == GPUFrameResourceRole.PathDepthStencil
+                    }
+                    val depthTarget = native.pass.depthStencilTarget ?: return false
+                    val sealedView = when (resourceFact.role) {
+                        PlanResourceRole.DepthStencil -> exactPayload.pathDepthStencilViewAuthority[stepIndex]
+                        PlanResourceRole.PathHardEdgeDepthStencil -> exactPayload.clipDepthStencilViewAuthority[stepIndex]
+                        else -> return false
+                    }
+                    if (packet.role != expectedPacketRole ||
+                        fact.depthStencilAccess != expectedState.first ||
+                        render.depthStencilLoadStore != expectedLoadStore ||
+                        pathUse?.resource != resource ||
+                        pathUse.usage != org.graphiks.kanvas.gpu.renderer.resources
+                            .GPUFrameResourceUsage.RenderAttachment ||
+                        !pathUse.write ||
+                        sealedView !== depthTarget.view ||
+                        depthTarget.deviceGeneration != frame.generationSeal.deviceGeneration ||
+                        depthTarget.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                        !native.pass.depthReadOnly || native.pass.stencilReadOnly ||
+                        native.pass.stencilLoadOperation != expectedState.second ||
+                        native.pass.stencilStoreOperation != GPUPreparedNativeStoreOperation.Store ||
+                        native.pass.stencilClearValue != expectedState.third
+                    ) {
+                        return false
+                    }
+                    when (resourceFact.role) {
+                        PlanResourceRole.DepthStencil -> expectedPathViews[stepIndex] = depthTarget.view
+                        PlanResourceRole.PathHardEdgeDepthStencil -> expectedClipViews[stepIndex] = depthTarget.view
+                    }
+                    val atomicGroup = fact.atomicGroupId ?: return false
+                    stencilPairs.getOrPut(depthResourceId to atomicGroup) { mutableListOf() } +=
+                        Triple(stepIndex, fact.depthStencilLoadStore, depthTarget.view)
+                }
+                val pairsAreContinuous = stencilPairs.values.all { pair ->
+                    val producer = pair.singleOrNull { entry ->
+                        entry.second == PlanDepthStencilLoadStore.ClearZeroStore
+                    }
+                    val cover = pair.singleOrNull { entry ->
+                        entry.second == PlanDepthStencilLoadStore.LoadStoreTestReset
+                    }
+                    pair.size == 2 && producer != null && cover != null &&
+                        producer.first < cover.first && producer.third === cover.third
+                }
+                val writableSteps = writableLoads.map { (stepIndex, _, _) -> stepIndex }.toSet()
+                val expectedWritableSteps = stencilPairs.values.flatMap { pair ->
+                    pair.filter { entry -> entry.second == PlanDepthStencilLoadStore.LoadStoreTestReset }
+                        .map(Triple<Int, PlanDepthStencilLoadStore, Any>::first)
+                }.toSet()
+                return pairsAreContinuous && writableSteps == expectedWritableSteps &&
+                    matchesExpectedViews(exactPayload.pathDepthStencilViewAuthority, expectedPathViews) &&
+                    matchesExpectedViews(exactPayload.clipDepthStencilViewAuthority, expectedClipViews)
+            }
+            return if (hasW4c || hasW4d || !exactD24Authority()) {
+                executionDiagnostic(
+                    "invalid.native-frame-payload.w4d-general-authority",
+                    "W4d.2 writable stencil scopes require exact sealed D24S8 payload authority.",
+                )
+            } else {
+                null
+            }
+        }
+        if (composite == null && hasW4c == hasW4d) {
+            return executionDiagnostic(
+                "invalid.native-frame-payload.planned-path-authority",
+                "A prepared frame must retain exactly one W4c or W4d planned-path authority.",
+            )
+        }
+        val lane = if (hasW4d) "w4d" else "w4c"
+        val laneName = lane.replaceFirstChar(Char::uppercaseChar)
+        val exactPayload = payload ?: return executionDiagnostic(
+            "unsupported.native-frame-payload.$lane-missing",
+            "A planned $laneName frame requires one consumed native payload before encoding.",
+        )
+        val plannedScratch: Any = if (w5bGeometry != null) {
+            w5bGeometry.geometryLanes.filterIsInstance<org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath>().first().nativeAuthority
+        } else if (hasW4d) {
+            renders.mapNotNull { (_, _, packet) ->
+                packet?.corePrimitivePreparedAuthority?.w4dSessionScratch
+            }.firstOrNull()
+        } else {
+            renders.mapNotNull { (_, _, packet) ->
+                packet?.corePrimitivePreparedAuthority?.w4cSessionScratch
+            }.firstOrNull()
+        } ?: return executionDiagnostic(
+            "invalid.native-frame-payload.$lane-authority",
+            "A planned $laneName frame is missing its common packet authority.",
+        )
+        var sharedPathDepthStencilView: Any? = null
+        val compositeDepthViews = java.util.IdentityHashMap<Any, Any>()
+        renders.forEach { (stepIndex, render, packet) ->
+            val exactPacket = packet ?: return executionDiagnostic(
+                "invalid.native-frame-payload.$lane-authority",
+                "Each planned $laneName render scope must contain exactly one packet.",
+            )
+            val packetScratch = exactPacket.corePrimitivePreparedAuthority?.let { authority ->
+                if (w5bGeometry != null) (w5bGeometry.scratchFor(exactPacket) as org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath).nativeAuthority
+                else if (composite != null) authority.w4dSessionScratch ?: authority.w4cSessionScratch
+                else if (hasW4d) authority.w4dSessionScratch else authority.w4cSessionScratch
+            }
+            val expectedScratch = if (w5bGeometry != null) (w5bGeometry.scratchFor(exactPacket) as org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath).nativeAuthority
+            else if (composite == null) plannedScratch else composite.lanes.singleOrNull { lane ->
+                lane.packets.any { it === exactPacket }
+            }?.packets?.firstOrNull()?.corePrimitivePreparedAuthority?.let { authority ->
+                authority.w4dSessionScratch ?: authority.w4cSessionScratch
+            }
+            if (expectedScratch == null || packetScratch !== expectedScratch) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.$lane-authority",
+                    "$laneName render packets must retain one shared planned scratch authority.",
+                )
+            }
+            val scopeIndex = frame.encoderPlan.scopes.indexOfFirst { scope ->
+                scope.sourceStepIndex == stepIndex
+            }
+            val native = exactPayload.scopeOperands.getOrNull(scopeIndex) as?
+                GPUPreparedNativeScopeOperand.Render ?: return executionDiagnostic(
+                "invalid.native-frame-payload.$lane-scope",
+                "Each planned $laneName render step requires one exact native render operand.",
+            )
+            val pathUses = render.resourceUses.filter { use ->
+                use.role == GPUFrameResourceRole.PathDepthStencil
+            }
+            val expectedLoadStore = when (exactPacket.role) {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ->
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                        .WritableStencil(
+                            org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                            org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                            0u,
+                        )
+                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover ->
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                        .WritableStencil(
+                            org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load,
+                            org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                            null,
+                        )
+                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.Shading -> null
+                else -> return executionDiagnostic(
+                    "invalid.native-frame-payload.$lane-role",
+                    "A planned $laneName frame admits only direct shading, path producer, and path cover roles.",
+                )
+            }
+            if (expectedLoadStore == null) {
+                if (render.depthStencilLoadStore != null || pathUses.isNotEmpty() ||
+                    native.pass.depthStencilTarget != null || native.pass.stencilLoadOperation != null ||
+                    native.pass.stencilStoreOperation != null || native.pass.stencilClearValue != null
+                ) {
+                    return executionDiagnostic(
+                        "invalid.native-frame-payload.$lane-direct-state",
+                        "$laneName direct shading must remain color-only without a stencil attachment.",
+                    )
+                }
+                return@forEach
+            }
+            val depthStencil = native.pass.depthStencilTarget
+            val sealedDepthStencil = exactPayload.pathDepthStencilViewAuthority[stepIndex]
+            val expectedNativeLoad = when (expectedLoadStore.loadOperation) {
+                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear ->
+                    GPUPreparedNativeLoadOperation.Clear
+                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load ->
+                    GPUPreparedNativeLoadOperation.Load
+            }
+            if (render.depthStencilLoadStore != expectedLoadStore ||
+                pathUses.singleOrNull()?.let { use ->
+                    use.write &&
+                        use.usage == org.graphiks.kanvas.gpu.renderer.resources
+                            .GPUFrameResourceUsage.RenderAttachment
+                } != true ||
+                depthStencil == null || sealedDepthStencil !== depthStencil.view ||
+                depthStencil.deviceGeneration != frame.generationSeal.deviceGeneration ||
+                depthStencil.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                native.pass.stencilReadOnly ||
+                native.pass.stencilLoadOperation != expectedNativeLoad ||
+                native.pass.stencilStoreOperation != GPUPreparedNativeStoreOperation.Store ||
+                native.pass.stencilClearValue !=
+                    expectedLoadStore.clearValue
+            ) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.$lane-stencil-state",
+                    "$laneName path producer and cover operands must retain their exact writable stencil state.",
+                )
+            }
+            val previousDepthView = if (composite == null && w5bGeometry == null) sharedPathDepthStencilView else compositeDepthViews[expectedScratch]
+            if (previousDepthView != null && previousDepthView !== depthStencil.view) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.$lane-depth-stencil-continuity",
+                    "$laneName producer and cover operands must share one D24S8 view.",
+                )
+            }
+            sharedPathDepthStencilView = depthStencil.view
+            if (composite != null || w5bGeometry != null) compositeDepthViews[expectedScratch] = depthStencil.view
+        }
+        val coverStepIndices = renders.mapNotNull { (stepIndex, _, packet) ->
+            stepIndex.takeIf {
+                packet?.role ==
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover
+            }
+        }
+        if (writableLoads.map { (stepIndex, _, _) -> stepIndex } != coverStepIndices) {
+            return executionDiagnostic(
+                "invalid.native-frame-payload.$lane-writable-load",
+                "Every planned $laneName cover, and no other scope, must retain writable stencil Load.",
+            )
+        }
+        return null
+    }
+
+    /** Executes W4e's own scene MSAA ABI without widening generic or W4d.2 continuation rules. */
+    private fun w4eSceneContinuationPayloadDiagnostic(
+        frame: PreparedGPUFrame,
+        payload: GPUPreparedNativeFramePayload,
+    ): GPUDiagnostic? {
+        val scopes = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+            val continuation = render.w4eSceneContinuation ?: return@mapIndexedNotNull null
+            Triple(stepIndex, render, continuation)
+        }
+        if (scopes.isEmpty()) return null
+        val retainedViews = mutableMapOf<String, Any>()
+        scopes.forEachIndexed { order, (stepIndex, render, continuation) ->
+            val scope = payload.scopeOperands.singleOrNull { operand -> operand.sourceStepIndex == stepIndex } as?
+                GPUPreparedNativeScopeOperand.Render ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4e-scene-scope",
+                "W4e scene continuation requires one native render scope per sealed scene pass.",
+            )
+            val expectedLoad = if (order == 0) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load
+            val resolve = scope.pass.resolveTarget
+            val expectsResolve = continuation.resolveAction ==
+                org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction.ResolveCanonical
+            val sealedLayerTarget = render.resourceUses.singleOrNull { use ->
+                use.resource.value.substringAfterLast('.') == continuation.sceneTargetResourceId &&
+                    use.role == GPUFrameResourceRole.LayerTarget &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+            } != null
+            val sealedCanonicalResolve = !expectsResolve || render.resourceUses.singleOrNull { use ->
+                use.resource.value.substringAfterLast('.') == requireNotNull(continuation.resolveSceneResourceId) &&
+                    use.role == GPUFrameResourceRole.SceneTarget &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+            } != null
+            if (render.samplePlan != org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.MultisampleFrame(4) ||
+                render.sampleContinuation != null ||
+                !sealedLayerTarget || !sealedCanonicalResolve ||
+                scope.pass.loadOperation != expectedLoad ||
+                scope.pass.storeOperation != GPUPreparedNativeStoreOperation.Store ||
+                (expectsResolve != (resolve != null)) ||
+                (expectsResolve && !backend.isCanonicalSceneTargetView(sceneTarget, requireNotNull(resolve)))
+            ) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-scene-continuation",
+                    "W4e scene scope load/store/resolve behavior contradicts its sealed continuation.",
+                )
+            }
+            val retained = retainedViews[continuation.sceneTargetResourceId]
+            if (retained != null && retained !== scope.pass.colorTarget.view) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-scene-continuity",
+                    "W4e scene continuation changed its retained four-sample color attachment.",
+                )
+            }
+            retainedViews[continuation.sceneTargetResourceId] = scope.pass.colorTarget.view
         }
         return null
     }

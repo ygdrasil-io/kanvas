@@ -6,6 +6,7 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.reflect.KClass
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 
@@ -179,12 +180,15 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             // formula pipelines sample it (Graphite DrawContext dst-copy recipe).
             GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
         hasDestinationCopy &&
-            GPUDrawSemanticPayload.ColorGlyph::class in distinct &&
+            (GPUDrawSemanticPayload.ColorGlyph::class in distinct ||
+                GPUDrawSemanticPayload.TextA8::class in distinct ||
+                GPUDrawSemanticPayload.Vertices::class in distinct) &&
             distinct.all { semanticClass ->
                 semanticClass == GPUDrawSemanticPayload.CorePrimitive::class ||
                     semanticClass == GPUDrawSemanticPayload.SampledImage::class ||
                     semanticClass == GPUDrawSemanticPayload.TextA8::class ||
-                    semanticClass == GPUDrawSemanticPayload.ColorGlyph::class
+                    semanticClass == GPUDrawSemanticPayload.ColorGlyph::class ||
+                    semanticClass == GPUDrawSemanticPayload.Vertices::class
             } -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
         hasDestinationCopy && distinct.toSet() == setOf(GPUDrawSemanticPayload.MaskBlur::class) ||
         hasDestinationCopy && distinct.toSet() == setOf(
@@ -265,6 +269,9 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val corePrimitiveLimits: GPULimits? = null,
     private val preparedSurfaceMixedMaterializer: GPUPreparedNativeFramePayloadMaterializer? = null,
     private val onDestinationSnapshotCreated: () -> Unit = {},
+    private val decodedImageCache: GPUW5eDecodedImageSessionCache? = null,
+    private val runtimeResourceCache: GPUW5hRuntimeResourceSessionCache? = null,
+    private val spatialFilterCache: GPUW6cSpatialFilterSessionCache? = null,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preparedSurfaceMixedAvailable =
         preparedSurfaceMixedMaterializer?.capabilities?.contains(
@@ -281,9 +288,26 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private var delegate: GPUPreparedNativeFramePayloadMaterializer? = null
     private var closed = false
 
+    internal fun spatialFilterCacheOrNull(): GPUW6cSpatialFilterSessionCache? = spatialFilterCache
+
     @Synchronized
     override fun materializeReusable(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        require(sourceWitness.authenticates(framePlan)) { "W5h source witness belongs to another frame root" }
+        val geometry = materializeGeometry(framePlan, sourceWitness, encoderPlan, resources, generationSeal)
+        val limits = corePrimitiveLimits ?: return geometry
+        return materializeW5aSourcePartitionV2(device, queue, limits, framePlan, sourceWitness, geometry, corePrimitiveCache,
+            decodedImageCache,runtimeResourceCache)
+    }
+
+    private fun materializeGeometry(
+        framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
@@ -292,6 +316,65 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
             return GPUPreparedNativeFramePayloadMaterialization.Refused(
                 "unsupported.native-frame-payload.dispatcher-state",
                 "The prepared frame payload dispatcher is one-shot and already consumed.",
+            )
+        }
+        if (framePlan.w6aLayerFrameV1 != null) {
+            val materializer = GPUWgpu4kW6aLayerFramePayloadMaterializer(device, queue, preparedSceneTarget,
+                decodedImageCache, runtimeResourceCache, spatialFilterCache)
+            delegate = materializer
+            return materializer.materializeReusable(framePlan, sourceWitness, encoderPlan, resources, generationSeal)
+        }
+        val w4eRenderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val hasW4e = w4eRenderSteps.any { step ->
+            step.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
+        }
+        if (hasW4e) {
+            val pointWitness = w4eRenderSteps.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+                .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+            val nativeFinal = w4eRenderSteps.flatMap { it.drawPackets }.mapNotNull { it.w5bFinalFrameWitnessV3 }
+                .firstOrNull()?.takeIf { it.w4eLane != null }
+            if (nativeFinal != null && !nativeFinal.validates(framePlan)) return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                "invalid.native-frame-payload.w5b-w4e", "W4e final-color materialization requires its complete sealed frame.")
+            val prefixSteps = when {
+                nativeFinal != null -> w4eRenderSteps.filter { step -> step.drawPackets.any(requireNotNull(nativeFinal.w4eLane)::owns) }
+                pointWitness != null && pointWitness.validates(framePlan) -> w4eRenderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size)
+                else -> w4eRenderSteps
+            }
+            if (prefixSteps.isEmpty() || prefixSteps.any { step ->
+                    step.drawPackets.size != 1 || step.drawPackets.single().role != GPUDrawPacketRole.W4ePrepared
+                }) {
+                return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                    "invalid.native-frame-payload.w4e-semantic-shape",
+                    "A W4e frame requires one sealed W4e packet in every render scope.",
+                )
+            }
+            val surfaceRoute = when (val split = splitWgpu4kSurfaceRoute(framePlan, encoderPlan)) {
+                Wgpu4kSurfaceRouteSplit.NoSurface -> null
+                is Wgpu4kSurfaceRouteSplit.Routed -> split
+                is Wgpu4kSurfaceRouteSplit.Refused -> return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                    split.code,
+                    split.message,
+                )
+            }
+            return dispatch(
+                GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+                    device,
+                    queue,
+                    preparedSceneTarget,
+                    corePrimitiveCache,
+                    corePrimitiveLimits ?: return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                        "unsupported.native-core-primitive.limits-unavailable",
+                        "The direct W4e route requires observed backend limits.",
+                    ),
+                    onDestinationSnapshotCreated = onDestinationSnapshotCreated,
+                ),
+                surfaceRoute?.reusableFramePlan ?: framePlan,
+                sourceWitness,
+                surfaceRoute?.reusableEncoderPlan ?: encoderPlan,
+                encoderPlan,
+                surfaceRoute,
+                resources,
+                generationSeal,
             )
         }
         val fullSemantics = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
@@ -303,7 +386,17 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         val hasLayerCompositeSteps = framePlan.steps.any {
             it is GPUFrameStep.LayerCompositeRenderStep
         }
-        if (hasLayerCompositeSteps ||
+        val commonCorePackets = w4eRenderSteps.flatMap { it.drawPackets }
+            .filter { it.corePrimitivePreparedAuthority?.materialDispatchPlan != null }
+        val commonPreparedFrame = commonCorePackets.isNotEmpty()
+        if (commonPreparedFrame && commonCorePackets.mapNotNull { it.w5bMixedFrameWitnessV1 }
+                .distinct().singleOrNull()?.validates(framePlan) != true) {
+            return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                "invalid.native-frame-payload.common-prepared-frame",
+                "Common Core geometry requires its exact prepared frame witness.",
+            )
+        }
+        if (commonPreparedFrame || hasLayerCompositeSteps ||
             selectWgpu4kPreparedFramePayloadRoute(
                 fullSemantics.map { it::class },
                 fullHasDestinationCopy,
@@ -311,6 +404,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         ) {
             return dispatchPreparedSurfaceMixed(
                 framePlan,
+                sourceWitness,
                 encoderPlan,
                 resources,
                 generationSeal,
@@ -329,8 +423,12 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         val semantics = reusableFramePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { step -> step.drawPackets.mapNotNull { it.semanticPayload } }
         val hasDestinationCopy = reusableFramePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }
+        val clearOnlyWitness = reusableFramePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .mapNotNull { it.w5bInitialClearV3?.clearOnly }.singleOrNull()
         return when (
-            val route = selectWgpu4kPreparedFramePayloadRoute(
+            val route = if (clearOnlyWitness?.validates(reusableFramePlan) == true) {
+                GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
+            } else selectWgpu4kPreparedFramePayloadRoute(
                 semantics.map { it::class },
                 hasDestinationCopy,
             )
@@ -343,6 +441,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     destinationCopyCache,
                 ),
                 reusableFramePlan,
+                sourceWitness,
                 reusableEncoderPlan,
                 encoderPlan,
                 surfaceRoute,
@@ -357,6 +456,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     solidRectCache,
                 ),
                 reusableFramePlan,
+                sourceWitness,
                 reusableEncoderPlan,
                 encoderPlan,
                 surfaceRoute,
@@ -376,6 +476,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     onDestinationSnapshotCreated = onDestinationSnapshotCreated,
                 ),
                 reusableFramePlan,
+                sourceWitness,
                 reusableEncoderPlan,
                 encoderPlan,
                 surfaceRoute,
@@ -390,6 +491,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     registeredUniformRectCache,
                 ),
                 reusableFramePlan,
+                sourceWitness,
                 reusableEncoderPlan,
                 encoderPlan,
                 surfaceRoute,
@@ -404,6 +506,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     separableBlurRectCache,
                 ),
                 reusableFramePlan,
+                sourceWitness,
                 reusableEncoderPlan,
                 encoderPlan,
                 surfaceRoute,
@@ -424,6 +527,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     onDestinationSnapshotCreated = onDestinationSnapshotCreated,
                 ),
                 reusableFramePlan,
+                sourceWitness,
                 reusableEncoderPlan,
                 encoderPlan,
                 surfaceRoute,
@@ -433,6 +537,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
             GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed ->
                 dispatchPreparedSurfaceMixed(
                     framePlan,
+                    sourceWitness,
                     encoderPlan,
                     resources,
                     generationSeal,
@@ -444,6 +549,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
 
     private fun dispatchPreparedSurfaceMixed(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
@@ -457,6 +563,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         delegate = selected
         return selected.materializeReusable(
             framePlan,
+            sourceWitness,
             encoderPlan,
             resources,
             generationSeal,
@@ -466,6 +573,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private fun dispatch(
         selected: GPUPreparedNativeFramePayloadMaterializer,
         reusableFramePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         reusableEncoderPlan: GPUCommandEncoderPlan,
         fullEncoderPlan: GPUCommandEncoderPlan,
         surfaceRoute: Wgpu4kSurfaceRouteSplit.Routed?,
@@ -476,6 +584,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         if (surfaceRoute == null) {
             return selected.materializeReusable(
                 reusableFramePlan,
+                sourceWitness,
                 reusableEncoderPlan,
                 resources,
                 generationSeal,
@@ -487,6 +596,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
             materializeWithSurfaceBlit = {
                 selected.materializeReusable(
                     reusableFramePlan,
+                    sourceWitness,
                     reusableEncoderPlan,
                     resources,
                     generationSeal,
@@ -614,6 +724,9 @@ private fun splitWgpu4kSurfaceRoute(
             phaseOrder = framePlan.phaseOrder,
             elidedNoOpDraws = framePlan.elidedNoOpDraws,
             atomicallyRefused = framePlan.atomicallyRefused,
+            w5eConstructionV1 = framePlan.w5eConstructionV1,
+            w5ePreparedFrameV1 = framePlan.w5ePreparedFrameV1,
+            w5hSourceRootFrameV1 = framePlan,
         ),
         reusableEncoderPlan = wgpu4kReusableEncoderPlanWithoutSurface(encoderPlan),
         surfaceScope = scope,

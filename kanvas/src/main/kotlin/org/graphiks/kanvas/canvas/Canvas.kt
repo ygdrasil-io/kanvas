@@ -9,6 +9,8 @@ import org.graphiks.kanvas.text.GlyphPaintProvider
 import org.graphiks.kanvas.text.PreparedTextOutline
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.toCompatibilityPath
+import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
@@ -18,9 +20,9 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.math.matrix.mapAxisAligned
 import org.graphiks.math.matrix.mapAxisAlignedRect
 
 /**
@@ -31,7 +33,9 @@ import org.graphiks.math.matrix.mapAxisAlignedRect
  * for drawing rectangles, paths, images, and text. All operations are appended to
  * the internal buffer for subsequent rendering by a pipeline consumer.
  */
-class Canvas internal constructor(private val buffer: DisplayListBuffer) {
+class Canvas internal constructor(buffer: DisplayListBuffer) {
+    private val buffer: DisplayListBuffer =
+        if (buffer is SnapshotOwningDisplayListBuffer) buffer else GeometrySnapshotDisplayListBuffer(buffer)
     private var currentTransform = Matrix3x3F32.Identity
     /** Clip exposed to Canvas queries such as [quickReject] and [localClipBounds]. */
     private var currentClip: ClipStack = ClipStack.WideOpen
@@ -135,9 +139,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     /**
      * Draw an [image] scaled to fill [dst] with an explicit sampling policy.
      *
-     * The policy is recorded on the image shader so GPU lowering can either
-     * select the matching native sampler or report its stable unsupported
-     * diagnostic.
+     * The policy is recorded directly on the image operation.
      */
     fun drawImage(
         image: Image,
@@ -146,8 +148,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         paint: Paint? = null,
     ) {
         val src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat())
-        val samplingPaint = (paint ?: Paint()).copy(shader = image.makeShader(sampling = sampling))
-        buffer.append(DisplayOp.DrawImage(image, src, dst, samplingPaint, currentTransform, currentRecordedClip))
+        buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentRecordedClip, sampling))
     }
 
     /**
@@ -157,6 +158,17 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      */
     fun drawImageRect(image: Image, src: RectF32, dst: RectF32, paint: Paint? = null) {
         buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentRecordedClip))
+    }
+
+    /** Draw a sub-region [src] with an explicit sampling policy. */
+    fun drawImageRect(
+        image: Image,
+        src: RectF32,
+        dst: RectF32,
+        sampling: SamplingOptions,
+        paint: Paint? = null,
+    ) {
+        buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentRecordedClip, sampling))
     }
 
     /** Draw a [TextBlob] at the given position with [paint]. */
@@ -276,7 +288,21 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     /** Draw a triangle mesh from [vertices]. */
     fun drawVertices(vertices: Vertices, paint: Paint) {
-        buffer.append(DisplayOp.DrawVertices(vertices, paint, currentTransform, currentRecordedClip))
+        buffer.append(DisplayOp.DrawVertices(vertices.snapshotForDisplayList(), paint, currentTransform, currentRecordedClip))
+    }
+
+    /** Combines the paint shader (source) with vertex colors (destination), then applies paint alpha/filter and final blend. */
+    fun drawVertices(vertices: Vertices, operationBlendMode: BlendMode, paint: Paint) {
+        val snapshot = vertices.snapshotForDisplayList()
+        val bounds = requireNotNull(RectF32.bounds(snapshot.positions.toTypedArray())) {
+            "Vertices positions must be finite"
+        }
+        drawCapturedMesh(Mesh(snapshot, bounds = bounds), paint, operationBlendMode)
+    }
+
+    /** Preserve the captured operation role when replaying the existing Mesh wire form. */
+    internal fun drawCapturedMesh(mesh: Mesh, paint: Paint, operationBlendMode: BlendMode?) {
+        buffer.append(DisplayOp.DrawMesh(mesh, paint, operationBlendMode, currentTransform, currentRecordedClip))
     }
 
     fun drawMesh(mesh: Mesh, paint: Paint, blendMode: BlendMode? = null) {
@@ -435,77 +461,28 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     private fun captureClipRect(rect: RectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp {
-        val transformClass = currentTransform.captureTransformClass()
-        return when {
-        transformClass.isTerminalClipTransformClass() ->
-            ClipStackOp.PathOp(
-                Path().addRect(rect), op, antiAlias,
-                perspectiveCaptureRefusal = transformClass == "perspective",
-                transformClass = transformClass,
-            )
-        currentTransform.isScaleTranslate() ->
-            ClipStackOp.RectOp(currentTransform.mapAxisAlignedRect(rect), op, antiAlias)
-        !currentTransform.hasPerspective() ->
-            ClipStackOp.PathOp(
-                Path().addRect(rect).transform(currentTransform),
-                op,
-                antiAlias,
-                transformClass = currentTransform.captureTransformClass(),
-            )
-        else ->
-            ClipStackOp.PathOp(
-                Path().addRect(rect),
-                op,
-                antiAlias,
-                perspectiveCaptureRefusal = true,
-                transformClass = "perspective",
-            )
+        val mapped = if (currentTransform.isLosslessAxisAlignedClipCaptureMatrix() && currentTransform.isScaleTranslate()) {
+            currentTransform.mapAxisAlignedRect(rect)
+        } else {
+            null
+        }
+        return if (mapped?.isFiniteClipCaptureRect() == true) {
+            ClipStackOp.RectOp(mapped, op, antiAlias)
+        } else {
+            ClipStackOp.RectOp(rect, op, antiAlias, ClipTransformSnapshot.Known.of(currentTransform))
         }
     }
 
     private fun captureClipRRect(rrect: RRectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp {
-        val transformClass = currentTransform.captureTransformClass()
-        return when {
-        transformClass.isTerminalClipTransformClass() ->
-            ClipStackOp.PathOp(
-                Path().addRRect(rrect), op, antiAlias,
-                perspectiveCaptureRefusal = transformClass == "perspective",
-                transformClass = transformClass,
-            )
-        currentTransform.isScaleTranslate() ->
-            ClipStackOp.RRectOp(
-                rrect = rrect.mapAxisAligned(currentTransform),
-                op = op,
-                antiAlias = antiAlias,
-                transformClass = transformClass,
-            )
-        !currentTransform.hasPerspective() ->
-            ClipStackOp.PathOp(
-                Path().addRRect(rrect).transform(currentTransform),
-                op,
-                antiAlias,
-                transformClass = currentTransform.captureTransformClass(),
-            )
-        else ->
-            ClipStackOp.PathOp(
-                Path().addRRect(rrect),
-                op,
-                antiAlias,
-                perspectiveCaptureRefusal = true,
-                transformClass = "perspective",
-            )
-        }
+        return ClipStackOp.RRectOp(rrect, op, antiAlias, ClipTransformSnapshot.Known.of(currentTransform))
     }
 
     private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp {
-        val transformClass = currentTransform.captureTransformClass()
-        val terminalCapture = transformClass.isTerminalClipTransformClass()
         return ClipStackOp.PathOp(
-            if (terminalCapture) path else path.transform(currentTransform),
+            path.toPathF32().toCompatibilityPath(),
             op,
             antiAlias,
-            perspectiveCaptureRefusal = transformClass == "perspective",
-            transformClass = transformClass,
+            ClipTransformSnapshot.Known.of(currentTransform),
         )
     }
 
@@ -514,7 +491,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         newOp: ClipStackOp,
         allowDeviceRect: Boolean,
     ): ClipStack = when (previous) {
-        ClipStack.WideOpen -> if (allowDeviceRect && newOp is ClipStackOp.RectOp && newOp.op == ClipOp.INTERSECT) {
+        ClipStack.WideOpen -> if (allowDeviceRect && newOp is ClipStackOp.RectOp && newOp.op == ClipOp.INTERSECT && newOp.isLosslessDeviceRect()) {
             ClipStack.DeviceRect(newOp.rect, newOp.antiAlias)
         } else {
             ClipStack.Complex(listOf(newOp))
@@ -532,19 +509,27 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     )
 }
 
-private fun Matrix3x3F32.captureTransformClass(): String = when {
-    !floatValues().all(Float::isFinite) -> "non-finite"
-    hasPerspective() -> "perspective"
-    sx * sy - kx * ky == 0f -> "singular-affine"
-    this == Matrix3x3F32.Identity -> "identity"
-    kx == 0f && ky == 0f && sx == 1f && sy == 1f -> "translate"
-    kx == 0f && ky == 0f && sx == sy && sx > 0f -> "uniform-positive-scale-translate"
-    kx == 0f && ky == 0f && tx == 0f && ty == 0f -> "scale"
-    kx == 0f && ky == 0f -> "scale-translate"
-    else -> "affine"
+/**
+ * [Vertices] carries caller-owned collections.  Recording must close that mutable boundary
+ * before a deferred Picture or GPU prepared-frame lowering observes the operation.
+ */
+private fun Vertices.snapshotForDisplayList(): Vertices = Vertices(
+    mode = mode,
+    positions = positions.map { point -> Point2F32(point.x, point.y) },
+    texCoords = texCoords?.map { point -> Point2F32(point.x, point.y) },
+    colors = colors?.toList(),
+    indices = indices?.toList(),
+)
+
+private fun ClipStackOp.RectOp.isLosslessDeviceRect(): Boolean =
+    (transform as? ClipTransformSnapshot.Known)?.copyMatrixF32() == Matrix3x3F32.Identity &&
+        rect.isFiniteClipCaptureRect()
+
+private fun Matrix3x3F32.isLosslessAxisAlignedClipCaptureMatrix(): Boolean {
+    if (!listOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2).all(Float::isFinite)) return false
+    val determinant = sx.toDouble() * sy.toDouble() - kx.toDouble() * ky.toDouble()
+    return determinant.isFinite() && determinant != 0.0
 }
 
-private fun Matrix3x3F32.floatValues(): FloatArray = floatArrayOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2)
-
-private fun String.isTerminalClipTransformClass(): Boolean =
-    this == "non-finite" || this == "singular-affine" || this == "perspective"
+private fun RectF32.isFiniteClipCaptureRect(): Boolean =
+    listOf(left, top, right, bottom).all(Float::isFinite)

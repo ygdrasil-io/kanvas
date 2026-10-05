@@ -108,7 +108,9 @@ fun RenderResult.toImage(sourceId: String = "render-result"): Image =
         },
         sourceId,
         pixels = pixels.toByteArray(),
+        colorSpace = colorSpace,
         alphaType = AlphaType.PREMUL,
+        premultiplication = premultiplication,
     )
 
 private fun RenderResult.pixelLayout(): ImageEncoder.PixelLayout = when (format) {

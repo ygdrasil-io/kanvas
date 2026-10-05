@@ -13,7 +13,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.surface.RenderConfig
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
+import org.graphiks.kanvas.surface.PreparedImageRoute
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
@@ -38,7 +38,7 @@ object KanvasScenePrograms {
     fun boundedRgba8NearestBitmap() = KanvasSurfaceProgram(
         ROUTE_ID,
         renderConfig = RenderConfig(
-            preparedImageRouteCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+            preparedImageRoute = PreparedImageRoute.BOUNDED_NEAREST_1_TO_1,
         ),
         record = {
         drawColor(BACKGROUND)
@@ -61,7 +61,7 @@ object KanvasScenePrograms {
     fun boundedBitmapLinearRefusal() = KanvasSurfaceProgram(
         ROUTE_ID,
         renderConfig = RenderConfig(
-            preparedImageRouteCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+            preparedImageRoute = PreparedImageRoute.BOUNDED_NEAREST_1_TO_1,
         ),
         record = {
         drawImage(

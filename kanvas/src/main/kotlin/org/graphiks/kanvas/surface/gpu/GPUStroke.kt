@@ -9,14 +9,14 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-data class StrokeGeometry(
+internal data class StrokeGeometry(
     val vertices: List<Float>,
     val contourStarts: List<Int>,
     val coordinateSpace: StrokeGeometryCoordinateSpace =
         StrokeGeometryCoordinateSpace.DEVICE,
 )
 
-enum class StrokeGeometryCoordinateSpace {
+internal enum class StrokeGeometryCoordinateSpace {
     DEVICE,
 }
 

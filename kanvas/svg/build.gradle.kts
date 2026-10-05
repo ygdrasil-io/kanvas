@@ -6,6 +6,7 @@ plugins {
 
 dependencies {
     api(project(":kanvas"))
+    implementation(project(":gpu-renderer"))
     implementation(kotlin("stdlib"))
     implementation("javax.xml.stream:stax-api:1.0")
     testImplementation(kotlin("test"))

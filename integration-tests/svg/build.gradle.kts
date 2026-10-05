@@ -8,6 +8,7 @@ dependencies {
     implementation(project(":kanvas"))
     implementation(project(":kanvas:svg"))
     implementation(project(":integration-tests:test-utils"))
+    testImplementation(project(":gpu-renderer"))
     implementation(libs.wgpu4kToolkit)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.diagnostic
 
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.surface.DebugLevel
+import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.test.ComparisonUtils
 import java.io.File
 import java.time.LocalDateTime
@@ -26,6 +27,7 @@ data class RunnerInput(
     val diagnostics: List<String>,
     val debugLevel: DebugLevel,
     val outputDir: File,
+    val renderConfig: RenderConfig = RenderConfig.DEFAULT,
 )
 
 /**
@@ -82,6 +84,7 @@ object DiagnosticRunner {
                 gmHeight = input.height,
                 tolerance = input.tolerance,
                 outputDir = input.outputDir,
+                config = input.renderConfig,
             )
         } else null
 

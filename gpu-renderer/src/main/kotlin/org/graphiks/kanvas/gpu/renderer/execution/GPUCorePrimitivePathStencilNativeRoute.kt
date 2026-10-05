@@ -335,6 +335,17 @@ internal class GPUCorePrimitivePathStencilNativeFrameRouteSeal(
     private val routesByFrameKey = immutableMap(routesByFrameKey)
     private val preparedPassByStep = immutableMap(preparedPassByStep)
 
+
+    /** Exact relocation of sealed lane ranges into the composite frame's step coordinates. */
+    fun reindexed(indices: Map<Int, Int>): GPUCorePrimitivePathStencilNativeFrameRouteSeal = GPUCorePrimitivePathStencilNativeFrameRouteSeal(
+        routesByFrameKey.mapKeys { (key, _) -> key.copy(sourceStepIndex = indices.getValue(key.sourceStepIndex)) },
+        preparedPassByStep.mapKeys { (index, _) -> indices.getValue(index) },
+    )
+
+    fun appended(other: GPUCorePrimitivePathStencilNativeFrameRouteSeal): GPUCorePrimitivePathStencilNativeFrameRouteSeal {
+        require(routesByFrameKey.keys.intersect(other.routesByFrameKey.keys).isEmpty())
+        return GPUCorePrimitivePathStencilNativeFrameRouteSeal(routesByFrameKey + other.routesByFrameKey, preparedPassByStep + other.preparedPassByStep)
+    }
     init {
         routesByFrameKey.forEach { (key, route) ->
             require(key.pairKey == route.pairKey) {

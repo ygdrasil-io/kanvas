@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesLayoutAuthority
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexLayoutPlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
+import org.graphiks.kanvas.render.ir.PreparedVerticesUploadPayloadV1
 
 /** Versioned identity of the topology canonicalization embodied by an artifact. */
 enum class GPUPreparedVerticesCanonicalizationIdentity(val stableIdentity: String) {
@@ -79,7 +80,25 @@ class GPUPreparedVerticesUploadArtifact internal constructor(
 
     fun indexBytesForUpload(): ByteArray? = indexSnapshot?.copyOf()
 
-    private companion object {
+    internal companion object {
+        /** Backend ABI validation for bytes already sealed by the shared neutral authority. */
+        fun fromSealedPayload(payload: PreparedVerticesUploadPayloadV1, provenance: String): GPUPreparedVerticesUploadArtifact =
+            GPUPreparedVerticesUploadArtifact(
+                topology = if (payload.topology == PreparedVerticesUploadPayloadV1.Topology.TriangleStrip)
+                    GPUVertexMode.TriangleStrip else GPUVertexMode.Triangles,
+                layout = GPUPreparedVerticesLayoutAuthority.layout(payload.hasColors, payload.hasTexCoords),
+                vertexBytes = payload.copyVertexBytes(),
+                indexBytes = payload.copyIndexBytes(),
+                vertexCount = payload.vertexCountI32,
+                indexCount = payload.indexCountI32,
+                indexFormat = payload.indexElementBytesI32?.let { if (it == 2) "uint16" else "uint32" },
+                provenance = provenance,
+                canonicalizationIdentity = if (payload.canonicalization ==
+                    PreparedVerticesUploadPayloadV1.Canonicalization.TriangleFanToTriangleListV1
+                ) GPUPreparedVerticesCanonicalizationIdentity.TriangleFanToTriangleListV1
+                else GPUPreparedVerticesCanonicalizationIdentity.IdentityV1,
+            )
+
         fun validate(
             topology: GPUVertexMode,
             layout: GPUVertexLayoutPlan,

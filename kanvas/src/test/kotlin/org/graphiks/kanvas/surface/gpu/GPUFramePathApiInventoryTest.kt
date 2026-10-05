@@ -33,7 +33,6 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
-import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathEdgeFanPayloadContract
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
@@ -63,6 +62,7 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.KanvasGlyphRun
@@ -81,19 +81,16 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUFramePathApiInventoryTest {
     @Test
-    fun `public path defaults derive from the stencil edge fan payload contract`() {
+    fun `public path defaults expose backend-neutral capacity limits`() {
+        assertEquals(1_024u, RenderConfig.MAX_PATH_FAN_TRIANGLES)
+        assertEquals(36_864u, RenderConfig.MAX_PATH_GEOMETRY_BYTES)
         assertEquals(
-            GPUPathEdgeFanPayloadContract.MAX_TRIANGLES,
+            RenderConfig.MAX_PATH_FAN_TRIANGLES,
             RenderConfig.DEFAULT.maxPathFanTriangles,
         )
         assertEquals(
-            GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES,
+            RenderConfig.MAX_PATH_GEOMETRY_BYTES,
             RenderConfig.DEFAULT.maxPathGeometryBytes,
-        )
-        assertEquals(
-            GPUPathEdgeFanPayloadContract.BYTES_PER_TRIANGLE,
-            GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES /
-                GPUPathEdgeFanPayloadContract.MAX_TRIANGLES,
         )
     }
 
@@ -1351,7 +1348,7 @@ class GPUFramePathApiInventoryTest {
         val paint = Paint.fill(ColorARGB.Blue).copy(antiAlias = false)
         fun hardClip(
             fillType: FillType = FillType.WINDING,
-            transformClass: String = "identity",
+            transform: ClipTransformSnapshot = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
         ): ClipStack = ClipStack.Complex(
             listOf(
                 ClipStackOp.PathOp(
@@ -1359,7 +1356,7 @@ class GPUFramePathApiInventoryTest {
                         .apply { this.fillType = fillType },
                     ClipOp.INTERSECT,
                     antiAlias = false,
-                    transformClass = transformClass,
+                    transform = transform,
                 ),
             ),
         )
@@ -1383,7 +1380,10 @@ class GPUFramePathApiInventoryTest {
             "non-finite translation" to operation(Matrix3x3F32.translation(Float.NaN, 5f), hardClip()),
             "scale" to operation(Matrix3x3F32.scaling(2f, 2f), hardClip()),
             "affine" to operation(Matrix3x3F32.of(1f, 0.25f, 0f, 0f, 1f, 0f, 0f, 0f, 1f), hardClip()),
-            "transformed clip" to operation(Matrix3x3F32.translation(4f, 5f), hardClip(transformClass = "translate")),
+            "transformed clip" to operation(
+                Matrix3x3F32.translation(4f, 5f),
+                hardClip(transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.translation(4f, 5f))),
+            ),
             "inverse translated" to operation(
                 Matrix3x3F32.translation(4f, 5f),
                 hardClip(fillType = FillType.INVERSE_WINDING),
@@ -2321,9 +2321,15 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `public path rejects static and UInt-overflow fan memory configuration before submission`() {
         val cases = listOf(
-            RenderConfig(maxPathVertices = 16u, maxPathFanTriangles = 1_025u) to
+            RenderConfig(
+                maxPathVertices = 16u,
+                maxPathFanTriangles = RenderConfig.MAX_PATH_FAN_TRIANGLES + 1u,
+            ) to
                 "geometry.path.fan_budget_config_exceeded",
-            RenderConfig(maxPathVertices = 16u, maxPathGeometryBytes = 36_865u) to
+            RenderConfig(
+                maxPathVertices = 16u,
+                maxPathGeometryBytes = RenderConfig.MAX_PATH_GEOMETRY_BYTES + 1u,
+            ) to
                 "geometry.path.memory_budget_config_exceeded",
             RenderConfig(maxPathVertices = 16u, maxPathFanTriangles = UInt.MAX_VALUE) to
                 "geometry.path.fan_budget_config_out_of_int_range",
@@ -2650,7 +2656,9 @@ class GPUFramePathApiInventoryTest {
                                 clipPath,
                                 ClipOp.INTERSECT,
                                 antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                                transform = ClipTransformSnapshot.Known.of(
+                                    Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                                ),
                             ),
                         ),
                     ),
@@ -2708,7 +2716,9 @@ class GPUFramePathApiInventoryTest {
                                 clipPath,
                                 ClipOp.INTERSECT,
                                 antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                                transform = ClipTransformSnapshot.Known.of(
+                                    Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                                ),
                             ),
                         ),
                     ),
@@ -2756,7 +2766,7 @@ class GPUFramePathApiInventoryTest {
                         },
                         ClipOp.INTERSECT,
                         antiAlias = false,
-                        transformClass = "non-right-angle-rotation",
+                        transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(15f)),
                     ))),
                 ),
             ),

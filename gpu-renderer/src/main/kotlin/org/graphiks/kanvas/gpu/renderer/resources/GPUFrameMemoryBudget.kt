@@ -27,6 +27,8 @@ enum class GPUFrameMemoryCategory(val targetResident: Boolean) {
 enum class GPUFrameMemoryResourceKind {
     Texture2D,
     Buffer,
+    /** Pessimistic admission lease for opaque native program objects; never a buffer allocation. */
+    LogicalProgram,
 }
 
 /** One handle-free allocation fact consumed by aggregate frame budgeting. */
@@ -36,16 +38,25 @@ data class GPUFrameMemoryAllocation(
     val bytes: Long,
     val resourceKind: GPUFrameMemoryResourceKind,
     val extent: GPUPixelBounds?,
+    /** Half-open sealed pass lifetime; default preserves the one-segment legacy allocation ABI. */
+    val firstPassIndex: Int = 0,
+    val lastPassIndexExclusive: Int = 1,
 ) {
     init {
         require(label.isNotBlank()) { "GPUFrameMemoryAllocation.label must not be blank" }
         require(bytes >= 0L) { "GPUFrameMemoryAllocation.bytes must be non-negative" }
+        require(firstPassIndex >= 0 && lastPassIndexExclusive > firstPassIndex) {
+            "GPUFrameMemoryAllocation lifetime must be a non-empty non-negative range"
+        }
         when (resourceKind) {
             GPUFrameMemoryResourceKind.Texture2D -> requireNotNull(extent) {
                 "GPUFrameMemoryAllocation.extent is required for Texture2D allocations"
             }
             GPUFrameMemoryResourceKind.Buffer -> require(extent == null) {
                 "GPUFrameMemoryAllocation.extent must be absent for Buffer allocations"
+            }
+            GPUFrameMemoryResourceKind.LogicalProgram -> require(extent == null) {
+                "GPUFrameMemoryAllocation.extent must be absent for LogicalProgram leases"
             }
         }
     }
@@ -174,16 +185,23 @@ private fun aggregateFacts(
                 total + allocation.bytes.toBigInteger()
             }
     }
+    val transient = allocations.filter { !it.category.targetResident }
+    val transientPeak = if (transient.isEmpty()) {
+        BigInteger.ZERO
+    } else {
+        (0 until transient.maxOf(GPUFrameMemoryAllocation::lastPassIndexExclusive)).maxOf { passIndex ->
+            transient.asSequence()
+                .filter { allocation -> allocation.firstPassIndex <= passIndex && passIndex < allocation.lastPassIndexExclusive }
+                .fold(BigInteger.ZERO) { total, allocation -> total + allocation.bytes.toBigInteger() }
+        }
+    }
     return GPUFrameMemoryAggregateFacts(
         categoryTotals = categoryTotals,
         targetResident = categoryTotals
             .filterKeys(GPUFrameMemoryCategory::targetResident)
             .values
             .fold(BigInteger.ZERO, BigInteger::add),
-        peakTransient = categoryTotals
-            .filterKeys { category -> !category.targetResident }
-            .values
-            .fold(BigInteger.ZERO, BigInteger::add),
+        peakTransient = transientPeak,
     )
 }
 
@@ -194,6 +212,7 @@ private fun GPUFrameMemoryAllocation.exceeds(limits: GPULimits): Boolean = when 
             textureExtent.height.toLong() > limits.maxTextureDimension2D
     }
     GPUFrameMemoryResourceKind.Buffer -> false
+    GPUFrameMemoryResourceKind.LogicalProgram -> false
 }
 
 private fun BigInteger.clampedLong(): Long = min(Long.MAX_VALUE.toBigInteger()).toLong()

@@ -4,7 +4,9 @@ plugins {
 }
 
 dependencies {
-    api(project(":gpu-renderer"))
+    api(project(":render-ir"))
+    implementation(project(":gpu-renderer"))
+    implementation(project(":gpu-plan"))
     api(project(":font:gpu-api"))
     api(project(":color-management"))
     implementation(kotlin("stdlib"))
@@ -20,6 +22,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     testImplementation(libs.wgslCoreJvm)
     testImplementation(libs.wgslParserJvm)
+    testImplementation(libs.wgpu4kToolkit)
 }
 
 sourceSets {

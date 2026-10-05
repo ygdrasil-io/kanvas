@@ -112,6 +112,47 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             "Direct CorePrimitive native geometry accepts only the bounded linear, radial, and sweep gradient material ABI.",
         )
     }
+    return validateCorePrimitiveDirectGeometryRoute(
+        GPUCorePrimitiveGeometryAuthority.capture(semantic), exactClipScissor, blendPlan, samplePlan, targetFormat)
+}
+
+/** One geometry classifier, shared by the source-free inventory and the historical bound facade. */
+internal fun validateCorePrimitiveDirectGeometryRoute(
+    geometryAuthority: GPUCorePrimitiveGeometryAuthority,
+    exactClipScissor: GPUPixelBounds?,
+    blendPlan: GPUBlendPlan,
+    samplePlan: GPUSamplePlan,
+    targetFormat: String,
+): GPUCorePrimitiveDirectNativeRoute = validateCorePrimitiveDirectGeometrySnapshot(
+    geometryAuthority.snapshot, exactClipScissor, samplePlan, targetFormat,
+    validateBlend = { validateCorePrimitiveDirectBlend(blendPlan) },
+)
+
+internal fun validateCorePrimitiveDirectBlend(blendPlan: GPUBlendPlan): GPUCorePrimitiveDirectNativeRoute.Refused? =
+    if (blendPlan.isCorePrimitiveDirectLaneBlend()) null else GPUCorePrimitiveDirectNativeRoute.Refused(
+        "unsupported.native-core-primitive.blend",
+        "Direct CorePrimitive native geometry requires a canonical fixed-function, " +
+            "shader-no-destination, or shader-with-destination blend plan.",
+    )
+
+/** The unbound inventory has no final blend; the historical facade validates it at its old boundary. */
+internal fun validateCorePrimitiveDirectGeometrySnapshot(
+    geometryAuthority: GPUCorePrimitiveGeometrySnapshot,
+    exactClipScissor: GPUPixelBounds?,
+    samplePlan: GPUSamplePlan,
+    targetFormat: String,
+): GPUCorePrimitiveDirectNativeRoute = validateCorePrimitiveDirectGeometrySnapshot(
+    geometryAuthority, exactClipScissor, samplePlan, targetFormat, validateBlend = { null },
+)
+
+private fun validateCorePrimitiveDirectGeometrySnapshot(
+    geometryAuthority: GPUCorePrimitiveGeometrySnapshot,
+    exactClipScissor: GPUPixelBounds?,
+    samplePlan: GPUSamplePlan,
+    targetFormat: String,
+    validateBlend: () -> GPUCorePrimitiveDirectNativeRoute.Refused?,
+): GPUCorePrimitiveDirectNativeRoute {
+    fun refused(code: String, message: String) = GPUCorePrimitiveDirectNativeRoute.Refused(code, message)
     if (targetFormat !in setOf("rgba8unorm", "rgba8unorm-srgb", "bgra8unorm")) {
         return refused(
             "unsupported.native-core-primitive.target-format",
@@ -129,20 +170,14 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             "Direct CorePrimitive native geometry requires one or four exact samples.",
         )
     }
-    if (!blendPlan.isCorePrimitiveDirectLaneBlend()) {
-        return refused(
-            "unsupported.native-core-primitive.blend",
-            "Direct CorePrimitive native geometry requires a canonical fixed-function, " +
-                "shader-no-destination, or shader-with-destination blend plan.",
-        )
-    }
-    val analyticShape = when (semantic.geometry) {
+    validateBlend()?.let { return it }
+    val analyticShape = when (geometryAuthority.geometry) {
         is GPUCorePrimitiveGeometry.Rect ->
-            semantic.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
+            geometryAuthority.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
         is GPUCorePrimitiveGeometry.RRect ->
-            semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
-                semantic.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
-        is GPUCorePrimitiveGeometry.DRRect -> semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
+            geometryAuthority.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
+                geometryAuthority.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
+        is GPUCorePrimitiveGeometry.DRRect -> geometryAuthority.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
         is GPUCorePrimitiveGeometry.TriangulatedPath -> false
     }
     if (sampleCount == 4 && analyticShape) {
@@ -151,15 +186,15 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             "The color-only 4x lane accepts hard direct geometry; analytic coverage remains single-sample.",
         )
     }
-    val coverageCompatible = when (semantic.geometry) {
+    val coverageCompatible = when (geometryAuthority.geometry) {
         is GPUCorePrimitiveGeometry.Rect,
         is GPUCorePrimitiveGeometry.RRect,
-        -> semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
-            semantic.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
+        -> geometryAuthority.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
+            geometryAuthority.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
         is GPUCorePrimitiveGeometry.DRRect ->
-            semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
+            geometryAuthority.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
         is GPUCorePrimitiveGeometry.TriangulatedPath ->
-            semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
+            geometryAuthority.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
     }
     if (!coverageCompatible) {
         return refused(
@@ -171,7 +206,7 @@ internal fun validateCorePrimitiveDirectNativeRoute(
         "unsupported.native-core-primitive.clip",
         "Direct CorePrimitive native geometry accepts only no clip or scissor clip.",
     )
-    if (semantic.scissorBounds != exactScissor) {
+    if (geometryAuthority.scissorBounds != exactScissor) {
         return refused(
             "invalid.native-core-primitive.scissor-authority",
             "The semantic scissor must exactly match the classified direct clip plan.",
@@ -190,7 +225,7 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             "Direct CorePrimitive geometry requires finite xy vertices and in-range local indices.",
         )
     }
-    return when (val geometry = semantic.geometry) {
+    return when (val geometry = geometryAuthority.geometry) {
         is GPUCorePrimitiveGeometry.Rect -> if (analyticShape) {
             analyticShapeRoute(
                 geometry.left,
@@ -198,7 +233,7 @@ internal fun validateCorePrimitiveDirectNativeRoute(
                 geometry.right,
                 geometry.bottom,
                 antiAlias = true,
-                targetBounds = semantic.targetBounds,
+                targetBounds = geometryAuthority.targetBounds,
                 clipScissor = exactScissor,
                 accepted = ::accepted,
                 refused = ::refused,
@@ -214,15 +249,15 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             geometry.top,
             geometry.right,
             geometry.bottom,
-            antiAlias = semantic.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA,
-            targetBounds = semantic.targetBounds,
+            antiAlias = geometryAuthority.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA,
+            targetBounds = geometryAuthority.targetBounds,
             clipScissor = exactScissor,
             accepted = ::accepted,
             refused = ::refused,
         )
         is GPUCorePrimitiveGeometry.DRRect -> analyticShapeRoute(
             geometry.outerBounds[0], geometry.outerBounds[1], geometry.outerBounds[2], geometry.outerBounds[3],
-            antiAlias = false, targetBounds = semantic.targetBounds, clipScissor = exactScissor,
+            antiAlias = false, targetBounds = geometryAuthority.targetBounds, clipScissor = exactScissor,
             accepted = ::accepted, refused = ::refused,
         )
         is GPUCorePrimitiveGeometry.TriangulatedPath -> when {

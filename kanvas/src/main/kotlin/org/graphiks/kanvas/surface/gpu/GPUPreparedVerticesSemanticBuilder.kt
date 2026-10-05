@@ -247,6 +247,7 @@ internal object GPUPreparedVerticesSemanticBuilder {
                     artifact = inventoryCommand.artifact,
                     material = inventoryCommand.material,
                     materialFrameSnapshot = inventoryCommand.materialFrameSnapshot,
+                    materialPlanEmission = inventoryCommand.materialPlanEmission,
                     topologyIdentity = when (inventoryCommand.artifact.topology.sourceLabel) {
                         "Triangles" -> GPUPreparedVerticesTopologyIdentity.Triangles
                         "TriangleStrip" -> GPUPreparedVerticesTopologyIdentity.TriangleStrip
@@ -255,11 +256,14 @@ internal object GPUPreparedVerticesSemanticBuilder {
                     transformBytes = normalized.transformBytes,
                     targetBounds = targetBounds,
                     scissorBounds = scissor,
+                    conservativeDrawBounds = expectedBounds.preparedVerticesPixelBounds(targetBounds),
                     targetFormat = normalized.layer.target.colorFormat,
                     clipIdentity = normalized.clipIdentity,
                     clipCoverageIdentity = normalized.clipCoverageIdentity,
                     primitiveColorPresent = normalized.primitiveColorPresent,
                     primitiveBlendIdentity = normalized.primitiveBlendIdentity,
+                    primitiveBlendPlan = draw.primitiveBlendPlan,
+                    w5bFinalBlendPlan = draw.materialPlan?.blend,
                     finalBlendIdentity = draw.blendPlan.canonicalIdentity(),
                     capabilitySnapshotHash = normalized.capabilitySnapshotHash,
                     drawProvenance = normalized.drawProvenance,

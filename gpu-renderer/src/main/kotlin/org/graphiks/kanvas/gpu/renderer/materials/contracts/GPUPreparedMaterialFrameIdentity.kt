@@ -48,6 +48,7 @@ object GPUPreparedMaterialFrameIdentityAuthority {
 }
 
 private fun GPUPreparedMaterialProgram.exactFrameBucketKey(): String {
+    commonSource?.let { return "prepared-common-v6:${it.stage.canonicalIdentity}" }
     val fragment = composableFragment
     val encoder = ExactUtf16CanonicalIdentityDigestEncoder(
         "prepared-material-frame-identity-v2-utf16-code-units",
@@ -114,6 +115,7 @@ private fun GPUPreparedMaterialProgram.exactFrameBucketKey(): String {
 private fun GPUPreparedMaterialProgram.exactFrameMatches(
     other: GPUPreparedMaterialProgram,
 ): Boolean {
+    if (commonSource != null || other.commonSource != null) return commonSource === other.commonSource
     val leftFragment = composableFragment
     val rightFragment = other.composableFragment
     return materialKey == other.materialKey &&

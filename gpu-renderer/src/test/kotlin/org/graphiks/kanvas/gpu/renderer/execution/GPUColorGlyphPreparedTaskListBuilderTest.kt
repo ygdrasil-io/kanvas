@@ -252,6 +252,10 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
                 )
                 val result = materializer.materializeReusable(
                     framePlan = plan,
+                    sourceWitness = when (val preflight = preflightW5hFrameSourcesV1(plan)) {
+                        is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                        is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                    },
                     encoderPlan = GPUCommandEncoderPlan.ordered(
                         planId = "authority.$case",
                         contextIdentity = "authority-test",

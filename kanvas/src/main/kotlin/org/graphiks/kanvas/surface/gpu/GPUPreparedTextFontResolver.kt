@@ -20,12 +20,12 @@ import org.graphiks.kanvas.text.PreparedTextOutline
 import org.graphiks.kanvas.text.Typeface
 
 /** Resolves and snapshots the exact pure-Kotlin font face used by one text operation. */
-fun interface GPUPreparedTextFontResolver {
+internal fun interface GPUPreparedTextFontResolver {
     fun resolve(typeface: Typeface?): GPUPreparedTextFontResolution
 }
 
 /** Glyph representation query bound to one already-snapshotted parsed face. */
-fun interface GPUPreparedTextGlyphRepresentationResolver {
+internal fun interface GPUPreparedTextGlyphRepresentationResolver {
     fun resolve(
         glyphId: Int,
         fontSize: Float,
@@ -34,7 +34,7 @@ fun interface GPUPreparedTextGlyphRepresentationResolver {
 }
 
 /** Transactional font resolution result. */
-sealed interface GPUPreparedTextFontResolution {
+internal sealed interface GPUPreparedTextFontResolution {
     @ConsistentCopyVisibility
     data class Ready private constructor(
         val face: GPUPreparedFontFaceSnapshot,
@@ -115,7 +115,7 @@ private val CANONICAL_PREPARED_FONT_REFUSAL_CODES = setOf(
  * byte array. Other Typeface implementations do not expose the source identity
  * and bytes required by prepared GPU text and therefore fail closed.
  */
-object GPUPreparedFontTypefaceResolver : GPUPreparedTextFontResolver {
+internal object GPUPreparedFontTypefaceResolver : GPUPreparedTextFontResolver {
     override fun resolve(typeface: Typeface?): GPUPreparedTextFontResolution {
         if (typeface == null) {
             return refused(

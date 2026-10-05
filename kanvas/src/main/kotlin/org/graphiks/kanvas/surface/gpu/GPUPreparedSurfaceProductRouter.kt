@@ -1,8 +1,9 @@
+@file:OptIn(ExperimentalUnsignedTypes::class)
+
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.Collections
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat as CanonicalGPUColorFormat
-import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
@@ -31,36 +32,24 @@ internal object GPUPreparedSurfaceProductRouter {
         config: RenderConfig,
         executionPort: GPUPreparedSurfaceExecutionPort,
     ): GPUPreparedSurfaceProductRoute {
+        try {
+            config.requireCompositionTarget()
+        } catch (failure: GPUPlanSurfaceTerminalException) {
+            return GPUPreparedSurfaceProductRoute.Terminal(terminalDiagnostic(failure.code))
+        }
         val candidate = when (val eligibility = GPUPreparedSurfaceFrameGate.classify(operations, config)) {
             is GPUPreparedSurfaceEligibility.Refused ->
                 return GPUPreparedSurfaceProductRoute.Terminal(terminalDiagnostic(eligibility.code))
             is GPUPreparedSurfaceEligibility.Candidate -> eligibility
         }
-        // The default RenderConfig carries RGBA8_UNORM_SRGB, so the config-derived color would
-        // never select a bgra8unorm target. The requested surface format drives the target
-        // (Graphite model: surface color type -> texture format).
-        val targetCandidate = when (format) {
-            PixelFormat.BGRA8 -> candidate.copy(
-                color = GPUPreparedSurfaceColorMapping.Ready(
-                    physicalFormat = CanonicalGPUColorFormat.BGRA8Unorm,
-                    interpretation = GPUColorInterpretation.EncodedPremulSrgb,
-                ),
-            )
-            // Asymmetric by design: the RGBA8 path keeps the config-derived color (the
-            // default config carries RGBA8_UNORM_SRGB). A Surface(format = RGBA8) with an
-            // explicit config.gpuColorFormat = BGRA8_UNORM opens a bgra8unorm target and
-            // returns BGRA-ordered bytes labelled RGBA8 — a newly-reachable edge, not a
-            // regression.
-            PixelFormat.RGBA8 -> candidate
-        }
         return when (val execution = executionPort.execute(
-            GPUPreparedSurfaceExecutionRequest(targetCandidate, width, height),
+            GPUPreparedSurfaceExecutionRequest(candidate, width, height),
         )) {
             is GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused ->
                 GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
             is GPUPreparedSurfaceExecutionResult.TerminalFailure ->
                 GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
-            is GPUPreparedSurfaceExecutionResult.Succeeded -> success(width, height, format, execution)
+            is GPUPreparedSurfaceExecutionResult.Succeeded -> success(width, height, format, config, execution)
         }
     }
 
@@ -68,6 +57,7 @@ internal object GPUPreparedSurfaceProductRouter {
         width: Int,
         height: Int,
         format: PixelFormat,
+        config: RenderConfig,
         execution: GPUPreparedSurfaceExecutionResult.Succeeded,
     ): GPUPreparedSurfaceProductRoute {
         val drawCallCount = try {
@@ -82,7 +72,7 @@ internal object GPUPreparedSurfaceProductRouter {
         }
         return GPUPreparedSurfaceProductRoute.Prepared(
             result = RenderResult(
-                pixels = execution.rgba.toUByteArray(),
+                pixels = publicPixels(execution.rgba, format),
                 width = width,
                 height = height,
                 format = format,
@@ -128,8 +118,34 @@ internal object GPUPreparedSurfaceProductRouter {
                     coverage = if (execution.visualOperationCount == 0) 0f else 1f,
                     coverageMeasured = false,
                 ),
-                structuralSteps = execution.evidence.structuralSteps,
+                structuralSteps = Collections.unmodifiableList(
+                    ArrayList(
+                        execution.evidence.structuralSteps +
+                            execution.evidence.structuralTelemetry?.events.orEmpty().map { event -> event.kind.name },
+                    ),
+                ),
                 nativeEvidenceCounters = mapOf(
+                    "targetCreations" to execution.evidence.targetCreations,
+                    "targetCloses" to execution.evidence.targetCloses,
+                    "frameCoordinatorCreations" to execution.evidence.frameCoordinatorCreations,
+                    "encoders" to execution.evidence.encoders,
+                    "commandBuffers" to execution.evidence.commandBuffers,
+                    "submits" to execution.evidence.submits,
+                    "readbackCopies" to execution.evidence.readbackCopies,
+                    "destinationSnapshotCreations" to execution.evidence.destinationSnapshotCreations,
+                    "destinationReadbackSnapshots" to execution.evidence.destinationReadbackSnapshots,
+                    "renderPasses" to execution.evidence.renderPasses,
+                    "draws" to execution.evidence.draws,
+                    "drawIndexed" to execution.evidence.drawIndexed,
+                    "pipelineBinds" to execution.evidence.pipelineBinds,
+                    "destinationCopies" to execution.evidence.destinationCopies,
+                    "activeNativePayloads" to execution.evidence.activeNativePayloads.toLong(),
+                    "outputOwnedNativePayloads" to execution.evidence.outputOwnedNativePayloads.toLong(),
+                    "quarantinedNativePayloads" to execution.evidence.quarantinedNativePayloads.toLong(),
+                    "retentionRegistrations" to execution.evidence.retentionRegistrations,
+                    "retentionCompletions" to execution.evidence.retentionCompletions,
+                    "retentionQuarantines" to execution.evidence.retentionQuarantines,
+                    "distinctRetentionTickets" to execution.evidence.distinctRetentionTickets.toLong(),
                     "preparedImage.textureUploadScope" to
                         execution.evidence.preparedImageFrameTextureUploadScopesEncoded,
                     "preparedImage.frameTextureCreations" to
@@ -141,9 +157,10 @@ internal object GPUPreparedSurfaceProductRouter {
                     "preparedImage.queueWriteTextureCalls" to
                         execution.evidence.preparedImageFrameTextureWriteTextureCalls,
                 ),
-                nativeEvidenceScopeKinds = if (
-                    execution.evidence.preparedImageFrameTextureUploadScopesEncoded > 0L
-                ) listOf("Upload") else emptyList(),
+                nativeEvidenceScopeKinds = Collections.unmodifiableList(
+                    ArrayList(execution.evidence.encodedScopeKinds.orEmpty().map { scopeKind -> scopeKind.name }),
+                ),
+                premultiplication = config.resolvedCompositionPremultiplication(),
             ),
             evidence = execution.evidence,
         )
@@ -165,4 +182,17 @@ internal object GPUPreparedSurfaceProductRouter {
         severity = GPUDiagnosticSeverity.Error,
         message = "The prepared Surface route cannot render this frame.",
     )
+
+    /** PixelFormat controls only public byte layout; the prepared target is resolved by domain. */
+    private fun publicPixels(rgba: ByteArray, format: PixelFormat): UByteArray = when (format) {
+        PixelFormat.RGBA8 -> rgba.toUByteArray()
+        PixelFormat.BGRA8 -> rgba.copyOf().also { bytes ->
+            bytes.indices.step(4).forEach { index ->
+                val red = bytes[index]
+                bytes[index] = bytes[index + 2]
+                bytes[index + 2] = red
+            }
+        }.toUByteArray()
+    }
+
 }

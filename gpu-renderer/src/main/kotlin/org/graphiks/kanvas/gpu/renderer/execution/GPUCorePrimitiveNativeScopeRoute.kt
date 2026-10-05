@@ -283,6 +283,16 @@ internal class GPUCorePrimitiveNativeScopeFrameRouteSeal(
 ) {
     private val routesByFrameKey = immutableMap(routesByFrameKey)
 
+
+    /** Exact relocation of sealed lane ranges into the composite frame's step coordinates. */
+    fun reindexed(indices: Map<Int, Int>): GPUCorePrimitiveNativeScopeFrameRouteSeal = GPUCorePrimitiveNativeScopeFrameRouteSeal(
+        routesByFrameKey.mapKeys { (key, _) -> key.copy(sourceStepIndex = indices.getValue(key.sourceStepIndex)) },
+    )
+
+    fun appended(other: GPUCorePrimitiveNativeScopeFrameRouteSeal): GPUCorePrimitiveNativeScopeFrameRouteSeal {
+        require(routesByFrameKey.keys.intersect(other.routesByFrameKey.keys).isEmpty())
+        return GPUCorePrimitiveNativeScopeFrameRouteSeal(routesByFrameKey + other.routesByFrameKey)
+    }
     init {
         routesByFrameKey.forEach { (key, route) ->
             require(key.firstPacketId == route.flattenedPacketIds.first()) {
@@ -333,6 +343,47 @@ internal data class GPUCorePrimitiveNativeScopeGeometrySlice(
     val maxLocalIndex: Int,
 )
 
+/** Source-free input to the single arena packer, retained before material publication. */
+internal sealed interface GPUCorePrimitiveGeometryPiece {
+    val packetId: GPUDrawPacketID
+    val role: GPUCorePrimitiveNativeScopeArenaRole
+    val vertexCount: Int
+    val indexCount: Int
+    val maxLocalIndex: Int
+    fun copyVerticesInto(destination: FloatArray, offset: Int)
+    fun copyIndicesInto(destination: IntArray, offset: Int)
+
+    class Direct(override val packetId: GPUDrawPacketID, val route: GPUCorePrimitiveDirectNativeRoute.Accepted) : GPUCorePrimitiveGeometryPiece {
+        override val role = GPUCorePrimitiveNativeScopeArenaRole.Direct
+        override val vertexCount get() = route.vertexCount
+        override val indexCount get() = route.indexCount
+        override val maxLocalIndex get() = route.maxLocalIndex
+        override fun copyVerticesInto(destination: FloatArray, offset: Int) = route.copyVerticesInto(destination, offset)
+        override fun copyIndicesInto(destination: IntArray, offset: Int) = route.copyIndicesInto(destination, offset)
+    }
+    class Path(override val packetId: GPUDrawPacketID, override val role: GPUCorePrimitiveNativeScopeArenaRole,
+        val geometry: GPUCorePrimitivePathStencilGeometrySnapshot) : GPUCorePrimitiveGeometryPiece {
+        init { require(role != GPUCorePrimitiveNativeScopeArenaRole.Direct) }
+        override val vertexCount get() = geometry.vertexCount
+        override val indexCount get() = geometry.indexCount
+        override val maxLocalIndex get() = geometry.maxLocalIndex
+        override fun copyVerticesInto(destination: FloatArray, offset: Int) = geometry.copyVerticesInto(destination, offset)
+        override fun copyIndicesInto(destination: IntArray, offset: Int) = geometry.copyIndicesInto(destination, offset)
+    }
+}
+
+internal fun GPUCorePrimitiveNativeScopeRouteSeal.Routes.geometryPieces(): List<GPUCorePrimitiveGeometryPiece> =
+    orderedUnits.flatMap { unit -> when (unit) {
+        is GPUCorePrimitiveNativeScopeRouteUnit.Direct -> listOf(GPUCorePrimitiveGeometryPiece.Direct(unit.packetId, unit.route))
+        is GPUCorePrimitiveNativeScopeRouteUnit.PathPair -> listOf(
+            GPUCorePrimitiveGeometryPiece.Path(unit.pair.producerPacketId, GPUCorePrimitiveNativeScopeArenaRole.PathProducer, unit.pair.producer),
+            GPUCorePrimitiveGeometryPiece.Path(unit.pair.coverPacketId, GPUCorePrimitiveNativeScopeArenaRole.PathCover, unit.pair.cover))
+        is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> listOf(GPUCorePrimitiveGeometryPiece.Path(unit.packetId,
+            GPUCorePrimitiveNativeScopeArenaRole.PathProducer, unit.geometry))
+        is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> listOf(GPUCorePrimitiveGeometryPiece.Path(unit.packetId,
+            GPUCorePrimitiveNativeScopeArenaRole.PathCover, unit.geometry))
+    } }
+
 internal class GPUCorePrimitiveNativeScopeGeometryArena private constructor(
     vertices: FloatArray,
     indices: IntArray,
@@ -343,6 +394,24 @@ internal class GPUCorePrimitiveNativeScopeGeometryArena private constructor(
     val slices: List<GPUCorePrimitiveNativeScopeGeometrySlice> = immutableList(slices)
     val vertexFloatCount: Int = vertexSlab.size
     val indexCount: Int = indexSlab.size
+    val packedGeometryHash: String = java.security.MessageDigest.getInstance("SHA-256").run {
+        val word = java.nio.ByteBuffer.allocate(Int.SIZE_BYTES).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        fun add(value: Int) { word.clear(); word.putInt(value); update(word.array()) }
+        add(vertexSlab.size); vertexSlab.forEach { add(it.toRawBits()) }
+        add(indexSlab.size); indexSlab.forEach(::add)
+        slices.forEach { slice ->
+            update(slice.packetId.value.toByteArray(Charsets.UTF_8)); add(slice.role.ordinal)
+            add(slice.firstIndex); add(slice.indexCount); add(slice.baseVertex); add(slice.vertexCount); add(slice.maxLocalIndex)
+        }
+        digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /** A compatibility view over these exact ranges; never reclassifies or repacks geometry. */
+    fun directCompatibilityView(): GPUCorePrimitiveFrameGeometryArena {
+        require(slices.all { it.role == GPUCorePrimitiveNativeScopeArenaRole.Direct })
+        return GPUCorePrimitiveFrameGeometryArena(vertexSlab.copyOf(), indexSlab.copyOf(), slices.map {
+            GPUCorePrimitiveFrameGeometrySlice(it.firstIndex, it.indexCount, it.baseVertex, it.vertexCount, it.maxLocalIndex) })
+    }
 
     fun copyVerticesInto(destination: FloatArray, destinationOffset: Int = 0) {
         require(destinationOffset >= 0 && destinationOffset <= destination.size - vertexSlab.size) {
@@ -359,39 +428,27 @@ internal class GPUCorePrimitiveNativeScopeGeometryArena private constructor(
     }
 
     companion object {
-        fun pack(routes: GPUCorePrimitiveNativeScopeRouteSeal.Routes): GPUCorePrimitiveNativeScopeGeometryArena {
-            val geometryCount = routes.orderedUnits.sumOf { unit ->
-                when (unit) {
-                    is GPUCorePrimitiveNativeScopeRouteUnit.Direct -> 1
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathPair -> 2
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> 1
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> 1
-                }
+        /** Shared sizing walk for preflight and packing; never reads or allocates native handles. */
+        fun countsI64(routes: GPUCorePrimitiveNativeScopeRouteSeal.Routes): Pair<Long, Long> = countsI64(routes.geometryPieces())
+
+        fun countsI64(pieces: List<GPUCorePrimitiveGeometryPiece>): Pair<Long, Long> {
+            var verticesI64 = 0L
+            var indicesI64 = 0L
+            fun add(vertices: Int, indices: Int) {
+                verticesI64 = Math.addExact(verticesI64, vertices.toLong())
+                indicesI64 = Math.addExact(indicesI64, indices.toLong())
             }
-            var totalVertexCount = 0
-            var totalIndexCount = 0
-            routes.orderedUnits.forEach { unit ->
-                when (unit) {
-                    is GPUCorePrimitiveNativeScopeRouteUnit.Direct -> {
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.route.vertexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.route.indexCount)
-                    }
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathPair -> {
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.pair.producer.vertexCount)
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.pair.cover.vertexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.pair.producer.indexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.pair.cover.indexCount)
-                    }
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> {
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.geometry.vertexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.geometry.indexCount)
-                    }
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> {
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.geometry.vertexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.geometry.indexCount)
-                    }
-                }
-            }
+            pieces.forEach { add(it.vertexCount, it.indexCount) }
+            return verticesI64 to indicesI64
+        }
+        fun pack(routes: GPUCorePrimitiveNativeScopeRouteSeal.Routes): GPUCorePrimitiveNativeScopeGeometryArena = pack(routes.geometryPieces())
+
+        fun pack(pieces: List<GPUCorePrimitiveGeometryPiece>): GPUCorePrimitiveNativeScopeGeometryArena {
+            require(pieces.map { it.packetId }.distinct().size == pieces.size)
+            val geometryCount = pieces.size
+            val counts = countsI64(pieces)
+            val totalVertexCount = Math.toIntExact(counts.first)
+            val totalIndexCount = Math.toIntExact(counts.second)
             val vertices = FloatArray(Math.multiplyExact(totalVertexCount, 2))
             val indices = IntArray(totalIndexCount)
             val slices = ArrayList<GPUCorePrimitiveNativeScopeGeometrySlice>(geometryCount)
@@ -425,56 +482,9 @@ internal class GPUCorePrimitiveNativeScopeGeometryArena private constructor(
                 firstIndex = Math.addExact(firstIndex, indexCount)
             }
 
-            routes.orderedUnits.forEach { unit ->
-                when (unit) {
-                    is GPUCorePrimitiveNativeScopeRouteUnit.Direct -> append(
-                        unit.packetId,
-                        GPUCorePrimitiveNativeScopeArenaRole.Direct,
-                        unit.route.vertexCount,
-                        unit.route.indexCount,
-                        unit.route.maxLocalIndex,
-                        unit.route::copyVerticesInto,
-                        unit.route::copyIndicesInto,
-                    )
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathPair -> {
-                        append(
-                            unit.pair.producerPacketId,
-                            GPUCorePrimitiveNativeScopeArenaRole.PathProducer,
-                            unit.pair.producer.vertexCount,
-                            unit.pair.producer.indexCount,
-                            unit.pair.producer.maxLocalIndex,
-                            unit.pair.producer::copyVerticesInto,
-                            unit.pair.producer::copyIndicesInto,
-                        )
-                        append(
-                            unit.pair.coverPacketId,
-                            GPUCorePrimitiveNativeScopeArenaRole.PathCover,
-                            unit.pair.cover.vertexCount,
-                            unit.pair.cover.indexCount,
-                            unit.pair.cover.maxLocalIndex,
-                            unit.pair.cover::copyVerticesInto,
-                            unit.pair.cover::copyIndicesInto,
-                        )
-                    }
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> append(
-                        unit.packetId,
-                        GPUCorePrimitiveNativeScopeArenaRole.PathProducer,
-                        unit.geometry.vertexCount,
-                        unit.geometry.indexCount,
-                        unit.geometry.maxLocalIndex,
-                        unit.geometry::copyVerticesInto,
-                        unit.geometry::copyIndicesInto,
-                    )
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> append(
-                        unit.packetId,
-                        GPUCorePrimitiveNativeScopeArenaRole.PathCover,
-                        unit.geometry.vertexCount,
-                        unit.geometry.indexCount,
-                        unit.geometry.maxLocalIndex,
-                        unit.geometry::copyVerticesInto,
-                        unit.geometry::copyIndicesInto,
-                    )
-                }
+            pieces.forEach { piece ->
+                append(piece.packetId, piece.role, piece.vertexCount, piece.indexCount,
+                    piece.maxLocalIndex, piece::copyVerticesInto, piece::copyIndicesInto)
             }
             check(baseVertex == totalVertexCount && firstIndex == totalIndexCount) {
                 "Unified native geometry sizing and copy passes diverged"

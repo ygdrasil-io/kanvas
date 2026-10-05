@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 
 /**
  * The outcome of a single [Surface.render] invocation.
@@ -32,6 +33,8 @@ data class RenderResult(
     val nativeEvidenceCounters: Map<String, Long> = emptyMap(),
     /** Encoder scope kinds emitted by the native route during this completed render. */
     val nativeEvidenceScopeKinds: List<String> = emptyList(),
+    /** Premultiplication representation actually produced by the authenticated target. */
+    val premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL,
 ) {
     /** True when no diagnostics were recorded during rendering. */
     val isClean: Boolean get() = diagnostics.isEmpty
@@ -49,7 +52,7 @@ data class RenderResult(
         if (this === other) return true
         if (other !is RenderResult) return false
         return pixels.contentEquals(other.pixels) && width == other.width && height == other.height
-            && format == other.format && colorSpace == other.colorSpace && diagnostics == other.diagnostics && stats == other.stats && structuralSteps == other.structuralSteps && nativeEvidenceCounters == other.nativeEvidenceCounters && nativeEvidenceScopeKinds == other.nativeEvidenceScopeKinds
+            && format == other.format && colorSpace == other.colorSpace && diagnostics == other.diagnostics && stats == other.stats && structuralSteps == other.structuralSteps && nativeEvidenceCounters == other.nativeEvidenceCounters && nativeEvidenceScopeKinds == other.nativeEvidenceScopeKinds && premultiplication == other.premultiplication
     }
-    override fun hashCode(): Int = pixels.contentHashCode() * 31 + width + height + format.hashCode() + colorSpace.hashCode() + diagnostics.hashCode() + stats.hashCode() + structuralSteps.hashCode() + nativeEvidenceCounters.hashCode() + nativeEvidenceScopeKinds.hashCode()
+    override fun hashCode(): Int = pixels.contentHashCode() * 31 + width + height + format.hashCode() + colorSpace.hashCode() + diagnostics.hashCode() + stats.hashCode() + structuralSteps.hashCode() + nativeEvidenceCounters.hashCode() + nativeEvidenceScopeKinds.hashCode() + premultiplication.hashCode()
 }

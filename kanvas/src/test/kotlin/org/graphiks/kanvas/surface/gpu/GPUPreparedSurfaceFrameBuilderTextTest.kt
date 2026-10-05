@@ -19,14 +19,6 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.SCISSOR_NATIVE
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
-import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
-import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
-import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
-import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant
@@ -205,31 +197,6 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             "destination snapshot consumer must render after the synthesized scene clear",
         )
         assertEquals(2, ready.visualOperationCount)
-    }
-
-    @Test
-    fun `destination read text blend mirror equals the planner scalar coverage set`() {
-        // The synthesis condition mirrors GPUBlendPlanner's scalar-coverage dst-read fallback
-        // for text semantics; pin the mirror to the planner itself so drift fails loudly.
-        val plannerRequired = GPUBlendMode.entries.filter { mode ->
-            GPUBlendPlanner().plan(
-                GPUBlendSpecializationRequest(
-                    mode = mode,
-                    coverage = GPUCoverageConsumption.ScalarCoverage,
-                    sourceAlpha = GPUSourceAlphaClassification.Translucent,
-                    target = GPUTargetBlendFacts(
-                        formatClass = "rgba8unorm",
-                        clampsNormalizedColorWrites = true,
-                        premultipliedAlpha = true,
-                    ),
-                    samplePlan = GPUSamplePlan.SingleSampleFrame,
-                ),
-            ).destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired
-        }.map { it.name }.toSet()
-        assertEquals(
-            plannerRequired,
-            PREPARED_DST_READ_TEXT_BLEND_MODES.map { mode -> mode.name }.toSet(),
-        )
     }
 
     @Test

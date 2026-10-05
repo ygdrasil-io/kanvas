@@ -1,0 +1,416 @@
+package org.graphiks.kanvas.gpu.plan
+
+import java.security.MessageDigest
+import java.util.Collections
+import kotlin.math.ceil
+import kotlin.math.floor
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.render.ir.BlendMode
+import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.CanonicalId
+import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
+import org.graphiks.kanvas.render.ir.RenderDiagnostic
+import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
+import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
+import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
+import org.graphiks.kanvas.render.ir.RenderPlanResult
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.SceneCommand
+import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.PathF32
+import org.graphiks.math.geometry.PathSegmentF32
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.SizeI32
+import org.graphiks.math.matrix.Matrix3x3F32
+
+/** W4a's closed capability: fractional solid rectangles with analytic scalar AA. */
+public class W4aAnalyticRectPlanCompiler internal constructor(private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
+    override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
+        if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
+            return invalidSelection(diag(W4aPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
+        }
+        if (target.colorSpace != ColorSpace.SRGB) return notCandidate("W4a supports only sRGB targets")
+        return when (val recognition = recognize(scene)) {
+            is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(W5A_CAPABILITY_ID, scene.canonicalId, target, recognition.refusals)
+            is Recognition.Accepted -> GpuPlanSelection.Candidate(
+                W4aCandidate(this, scene.canonicalId, target, recognition.draws, recognition.materialPlanTable, recognition.capabilityId,recognition.sources),
+            )
+            is Recognition.Gap -> notCandidate(recognition.message)
+            is Recognition.Invalid -> invalidSelection(diag(W4aPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, recognition.message))
+        }
+    }
+
+    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> =
+        if (hasPendingSources(candidate)) constructSources(candidate,capabilities,budget).prepareAndPublishSourcesV4()
+        else construct(candidate,capabilities,budget).publishConstructionResult()
+
+    internal fun hasPendingSources(candidate: GpuPlanCandidate): Boolean =
+        (candidate as? W4aCandidate)?.sources?.sources()?.any { it.pending } == true
+
+    internal fun construct(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<RenderGraphConstruction> = constructChecked(candidate,capabilities,budget,
+        clear = { selected,extent -> RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.constructClearOnly(
+            PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),W5B_CAPABILITY_ID,
+            extent,capabilities,budget,null))) }) { selected,extent,draws,topology,memory ->
+            require(!hasPendingSources(selected)) { W5fPlanDiagnostics.Schema }
+            val id = PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget))
+            if (selected.capabilityId == W5B_CAPABILITY_ID) RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(
+                W5bDestinationGraphSealer.construct(id,selected.capabilityId,extent,capabilities,budget,draws,selected.materialPlanTable,
+                    memory.targetBytes,memory.readbackBytes,memory.readbackBytesPerRow,
+                    topology.resources.filter { it.role in GEOMETRY_ROLES },
+                    (topology.passes.first() as PlanPass.RenderPass).drawDataResources)))
+            else RenderPlanResult.Ready(RenderGraph.construct(id,selected.capabilityId,extent,FORMAT,capabilities,budget,
+                draws.size,topology.resources,topology.passes,topology.dependencies,topology.peakI64,selected.materialPlanTable))
+        }
+
+    internal fun constructSources(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> = constructChecked(candidate,capabilities,budget,
+        clear = { selected,extent -> SourceDeferredRenderConstructionV4.clearOnly(
+            PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),W5B_CAPABILITY_ID,
+            extent,capabilities,budget, preparedIdentity = { scene, _, _ -> PlanId(planIdentity(scene, selected.target, capabilities, budget)) }) }) { selected,extent,draws,ordinary,memory ->
+            val symbolic = draws.mapIndexed { ordinal,draw -> draw.withMaterialRef(MaterialPlanRef(ordinal)) }
+            val topology = if (selected.capabilityId == W5B_CAPABILITY_ID)
+                W5bDestinationGraphSealer.describeSources(selected.capabilityId,extent,capabilities,budget,symbolic,
+                    memory.targetBytes,memory.readbackBytes,memory.readbackBytesPerRow,
+                    ordinary.resources.filter { it.role in GEOMETRY_ROLES },
+                    (ordinary.passes.first() as PlanPass.RenderPass).drawDataResources)
+                else W5bDestinationGraphSealer.DestinationTopologyV4(ordinary.format,ordinary.resources,
+                    remapSourcePassesV4(ordinary.passes) { ref -> MaterialPlanRef(draws.indexOfFirst {
+                        it.materialAuthority.materialPlanRef() == ref }.also { require(it >= 0) }) },ordinary.dependencies,ordinary.peakI64)
+            when (val result = SourceDeferredRenderConstructionV4.of(
+                PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),selected.capabilityId,
+                extent,topology.format,capabilities,budget,draws.size,topology.resources,topology.passes,topology.dependencies,
+                selected.sources,if (selected.capabilityId == W5B_CAPABILITY_ID) DeferredLaneTopologyV4.GeometryBridge
+                    else DeferredLaneTopologyV4.Ordinary,null,emptyList(),emptyMap(),emptyMap(),
+                preparedIdentity = { scene, _, _ -> PlanId(planIdentity(scene, selected.target, capabilities, budget)) })) {
+                is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
+                is SourceConstructionResultV4.Refused -> result.failure
+            }
+        }
+
+    private fun <T: Any> constructChecked(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,budget: PlanBudget,
+        clear: (W4aCandidate,SizeI32)->RenderPlanResult<T>,
+        finish: (W4aCandidate,SizeI32,List<AnalyticRectDraw>,W5bDestinationGraphSealer.DestinationTopologyV4,
+            AnalyticRectMemoryFootprint)->RenderPlanResult<T>): RenderPlanResult<T> {
+        val selected = candidate as? W4aCandidate ?: return invalidCandidate()
+        if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
+        val target = selected.target
+        val extent = SizeI32(target.extent.width, target.extent.height)
+        if (extent.width > capabilities.maxTextureDimension2D || extent.height > capabilities.maxTextureDimension2D) {
+            return promoted(W4aPlanDiagnostics.CapabilityTextureDimension, "Target extent exceeds device texture limits")
+        }
+        if (FORMAT !in capabilities.supportedFormats()) return promoted(W4aPlanDiagnostics.CapabilityFormat, "W4a target format is unavailable")
+        if (!REQUIRED_OPERATIONS.all { it in capabilities.supportedOperations() }) {
+            return promoted(W4aPlanDiagnostics.CapabilityOperation, "W4a required operation is unavailable")
+        }
+        if (capabilities.maxDynamicUniformBuffersPerPipelineLayout < 1) {
+            return promoted(W4aPlanDiagnostics.CapabilityDynamicUniform, "W4a requires one dynamic uniform buffer")
+        }
+        if (!validAllocationFacts(capabilities)) {
+            return promoted(W4aPlanDiagnostics.CapabilityAllocationPolicy, "W4a allocation facts are not power-of-two aligned")
+        }
+        if (selected.draws.isEmpty()) return try {
+            clear(selected,extent)
+        } catch (_: IllegalArgumentException) { resourceLimit(W4aPlanDiagnostics.SizeOverflow, "W4a clear-only frame exceeds its resource contract") }
+        val plannedDraws = selected.draws.map { sealed ->
+            val raster = rasterBounds(sealed.deviceBounds) ?: return resourceLimit(W4aPlanDiagnostics.SizeOverflow, "Device raster bounds exceed I32")
+            val targetRaster = intersect(raster, targetBounds(extent))
+                ?: return resourceLimit(W4aPlanDiagnostics.SizeOverflow, "Selected draw became empty during planning")
+            val scissor = if (sealed.clip == null) targetRaster else intersect(targetRaster, sealed.clip)
+                ?: return resourceLimit(W4aPlanDiagnostics.SizeOverflow, "Selected draw became empty during planning")
+            AnalyticRectDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.deviceBounds, raster, scissor, sealed.blend,
+                sealed.coordinates,sealed.coordinatesV2,sealed.coordinatesV4)
+        }
+        val footprint = when (val memory = AnalyticRectPlanBudget.calculate(extent, plannedDraws.size, capabilities, budget)) {
+            is AnalyticRectPlanBudgetResult.WithinBudget -> memory.footprint
+            is AnalyticRectPlanBudgetResult.Exceeded -> return resourceLimit(W4aPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local memory budget is exceeded")
+            is AnalyticRectPlanBudgetResult.Invalid -> return resourceLimit(W4aPlanDiagnostics.SizeOverflow, "W4a physical footprint overflowed")
+        }
+        if (listOf(footprint.readbackBytes, footprint.vertexCapacityBytes, footprint.indexCapacityBytes, footprint.uniformCapacityBytes)
+                .any { it > capabilities.maxBufferSizeBytes }) {
+            return promoted(W4aPlanDiagnostics.CapabilityBufferSize, "W4a buffer exceeds device limits")
+        }
+        return try {
+            val logicalTarget = PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, PlanTextureFormat.Color(FORMAT), extent,
+                footprint.targetBytes, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, 2)
+            val staging = PlanResource.of(PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null,
+                footprint.readbackBytes, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 1, 2)
+            val vertex = PlanResource.of(PlanResourceRole.VertexData, 0, PlanResourceKind.Buffer, null, null,
+                footprint.vertexCapacityBytes, setOf(PlanResourceUsage.Vertex, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, 2)
+            val index = PlanResource.of(PlanResourceRole.IndexData, 0, PlanResourceKind.Buffer, null, null,
+                footprint.indexCapacityBytes, setOf(PlanResourceUsage.Index, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, 2)
+            val uniform = PlanResource.of(PlanResourceRole.UniformData, 0, PlanResourceKind.Buffer, null, null,
+                footprint.uniformCapacityBytes, setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, 2)
+            val render = PlanPass.RenderPass(0, logicalTarget.id, plannedDraws, AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
+                PlanDrawDataResources(vertex.id, index.id, uniform.id))
+            val readback = PlanPass.ReadbackPass(0, logicalTarget.id, staging.id, footprint.readbackBytesPerRow)
+            finish(selected,extent,plannedDraws,W5bDestinationGraphSealer.DestinationTopologyV4(FORMAT,
+                listOf(logicalTarget,staging,vertex,index,uniform),listOf(render,readback),
+                listOf(PlanPassDependency(render.id,readback.id)),footprint.peakBytes),footprint)
+        } catch (failure: IllegalArgumentException) {
+            val reason = failure.message.orEmpty()
+            if (reason.startsWith("unsupported.material.gradient.")) promoted(RenderDiagnosticCode(reason), reason)
+            else if (reason.startsWith("resource.material.gradient.")) resourceLimit(RenderDiagnosticCode(reason), reason)
+            else promoted(W4aPlanDiagnostics.PlanIdentityInvalid, "W4a graph invariants were not satisfied: $reason")
+        }
+    }
+
+    private fun recognize(scene: SceneSnapshot): Recognition {
+        if (scene.colorSpace != ColorSpace.SRGB) return Recognition.Gap("W4a supports only sRGB scenes")
+        val target = RectF32(0f, 0f, scene.extent.width.toFloat(), scene.extent.height.toFloat())
+        val draws = mutableListOf<SealedDraw>()
+        val materialEntries = mutableListOf<MaterialPlanEntry>()
+        val sources = mutableListOf<MaterialSourceConstructionV4>()
+        val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
+        var refusedFractionalEdge = false
+        var elidedNoOpsI32 = 0
+        for ((index, command) in scene.withIndex()) when (command) {
+            is SceneCommand.Draw -> when (val draw = recognizeDraw(command.node, index, target, materialEntries,sources)) {
+                is DrawRecognition.NoOp -> { elidedNoOpsI32++; refusedFractionalEdge = refusedFractionalEdge || draw.fractionalEdge }
+                is DrawRecognition.MaterialRefused -> { materialRefusals += draw.refusal; refusedFractionalEdge = refusedFractionalEdge || draw.fractionalEdge }
+                is DrawRecognition.Accepted -> draws += draw.draw
+                is DrawRecognition.Gap -> return Recognition.Gap(draw.message)
+                is DrawRecognition.Invalid -> return Recognition.Invalid(draw.message)
+            }
+            is SceneCommand.SetTransform -> if (!finite(command.matrix)) {
+                return Recognition.Invalid("Transform is non-finite")
+            }
+            is SceneCommand.SetClip -> if (!finiteMetadataClip(command.clip)) {
+                return Recognition.Invalid("Clip bounds are non-finite")
+            }
+            is SceneCommand.Annotation -> if (!finite(command.copyBounds())) return Recognition.Invalid("Annotation bounds are non-finite")
+            else -> return Recognition.Gap("Scene command is outside W4a")
+        }
+        if (draws.isEmpty() && materialRefusals.isEmpty() && elidedNoOpsI32 == 0) return Recognition.Gap("W4a requires at least one visible draw")
+        if (draws.size + materialRefusals.size + elidedNoOpsI32 > MAX_DRAWS) return Recognition.Gap("W4a accepts at most 512 visual draws")
+        if (!refusedFractionalEdge && draws.none { hasFractionalEdge(it.deviceBounds) }) return Recognition.Gap("W4a requires a fractional device edge")
+        if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
+        val pending = sources.any { it.pending }
+        return Recognition.Accepted(if (pending) draws.mapIndexed { ordinal,draw -> draw.copy(material=MaterialPlanRef(ordinal)) } else draws,
+            materialEntries.takeIf { it.isNotEmpty() && !pending }?.let(MaterialPlanTable::of),
+            if (pending || elidedNoOpsI32 > 0 || draws.any { it.blend != BlendPlan.LegacySrcOverV1 } ||
+                materialEntries.any { it.bindings is MaterialBindingPlan.GradientV1 || it.bindings is MaterialBindingPlan.GradientV2 }) W5B_CAPABILITY_ID else W5A_CAPABILITY_ID,
+            (MaterialSourceConstructionTableV4.of(sources) as SourceConstructionResultV4.Built).value)
+    }
+
+    private fun recognizeDraw(
+        node: DrawNode,
+        index: Int,
+        target: RectF32,
+        materialEntries: MutableList<MaterialPlanEntry>,
+        sources: MutableList<MaterialSourceConstructionV4>,
+    ): DrawRecognition {
+        val geometry = node.geometry as? GeometryNode.Rect ?: return DrawRecognition.Gap("Draw geometry is outside W4a")
+        if (node.origin != DrawOrigin.RECT) return DrawRecognition.Gap("Draw origin is outside W4a")
+        if (!w4aPaint(node.paint, true) || !w4aBlend(node.blend) || node.effects !is EffectStack.Empty && node.paint?.colorFilter == null || node.resource != null || node.operationBlendMode != null) {
+            return DrawRecognition.Gap("Draw state is outside W4a")
+        }
+        if (!materialMatchesPaintAuthority(node)) return DrawRecognition.Gap("Draw material disagrees with paint authority")
+        if (node.coverage != CoverageRequest.ANTIALIASED) return DrawRecognition.Gap("Coverage is outside W4a")
+        val source = geometry.copyBounds()
+        if (!finite(source) || !finite(node.transform)) return DrawRecognition.Invalid("Draw geometry or transform is non-finite")
+        if (source.isEmpty) return DrawRecognition.Gap("Source geometry is empty or inverted")
+        val device = deviceBounds(source, node.transform) ?: return DrawRecognition.Gap("Transform is outside W4a")
+        val clip = when (val recognized = recognizeClip(node.clip)) {
+            is ClipRecognition.Accepted -> recognized.bounds
+            is ClipRecognition.Gap -> return DrawRecognition.Gap(recognized.message)
+            is ClipRecognition.Invalid -> return DrawRecognition.Invalid(recognized.message)
+        }
+        val targetVisible = intersect(device, target)
+            ?: return DrawRecognition.Gap("Draw is outside the target")
+        val visible = if (clip == null) targetVisible else intersect(targetVisible, clip.toRectF32())
+            ?: return DrawRecognition.Gap("Draw is fully clipped out")
+        if (visible.isEmpty) return DrawRecognition.Gap("Draw is fully clipped out")
+        val raster = rasterBounds(visible) ?: return DrawRecognition.Gap("Visible raster bounds exceed I32")
+        return when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node, FORMAT.blendTargetClampV1(), raster,
+            CoveragePlan.AnalyticScalarAA,legacyGradientBoundsI32=null,runtimeCatalog=runtimeCatalog)) {
+            EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> DrawRecognition.NoOp(hasFractionalEdge(device))
+            is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> DrawRecognition.MaterialRefused(
+                EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), hasFractionalEdge(device))
+            is EffectiveMaterialPlanner.SourceNormalizationV4.Source -> {
+                val source = planned.captured
+                sources += source
+                val resolved = source.resolvedSource
+                val root = if (resolved == null) MaterialPlanRef(sources.lastIndex)
+                    else appendMaterialPlan(materialEntries,resolved.table,resolved.root)
+                DrawRecognition.Accepted(SealedDraw(index,root,device,clip,
+                    if (source.blend is BlendPlan.FixedFunctionV1 && source.blend.mode == BlendMode.SRC_OVER)
+                        BlendPlan.LegacySrcOverV1 else source.blend,MaterialCoordinatePlanV1.fromCtm(node.transform),
+                    resolved?.table?.coordinatesV2(resolved.root),
+                    if (source.pending) source.coordinates else resolved?.table?.coordinatesV4(resolved.root)))
+            }
+        }
+    }
+
+    private fun recognizeClip(clip: ClipStackNode): ClipRecognition = when (clip) {
+        ClipStackNode.Empty -> ClipRecognition.Accepted(null)
+        is ClipStackNode.DeviceRect -> {
+            val bounds = clip.copyBounds()
+            if (!finite(bounds)) ClipRecognition.Invalid("Clip bounds are non-finite")
+            else if (clip.antiAlias) ClipRecognition.Gap("Antialiased clip is outside W4a")
+            else integralRect(bounds)?.let(ClipRecognition::Accepted) ?: ClipRecognition.Gap("Clip is not an integral non-empty I32 rectangle")
+        }
+        is ClipStackNode.Operations -> ClipRecognition.Gap("Complex clip is outside W4a")
+    }
+
+    private fun deviceBounds(source: RectF32, matrix: Matrix3x3F32): RectF32? {
+        if (!(matrix.isIdentity || matrix.isScaleTranslate()) || !finite(matrix)) return null
+        val corners = listOf(
+            matrix.transform(Point2F32(source.left, source.top)), matrix.transform(Point2F32(source.right, source.top)),
+            matrix.transform(Point2F32(source.right, source.bottom)), matrix.transform(Point2F32(source.left, source.bottom)),
+        )
+        if (corners.any { !it.x.isFinite() || !it.y.isFinite() }) return null
+        return RectF32(corners.minOf { it.x }, corners.minOf { it.y }, corners.maxOf { it.x }, corners.maxOf { it.y })
+    }
+
+    private fun rasterBounds(bounds: RectF32): RectI32? {
+        val left = floor(bounds.left.toDouble())
+        val top = floor(bounds.top.toDouble())
+        val right = ceil(bounds.right.toDouble())
+        val bottom = ceil(bounds.bottom.toDouble())
+        if (listOf(left, top, right, bottom).any { it < Int.MIN_VALUE.toDouble() || it > Int.MAX_VALUE.toDouble() }) return null
+        return RectI32(left.toInt(), top.toInt(), right.toInt(), bottom.toInt()).takeUnless { it.isEmpty }
+    }
+
+    private fun integralRect(bounds: RectF32): RectI32? {
+        val values = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        val converted = values.map { value ->
+            val long = value.toLong()
+            if (long.toFloat() != value || long !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) return null
+            long.toInt()
+        }
+        return RectI32(converted[0], converted[1], converted[2], converted[3]).takeUnless { it.isEmpty64() }
+    }
+
+    private fun RectI32.toRectF32(): RectF32 = RectF32(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
+    private fun targetBounds(extent: SizeI32): RectI32 = RectI32(0, 0, extent.width, extent.height)
+    private fun intersect(first: RectI32, second: RectI32): RectI32? = first.copy().takeIf { it.intersect(second) }
+    private fun intersect(first: RectF32, second: RectF32): RectF32? = RectF32(
+        maxOf(first.left, second.left), maxOf(first.top, second.top), minOf(first.right, second.right), minOf(first.bottom, second.bottom),
+    ).takeUnless { it.isEmpty }
+
+    private fun hasFractionalEdge(bounds: RectF32): Boolean = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        .any { value -> value.toLong().toFloat() != value }
+    private fun finiteMetadataClip(clip: ClipStackNode): Boolean = when (clip) {
+        ClipStackNode.Empty -> true
+        is ClipStackNode.DeviceRect -> finite(clip.copyBounds())
+        is ClipStackNode.Operations -> clip.all { finiteMetadataClipGeometry(it.geometry) }
+    }
+    private fun finiteMetadataClipGeometry(geometry: GeometryNode): Boolean = when (geometry) {
+        is GeometryNode.Rect -> finite(geometry.copyBounds())
+        is GeometryNode.RRect -> finite(geometry.copyShape())
+        is GeometryNode.Path -> finite(geometry.path)
+        else -> false
+    }
+    private fun finite(shape: RRectF32): Boolean = finite(shape.rect) && listOf(
+        shape.topLeft.x, shape.topLeft.y, shape.topRight.x, shape.topRight.y,
+        shape.bottomRight.x, shape.bottomRight.y, shape.bottomLeft.x, shape.bottomLeft.y,
+    ).all(Float::isFinite)
+    private fun finite(path: PathF32): Boolean = path.all { segment -> when (segment) {
+        is PathSegmentF32.MoveTo -> finite(segment.point)
+        is PathSegmentF32.LineTo -> finite(segment.point)
+        is PathSegmentF32.QuadTo -> finite(segment.control) && finite(segment.point)
+        is PathSegmentF32.CubicTo -> finite(segment.control1) && finite(segment.control2) && finite(segment.point)
+        is PathSegmentF32.ArcTo -> finite(segment.point) && segment.radius.x.isFinite() &&
+            segment.radius.y.isFinite() && segment.xAxisRotation.isFinite()
+        PathSegmentF32.Close -> true
+    } }
+    private fun finite(point: Point2F32): Boolean = point.x.isFinite() && point.y.isFinite()
+    private fun finite(bounds: RectF32): Boolean = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite)
+    private fun finite(matrix: Matrix3x3F32): Boolean = listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty, matrix.persp0, matrix.persp1, matrix.persp2).all(Float::isFinite)
+    private fun w4aBlend(blend: BlendNode): Boolean = when (blend) { BlendNode.SrcOver -> true; is BlendNode.Mode -> true; is BlendNode.Paint -> blend.blender == null; is BlendNode.Custom -> false }
+    private fun w4aPaint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (
+        (paint.shader == null || acceptsMaterialShader) && paint.blender == null &&
+            (paint.colorFilter == null || paint.colorFilter is org.graphiks.kanvas.render.ir.ColorFilterNode.Matrix) &&
+            paint.maskFilter == null && paint.pathEffect == null && paint.imageFilter == null &&
+            paint.style == PaintStyleNode.FILL
+        )
+    private fun materialMatchesPaintAuthority(node: DrawNode): Boolean {
+        val paint = node.paint ?: return false
+        val paintMaterial = paint.shader ?: MaterialNode.Solid(paint.color)
+        return node.material.canonicalId == paintMaterial.canonicalId
+    }
+    private fun appendMaterialPlan(
+        entries: MutableList<MaterialPlanEntry>,
+        incoming: MaterialPlanTable,
+        root: MaterialPlanRef,
+    ): MaterialPlanRef {
+        val offset = entries.size
+        incoming.entries().forEach { entry -> entries += entry }
+        return MaterialPlanRef(offset + root.indexI32)
+    }
+    private fun validAllocationFacts(capabilities: PlanCapabilitySnapshot): Boolean = listOf(
+        capabilities.copyBytesPerRowAlignment.toLong(), capabilities.minUniformBufferOffsetAlignment.toLong(),
+        capabilities.bufferAllocationPolicy.vertexFloorBytes, capabilities.bufferAllocationPolicy.indexFloorBytes, capabilities.bufferAllocationPolicy.uniformFloorBytes,
+    ).all { it > 0 && it and (it - 1) == 0L }
+
+    private fun notCandidate(message: String): GpuPlanSelection.NotCandidate = GpuPlanSelection.NotCandidate(listOf(diag(W4aPlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, message)))
+    private fun invalidSelection(diagnostic: RenderDiagnostic): GpuPlanSelection.InvalidScene = GpuPlanSelection.InvalidScene(listOf(diagnostic))
+    private fun diag(code: RenderDiagnosticCode, domain: RenderDiagnosticDomain, message: String): RenderDiagnostic = W4aPlanDiagnostics.diagnostic(code, domain, message)
+    private fun promoted(code: RenderDiagnosticCode, message: String): RenderPlanResult<Nothing> = RenderPlanResult.GapOnPromotedScope(listOf(diag(code, RenderDiagnosticDomain.CAPABILITY, message)))
+    private fun resourceLimit(code: RenderDiagnosticCode, message: String): RenderPlanResult<Nothing> = RenderPlanResult.ResourceLimitExceeded(listOf(diag(code, RenderDiagnosticDomain.RESOURCE, message)))
+    private fun invalidCandidate(): RenderPlanResult<Nothing> = RenderPlanResult.InvalidScene(listOf(RenderDiagnostic(RenderDiagnosticCode("gpu-plan.selection.invalid-candidate"), RenderDiagnosticDomain.SCENE, RenderDiagnosticSeverity.ERROR, "W4a candidate does not belong to this compiler.")))
+
+    private fun planIdentity(scene: CanonicalId, target: RenderTargetDescriptor, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): String {
+        val fields = listOf("w4a-plan-w5a-v2", scene.value, target.extent.width.toString(), target.extent.height.toString(), target.colorSpace.name,
+            target.colorSpace.transferFunction.name, target.colorSpace.gamut.name, capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(), capabilities.copyBytesPerRowAlignment.toString(), capabilities.identitySupportedFormats(target).map { it.name }.sorted().joinToString(","), capabilities.minUniformBufferOffsetAlignment.toString(), capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(), capabilities.supportedOperations().map { it.name }.sorted().joinToString(","), capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(), capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name, budget.maxFrameLocalBytes.toString()) + planCapabilityIdentityFacts(capabilities, target)
+        val digest = MessageDigest.getInstance("SHA-256")
+        fields.forEach { value -> val bytes = value.encodeToByteArray(); digest.update(bytes.size.toString().encodeToByteArray()); digest.update(0); digest.update(bytes); digest.update(0) }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private sealed interface Recognition {
+        data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition
+        data class Accepted(
+            val draws: List<SealedDraw>,
+            val materialPlanTable: MaterialPlanTable?,
+            val capabilityId: String,
+            val sources: MaterialSourceConstructionTableV4,
+        ) : Recognition
+        data class Gap(val message: String) : Recognition
+        data class Invalid(val message: String) : Recognition
+    }
+    private sealed interface DrawRecognition { data class NoOp(val fractionalEdge: Boolean) : DrawRecognition; data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val fractionalEdge: Boolean) : DrawRecognition; data class Accepted(val draw: SealedDraw) : DrawRecognition; data class Gap(val message: String) : DrawRecognition; data class Invalid(val message: String) : DrawRecognition }
+    private sealed interface ClipRecognition { data class Accepted(val bounds: RectI32?) : ClipRecognition; data class Gap(val message: String) : ClipRecognition; data class Invalid(val message: String) : ClipRecognition }
+    private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val deviceBounds: RectF32,
+        val clip: RectI32?, val blend: BlendPlan, val coordinates: MaterialCoordinatePlanV1?,
+        val coordinatesV2: MaterialCoordinatePlanV2?,val coordinatesV4: SourceCoordinatesV4?)
+    private class W4aCandidate(
+        val owner: W4aAnalyticRectPlanCompiler,
+        override val sceneCanonicalId: CanonicalId,
+        override val target: RenderTargetDescriptor,
+        draws: List<SealedDraw>,
+        val materialPlanTable: MaterialPlanTable?,
+        override val capabilityId: String,
+        val sources: MaterialSourceConstructionTableV4,
+    ) : GpuPlanCandidate {
+        val draws: List<SealedDraw> = Collections.unmodifiableList(draws.map { it.copy(deviceBounds = it.deviceBounds.copy(), clip = it.clip?.copy()) })
+        private val sceneFingerprint = sceneCanonicalId
+        private val targetFingerprint = target.canonicalId
+        fun hasMatchingFingerprints(): Boolean = capabilityId in setOf(W5A_CAPABILITY_ID, W5B_CAPABILITY_ID) &&
+            sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
+    }
+
+    public companion object {
+        private val GEOMETRY_ROLES = setOf(PlanResourceRole.VertexData,PlanResourceRole.IndexData,PlanResourceRole.UniformData)
+        public const val HISTORICAL_CAPABILITY_ID: String = "solid-rect-scalar-aa-simple-scissor-src-over-srgb-v1"
+        public const val CAPABILITY_ID: String = "w5a-solid-rect-scalar-aa-simple-scissor-src-over-srgb-v2"
+        public const val W5A_CAPABILITY_ID: String = CAPABILITY_ID
+        public const val W5B_CAPABILITY_ID: String = "w5b-analytic-rect-final-blend-v3"
+        private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+        private val REQUIRED_OPERATIONS = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)
+        private const val MAX_DRAWS = 512
+    }
+}

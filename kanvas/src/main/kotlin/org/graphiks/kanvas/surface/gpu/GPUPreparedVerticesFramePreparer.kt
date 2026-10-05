@@ -16,6 +16,11 @@ internal sealed interface GPUPreparedVerticesFramePreparation {
     ) : GPUPreparedVerticesFramePreparation
 }
 
+internal sealed interface GPUPreparedVerticesDrawPreparation {
+    data class Ready(val draws: List<GPUPreparedVerticesDraw>) : GPUPreparedVerticesDrawPreparation
+    data class Refused(val refusal: GPUPreparedOperationRefusal) : GPUPreparedVerticesDrawPreparation
+}
+
 internal fun interface GPUPreparedFrameMappingBoundary {
     fun map(
         operations: List<DisplayOp>,
@@ -40,20 +45,35 @@ private val canonicalPreparedFrameMappingBoundary = GPUPreparedFrameMappingBound
 }
 
 internal object GPUPreparedVerticesFramePreparer {
-    fun prepare(
+    fun lowerDraws(
         operations: List<DisplayOp>,
         target: GPUTargetFacts,
-        config: RenderConfig,
         capabilities: GPUCapabilities,
-        limits: PreparedVerticesFrameInventoryLimits = defaultLimits(capabilities),
-        preparedTextInventory: PreparedTextFrameInventory? = null,
-        mappingBoundary: GPUPreparedFrameMappingBoundary = canonicalPreparedFrameMappingBoundary,
-    ): GPUPreparedVerticesFramePreparation {
+        commonMaterialBridge: W5aPreparedVerticesMaterialBridge? = null,
+    ): GPUPreparedVerticesDrawPreparation {
         val operationSnapshot = operations.toList()
+        val materialBridge = commonMaterialBridge ?: W5aPreparedVerticesMaterialBridge.capture(
+            operations = operationSnapshot,
+            width = target.width,
+            height = target.height,
+        )
         val draws = ArrayList<GPUPreparedVerticesDraw>()
         operationSnapshot.forEachIndexed { operationIndex, operation ->
             if (operation !is DisplayOp.DrawVertices && operation !is DisplayOp.DrawMesh) {
                 return@forEachIndexed
+            }
+            val materialPlan = when (val bridgeResult = materialBridge.materialFor(operationIndex)) {
+                W5aPreparedVerticesMaterialBridge.Result.NotCandidate -> null
+                is W5aPreparedVerticesMaterialBridge.Result.Ready -> bridgeResult.materialPlan
+                is W5aPreparedVerticesMaterialBridge.Result.Refused ->
+                    return GPUPreparedVerticesDrawPreparation.Refused(
+                        GPUPreparedOperationRefusal(
+                            commandId = operationIndex,
+                            operationIndex = operationIndex,
+                            code = bridgeResult.code,
+                            facts = bridgeResult.facts,
+                        ),
+                    )
             }
             when (
                 val lowered = GPUPreparedVerticesLowerer.lower(
@@ -61,11 +81,13 @@ internal object GPUPreparedVerticesFramePreparer {
                     operationIndex = operationIndex,
                     target = target,
                     capabilities = capabilities,
+                    materialPlan = materialPlan,
                 )
             ) {
                 is GPUPreparedVerticesLowering.Ready -> draws += lowered.draw
+                is GPUPreparedVerticesLowering.GeometryReady -> error("Geometry-only admission cannot publish a prepared draw")
                 is GPUPreparedVerticesLowering.Refused ->
-                    return GPUPreparedVerticesFramePreparation.Refused(
+                    return GPUPreparedVerticesDrawPreparation.Refused(
                         GPUPreparedOperationRefusal(
                             commandId = operationIndex,
                             operationIndex = operationIndex,
@@ -75,8 +97,29 @@ internal object GPUPreparedVerticesFramePreparer {
                     )
             }
         }
+        return GPUPreparedVerticesDrawPreparation.Ready(draws.toList())
+    }
 
-        val inventory = when (
+    fun prepare(
+        operations: List<DisplayOp>,
+        target: GPUTargetFacts,
+        config: RenderConfig,
+        capabilities: GPUCapabilities,
+        limits: PreparedVerticesFrameInventoryLimits = defaultLimits(capabilities),
+        preparedTextInventory: PreparedTextFrameInventory? = null,
+        mappingBoundary: GPUPreparedFrameMappingBoundary = canonicalPreparedFrameMappingBoundary,
+        commonInventory: PreparedVerticesFrameInventory? = null,
+    ): GPUPreparedVerticesFramePreparation {
+        val operationSnapshot = operations.toList()
+        val draws = if (commonInventory != null) emptyList() else when (val lowered = lowerDraws(
+            operationSnapshot, target, capabilities,
+        )) {
+            is GPUPreparedVerticesDrawPreparation.Ready -> lowered.draws
+            is GPUPreparedVerticesDrawPreparation.Refused ->
+                return GPUPreparedVerticesFramePreparation.Refused(lowered.refusal)
+        }
+
+        val inventory = commonInventory ?: when (
             val built = PreparedVerticesFrameInventoryBuilder.build(draws, limits, capabilities)
         ) {
             is PreparedVerticesFrameInventoryResult.Ready -> built.inventory
@@ -118,7 +161,7 @@ internal object GPUPreparedVerticesFramePreparer {
         operations.indexOfFirst { it is DisplayOp.DrawVertices || it is DisplayOp.DrawMesh }
             .coerceAtLeast(0)
 
-    private fun defaultLimits(capabilities: GPUCapabilities): PreparedVerticesFrameInventoryLimits {
+    internal fun defaultLimits(capabilities: GPUCapabilities): PreparedVerticesFrameInventoryLimits {
         val policyBufferBytes = 64L * 1024L * 1024L
         val deviceBufferBytes = capabilities.limits?.maxBufferSize ?: policyBufferBytes
         val effectiveBufferBytes = minOf(policyBufferBytes, deviceBufferBytes)

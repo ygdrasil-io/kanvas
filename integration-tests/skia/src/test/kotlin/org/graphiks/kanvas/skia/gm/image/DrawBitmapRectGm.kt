@@ -27,7 +27,7 @@ import org.graphiks.math.geometry.RectF32
  *  and styles to test bitmap-rect rendering.
  *  @see https://github.com/google/skia/blob/main/gm/bitmaprect.cpp
  */
-class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
+open class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
     enum class Variant(val suffix: String?) {
         BITMAP(null), BITMAP_SUBSET("-subset"), IMAGE("-imagerect"), IMAGE_SUBSET("-imagerect-subset")
     }
@@ -143,3 +143,8 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
         fun newImageSubset() = DrawBitmapRectGm(Variant.IMAGE_SUBSET)
     }
 }
+
+class DrawBitmapRectBitmapGm : DrawBitmapRectGm(Variant.BITMAP)
+class DrawBitmapRectSubsetGm : DrawBitmapRectGm(Variant.BITMAP_SUBSET)
+class DrawImageRectGm : DrawBitmapRectGm(Variant.IMAGE)
+class DrawImageRectSubsetGm : DrawBitmapRectGm(Variant.IMAGE_SUBSET)

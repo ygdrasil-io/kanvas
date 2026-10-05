@@ -51,6 +51,7 @@ object OpInspector {
         gmHeight: Int,
         tolerance: Int,
         outputDir: File,
+        config: RenderConfig = RenderConfig.DEFAULT,
     ): OpTrace {
         if (ops.isEmpty()) return OpTrace(0, emptyList(), emptyList())
 
@@ -60,7 +61,7 @@ object OpInspector {
         if (n <= 50) {
             var prevSimilarity = 100.0
             for (i in 1..n) {
-                val partialRgba = renderPartial(ops, i, gmWidth, gmHeight)
+                val partialRgba = renderPartial(ops, i, gmWidth, gmHeight, config)
                 val similarity = comparePartial(partialRgba, referenceRgba, gmWidth, gmHeight, tolerance)
                 val contribution = max(0.0, prevSimilarity - similarity)
                 prevSimilarity = similarity
@@ -71,7 +72,7 @@ object OpInspector {
                 var deltaUrl: String? = null
 
                 if (suspect) {
-                    val beforeRgba = renderPartial(ops, i - 1, gmWidth, gmHeight)
+                    val beforeRgba = renderPartial(ops, i - 1, gmWidth, gmHeight, config)
                     ComparisonUtils.saveRgbaAsPng(beforeRgba, gmWidth, gmHeight,
                         outputDir.resolve("op_${i - 1}_before.png"))
                     ComparisonUtils.saveRgbaAsPng(partialRgba, gmWidth, gmHeight,
@@ -101,7 +102,7 @@ object OpInspector {
             var prevSimilarity = 100.0
             var prevCount = 0
             for (cp in checkpoints) {
-                val partialRgba = renderPartial(ops, cp, gmWidth, gmHeight)
+                val partialRgba = renderPartial(ops, cp, gmWidth, gmHeight, config)
                 val similarity = comparePartial(partialRgba, referenceRgba, gmWidth, gmHeight, tolerance)
                 val contribution = max(0.0, prevSimilarity - similarity)
                 prevSimilarity = similarity
@@ -112,7 +113,7 @@ object OpInspector {
                 var deltaUrl: String? = null
 
                 if (suspect && prevCount > 0) {
-                    val beforeRgba = renderPartial(ops, prevCount, gmWidth, gmHeight)
+                    val beforeRgba = renderPartial(ops, prevCount, gmWidth, gmHeight, config)
                     ComparisonUtils.saveRgbaAsPng(beforeRgba, gmWidth, gmHeight,
                         outputDir.resolve("op_${prevCount}_before.png"))
                     ComparisonUtils.saveRgbaAsPng(partialRgba, gmWidth, gmHeight,
@@ -167,8 +168,8 @@ object OpInspector {
         is DisplayOp.FlushAndSnapshot -> "FlushAndSnapshot"
     }
 
-    private fun renderPartial(ops: List<DisplayOp>, count: Int, width: Int, height: Int): ByteArray {
-        val surface = Surface(width, height, config = RenderConfig.DEFAULT)
+    private fun renderPartial(ops: List<DisplayOp>, count: Int, width: Int, height: Int, config: RenderConfig): ByteArray {
+        val surface = Surface(width, height, config = config)
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
@@ -11,6 +12,7 @@ import java.util.IdentityHashMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
@@ -21,6 +23,189 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUWgpu4kCorePrimitiveFramePoolTest {
+    @Test
+    fun `W4d direct and stencil reservations retain their exact sealed pool requirements`() {
+        fun scratch(frame: org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan) = requireNotNull(
+            frame.steps.filterIsInstance<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep>()
+                .first().drawPackets.single().corePrimitivePreparedAuthority?.w4dSessionScratch,
+        )
+
+        val direct = scratch(W4dExecutionFixture.directOnlyFramePlan())
+        val mixed = scratch(W4dExecutionFixture.framePlan())
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
+        val directCapacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(
+            direct.vertexCapacityBytes,
+            direct.indexCapacityBytes,
+            direct.uniformCapacityBytes,
+        )
+        val directLease = pool.acquire(
+            requirements(
+                vertexBytes = direct.vertexUsefulBytes,
+                indexBytes = direct.indexUsefulBytes,
+                uniformBytes = direct.uniformPlan.totalBytes,
+                expectedCapacities = directCapacities,
+            ),
+        ).acquiredLease()
+        assertEquals(directCapacities, directLease.capacities)
+        assertEquals(null, directLease.handles.pathDepthStencil)
+        directLease.rollbackBeforeSubmit()
+
+        val mixedCapacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(
+            mixed.vertexCapacityBytes,
+            mixed.indexCapacityBytes,
+            mixed.uniformCapacityBytes,
+        )
+        val depthStencil = GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
+            width = mixed.targetBounds.width,
+            height = mixed.targetBounds.height,
+            format = GPUTextureFormat.Depth24PlusStencil8,
+            sampleCount = 1,
+            usage = GPUTextureUsage.RenderAttachment,
+            target = mixed.target,
+            depthStencilAttachment = GPUTargetIdentity(
+                mixed.target.value.removeSuffix(".target").plus(".depth-stencil"),
+            ),
+            deviceGeneration = GENERATION,
+            targetGeneration = 1L,
+        )
+        val mixedLease = pool.acquire(
+            requirements(
+                vertexBytes = mixed.vertexUsefulBytes,
+                indexBytes = mixed.indexUsefulBytes,
+                uniformBytes = mixed.uniformPlan.totalBytes,
+                expectedCapacities = mixedCapacities,
+                pathDepthStencil = depthStencil,
+            ),
+        ).acquiredLease()
+        assertEquals(mixedCapacities, mixedLease.capacities)
+        assertEquals(depthStencil, requireNotNull(mixedLease.handles.pathDepthStencil).requirement)
+
+        mixedLease.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `exact capacity reservation materializes W4a rounded capacities without reusing larger slot`() {
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
+        val larger = pool.acquire(
+            requirements(vertexBytes = 16_385L, indexBytes = 4_097L, uniformBytes = 4_097L),
+        ).acquiredLease()
+        assertEquals(32_768L, larger.capacities.vertexBytes)
+        assertEquals(8_192L, larger.capacities.indexBytes)
+        assertEquals(8_192L, larger.capacities.uniformBytes)
+        larger.rollbackBeforeSubmit()
+
+        val expected = GPUWgpu4kCorePrimitiveFramePoolCapacities(16_384L, 4_096L, 4_096L)
+        val exact = pool.acquire(
+            requirements(
+                vertexBytes = 16_384L,
+                indexBytes = 4_096L,
+                uniformBytes = 4_096L,
+                expectedCapacities = expected,
+            ),
+        ).acquiredLease()
+
+        assertEquals(expected, exact.capacities)
+        exact.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `W4b Uniform80 lease stays exclusive through readback completion and then reuses its exact slot`() {
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
+        val capacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(16_384L, 4_096L, 4_096L)
+        val request = requirements(
+            vertexBytes = 64L,
+            indexBytes = 48L,
+            uniformBytes = 512L,
+            expectedCapacities = capacities,
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY,
+        )
+
+        val submitted = pool.acquire(request).acquiredLease()
+        submitted.markSubmitted()
+        val liveSecond = pool.acquire(request).acquiredLease()
+        val liveThird = pool.acquire(request).acquiredLease()
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(maxSlots = 3),
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(pool.acquire(request)).reason,
+        )
+
+        liveSecond.rollbackBeforeSubmit()
+        liveThird.rollbackBeforeSubmit()
+        submitted.completeSuccessfully()
+        val completed = pool.acquire(request).acquiredLease()
+        assertEquals(capacities, completed.capacities)
+        assertSame(submitted.handles.vertexBuffer, completed.handles.vertexBuffer)
+        assertSame(submitted.handles.indexBuffer, completed.handles.indexBuffer)
+        assertSame(submitted.handles.uniformBuffer, completed.handles.uniformBuffer)
+        assertSame(submitted.handles.bindGroup, completed.handles.bindGroup)
+
+        completed.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `W4c one x D24S8 lease retains all public handles until completion`() {
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
+        val capacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(16_384L, 4_096L, 4_096L)
+        val target = GPUFrameTargetRef("w4c.session.7.4x4.rgba8unorm-srgb.target")
+        val depthStencil = GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
+            width = 4,
+            height = 4,
+            format = GPUTextureFormat.Depth24PlusStencil8,
+            sampleCount = 1,
+            usage = GPUTextureUsage.RenderAttachment,
+            target = target,
+            depthStencilAttachment = GPUTargetIdentity(
+                "w4c.session.7.4x4.rgba8unorm-srgb.depth-stencil",
+            ),
+            deviceGeneration = GENERATION,
+            targetGeneration = 1L,
+        )
+        val request = requirements(
+            // The sealed 4×4 W4c fixture contains direct(3), stencil-fan(5), direct(3):
+            // 200 vertex bytes, 108 index bytes, and three 256-byte Uniform32 slots.
+            vertexBytes = 200L,
+            indexBytes = 108L,
+            uniformBytes = 768L,
+            expectedCapacities = capacities,
+            pathDepthStencil = depthStencil,
+        )
+
+        val submitted = pool.acquire(request).acquiredLease()
+        val submittedDepthStencil = requireNotNull(submitted.handles.pathDepthStencil)
+        assertEquals(capacities, submitted.capacities)
+        assertEquals(depthStencil, submittedDepthStencil.requirement)
+        submitted.markSubmitted()
+
+        val concurrentOne = pool.acquire(request).acquiredLease()
+        val concurrentTwo = pool.acquire(request).acquiredLease()
+        assertNotSame(submitted.handles.vertexBuffer, concurrentOne.handles.vertexBuffer)
+        assertNotSame(submittedDepthStencil.texture, requireNotNull(concurrentOne.handles.pathDepthStencil).texture)
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(maxSlots = 3),
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(pool.acquire(request)).reason,
+        )
+
+        concurrentOne.rollbackBeforeSubmit()
+        concurrentTwo.rollbackBeforeSubmit()
+        submitted.completeSuccessfully()
+
+        val completed = pool.acquire(request).acquiredLease()
+        val completedDepthStencil = requireNotNull(completed.handles.pathDepthStencil)
+        assertEquals(capacities, completed.capacities)
+        assertSame(submitted.handles.vertexBuffer, completed.handles.vertexBuffer)
+        assertSame(submitted.handles.indexBuffer, completed.handles.indexBuffer)
+        assertSame(submitted.handles.uniformBuffer, completed.handles.uniformBuffer)
+        assertSame(submitted.handles.bindGroup, completed.handles.bindGroup)
+        assertSame(submittedDepthStencil.texture, completedDepthStencil.texture)
+        assertSame(submittedDepthStencil.view, completedDepthStencil.view)
+
+        completed.rollbackBeforeSubmit()
+        pool.close()
+    }
+
     @Test
     fun `4x path or clip D24S8 requirements match the exact multisample color frame`() {
         val path = pathDepthStencil(32, 24, sampleCount = 4)
@@ -80,6 +265,47 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
                 )
             },
         ).forEach { invalid -> assertFailsWith<IllegalArgumentException> { invalid() } }
+    }
+
+    @Test
+    fun `authenticated W4d mixed slot leases four x color and depth with one x mask and hard depth`() {
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
+        val request = requirements(
+            sampleCount = 4,
+            pathDepthStencil = pathDepthStencil(32, 24, sampleCount = 4),
+            clipDepthStencil = clipDepthStencil(32, 24, sampleCount = 1),
+            coverageMask = coverageMask(32, 24),
+            coverageMaskConsumerBindGroupRequired = true,
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+        )
+
+        val first = pool.acquire(request).acquiredLease()
+        val color = requireNotNull(first.handles.msaaColor)
+        val aaDepth = requireNotNull(first.handles.pathDepthStencil)
+        val hardDepth = requireNotNull(first.handles.clipDepthStencil)
+        val mask = requireNotNull(first.handles.coverageMask)
+
+        assertEquals(4, color.requirement.sampleCount)
+        assertEquals(4, aaDepth.requirement.sampleCount)
+        assertEquals(1, hardDepth.requirement.sampleCount)
+        assertEquals(1, mask.requirement.sampleCount)
+        assertEquals(30_720L, request.totalAttachmentByteSize)
+        assertEquals(GPUWgpu4kCorePrimitiveFramePoolLeaseTransition.Applied, first.markSubmitted())
+        val concurrent = pool.acquire(request).acquiredLease()
+        assertNotSame(color.view, requireNotNull(concurrent.handles.msaaColor).view)
+        assertNotSame(aaDepth.view, requireNotNull(concurrent.handles.pathDepthStencil).view)
+        assertNotSame(hardDepth.view, requireNotNull(concurrent.handles.clipDepthStencil).view)
+        assertNotSame(mask.view, requireNotNull(concurrent.handles.coverageMask).view)
+        concurrent.rollbackBeforeSubmit()
+        assertEquals(GPUWgpu4kCorePrimitiveFramePoolLeaseTransition.Applied, first.completeSuccessfully())
+
+        val reused = pool.acquire(request).acquiredLease()
+        assertSame(color.view, requireNotNull(reused.handles.msaaColor).view)
+        assertSame(aaDepth.view, requireNotNull(reused.handles.pathDepthStencil).view)
+        assertSame(hardDepth.view, requireNotNull(reused.handles.clipDepthStencil).view)
+        assertSame(mask.view, requireNotNull(reused.handles.coverageMask).view)
+        reused.rollbackBeforeSubmit()
+        pool.close()
     }
 
     @Test
@@ -2041,6 +2267,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         vertexBytes: Long = 1L,
         indexBytes: Long = 1L,
         uniformBytes: Long = 1L,
+        expectedCapacities: GPUWgpu4kCorePrimitiveFramePoolCapacities? = null,
         pathDepthStencil: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
         clipDepthStencil: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
         coverageMask: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
@@ -2048,6 +2275,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         analyticClipBindGroupRequired: Boolean = false,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
             PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+        additionalComponentIdentities: Set<GPUWgpu4kCorePrimitiveComponentIdentity> = emptySet(),
         sampleCount: Int = 1,
         msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement? =
             if (sampleCount == 4) msaaColor(32, 24) else null,
@@ -2056,6 +2284,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         vertexBytes = vertexBytes,
         indexBytes = indexBytes,
         uniformBytes = uniformBytes,
+        expectedCapacities = expectedCapacities,
         pathDepthStencil = pathDepthStencil,
         componentIdentity = componentIdentity,
         clipDepthStencil = clipDepthStencil,
@@ -2064,6 +2293,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         analyticClipBindGroupRequired = analyticClipBindGroupRequired,
         sampleCount = sampleCount,
         msaaColor = msaaColorRequirement,
+        additionalComponentIdentities = additionalComponentIdentities,
     )
 
     private fun msaaColor(

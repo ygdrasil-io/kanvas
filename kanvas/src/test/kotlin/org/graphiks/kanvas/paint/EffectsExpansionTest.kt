@@ -1,7 +1,9 @@
 package org.graphiks.kanvas.paint
 
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.vector.Vector3F32
 
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.types.*
@@ -117,27 +119,27 @@ class EffectsExpansionTest {
         assertTrue(f is ImageFilter)
     }
     @Test fun `DistantLitDiffuse constructs`() {
-        val f = ImageFilter.DistantLitDiffuse(Vector2F32(0f, 0f), ColorARGB.White, 1f, 1f, null)
+        val f = ImageFilter.DistantLitDiffuse(Vector3F32(0f, 0f, 1f), ColorARGB.White, 1f, 1f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `PointLitDiffuse constructs`() {
-        val f = ImageFilter.PointLitDiffuse(Point2F32(0f, 0f), ColorARGB.White, 1f, 1f, null)
+        val f = ImageFilter.PointLitDiffuse(Point3F32(0f, 0f, 1f), ColorARGB.White, 1f, 1f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `SpotLitDiffuse constructs`() {
-        val f = ImageFilter.SpotLitDiffuse(Point2F32(0f, 0f), Point2F32(1f, 1f), 10f, 30f, ColorARGB.White, 1f, 1f, null)
+        val f = ImageFilter.SpotLitDiffuse(Point3F32(0f, 0f, 1f), Point3F32(1f, 1f, 1f), 10f, 30f, ColorARGB.White, 1f, 1f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `DistantLitSpecular constructs`() {
-        val f = ImageFilter.DistantLitSpecular(Vector2F32(0f, 0f), ColorARGB.White, 1f, 1f, 10f, null)
+        val f = ImageFilter.DistantLitSpecular(Vector3F32(0f, 0f, 1f), ColorARGB.White, 1f, 1f, 10f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `PointLitSpecular constructs`() {
-        val f = ImageFilter.PointLitSpecular(Point2F32(0f, 0f), ColorARGB.White, 1f, 1f, 10f, null)
+        val f = ImageFilter.PointLitSpecular(Point3F32(0f, 0f, 1f), ColorARGB.White, 1f, 1f, 10f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `SpotLitSpecular constructs`() {
-        val f = ImageFilter.SpotLitSpecular(Point2F32(0f, 0f), Point2F32(1f, 1f), 10f, 30f, ColorARGB.White, 1f, 1f, 10f, null)
+        val f = ImageFilter.SpotLitSpecular(Point3F32(0f, 0f, 1f), Point3F32(1f, 1f, 1f), 10f, 30f, ColorARGB.White, 1f, 1f, 10f, null)
         assertTrue(f is ImageFilter)
     }
     @Test fun `Offset constructs`() {

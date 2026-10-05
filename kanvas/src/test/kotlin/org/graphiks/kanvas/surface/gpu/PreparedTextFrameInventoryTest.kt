@@ -32,7 +32,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 
-class PreparedTextFrameInventoryTest {
+internal class PreparedTextFrameInventoryTest {
     @Test
     fun `every finalized subrun shares the exact immutable prepared draw`() {
         val draw = draw(
@@ -1765,7 +1765,7 @@ class PreparedTextFrameInventoryTest {
         }
     }
 
-    data class BudgetCase(
+    internal data class BudgetCase(
         val expectedCode: String,
         val requiresTwoPages: Boolean = false,
         val configure: (PreparedTextFrameInventoryLimits) -> PreparedTextFrameInventoryLimits,

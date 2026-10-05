@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -228,10 +230,7 @@ internal fun buildPreparedTextDrawUniformBufferPlan(
         )
     }
     val strideBytes = try {
-        alignUpPreparedTextDrawUniform(
-            PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES,
-            alignmentBytes,
-        )
+        preparedTextDrawUniformStrideBytesI64(alignmentBytes)
     } catch (_: ArithmeticException) {
         return GPUPreparedTextDrawUniformPlanResult.Refused(
             code = "unsupported.recording.prepared_text_draw_uniform_buffer",
@@ -293,11 +292,11 @@ internal fun buildPreparedTextDrawUniformBufferPlan(
         target.putFloat(affine.m00)
         target.putFloat(affine.m01)
         target.putFloat(affine.m02)
-        target.putFloat(0f)
+        target.putFloat(semantic.preparedDestinationBounds(semantic.targetBounds).left.toFloat())
         target.putFloat(affine.m10)
         target.putFloat(affine.m11)
         target.putFloat(affine.m12)
-        target.putFloat(0f)
+        target.putFloat(semantic.preparedDestinationBounds(semantic.targetBounds).top.toFloat())
         when (val clipPlan = input.clipPlan) {
             is GPUPreparedTextClipPlan.Direct -> repeat(8) { target.putFloat(0f) }
             is GPUPreparedTextClipPlan.CoverageMask -> repeat(8) { target.putFloat(0f) }
@@ -359,4 +358,8 @@ internal fun ByteArray.preparedTextSha256(): String =
     }
 
 internal const val PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES: Long = 80L
+
+/** The same physical draw-uniform stride used before and after material admission. */
+fun preparedTextDrawUniformStrideBytesI64(alignmentBytesI64: Long): Long =
+    alignUpPreparedTextDrawUniform(PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES, alignmentBytesI64)
 private const val PREPARED_TEXT_LOWER_HEX_DIGITS = "0123456789abcdef"

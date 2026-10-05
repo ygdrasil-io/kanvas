@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.canvas.drawLine
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
@@ -39,6 +40,8 @@ enum class TextAlign(val factor: Float) {
     CENTER(0.5f),
     RIGHT(1f),
 }
+
+enum class GmExternalDependency { FONT }
 
 private const val PORTABLE_FONT_RESOURCE = "fonts/LiberationSans-Regular.ttf"
 private const val PORTABLE_FONT_FALLBACK_RESOURCE = "fonts/liberation/LiberationSans-Regular.ttf"
@@ -82,6 +85,7 @@ class GmCanvas(
     val width: Int,
     val height: Int,
 ) {
+    private val observedDependencies = linkedSetOf<GmExternalDependency>()
     private val transformStack = mutableListOf<Matrix3x3F32>()
     private val clipStack = mutableListOf<RectF32?>()
     private var currentTransform = Matrix3x3F32.Identity
@@ -199,6 +203,14 @@ class GmCanvas(
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawRect(rect, paint)
+            } else if (currentTransform.isScaleTranslate()) {
+                inner.save()
+                try {
+                    inner.concat(currentTransform)
+                    inner.drawRect(rect, paint)
+                } finally {
+                    inner.restore()
+                }
             } else {
                 val t = currentTransform
                 val p0 = t.transform(Point2F32(rect.left, rect.top))
@@ -218,11 +230,21 @@ class GmCanvas(
     }
 
     fun drawPath(path: Path, paint: Paint) {
+        withPathTransform { inner.drawPath(path, paint) }
+    }
+
+    private inline fun withPathTransform(block: () -> Unit) {
         withClip {
             if (currentTransform.isIdentity()) {
-                inner.drawPath(path, paint)
+                block()
             } else {
-                inner.drawPath(path.transform(currentTransform), paint)
+                inner.save()
+                try {
+                    inner.concat(currentTransform)
+                    block()
+                } finally {
+                    inner.restore()
+                }
             }
         }
     }
@@ -233,10 +255,7 @@ class GmCanvas(
         b: Float,
         a: Float = 1f,
     ) {
-        drawRect(
-            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = ColorARGB.fromRGBA(r, g, b, a)),
-        )
+        drawColor(r, g, b, a, BlendMode.SRC_OVER)
     }
 
     fun drawColor(
@@ -272,7 +291,7 @@ class GmCanvas(
     }
 
     fun drawLine(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint) {
-        drawPath(Path { moveTo(x1, y1); lineTo(x2, y2) }, paint)
+        withPathTransform { inner.drawLine(x1, y1, x2, y2, paint) }
     }
 
     fun drawArc(rect: RectF32, startAngle: Float, sweepAngle: Float, useCenter: Boolean, paint: Paint) {
@@ -445,6 +464,7 @@ class GmCanvas(
     }
 
     fun drawString(str: String, x: Float, y: Float, font: Font, paint: Paint) {
+        observedDependencies += GmExternalDependency.FONT
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawString(str, x, y, font, paint)
@@ -486,6 +506,7 @@ class GmCanvas(
     /** Draw individual glyphs at explicit positions. Renders monochrome outlines
      * via the path pipeline; color glyph layers require the GPU text pipeline. */
     fun drawGlyphs(glyphIds: List<Int>, positions: List<Point2F32>, font: Font, paint: Paint) {
+        observedDependencies += GmExternalDependency.FONT
         require(glyphIds.size == positions.size)
         val emboldenWidth = font.size * 0.02f
         val glyphPaint = when {
@@ -507,6 +528,7 @@ class GmCanvas(
     }
 
     fun drawTextBlob(blob: TextBlob, x: Float, y: Float, paint: Paint) {
+        observedDependencies += GmExternalDependency.FONT
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawText(blob, x, y, paint)
@@ -518,6 +540,8 @@ class GmCanvas(
             }
         }
     }
+
+    internal fun observedExternalDependencies(): Set<GmExternalDependency> = observedDependencies.toSet()
 
     fun drawPicture(picture: Picture, paint: Paint? = null) {
         withClip {

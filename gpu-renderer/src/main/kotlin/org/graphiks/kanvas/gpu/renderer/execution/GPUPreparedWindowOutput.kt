@@ -116,6 +116,8 @@ class GPUPreparedWindowOutput internal constructor(
             memoryBudget = taskList.memoryBudget,
             diagnostics = taskList.diagnostics,
             compositeCommands = taskList.compositeCommands,
+            w5eConstructionV1 = taskList.w5eConstructionV1,
+            w5ePreparedFrameV1 = taskList.w5ePreparedFrameV1,
         )
     }
 

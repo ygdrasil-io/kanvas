@@ -171,7 +171,7 @@ internal fun encodeWgpu4kRenderPass(
     encoder.beginRenderPass(buildWgpu4kRenderPassDescriptor(render.pass)) {
         onRenderPassBegan()
         encodedDraws = encodeWgpu4kRenderCommands(
-            render.commands,
+            render.encodingCommands,
             GPUWgpu4kRenderCommandActions(
                 setPipeline = { pipeline ->
                     setPipeline(pipeline)
@@ -378,6 +378,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
                 error("A native render-pass segment cannot be interrupted by ${operand.operationKind}")
             }
             when (operand) {
+                is GPUPreparedNativeScopeOperand.NoOp -> Unit
                 is GPUPreparedNativeScopeOperand.Render -> encodeRender(operand)
                 is GPUPreparedNativeScopeOperand.TextureUpload ->
                     encodePreparedImageTextureUpload(
@@ -489,7 +490,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
                 requireNotNull(activeRenderPass)
             }
             encodeWgpu4kRenderCommands(
-                render.commands,
+                render.encodingCommands,
                 GPUWgpu4kRenderCommandActions(
                     setPipeline = { pipeline ->
                         passEncoder.setPipeline(pipeline)

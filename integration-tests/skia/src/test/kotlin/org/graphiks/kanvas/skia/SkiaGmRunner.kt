@@ -131,6 +131,7 @@ class SkiaGmRunner {
                 diagnostics = result.diagnostics,
                 debugLevel = debugLevel,
                 outputDir = diagnosticDir,
+                renderConfig = gm.compositionConfig(config),
             ))
 
             val finalManifest = if (pipelineTrace != null) {

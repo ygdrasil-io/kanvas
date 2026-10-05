@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.plan.BlendCoverageLawV1
+import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
@@ -16,12 +18,20 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUCorePrimitiveFramePoolCapacities
+import org.graphiks.kanvas.gpu.renderer.resources.corePrimitiveFramePoolCapacitiesOrNull
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
@@ -43,6 +53,12 @@ internal fun GPUColorFormat.corePrimitiveStructuralColorFormat():
     else -> throw IllegalArgumentException("Unsupported CorePrimitive scene target format: $value")
 }
 
+/**
+ * Non-forgeable module token carried only by the W4d.2 lowerer factory.  It is intentionally not
+ * part of the structural/public API: a generic coverage-mask consumer remains a 1x route.
+ */
+private object W4dGeneralCoverageMaskConsumer4xSeal
+
 /** Compact code/layout axes computed once while the prepared packet is recorded. */
 internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     val shader: Shader,
@@ -56,6 +72,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     val depthStencil: DepthStencil = DepthStencil.None,
     val sampleCount: Int = 1,
     val clipStencilFillRule: GPUClipFillRule? = null,
+    private val coverageMaskConsumer4xSeal: Any? = null,
 ) {
     enum class Role {
         Shading,
@@ -211,6 +228,8 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             val mode: GPUBlendMode,
             val formulaId: String,
             val sourceCoverage: GPUSourceCoverageEncoding,
+            val w5bCompositionAbiI32: Int? = null,
+            val coverageLaw: BlendCoverageLawV1? = null,
         ) : Blend
 
         data class NoOp(val mode: GPUBlendMode) : Blend
@@ -326,9 +345,19 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 require(blend == coverageMaskConsumerBlend()) {
                     "CorePrimitive coverage-mask consumer requires exact canonical premultiplied SrcOver"
                 }
+                require(
+                    sampleCount == 1 ||
+                        (sampleCount == 4 && isW4dGeneralCoverageMaskConsumer4x()),
+                ) {
+                    "CorePrimitive coverage-mask consumer is single-sample outside sealed W4d.2 BinaryMaskCover4"
+                }
             }
         }
     }
+
+    /** Internal-only admission bit for the sealed W4d.2 BinaryMaskCover4 native pass fact. */
+    internal fun isW4dGeneralCoverageMaskConsumer4x(): Boolean =
+        coverageMaskConsumer4xSeal === W4dGeneralCoverageMaskConsumer4xSeal
 
     /** Stable public/dump identity. Called only by the recording builder or explicit evidence tests. */
     fun stableRenderPipelineKey(prefix: String): GPURenderPipelineKey {
@@ -461,19 +490,47 @@ internal fun corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(
     )
 }
 
+/**
+ * W4d.2-only variant of the coverage-mask consumer.  The caller must bind it to the sealed
+ * `BinaryMaskCover4` authority; generic coverage-mask routes keep using the 1x constructor.
+ */
+internal fun corePrimitiveW4dGeneralCoverageMaskConsumer4xRenderPipelineStructuralKey(
+    blendPlan: GPUBlendPlan,
+    colorFormat: GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat =
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
+): GPUCorePrimitiveRenderPipelineStructuralKey {
+    require(blendPlan.isCanonicalCoverageMaskConsumerSrcOver()) {
+        "W4d.2 coverage-mask consumer requires canonical premultiplied SrcOver"
+    }
+    return GPUCorePrimitiveRenderPipelineStructuralKey(
+        shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskConsumer,
+        topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+        blend = coverageMaskConsumerBlend(),
+        clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.CoverageMaskNearest,
+        role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer,
+        colorFormat = colorFormat,
+        depthStencil = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None,
+        sampleCount = 4,
+        coverageMaskConsumer4xSeal = W4dGeneralCoverageMaskConsumer4xSeal,
+    )
+}
+
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.hasExactCoverageMaskFixedAxes(): Boolean =
     topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
         frontFace == GPUCorePrimitiveRenderPipelineStructuralKey.FrontFace.Ccw &&
         cullMode == GPUCorePrimitiveRenderPipelineStructuralKey.CullMode.None &&
         when (role) {
             GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer ->
-                colorFormat == GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
+                colorFormat == GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm &&
+                    sampleCount == 1
             GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer ->
-                colorFormat in GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.entries
+                colorFormat in GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.entries &&
+                    (sampleCount == 1 ||
+                        (sampleCount == 4 && isW4dGeneralCoverageMaskConsumer4x()))
             else -> false
         } &&
         depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None &&
-        sampleCount == 1 && clipStencilFillRule == null
+        clipStencilFillRule == null
 
 private fun coverageMaskConsumerBlend(): GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed =
     GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
@@ -968,7 +1025,7 @@ private val PATH_STENCIL_COVER_INVERSE_STATE = pathStencilState(
     inverseFill = true,
 )
 
-private fun GPUBlendPlan.corePrimitiveStructuralBlend():
+internal fun GPUBlendPlan.corePrimitiveStructuralBlend():
     GPUCorePrimitiveRenderPipelineStructuralKey.Blend = when (this) {
     is GPUBlendPlan.FixedFunctionBlend -> GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
         mode,
@@ -986,13 +1043,15 @@ private fun GPUBlendPlan.corePrimitiveStructuralBlend():
             mode,
             formulaId,
             sourceCoverageEncoding,
+            sealedW5b?.compositionAbiI32,
+            sealedW5b?.coverageLaw,
         )
     is GPUBlendPlan.LayerCompositeBlend -> child.corePrimitiveStructuralBlend()
     is GPUBlendPlan.NoOp -> GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp(mode)
     is GPUBlendPlan.UnsupportedBlend -> GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Unsupported(mode)
 }
 
-private fun GPUClipExecutionPlan.corePrimitiveStructuralClip():
+internal fun GPUClipExecutionPlan.corePrimitiveStructuralClip():
     GPUCorePrimitiveRenderPipelineStructuralKey.Clip = when (this) {
     GPUClipExecutionPlan.NoClip,
     is GPUClipExecutionPlan.ScissorOnly,
@@ -1076,8 +1135,8 @@ internal class GPUCorePrimitiveUniformSlabSeal(
         get() = commandIdsSnapshot.size
 
     init {
-        require(commandIdsSnapshot.isNotEmpty() && commandIdsSnapshot.distinct().size == commandIdsSnapshot.size) {
-            "CorePrimitive uniform slab seal requires unique draw commands"
+        require(commandIdsSnapshot.isNotEmpty()) {
+            "CorePrimitive uniform slab seal requires at least one sealed pass command"
         }
         require(plan.slots.size == commandIdsSnapshot.size) {
             "CorePrimitive uniform slab slots must match draw commands"
@@ -1125,16 +1184,171 @@ internal data class GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal(
     val bindingLayoutHash: String,
 )
 
-/** O(1) builder authority for one exact prepared semantic object. */
+/**
+ * Exact immutable geometry token before numerical command identity. It contains no source,
+ * material, color, source uniform, final blend, analysis-record string or source table.
+ */
+internal class GPUCorePrimitiveGeometrySnapshot(
+    val renderStepIdentity: String,
+    val sourceFamily: GPUCorePrimitiveSourceFamily,
+    val geometry: GPUCorePrimitiveGeometry,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipCoveragePlan: GPUClipCoveragePlan,
+    val clipExecutionPlanIdentity: String?,
+    val frameProvenance: GPUFrameProvenance,
+    val coverageMode: GPUCorePrimitiveCoverageMode,
+    val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+    val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+)
+
+/** Final command/analysis identity wrapper around the exact previously captured geometry token. */
+internal class GPUCorePrimitiveGeometryAuthority private constructor(
+    val commandIdI32: Int,
+    val snapshot: GPUCorePrimitiveGeometrySnapshot,
+    val analysisRecordId: String?,
+    val analysisCommandFamily: String?,
+    private val preparedPacketScissor: GPUPixelBounds? = null,
+) {
+    val renderStepIdentity: String get() = snapshot.renderStepIdentity
+    val sourceFamily: GPUCorePrimitiveSourceFamily get() = snapshot.sourceFamily
+    val geometry: GPUCorePrimitiveGeometry get() = snapshot.geometry
+    val targetBounds: GPUPixelBounds get() = snapshot.targetBounds
+    val scissorBounds: GPUPixelBounds get() = preparedPacketScissor ?: snapshot.scissorBounds
+    val clipCoveragePlan: GPUClipCoveragePlan get() = snapshot.clipCoveragePlan
+    val clipExecutionPlanIdentity: String? get() = snapshot.clipExecutionPlanIdentity
+    val frameProvenance: GPUFrameProvenance get() = snapshot.frameProvenance
+    val coverageMode: GPUCorePrimitiveCoverageMode get() = snapshot.coverageMode
+    val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? get() = snapshot.rectRouteAuthority
+    val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? get() = snapshot.rectGeometryAuthority
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? get() = snapshot.rrectGeometryAuthority
+    val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? get() = snapshot.drrectOuterGeometryAuthority
+    val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? get() = snapshot.drrectInnerGeometryAuthority
+
+    fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean =
+        commandIdI32 == semantic.payloadRef.commandIdValue &&
+            renderStepIdentity == semantic.payloadRef.renderStepIdentity &&
+            sourceFamily == semantic.sourceFamily && geometry === semantic.geometry &&
+            targetBounds == semantic.targetBounds && scissorBounds == semantic.scissorBounds &&
+            clipCoveragePlan === semantic.clipCoveragePlan &&
+            clipExecutionPlanIdentity == semantic.clipExecutionPlanIdentity &&
+            frameProvenance == semantic.frameProvenance && coverageMode == semantic.coverageMode &&
+            analysisRecordId == semantic.analysisRecordId && analysisCommandFamily == semantic.analysisCommandFamily &&
+            rectRouteAuthority == semantic.rectRouteAuthority &&
+            rectGeometryAuthority === semantic.rectGeometryAuthority &&
+            rrectGeometryAuthority === semantic.rrectGeometryAuthority &&
+            drrectOuterGeometryAuthority === semantic.drrectOuterGeometryAuthority &&
+            drrectInnerGeometryAuthority === semantic.drrectInnerGeometryAuthority
+
+    companion object {
+        fun capture(
+            semantic: GPUDrawSemanticPayload.CorePrimitive,
+            clipExecutionPlanIdentity: String? = semantic.clipExecutionPlanIdentity,
+        ): GPUCorePrimitiveGeometryAuthority {
+            require(semantic.hasGeometryStructuralIntegrity()) { "Core geometry authority requires admitted geometry" }
+            semantic.geometryPlan?.authority?.let { retained ->
+                if (retained.clipExecutionPlanIdentity == clipExecutionPlanIdentity && retained.matches(semantic)) return retained
+            }
+            return GPUCorePrimitiveGeometryAuthority(
+                semantic.payloadRef.commandIdValue,
+                GPUCorePrimitiveGeometrySnapshot(
+                    semantic.payloadRef.renderStepIdentity, semantic.sourceFamily, semantic.geometry,
+                    semantic.targetBounds, semantic.scissorBounds, semantic.clipCoveragePlan,
+                    clipExecutionPlanIdentity, semantic.frameProvenance, semantic.coverageMode,
+                    semantic.rectRouteAuthority, semantic.rectGeometryAuthority, semantic.rrectGeometryAuthority,
+                    semantic.drrectOuterGeometryAuthority, semantic.drrectInnerGeometryAuthority,
+                ),
+                semantic.analysisRecordId, semantic.analysisCommandFamily,
+            )
+        }
+
+        /** Identity-only join; the admitted geometry snapshot is neither copied nor revalidated here. */
+        internal fun bindRecordedSnapshot(
+            commandId: Int,
+            snapshot: GPUCorePrimitiveGeometrySnapshot,
+            analysisRecordId: String?,
+            analysisCommandFamily: String?,
+        ): GPUCorePrimitiveGeometryAuthority {
+            require(commandId >= 0)
+            return GPUCorePrimitiveGeometryAuthority(commandId, snapshot, analysisRecordId, analysisCommandFamily)
+        }
+
+        /** Pre-publication packet wrapper retains the exact admitted snapshot and cached Path scissor. */
+        internal fun bindPreparedPathScissor(
+            base: GPUCorePrimitiveGeometryAuthority,
+            scissor: GPUPixelBounds,
+        ): GPUCorePrimitiveGeometryAuthority {
+            val path = base.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
+            require(base.preparedPacketScissor == null &&
+                path != null &&
+                path.geometryMode in setOf(GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                    GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan))
+            return GPUCorePrimitiveGeometryAuthority(base.commandIdI32, base.snapshot,
+                base.analysisRecordId, base.analysisCommandFamily, scissor)
+        }
+    }
+}
+
+/** A completed source binding joins, but never reissues, its exact geometry token. */
+internal class GPUCorePrimitiveMaterialBindingAuthority private constructor(
+    val geometryAuthority: GPUCorePrimitiveGeometryAuthority,
+    semantic: GPUDrawSemanticPayload.CorePrimitive,
+) {
+    private val payloadReference = semantic.payloadRef
+    private val material = semantic.material
+    private val blendPlanIdentity = semantic.blendPlanIdentity
+    private val source = (material as? GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority
+    private val table = source?.sourcePlanTable
+    private val ref = source?.ref
+    private val program = source?.let { it.sourcePlanTable.entry(it.ref).program }
+    private val packedSource = source?.packedSourceV4
+    private val finalBlend = source?.finalBlend
+
+    fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean =
+        geometryAuthority.matches(semantic) && payloadReference === semantic.payloadRef &&
+            material === semantic.material && blendPlanIdentity == semantic.blendPlanIdentity &&
+            (source == null || source.validates(semantic.payloadRef.commandIdValue) &&
+                source.sourcePlanTable === table && source.ref == ref &&
+                source.sourcePlanTable.entry(source.ref).program === program &&
+                source.packedSourceV4 === packedSource && source.finalBlend === finalBlend)
+
+    companion object {
+        fun bind(geometry: GPUCorePrimitiveGeometryAuthority,
+            semantic: GPUDrawSemanticPayload.CorePrimitive): GPUCorePrimitiveMaterialBindingAuthority {
+            require(geometry.matches(semantic) && semantic.hasMaterialStructuralIntegrity() &&
+                semantic.material !is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1) {
+                "Core material binding requires an executable source and its exact admitted geometry"
+            }
+            (semantic.material as? GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority?.let { source ->
+                W5aCorePrimitiveMaterialAuthorityV2.geometryInventory(source)?.let { inventory ->
+                    require(geometry === inventory.geometryByCommandId[geometry.commandIdI32] ||
+                        geometry === inventory.pathGeometryByCommandId[geometry.commandIdI32]?.authority) {
+                        "Common source binding must retain one exact prepublication geometry token"
+                    }
+                }
+            }
+            return GPUCorePrimitiveMaterialBindingAuthority(geometry, semantic)
+        }
+    }
+}
+
+/** Compatibility facade for one exact semantic, composed from geometry and source authorities. */
 internal sealed class GPUCorePrimitivePreparedSemanticAuthority private constructor() {
+    internal abstract val geometryAuthority: GPUCorePrimitiveGeometryAuthority
+    internal abstract val materialBindingAuthority: GPUCorePrimitiveMaterialBindingAuthority
     internal abstract fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean
     internal abstract fun retainedSemantic(): GPUDrawSemanticPayload.CorePrimitive
 
     private class Exact(
         private val preparedSemanticReference: GPUDrawSemanticPayload.CorePrimitive,
+        override val geometryAuthority: GPUCorePrimitiveGeometryAuthority,
+        override val materialBindingAuthority: GPUCorePrimitiveMaterialBindingAuthority,
     ) : GPUCorePrimitivePreparedSemanticAuthority() {
         override fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean =
-            preparedSemanticReference === semantic
+            preparedSemanticReference === semantic && materialBindingAuthority.matches(semantic)
 
         override fun retainedSemantic(): GPUDrawSemanticPayload.CorePrimitive =
             preparedSemanticReference
@@ -1143,9 +1357,35 @@ internal sealed class GPUCorePrimitivePreparedSemanticAuthority private construc
     internal companion object {
         fun capture(
             semantic: GPUDrawSemanticPayload.CorePrimitive,
-        ): GPUCorePrimitivePreparedSemanticAuthority =
-            Exact(semantic)
+            geometry: GPUCorePrimitiveGeometryAuthority = GPUCorePrimitiveGeometryAuthority.capture(semantic),
+        ): GPUCorePrimitivePreparedSemanticAuthority {
+            return Exact(semantic, geometry, GPUCorePrimitiveMaterialBindingAuthority.bind(geometry, semantic))
+        }
     }
+}
+
+/** Common-frame sources cannot become executable without both exact post-bind authorities. */
+internal fun GPUDrawPacket.commonCoreSemanticAuthority(): GPUCorePrimitivePreparedSemanticAuthority? {
+    val semantic = semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return null
+    val source = (semantic.material as? GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority
+    val inventory = source?.let(W5aCorePrimitiveMaterialAuthorityV2::geometryInventory)
+    val dispatch = corePrimitivePreparedAuthority?.materialDispatchPlan
+    if (inventory == null && dispatch == null) return null
+    require(dispatch != null && dispatch.validatesMaterial(commandIdValue, semantic)) {
+        "Common Core packet lost its material dispatch over the original packed geometry"
+    }
+    if (inventory != null) require(dispatch.geometry === inventory.runPlan)
+    val authority = requireNotNull(corePrimitivePreparedAuthority?.semanticAuthority) {
+        "Common Core packet lost its geometry/material composition"
+    }
+    val geometry = authority.geometryAuthority
+    require(authority.matches(semantic) && authority.materialBindingAuthority.geometryAuthority === geometry &&
+        authority.materialBindingAuthority.matches(semantic) &&
+        (inventory == null || geometry === inventory.geometryByCommandId[commandIdValue] ||
+            geometry === inventory.pathGeometryByCommandId[commandIdValue]?.authority)) {
+        "Common Core packet substituted its exact geometry or material binding"
+    }
+    return authority
 }
 
 internal data class GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal(
@@ -1611,8 +1851,151 @@ internal class GPUCorePrimitiveAnalyticIntersectionUniformSeal(
         expected.size == 160 && payloadBytesSnapshot.contentEquals(expected)
 }
 
+/**
+ * Handle-free W3 encoder-scratch authority.  W3 deliberately keeps the vertex, index, and
+ * uniform slabs outside the logical prepared-resource graph: they are borrowed from the
+ * session-scoped native frame pool only after this seal has been accepted by preflight.
+ */
+internal class W3SessionScratchV1(
+    val planId: String,
+    val capabilitySealHash: String,
+    val deviceGeneration: Long,
+    val target: GPUFrameTargetRef,
+    val staging: GPUFrameBufferRef,
+    val targetBounds: GPUPixelBounds,
+    packetIds: List<GPUDrawPacketID>,
+    commandIds: List<Int>,
+    packetStructuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
+    val uniformPlan: GPUUniformSlabPlan,
+    /** Exact device limits used when sealing the physical encoder scratch. */
+    val maxBufferSize: Long,
+    val maxDynamicUniformBuffersPerPipelineLayout: Long,
+    val vertexBytes: Long,
+    val indexBytes: Long,
+    /** Exact minimum physical capacities allocated by the reusable native frame pool. */
+    val poolCapacities: GPUCorePrimitiveFramePoolCapacities,
+    packetGeometryBytes: List<Pair<Long, Long>> = packetIds.map { 32L to 24L },
+) {
+    private val packetGeometryBytes = immutableList(packetGeometryBytes)
+    val packetIds: List<GPUDrawPacketID> = immutableList(packetIds)
+    val commandIds: List<Int> = immutableList(commandIds)
+    val packetStructuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey> =
+        immutableList(packetStructuralPipelineKeys)
+    val structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey> =
+        immutableList(this.packetStructuralPipelineKeys.distinct())
+
+    init {
+        require(planId.isNotBlank() && capabilitySealHash.isNotBlank()) {
+            "W3 scratch requires the exact plan and capability seals"
+        }
+        require(deviceGeneration >= 0L && !targetBounds.isEmpty) {
+            "W3 scratch requires a current non-empty target"
+        }
+        require(maxBufferSize > 0L && maxDynamicUniformBuffersPerPipelineLayout >= 1L) {
+            "W3 scratch requires observed positive buffer and dynamic-uniform limits"
+        }
+        require(this.packetIds.size in 1..512 && this.packetIds.distinct().size == this.packetIds.size &&
+            this.commandIds.size == this.packetIds.size && this.commandIds.distinct().size == this.commandIds.size &&
+            this.commandIds.all { it >= 0 }
+        ) { "W3 scratch requires one ordered packet and command identity per draw" }
+        require(this.packetStructuralPipelineKeys.size == this.packetIds.size &&
+            structuralPipelineKeys.all { structuralPipelineKey ->
+                structuralPipelineKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
+                    structuralPipelineKey.topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
+                    structuralPipelineKey.sampleCount == 1 &&
+                    structuralPipelineKey.uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+            }
+        ) { "W3 scratch accepts only the direct single-sample uniform32 pipeline" }
+        require(this.packetGeometryBytes.size == this.packetIds.size &&
+            this.packetGeometryBytes.all { (vertexI64, indexI64) -> vertexI64 in 32L..2048L &&
+                vertexI64 % 32L == 0L && indexI64 == vertexI64 / 32L * 24L } &&
+            vertexBytes == this.packetGeometryBytes.sumOf { it.first } &&
+            indexBytes == this.packetGeometryBytes.sumOf { it.second } &&
+            vertexBytes <= Int.MAX_VALUE.toLong() && indexBytes <= Int.MAX_VALUE.toLong() &&
+            uniformPlan.sourceLabel == SOURCE_LABEL &&
+            uniformPlan.uploadBudgetBytes == maxBufferSize &&
+            uniformPlan.totalBytes <= Int.MAX_VALUE.toLong() &&
+            uniformPlan.totalBytes <= UInt.MAX_VALUE.toLong() &&
+            uniformPlan.slots.size == this.packetIds.size &&
+            uniformPlan.deviceGeneration == deviceGeneration &&
+            uniformPlan.slots.all { slot ->
+                slot.payloadBytes == 32L &&
+                    slot.alignedOffset <= UInt.MAX_VALUE.toLong() &&
+                    slot.allocatedBytes <= UInt.MAX_VALUE.toLong() &&
+                    slot.alignedOffset <= UInt.MAX_VALUE.toLong() - slot.allocatedBytes
+            }
+        ) { "W3 scratch byte packing must be exact for every packet" }
+        require(
+            poolCapacities == corePrimitiveFramePoolCapacitiesOrNull(
+                vertexBytes,
+                indexBytes,
+                uniformPlan.totalBytes,
+            ),
+        ) { "W3 scratch must seal the exact pooled buffer capacities" }
+    }
+
+    internal fun matches(
+        expectedPlanId: String,
+        capabilityHash: String,
+        generation: Long,
+        expectedTarget: GPUFrameTargetRef,
+        expectedStaging: GPUFrameBufferRef,
+        bounds: GPUPixelBounds,
+        packets: List<GPUDrawPacket>,
+    ): Boolean =
+        planId == expectedPlanId && capabilitySealHash == capabilityHash &&
+            deviceGeneration == generation && target == expectedTarget && staging == expectedStaging &&
+            targetBounds == bounds &&
+            packetIds == packets.map(GPUDrawPacket::packetId) &&
+            commandIds == packets.map(GPUDrawPacket::commandIdValue)
+
+    internal fun hasExactUniformPayloads(
+        expectedAlignmentBytes: Long,
+        packets: List<GPUDrawPacket>,
+    ): Boolean {
+        if (packetGeometryBytes != packets.map { packet ->
+            when (val geometry = (packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive)?.geometry) {
+                is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath ->
+                    geometry.vertices.size.toLong() * 4L to geometry.indices.size.toLong() * 4L
+                is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.Rect -> 32L to 24L
+                else -> return false
+            }
+        }) return false
+        val payloads = packets.map { packet ->
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                ?: return false
+            val bytes = semantic.payloadRef.uniformBlock?.bytes ?: return false
+            GPUUniformSlabPayload(
+                "w3.draw.${packet.commandIdValue}",
+                bytes.map(Int::toByte).toByteArray(),
+            )
+        }
+        return uniformPlan.hasExactPayloads(
+            expectedSourceLabel = SOURCE_LABEL,
+            expectedDeviceGeneration = deviceGeneration,
+            expectedAlignmentBytes = expectedAlignmentBytes,
+            payloads = payloads,
+        )
+    }
+
+    internal fun fitsDeviceLimits(
+        maxBufferSize: Long,
+        maxDynamicUniformBuffersPerPipelineLayout: Long,
+    ): Boolean =
+        maxBufferSize == this.maxBufferSize &&
+            maxDynamicUniformBuffersPerPipelineLayout == this.maxDynamicUniformBuffersPerPipelineLayout &&
+            poolCapacities.vertexBytes <= maxBufferSize &&
+            poolCapacities.indexBytes <= maxBufferSize &&
+            poolCapacities.uniformBytes <= maxBufferSize &&
+            uniformPlan.uploadBudgetBytes == maxBufferSize
+
+    internal companion object {
+        const val SOURCE_LABEL: String = "w3-session-scratch-v1"
+    }
+}
+
 /** One-shot authority attached by the prepared-frame builder before the packet escapes. */
-internal data class GPUCorePrimitivePreparedPacketAuthority(
+internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
     val renderPipelineKey: GPURenderPipelineKey,
     val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
@@ -1620,4 +2003,370 @@ internal data class GPUCorePrimitivePreparedPacketAuthority(
     val analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = null,
     val analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = null,
     val coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,
-)
+    val w3SessionScratch: W3SessionScratchV1? = null,
+    val w4aSessionScratch: W4aSessionScratchV1? = null,
+    val w4bSessionScratch: W4bSessionScratchV1? = null,
+    val w5aAnalyticRectSessionScratch: W5aAnalyticRectSessionScratchV2? = null,
+    val w5aAnalyticRRectSessionScratch: W5aAnalyticRRectSessionScratchV2? = null,
+    val w4cSessionScratch: W4cSessionScratchV1? = null,
+    val w4dSessionScratch: W4dSessionScratchV1? = null,
+    private val scratchLane: ScratchLane,
+    val w4dGeneralPreparedAuthority: GPUPlanW4dGeneralPreparedAuthority? = null,
+    val w4dGeneralFrameMaterializationAuthority:
+        GPUW4dGeneralPreparedFrameMaterializationAuthority? = null,
+    val w5bFrameWitnessV3: W5bPreparedFrameWitnessV3? = null,
+    val semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority? = null,
+    val materialDispatchPlan: org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveMaterialDispatchPlan? = null,
+) {
+    internal constructor(
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        renderPipelineKey: GPURenderPipelineKey,
+        uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+        analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = null,
+        analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = null,
+        analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = null,
+        coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,
+        semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority? = null,
+        materialDispatchPlan: org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveMaterialDispatchPlan? = null,
+    ) : this(
+        structuralPipelineKey,
+        renderPipelineKey,
+        uniformSlabSeal,
+        analyticShapeUniformSeal,
+        analyticClipUniformSeal,
+        analyticIntersectionUniformSeal,
+        coverageMaskUniformSlabSeal,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        ScratchLane.Legacy,
+        semanticAuthority = semanticAuthority,
+        materialDispatchPlan = materialDispatchPlan,
+    )
+
+    init {
+        val scratchCount = listOf(
+            w3SessionScratch,
+            w4aSessionScratch,
+            w4bSessionScratch,
+            w5aAnalyticRectSessionScratch,
+            w5aAnalyticRRectSessionScratch,
+            w4cSessionScratch,
+            w4dSessionScratch,
+        ).count { it != null }
+        require(scratchCount <= 1) {
+            "A prepared CorePrimitive packet may retain no more than one planned session scratch"
+        }
+        require(w4dGeneralPreparedAuthority == null ||
+            (scratchLane == ScratchLane.Legacy && scratchCount == 0)
+        ) { "W4d.2 general prepared authority cannot be combined with another planned scratch" }
+        require((w4dGeneralPreparedAuthority == null) ==
+            (w4dGeneralFrameMaterializationAuthority == null)
+        ) { "W4d.2 prepared packets require one common sealed native materialization authority" }
+        when (scratchLane) {
+            ScratchLane.Legacy -> require(scratchCount == 0) {
+                "A legacy CorePrimitive prepared packet may not retain a planned session scratch"
+            }
+            ScratchLane.W3 -> require(
+                w3SessionScratch != null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
+                    w4cSessionScratch == null && w4dSessionScratch == null,
+            ) { "A W3 CorePrimitive prepared packet requires its W3 session scratch" }
+            ScratchLane.W4a -> require(
+                w3SessionScratch == null && w4aSessionScratch != null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
+                    w4cSessionScratch == null && w4dSessionScratch == null,
+            ) { "A W4a CorePrimitive prepared packet requires its W4a session scratch" }
+            ScratchLane.W4b -> require(
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch != null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
+                    w4cSessionScratch == null && w4dSessionScratch == null,
+            ) { "A W4b CorePrimitive prepared packet requires its W4b session scratch" }
+            ScratchLane.W5aRect -> require(
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch != null && w5aAnalyticRRectSessionScratch == null &&
+                    w4cSessionScratch == null && w4dSessionScratch == null,
+            ) { "A W5a Rect CorePrimitive packet requires its V2 material scratch" }
+            ScratchLane.W5aRRect -> require(
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch != null &&
+                    w4cSessionScratch == null && w4dSessionScratch == null,
+            ) { "A W5a RRect CorePrimitive packet requires its V2 material scratch" }
+            ScratchLane.W4c -> require(
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
+                    w4cSessionScratch != null && w4dSessionScratch == null,
+            ) { "A W4c CorePrimitive prepared packet requires its W4c session scratch" }
+            ScratchLane.W4d -> require(
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
+                    w4cSessionScratch == null && w4dSessionScratch != null,
+            ) { "A W4d CorePrimitive prepared packet requires its W4d session scratch" }
+        }
+    }
+
+    internal fun copy(
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey = this.structuralPipelineKey,
+        renderPipelineKey: GPURenderPipelineKey = this.renderPipelineKey,
+        uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal? = this.uniformSlabSeal,
+        analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = this.analyticShapeUniformSeal,
+        analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = this.analyticClipUniformSeal,
+        analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = this.analyticIntersectionUniformSeal,
+        coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = this.coverageMaskUniformSlabSeal,
+        w3SessionScratch: W3SessionScratchV1? = this.w3SessionScratch,
+        w4aSessionScratch: W4aSessionScratchV1? = this.w4aSessionScratch,
+        w4bSessionScratch: W4bSessionScratchV1? = this.w4bSessionScratch,
+        w4cSessionScratch: W4cSessionScratchV1? = this.w4cSessionScratch,
+        w4dSessionScratch: W4dSessionScratchV1? = this.w4dSessionScratch,
+    ): GPUCorePrimitivePreparedPacketAuthority {
+        require(
+            scratchLane != ScratchLane.W4c && scratchLane != ScratchLane.W4d &&
+                w4dGeneralPreparedAuthority == null,
+        ) {
+            "Planned path prepared packet authority is sealed to its original packet."
+        }
+        return GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey,
+            renderPipelineKey,
+            uniformSlabSeal,
+            analyticShapeUniformSeal,
+            analyticClipUniformSeal,
+            analyticIntersectionUniformSeal,
+            coverageMaskUniformSlabSeal,
+            w3SessionScratch,
+            w4aSessionScratch,
+            w4bSessionScratch,
+            w5aAnalyticRectSessionScratch,
+            w5aAnalyticRRectSessionScratch,
+            w4cSessionScratch,
+            w4dSessionScratch,
+            scratchLane,
+            w5bFrameWitnessV3 = w5bFrameWitnessV3,
+            semanticAuthority = semanticAuthority,
+            materialDispatchPlan = materialDispatchPlan,
+        )
+    }
+
+    internal companion object {
+        fun plannedW5b(
+            key: GPUCorePrimitiveRenderPipelineStructuralKey,
+            pipeline: GPURenderPipelineKey,
+            witness: W5bPreparedFrameWitnessV3,
+            analyticSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = null,
+            general: W5bGeometryScratchV3.General? = null,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            key, pipeline, null, analyticShapeUniformSeal = analyticSeal, scratchLane = ScratchLane.Legacy, w5bFrameWitnessV3 = witness,
+            w4dGeneralPreparedAuthority = general?.also { require(witness.geometryLanes.any { lane -> lane === it }) }?.authority,
+            w4dGeneralFrameMaterializationAuthority = general?.native,
+        )
+
+        fun plannedW3(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            scratch: W3SessionScratchV1,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey,
+            renderPipelineKey,
+            null,
+            null,
+            null,
+            null,
+            null,
+            scratch,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            ScratchLane.W3,
+        )
+
+        fun plannedW4a(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal,
+            scratch: W4aSessionScratchV1,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey,
+            renderPipelineKey,
+            null,
+            analyticShapeUniformSeal,
+            null,
+            null,
+            null,
+            null,
+            scratch,
+            null,
+            null,
+            null,
+            null,
+            null,
+            ScratchLane.W4a,
+        )
+
+        fun plannedW4b(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            scratch: W4bSessionScratchV1,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey,
+            renderPipelineKey,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            scratch,
+            null,
+            null,
+            null,
+            null,
+            ScratchLane.W4b,
+        )
+
+        fun plannedW5aRect(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal,
+            scratch: W5aAnalyticRectSessionScratchV2,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey, renderPipelineKey, null, analyticShapeUniformSeal, null, null, null,
+            null, null, null, scratch, null, null, null, ScratchLane.W5aRect,
+        )
+
+        fun plannedW5aRRect(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            scratch: W5aAnalyticRRectSessionScratchV2,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey, renderPipelineKey, null, null, null, null, null,
+            null, null, null, null, scratch, null, null, ScratchLane.W5aRRect,
+        )
+
+        fun plannedW4c(
+            packet: GPUDrawPacket,
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            planId: String,
+            capabilitySealHash: String,
+            scratch: W4cSessionScratchV1,
+        ): GPUCorePrimitivePreparedPacketAuthority {
+            require(
+                scratch.matchesPreparedPacket(
+                    expectedPlanId = planId,
+                    expectedCapabilityHash = capabilitySealHash,
+                    packet = packet,
+                    structuralPipelineKey = structuralPipelineKey,
+                    renderPipelineKey = renderPipelineKey,
+                ),
+            ) { "W4c prepared authority must match its sealed scratch draw, ranges, and hashes." }
+            return GPUCorePrimitivePreparedPacketAuthority(
+                structuralPipelineKey,
+                renderPipelineKey,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                scratch,
+                null,
+                ScratchLane.W4c,
+            )
+        }
+
+        fun plannedW4d(
+            packet: GPUDrawPacket,
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            planId: String,
+            capabilitySealHash: String,
+            scratch: W4dSessionScratchV1,
+        ): GPUCorePrimitivePreparedPacketAuthority {
+            require(
+                scratch.matchesPreparedPacket(
+                    expectedPlanId = planId,
+                    expectedCapabilityHash = capabilitySealHash,
+                    packet = packet,
+                    structuralPipelineKey = structuralPipelineKey,
+                    renderPipelineKey = renderPipelineKey,
+                ),
+            ) { "W4d prepared authority must match its sealed scratch draw, ranges, style, and hashes." }
+            return GPUCorePrimitivePreparedPacketAuthority(
+                structuralPipelineKey,
+                renderPipelineKey,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                scratch,
+                ScratchLane.W4d,
+            )
+        }
+
+        fun plannedW4dGeneral(
+            packet: GPUDrawPacket,
+            pass: PlanPass.PathRenderPass,
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            authority: GPUPlanW4dGeneralPreparedAuthority,
+            materialization: GPUW4dGeneralPreparedFrameMaterializationAuthority,
+        ): GPUCorePrimitivePreparedPacketAuthority {
+            require(
+                authority.matchesPreparedPacket(packet, pass, structuralPipelineKey, renderPipelineKey),
+            ) { "W4d.2 prepared authority must match the sealed graph pass and packet." }
+            require(materialization.pathPass(pass.id.value) != null &&
+                materialization.planId.isNotBlank() &&
+                materialization.deviceGeneration.value >= 0L
+            ) { "W4d.2 prepared packets require the sealed native materialization pass authority." }
+            return GPUCorePrimitivePreparedPacketAuthority(
+                structuralPipelineKey,
+                renderPipelineKey,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                ScratchLane.Legacy,
+                authority,
+                materialization,
+            )
+        }
+    }
+
+    private enum class ScratchLane {
+        Legacy,
+        W3,
+        W4a,
+        W4b,
+        W5aRect,
+        W5aRRect,
+        W4c,
+        W4d,
+    }
+}

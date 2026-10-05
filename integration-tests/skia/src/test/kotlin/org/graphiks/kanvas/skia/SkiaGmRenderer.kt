@@ -8,7 +8,6 @@ import org.graphiks.kanvas.surface.DebugLevel
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
-import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 
 object SkiaGmRenderer {
@@ -21,12 +20,12 @@ object SkiaGmRenderer {
         height: Int = gm.height,
         config: RenderConfig = RenderConfig.DEFAULT,
     ): SkiaRenderResult {
-        val surface = Surface(width = width, height = height, config = config)
+        val surface = Surface(width = width, height = height, config = gm.compositionConfig(config))
         val tracer = if (config.debugLevel >= DebugLevel.TRACE) PipelineTracer() else null
         surface.renderOpListener = tracer
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
+            Paint(color = gm.backgroundColor, antiAlias = false))
         val gmCanvas = GmCanvas(canvas, width, height)
         gm.onOnceBeforeDraw(gmCanvas)
         gm.draw(gmCanvas, width, height)
@@ -55,11 +54,11 @@ object SkiaGmRenderer {
         height: Int = gm.height,
         config: RenderConfig = RenderConfig.DEFAULT,
     ): SkiaRenderTerminalAttempt? {
-        val surface = Surface(width = width, height = height, config = config)
+        val surface = Surface(width = width, height = height, config = gm.compositionConfig(config))
         val canvas = surface.canvas()
         canvas.drawRect(
             RectF32(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false),
+            Paint(color = gm.backgroundColor, antiAlias = false),
         )
         val gmCanvas = GmCanvas(canvas, width, height)
         gm.onOnceBeforeDraw(gmCanvas)
@@ -79,7 +78,7 @@ object SkiaGmRenderer {
     /** Captures exactly one existing public Surface.render() attempt for inventory evidence only. */
     fun inventoryEvidence(gm: SkiaGm, config: RenderConfig = RenderConfig.DEFAULT): InventoryRenderEvidence =
         captureInventoryEvidence(gm) {
-            SurfaceInventoryCapture(Surface(width = gm.width, height = gm.height, config = config))
+            SurfaceInventoryCapture(Surface(width = gm.width, height = gm.height, config = gm.compositionConfig(config)))
         }
 }
 
@@ -100,9 +99,12 @@ internal fun captureInventoryEvidence(
     gm: SkiaGm,
     createSurface: () -> InventorySurfaceCapture,
 ): InventoryRenderEvidence {
+    val initialDecision = SkiaGmConformance.decisionFor(gm)
+    if (!initialDecision.mustAttempt) return excludedInventoryEvidence(initialDecision)
     val surface = try {
         createSurface()
-    } catch (failure: Exception) {
+    } catch (failure: Throwable) {
+        rethrowFatalSetupFailure(failure)
         return InventoryRenderEvidence(
             attempted = false,
             renderSucceeded = false,
@@ -111,16 +113,23 @@ internal fun captureInventoryEvidence(
             route = "setup-failure",
             setupState = InventorySetupState.FAILED,
             setupDiagnostic = failure.message.orEmpty(),
+            conformanceDecision = initialDecision,
         )
     }
+    var gmCanvas: GmCanvas? = null
     try {
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, gm.width.toFloat(), gm.height.toFloat()),
-            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
-        val gmCanvas = GmCanvas(canvas, gm.width, gm.height)
-        gm.onOnceBeforeDraw(gmCanvas)
-        gm.draw(gmCanvas, gm.width, gm.height)
-    } catch (failure: Exception) {
+            Paint(color = gm.backgroundColor, antiAlias = false))
+        val createdCanvas = GmCanvas(canvas, gm.width, gm.height)
+        gmCanvas = createdCanvas
+        gm.onOnceBeforeDraw(createdCanvas)
+        gm.draw(createdCanvas, gm.width, gm.height)
+    } catch (failure: Throwable) {
+        rethrowFatalSetupFailure(failure)
+        val finalDecision = gmCanvas?.let { canvas ->
+            SkiaGmConformance.decisionFor(gm, canvas.observedExternalDependencies())
+        } ?: initialDecision
         return InventoryRenderEvidence(
             attempted = false,
             renderSucceeded = false,
@@ -129,6 +138,15 @@ internal fun captureInventoryEvidence(
             route = "setup-failure",
             setupState = InventorySetupState.FAILED,
             setupDiagnostic = failure.message.orEmpty(),
+            conformanceDecision = finalDecision,
+        )
+    }
+    val finalDecision = SkiaGmConformance.decisionFor(gm, checkNotNull(gmCanvas).observedExternalDependencies())
+    if (!finalDecision.mustAttempt) {
+        return excludedInventoryEvidence(
+            decision = finalDecision,
+            operationCount = surface.snapshotOperationCount(),
+            setupState = InventorySetupState.SUCCEEDED,
         )
     }
     return try {
@@ -140,8 +158,10 @@ internal fun captureInventoryEvidence(
             operationCount = surface.snapshotOperationCount(),
             diagnostics = result.diagnostics.entries.map { "${it.code}: ${it.reason}" },
             route = "gpu",
+            conformanceDecision = finalDecision,
         )
-    } catch (failure: Exception) {
+    } catch (failure: Throwable) {
+        rethrowFatalSetupFailure(failure)
         InventoryRenderEvidence(
             attempted = true,
             renderSucceeded = false,
@@ -149,9 +169,30 @@ internal fun captureInventoryEvidence(
             operationCount = surface.snapshotOperationCount(),
             diagnostics = listOf(failure.message.orEmpty()),
             route = "render-failure",
+            conformanceDecision = finalDecision,
         )
     }
 }
+
+@Suppress("DEPRECATION")
+private fun rethrowFatalSetupFailure(failure: Throwable) {
+    if (failure is VirtualMachineError || failure is ThreadDeath) throw failure
+}
+
+private fun excludedInventoryEvidence(
+    decision: GmConformanceDecision,
+    operationCount: Int = 0,
+    setupState: InventorySetupState = InventorySetupState.NOT_ATTEMPTED,
+): InventoryRenderEvidence = InventoryRenderEvidence(
+    attempted = false,
+    renderSucceeded = false,
+    terminalFailure = false,
+    operationCount = operationCount,
+    diagnostics = listOf("excluded:${decision.scope.wireName}"),
+    route = "excluded:${decision.scope.wireName}",
+    setupState = setupState,
+    conformanceDecision = decision,
+)
 
 data class SkiaRenderResult(
     val rgba: ByteArray,

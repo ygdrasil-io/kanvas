@@ -1,0 +1,501 @@
+package org.graphiks.kanvas.gpu.plan
+
+import org.graphiks.math.geometry.SizeI32
+import org.graphiks.math.geometry.RectI32
+
+/** Preflight and graph issuance for the integral W3 destination-read successor. */
+internal object W5bDestinationGraphSealer {
+    fun constructHardPathRoot(
+        frame: W7HardPathRootFrameV1,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): RenderGraphConstruction {
+        val extent = SizeI32(frame.target.extent.width, frame.target.extent.height)
+        val pathSlots = frame.pathSlots()
+        val colorSlots = frame.colorSlots()
+        require(pathSlots.isNotEmpty() && colorSlots.isNotEmpty())
+        val pathFootprint = when (val result = PathFillPlanBudget.calculate(
+            extent, pathSlots.map { requireNotNull(it.path).geometryF32 }, capabilities, budget,
+        )) {
+            is PathFillPlanBudgetResult.WithinBudget -> result.footprint
+            is PathFillPlanBudgetResult.Exceeded -> throw RawMaterialRequirementsV2.Refusal(
+                "resource-limit.w5b.destination-budget",
+            )
+            is PathFillPlanBudgetResult.Invalid -> throw ArithmeticException(result.code)
+        }
+        if (listOf(pathFootprint.readbackBytes, pathFootprint.vertexCapacityBytes,
+                pathFootprint.indexCapacityBytes, pathFootprint.uniformCapacityBytes).any {
+                it > capabilities.maxBufferSizeBytes
+            }) throw IllegalArgumentException(W4cPlanDiagnostics.CapabilityBufferSize.value)
+        require(extent.width <= capabilities.maxTextureDimension2D && extent.height <= capabilities.maxTextureDimension2D)
+        require(W4cPathFillPlanCompiler.FORMAT in capabilities.supportedFormats())
+        require(W4cPathFillPlanCompiler.REQUIRED_OPERATIONS.all { it in capabilities.supportedOperations() })
+        require(PlanDepthStencilFormat.Depth24PlusStencil8 in capabilities.supportedDepthStencilFormats())
+        require(capabilities.maxDynamicUniformBuffersPerPipelineLayout >= 1)
+        require(listOf(capabilities.copyBytesPerRowAlignment, capabilities.minUniformBufferOffsetAlignment)
+            .all { it > 0 && it and (it - 1) == 0 } && listOf(
+            capabilities.bufferAllocationPolicy.vertexFloorBytes,
+            capabilities.bufferAllocationPolicy.indexFloorBytes,
+            capabilities.bufferAllocationPolicy.uniformFloorBytes,
+        ).all { it > 0L && it and (it - 1L) == 0L })
+
+        val pathUsesStencil = pathSlots.any { requireNotNull(it.path).strategy == PathFillStrategy.StencilCover }
+        val pathResources = buildList {
+            add(PlanResource.of(PlanResourceRole.VertexData, 0, PlanResourceKind.Buffer, null, null,
+                pathFootprint.vertexCapacityBytes, setOf(PlanResourceUsage.Vertex, PlanResourceUsage.CopyDestination),
+                PlanResourceLifetime.FrameLocal, 0, 1))
+            add(PlanResource.of(PlanResourceRole.IndexData, 0, PlanResourceKind.Buffer, null, null,
+                pathFootprint.indexCapacityBytes, setOf(PlanResourceUsage.Index, PlanResourceUsage.CopyDestination),
+                PlanResourceLifetime.FrameLocal, 0, 1))
+            add(PlanResource.of(PlanResourceRole.UniformData, 0, PlanResourceKind.Buffer, null, null,
+                pathFootprint.uniformCapacityBytes, setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination),
+                PlanResourceLifetime.FrameLocal, 0, 1))
+            if (pathUsesStencil) add(PlanResource.of(PlanResourceRole.DepthStencil, 0, PlanResourceKind.Texture2D,
+                PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), extent,
+                pathFootprint.depthStencilBytes, setOf(PlanResourceUsage.DepthStencilAttachment),
+                PlanResourceLifetime.FrameLocal, 0, 1))
+        }
+        val pathData = PlanDrawDataResources(
+            pathResources.single { it.role == PlanResourceRole.VertexData }.id,
+            pathResources.single { it.role == PlanResourceRole.IndexData }.id,
+            pathResources.single { it.role == PlanResourceRole.UniformData }.id,
+        )
+        val depthId = pathResources.singleOrNull { it.role == PlanResourceRole.DepthStencil }?.id
+        val colorGeometry = w3DrawColorGeometryPartitionV1(colorSlots.size, capabilities, 1)
+        val draws = (pathSlots + colorSlots).sortedBy { it.commandIndexI32 }.map { slot ->
+            when (slot.kind) {
+                W7HardPathSlotKindV1.Path -> {
+                    val sealed = requireNotNull(slot.path)
+                    PathFillDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.geometryF32,
+                        sealed.strategy, sealed.scissorI32, sealed.blend, sealed.coordinates,
+                        coordinatesV2 = sealed.coordinatesV2, coordinatesV4 = sealed.coordinatesV4)
+                }
+                W7HardPathSlotKindV1.DrawColor -> requireNotNull(slot.color)
+                W7HardPathSlotKindV1.NoOp -> error("Only retained draws belong to W5b topology")
+            }
+        }
+        val dataByCommand = linkedMapOf<Int, PlanDrawDataResources>()
+        pathSlots.forEach { dataByCommand[it.commandIndexI32] = pathData }
+        colorSlots.forEach { dataByCommand[it.commandIndexI32] = colorGeometry.drawData }
+        val depthByCommand = pathSlots.filter { requireNotNull(it.path).strategy == PathFillStrategy.StencilCover }
+            .associate { it.commandIndexI32 to requireNotNull(depthId) }
+        val allGeometryResources = pathResources + colorGeometry.resources
+        val construction = construct(
+            PlanId(frame.owner.planIdentity(frame.sceneFingerprint, frame.target, capabilities, budget)),
+            W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID, extent, capabilities, budget, draws,
+            frame.materialPlanTable, pathFootprint.targetBytes, pathFootprint.readbackBytes,
+            pathFootprint.readbackBytesPerRow, allGeometryResources, drawDataByCommandI32 = dataByCommand,
+            depthStencilByCommandI32 = depthByCommand, hardPathRootFrame = frame,
+        )
+        val pathPartition = PhysicalPartitionFacts(W7HardPathRootFrameV1.PartitionKind.Path,
+            pathSlots.map { it.commandIndexI32 }, pathResources.map { it.id }, pathData, depthId)
+        val colorPartition = PhysicalPartitionFacts(W7HardPathRootFrameV1.PartitionKind.DrawColor,
+            colorSlots.map { it.commandIndexI32 }, colorGeometry.resources.map { it.id }, colorGeometry.drawData, null)
+        val publication = frame.issuePublication(
+            construction.id, construction.capabilityId, capabilities, budget, construction.resources(),
+            construction.passes(), construction.dependencies(), construction.peakFrameLocalBytes,
+            construction.visualCommandCount,
+            pathPartition, colorPartition,
+            pathSlots.map { requireNotNull(it.path).material },
+        )
+        return construction.withHardPathRootPublication(publication)
+    }
+
+    fun seal(
+        id: PlanId,
+        capabilityId: String,
+        extent: SizeI32,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        draws: List<PlanDraw>,
+        material: MaterialPlanTable?,
+        targetBytesI64: Long,
+        stagingBytesI64: Long,
+        rowBytesI64: Long,
+        geometryResources: List<PlanResource> = emptyList(),
+        drawDataResources: PlanDrawDataResources? = null,
+        drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
+        depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
+        w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+    ): RenderGraph {
+        return construct(id, capabilityId, extent, capabilities, budget, draws, material, targetBytesI64, stagingBytesI64, rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource, colorFormat).publish()
+    }
+
+    fun construct(
+        id: PlanId,
+        capabilityId: String,
+        extent: SizeI32,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        draws: List<PlanDraw>,
+        material: MaterialPlanTable?,
+        targetBytesI64: Long,
+        stagingBytesI64: Long,
+        rowBytesI64: Long,
+        geometryResources: List<PlanResource> = emptyList(),
+        drawDataResources: PlanDrawDataResources? = null,
+        drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
+        depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
+        w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+        hardPathRootFrame: W7HardPathRootFrameV1? = null,
+    ): RenderGraphConstruction {
+        require((capabilityId == W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID) ==
+            (hardPathRootFrame?.authenticates(hardPathRootFrame.owner) == true))
+        val sizing = sizeLayout(capabilityId, extent, capabilities, budget, draws, targetBytesI64, stagingBytesI64, rowBytesI64,
+            geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource, colorFormat)
+        val sourceRequirements = draws.filter { it.materialAuthority.colorSourceCoordinatesV4() == null &&
+            it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }.distinctBy {
+                it.materialAuthority.materialPlanRef()
+            }.map { draw ->
+            RawMaterialRequirementsV2.of(requireNotNull(material), draw.materialAuthority.materialPlanRef()).also { source ->
+                require(source.fitsUniformBinding(capabilities)) {
+                    if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget
+                    else "resource-limit.w5b.source-binding"
+                }
+            }
+        }
+        RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements,
+            Math.addExact(sizing.peakI64, material?.gradientStopSlab?.byteSizeI64 ?: 0L), budget,
+            "resource-limit.w5b.destination-budget")
+        val topology = sizing.finish(draws.map { original ->
+            if (original.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) return@map original
+            material?.coordinatesV2(original.materialAuthority.materialPlanRef())?.let(original::withW5dCoordinates) ?: original
+        })
+        return RenderGraph.construct(id, capabilityId, extent, topology.format, capabilities, budget,
+            draws.size, topology.resources, topology.passes, topology.dependencies, topology.peakI64,
+            material.takeIf { draws.isNotEmpty() }, w5bW4eFacts = w4eSource,
+            hardPathRootAdmission = hardPathRootFrame)
+    }
+
+    private fun sizeLayout(
+        capabilityId: String,
+        extent: SizeI32,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        draws: List<PlanDraw>,
+        targetBytesI64: Long,
+        stagingBytesI64: Long,
+        rowBytesI64: Long,
+        geometryResources: List<PlanResource> = emptyList(),
+        drawDataResources: PlanDrawDataResources? = null,
+        drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
+        depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
+        w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+    ): DestinationSizingV4 {
+        require(w4eSource == null ||
+            w4eSource.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID && capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID)
+        val nativePrefix = w4eSource?.passes?.filter { it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold }.orEmpty()
+        val clips = draws.filterIsInstance<W5bPointDraw>().mapNotNull { it.clipOnly }.distinct()
+        require(clips.size <= 1)
+        val clip = clips.singleOrNull()
+        require(clip == null || capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID &&
+            clip.capabilities == capabilities && clip.budget == budget && clip.copyExtentI32() == extent)
+        require(draws.none { it.blend == BlendPlan.NoOpV1 }) { "NoOp draws must be elided before graph issuance" }
+        require(capabilityId != W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID ||
+            draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 } &&
+                draws.any { it.blend is BlendPlan.DestinationReadV1 })
+        val destinationCountI32 = draws.count { it.blend is BlendPlan.DestinationReadV1 }
+        val readsDestination = destinationCountI32 > 0
+        require(capabilities.maxBindGroupsI32?.let { it >= if (clip != null) 4 else if (readsDestination) 3 else 2 } == true &&
+            capabilities.maxBindingsPerBindGroupI32?.let { it >= if (readsDestination) 2 else 1 } == true &&
+            (!readsDestination || capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= if (clip == null && w4eSource == null) 1 else 2 } == true) &&
+            (!readsDestination || capabilities.maxSamplersPerShaderStageI32?.let { it >= 1 } == true) &&
+            capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } == true &&
+            capabilities.maxUniformBufferBindingSizeBytesI64?.let { it >= 32L } == true) {
+            "unsupported.w5b.destination-capability"
+        }
+        val format = PlanTextureFormat.Color(colorFormat)
+        require(!readsDestination || capabilities.supportsTexture(format, 1, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled))) {
+            "unsupported.w5b.destination-texture"
+        }
+        require(destinationCountI32 > 0 || capabilityId in setOf(W5bCorePrimitiveGraph.CAPABILITY_ID,
+            W5bVerticesPlanCompiler.CAPABILITY_ID,
+            W5eImagePlanCompiler.CONSTRUCTION_CAPABILITY_ID,
+            W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,
+            W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, W4cPathFillPlanCompiler.W7_HARD_PATH_ROOT_CAPABILITY_ID))
+        val initialClearI32 = if (draws.isEmpty() || draws.first().blend is BlendPlan.DestinationReadV1) 1 else 0
+        val stencilCountI32 = draws.count { it is PathDraw && (it.strategy == PathFillStrategy.StencilCover ||
+            (it as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true) }
+        val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + stencilCountI32 + 1 + (clip?.passes()?.size ?: 0) + nativePrefix.size)
+        val regions = draws.filter { it.blend is BlendPlan.DestinationReadV1 }
+            .associate { it.commandIndex to destinationBounds(it, extent) }
+        val snapshotExtent = regions.values.takeIf { it.isNotEmpty() }?.let { bounds ->
+            val widthBytesI64 = alignedRowBytesI64(capabilities, bounds.maxOf { it.width() })
+            require(widthBytesI64 % 4L == 0L) { "unsupported.w5b.destination-row-alignment" }
+            SizeI32(Math.toIntExact(widthBytesI64 / 4L), bounds.maxOf { it.height() })
+        }
+        // Every copy is consumed before the next target write. Physical storage is reusable
+        // across these disjoint logical lifetimes; its capacity is the maximum extent, never
+        // a union of draw positions. Budget the aligned physical rows through completion.
+        val snapshotBytesI64 = snapshotExtent?.let {
+            Math.multiplyExact(alignedRowBytesI64(capabilities, it.width), it.height.toLong())
+        } ?: 0L
+        val peakI64 = Math.addExact(geometryResources.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) },
+            Math.addExact(Math.addExact(Math.addExact(targetBytesI64, snapshotBytesI64), stagingBytesI64),
+            clip?.resources()?.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) } ?: 0L))
+        return DestinationSizingV4(capabilityId, extent, capabilities, draws, targetBytesI64, stagingBytesI64, rowBytesI64,
+            geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource,
+            nativePrefix, clip, destinationCountI32, initialClearI32, passCountI32, regions, snapshotExtent,
+            snapshotBytesI64, peakI64, format)
+    }
+
+    internal class DestinationTopologyV4(format: PlanLogicalColorFormat, resources: List<PlanResource>,
+        passes: List<PlanPass>, dependencies: List<PlanPassDependency>, val peakI64: Long) {
+        val format = format
+        val resources = immutableList(resources)
+        val passes = immutableList(passes)
+        val dependencies = immutableList(dependencies)
+    }
+
+    /** Source-independent destination recipe, used before any pending source preparation. */
+    fun describeSources(capabilityId: String, extent: SizeI32, capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget, draws: List<PlanDraw>, targetBytesI64: Long, stagingBytesI64: Long,
+        rowBytesI64: Long, geometryResources: List<PlanResource> = emptyList(),
+        drawDataResources: PlanDrawDataResources? = null,
+        drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
+        depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
+        w4eSource: W4eGeometryFactsV6? = null,
+        colorFormat: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL): DestinationTopologyV4 =
+        sizeLayout(capabilityId, extent, capabilities, budget, draws, targetBytesI64, stagingBytesI64,
+            rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32,
+            depthStencilByCommandI32, w4eSource, colorFormat).finish(draws)
+
+    private fun alignedRowBytesI64(capabilities: PlanCapabilitySnapshot, widthI32: Int): Long {
+        val bytesI64 = Math.multiplyExact(widthI32.toLong(), 4L)
+        val alignmentI64 = capabilities.copyBytesPerRowAlignment.toLong()
+        return Math.addExact(bytesI64, (alignmentI64 - bytesI64 % alignmentI64) % alignmentI64)
+    }
+
+    private class DestinationSizingV4(
+        val capabilityId: String, val extent: SizeI32, val capabilities: PlanCapabilitySnapshot,
+        originalDraws: List<PlanDraw>, val targetBytesI64: Long, val stagingBytesI64: Long,
+        val rowBytesI64: Long, geometryResources: List<PlanResource>,
+        val drawDataResources: PlanDrawDataResources?, drawDataByCommandI32: Map<Int, PlanDrawDataResources>,
+        depthStencilByCommandI32: Map<Int, PlanResourceId>, val w4eSource: W4eGeometryFactsV6?,
+        nativePrefix: List<PlanPass>, val clip: W4eClipOnlyPlan?, val destinationCountI32: Int,
+        val initialClearI32: Int, val passCountI32: Int, regions: Map<Int, RectI32>,
+        val snapshotExtent: SizeI32?, val snapshotBytesI64: Long, val peakI64: Long,
+        val format: PlanTextureFormat.Color,
+    ) {
+        private val commands = originalDraws.map { it.commandIndex }
+        private val geometryResources = immutableList(geometryResources)
+        private val drawDataByCommandI32 = java.util.Collections.unmodifiableMap(LinkedHashMap(drawDataByCommandI32))
+        private val depthStencilByCommandI32 = java.util.Collections.unmodifiableMap(LinkedHashMap(depthStencilByCommandI32))
+        private val nativePrefix = immutableList(nativePrefix)
+        private val regions = regions.mapValues { it.value.copy() }
+        fun finish(draws: List<PlanDraw>): DestinationTopologyV4 {
+            require(draws.map { it.commandIndex } == commands)
+            val target = PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
+                format, extent, targetBytesI64, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
+                PlanResourceLifetime.FrameLocal, 0, passCountI32)
+            val snapshot = if (destinationCountI32 == 0) null else PlanResource.of(PlanResourceRole.DestinationSnapshot, 0, PlanResourceKind.Texture2D,
+                format, requireNotNull(snapshotExtent), snapshotBytesI64, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled),
+                PlanResourceLifetime.FrameLocal, 0, passCountI32)
+            val staging = PlanResource.of(PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer,
+                null, null, stagingBytesI64, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
+                PlanResourceLifetime.FrameLocal, if (draws.isEmpty()) 1 else 0, passCountI32)
+            var versionI64 = 0L
+            var renderOrdinalI32 = 0
+            var copyOrdinalI32 = 0
+            var producerOrdinalI32 = 0
+            var coverOrdinalI32 = 0
+            var hasColorAttachment = false
+            val passes = (nativePrefix + clip?.passes().orEmpty()).toMutableList()
+            fun render(draw: PlanDraw?) {
+                if (draw != null) versionI64 = Math.addExact(versionI64, 1L)
+                val data = draw?.let { drawDataByCommandI32[it.commandIndex] } ?: drawDataResources
+                val load = if (hasColorAttachment) AttachmentLoadPlan.Load else AttachmentLoadPlan.ClearTransparent
+                hasColorAttachment = true
+                if (draw is PathDraw && (draw.strategy == PathFillStrategy.StencilCover ||
+                        (draw as? W5bW4ePathDraw)?.hasW4eInverseMaskStencilPair() == true)) {
+                    val depth = requireNotNull(depthStencilByCommandI32[draw.commandIndex])
+                    val atomic = canonicalPathAtomicGroup(draw)
+                    passes += PlanPass.StencilGeometryProducerV3(producerOrdinalI32++, target.id, depth,
+                        draw.commandIndex, draw.copyPathGeometry(), draw.copyScissorI32(), requireNotNull(data), atomic,
+                        load, AttachmentStorePlan.Store)
+                    passes += PlanPass.StencilCover(coverOrdinalI32++, target.id, depth, draw, data, atomic,
+                        AttachmentLoadPlan.Load, AttachmentStorePlan.Store, PlanDepthStencilAccess.ReadWrite,
+                        PlanDepthStencilLoadStore.LoadStoreTestReset, DestinationVersionI64(versionI64))
+                    return
+                }
+                passes += PlanPass.RenderPass(renderOrdinalI32++, target.id, listOfNotNull(draw),
+                    load, AttachmentStorePlan.Store, data, destinationVersionAfter = DestinationVersionI64(versionI64))
+            }
+            if (initialClearI32 == 1) render(null)
+            draws.forEach { draw ->
+                val blend = draw.blend
+                if (blend is BlendPlan.DestinationReadV1) {
+                    require(blend.coverageLaw == selectedCoverageLawV1(blend.mode, blend.coverage)) {
+                        "invalid.w5b.coverage-law"
+                    }
+                    require(if (draw is W5bW4ePathDraw && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader)
+                        blend.compositionAbiI32 == 3
+                        else if ((draw as? W5bPointDraw)?.clipOnly != null)
+                        blend.compositionAbiI32 == 4 && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader
+                        else blend.compositionAbiI32 == 3 && (blend.coverage == BlendCoverageEncodingV1.FullOrScissor ||
+                            draw is AnalyticRectDraw || draw is AnalyticRRectDraw))
+                    val version = DestinationVersionI64(versionI64)
+                    val region = regions.getValue(draw.commandIndex)
+                    passes += PlanPass.TextureCopy(copyOrdinalI32++, target.id, requireNotNull(snapshot).id, version,
+                        region, bytesPerRowI64 = alignedRowBytesI64(capabilities, region.width()))
+                    val sealed = blend.copy(requiredDestinationVersion = version, snapshotResource = snapshot.id)
+                    render(draw.withFinalBlendV1(sealed))
+                } else render(draw)
+            }
+            passes += PlanPass.ReadbackPass(0, target.id, staging.id, rowBytesI64)
+            val clipResources = clip?.resources().orEmpty().map { resource ->
+                val last = passes.indexOfLast { pass -> when (pass) {
+                    is PlanPass.ClipMaskInitialize -> pass.output == resource.id
+                    is PlanPass.ClipMaskProducer -> resource.id in listOfNotNull(pass.target, pass.resolveTarget, pass.depthStencil)
+                    is PlanPass.ClipMaskFold -> resource.id in listOf(pass.previous, pass.source, pass.output)
+                    is PlanPass.RenderPass -> pass.draws().filterIsInstance<W5bPointDraw>().any { it.clipOnly?.maskResource == resource.id }
+                    else -> false
+                } }.let { if (it < 0) requireNotNull(clip).passes().lastIndex else it }
+                PlanResource.of(resource.role, resource.ordinal, resource.kind, resource.format, resource.copyExtent(), resource.byteSize,
+                    resource.usages(), resource.lifetime, 0, last + 1, resource.sampleCountI32)
+            }
+            val resources = listOfNotNull(target, snapshot, staging) + clipResources + geometryResources.map { resource ->
+                    val firstUseI32 = if (resource.role == PlanResourceRole.DepthStencil && w4eSource == null)
+                        passes.indexOfFirst { it is PlanPass.StencilGeometryProducerV3 && it.depthStencil == resource.id }
+                        else 0
+                    PlanResource.of(resource.role, resource.ordinal, resource.kind, resource.format, resource.copyExtent(),
+                        resource.byteSize, resource.usages(), resource.lifetime, firstUseI32, passCountI32, resource.sampleCountI32)
+                }
+            return DestinationTopologyV4(format.value, resources, passes,
+                passes.zipWithNext { before, after -> PlanPassDependency(before.id, after.id) }, peakI64)
+        }
+    }
+}
+
+/** Bounds are retained from the geometry owner; this never retessellates or estimates a draw. */
+private fun destinationBounds(draw: PlanDraw, extent: SizeI32): RectI32 {
+    val target = RectI32.ofLTRB(0, 0, extent.width, extent.height)
+    val scissor = when (draw) {
+        is SolidRectDraw -> draw.copyScissor()
+        is AnalyticRectDraw -> draw.copyScissor()
+        is AnalyticRRectDraw -> draw.copyScissor()
+        is W5bPointDraw -> draw.copyScissorI32()
+        is W5bVerticesDraw -> draw.copyScissorI32()
+        is PathDraw -> draw.copyScissorI32()
+        else -> target
+    }
+    val bounds = when (draw) {
+        is SolidRectDraw -> draw.copyVisibleBounds()
+        // These raster bounds already contain the original analytic AA footprint.
+        is AnalyticRectDraw -> draw.copyRasterBounds()
+        is AnalyticRRectDraw -> draw.copyRasterBounds()
+        is W5bPointDraw -> draw.copyBoundsI32()
+        is W5bVerticesDraw -> draw.copyBoundsI32()
+        // W4e inverse consumers own a finite cover domain, not their finite interior bounds.
+        is W5bW4ePathDraw -> scissor
+        is PathDraw -> when (val geometry = draw.copyPathGeometry()) {
+            is PathDrawGeometry.Fill -> return geometry.valueF32.copyConservativeScissorI32().let { bounds ->
+                RectI32.ofLTRB(maxOf(0, scissor.left, bounds.left), maxOf(0, scissor.top, bounds.top),
+                    minOf(extent.width, scissor.right, bounds.right), minOf(extent.height, scissor.bottom, bounds.bottom))
+            }
+            is PathDrawGeometry.Stroke -> geometry.valueF32.copyConservativeBoundsF32()
+            else -> null
+        }?.let { bounds -> RectI32.ofLTRB(
+            kotlin.math.floor(bounds.left.toDouble()).coerceIn(0.0, extent.width.toDouble()).toInt(),
+            kotlin.math.floor(bounds.top.toDouble()).coerceIn(0.0, extent.height.toDouble()).toInt(),
+            kotlin.math.ceil(bounds.right.toDouble()).coerceIn(0.0, extent.width.toDouble()).toInt(),
+            kotlin.math.ceil(bounds.bottom.toDouble()).coerceIn(0.0, extent.height.toDouble()).toInt()) } ?: target
+        else -> target // Explicit unknown-bounds fallback.
+    }
+    val result = RectI32.ofLTRB(maxOf(0, scissor.left, bounds.left), maxOf(0, scissor.top, bounds.top),
+        minOf(extent.width, scissor.right, bounds.right), minOf(extent.height, scissor.bottom, bounds.bottom))
+    require(!result.isEmpty) { "invalid.w5b.destination-empty-region" }
+    return result
+}
+
+/** Rebinds an existing source draw's final blend without issuing a source or changing geometry. */
+internal fun PlanDraw.withFinalBlendV1(sealed: BlendPlan): PlanDraw {
+    val ref = materialAuthority.materialPlanRef()
+    val coordinates = (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates
+    val composed = materialAuthority is PlanDrawMaterialAuthority.MaterialV5
+    return when (this) {
+        is SolidRectDraw -> SolidRectDraw.ofMaterial(commandIndex, ref, copyVisibleBounds(), copyScissor(),
+            coverage, sample, sealed, materialCoordinates, materialCoordinatesV2, coordinates, composed,
+            copySourceRasterBoundsI32())
+        is W5bPointDraw -> withBlend(sealed)
+        is W5bVerticesDraw -> withBlend(sealed)
+        is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(commandIndex, ref, copyDeviceBounds(), copyRasterBounds(),
+            copyScissor(), sealed, materialCoordinates, materialCoordinatesV2, coordinates, composed)
+        is AnalyticRRectDraw -> if (coordinates != null) AnalyticRRectDraw.ofMaterialV4(commandIndex, ref, origin,
+            copyDeviceShape(), copyRasterBounds(), copyScissor(), sealed, coordinates)
+            else AnalyticRRectDraw.ofMaterial(commandIndex, ref, origin, copyDeviceShape(), copyRasterBounds(),
+                copyScissor(), sealed, materialCoordinates, materialCoordinatesV2, composed)
+        is PathFillDraw -> PathFillDraw.ofMaterial(commandIndex, ref, copyGeometryF32(), strategy,
+            copyScissorI32(), sealed, materialCoordinates, materialCoordinatesV2, coordinates, composed)
+        is PathStrokeDraw -> if (coordinates != null) PathStrokeDraw.ofMaterialV4(commandIndex, ref,
+            copyGeometryF32(), copyScissorI32(), mode, styleF64, sealed, coordinates)
+            else PathStrokeDraw.ofMaterial(commandIndex, ref, copyGeometryF32(), copyScissorI32(), mode,
+                styleF64, sealed, materialCoordinates, materialCoordinatesV2, composed)
+        is W5bW4ePathDraw -> withBlend(sealed)
+        is GeneralPathDraw -> withBlend(sealed)
+        // The deferred W7 consumer owns the original symbolic material and final blend;
+        // the paired W4e coverage source separately retains its canonical-white payload.
+        is ClippedGeneralPathDraw -> ClippedGeneralPathDraw.of(source.withBlend(sealed), clip)
+        else -> error("unsupported.w5b.destination-geometry")
+    }
+}
+
+/** Validates every read against the last write and exact immediately preceding copy. */
+internal fun validateW5bDestinationVersions(passes: List<PlanPass>) {
+    if (passes.none { it is PlanPass.StencilGeometryProducerV3 || it is PlanPass.StencilCover &&
+            it.destinationVersionAfter != null || it is PlanPass.RenderPass && it.draws().any { draw ->
+        draw.blend is BlendPlan.DestinationReadV1 || draw is W5bPointDraw
+    } }) return
+    var versionI64 = 0L
+    var hasRendered = false
+    passes.forEachIndexed { indexI32, pass ->
+        when (pass) {
+            is PlanPass.RenderPass -> {
+                require(pass.draws().none { it.blend == BlendPlan.NoOpV1 }) { "invalid.w5b.noop-write" }
+                val initialClear = !hasRendered && pass.draws().isEmpty() && pass.load == AttachmentLoadPlan.ClearTransparent
+                require(pass.destinationVersionAfter?.valueI64 == if (initialClear) 0L else Math.addExact(versionI64, 1L)) { "invalid.w5b.destination-version" }
+                pass.draws().forEach { draw ->
+                    val blend = draw.blend as? BlendPlan.DestinationReadV1 ?: return@forEach
+                    require(blend.coverageLaw == selectedCoverageLawV1(blend.mode, blend.coverage)) {
+                        "invalid.w5b.coverage-law"
+                    }
+                    val copy = passes.getOrNull(indexI32 - 1) as? PlanPass.TextureCopy
+                    require(pass.draws().size == 1 && copy != null && copy.source == pass.target &&
+                        copy.destination == blend.snapshotResource && copy.destinationVersion == blend.requiredDestinationVersion &&
+                        blend.requiredDestinationVersion.valueI64 == versionI64 &&
+                        (blend.compositionAbiI32 == 3 || blend.compositionAbiI32 == 4 && (draw as? W5bPointDraw)?.clipOnly != null)) {
+                        "invalid.w5b.stale-destination-snapshot"
+                    }
+                }
+                versionI64 = requireNotNull(pass.destinationVersionAfter).valueI64
+                hasRendered = true
+            }
+            is PlanPass.TextureCopy -> require(pass.destinationVersion?.valueI64 == versionI64 && indexI32 > 0) {
+                "invalid.w5b.destination-copy-version"
+            }
+            is PlanPass.StencilGeometryProducerV3 -> Unit
+            is PlanPass.StencilCover -> {
+                require(passes.getOrNull(indexI32 - 1) is PlanPass.StencilGeometryProducerV3)
+                require(pass.destinationVersionAfter?.valueI64 == Math.addExact(versionI64, 1L))
+                (pass.draw.blend as? BlendPlan.DestinationReadV1)?.let { blend ->
+                    require(blend.coverageLaw == selectedCoverageLawV1(blend.mode, blend.coverage)) {
+                        "invalid.w5b.coverage-law"
+                    }
+                    val copy = passes.getOrNull(indexI32 - 2) as? PlanPass.TextureCopy
+                    require(copy != null && copy.source == pass.target && copy.destination == blend.snapshotResource &&
+                        copy.destinationVersion == blend.requiredDestinationVersion &&
+                        blend.requiredDestinationVersion.valueI64 == versionI64 && blend.compositionAbiI32 == 3)
+                }
+                versionI64 = requireNotNull(pass.destinationVersionAfter).valueI64
+                hasRendered = true
+            }
+            is PlanPass.ReadbackPass -> Unit
+            is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
+                require(!hasRendered) { "invalid.w5b.clip-prefix-order" }
+            else -> error("invalid.w5b.destination-pass")
+        }
+    }
+}

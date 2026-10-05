@@ -1,11 +1,16 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.canvas.Canvas
-import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.SnapshotDisplayListBuffer
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
+import org.graphiks.kanvas.render.ir.SceneCaptureResult
+import org.graphiks.kanvas.render.ir.SceneCaptureLimits
+import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.surface.gpu.renderViaGpu
 import org.graphiks.math.geometry.RectF32
 
@@ -25,12 +30,26 @@ class Surface(
     val height: Int,
     val format: PixelFormat = PixelFormat.RGBA8,
     val config: RenderConfig = RenderConfig.DEFAULT,
+    private val captureLimits: SceneCaptureLimits = SceneCaptureLimits.DEFAULT,
 ) {
-    private val buffer = SurfaceDisplayListBuffer()
+    private val buffer = SnapshotDisplayListBuffer(captureLimits)
     private var canvasInstance: Canvas? = null
 
     /** Return a snapshot of recorded display operations (for diagnostic replay). */
     fun snapshotOps(): List<DisplayOp> = buffer.ops()
+
+    /**
+     * Capture the recorded operations as immutable backend-neutral scene data.
+     *
+     * This is a read-only recording operation: it does not initialize, submit to,
+     * or read back from the legacy GPU renderer.
+     */
+    fun snapshotScene(limits: SceneCaptureLimits = captureLimits): SceneCaptureResult = DisplayOpSceneAdapter.capture(
+        operations = buffer.sealedOps(),
+        extent = SceneExtent(width, height),
+        colorSpace = ColorSpace.SRGB,
+        limits = limits,
+    )
 
     /** Optional listener for per-operation pipeline events (DebugLevel.TRACE). */
     var renderOpListener: RenderOpListener? = null
@@ -48,13 +67,24 @@ class Surface(
     fun canvas(): Canvas { if (canvasInstance == null) canvasInstance = Canvas(buffer); return canvasInstance!! }
 
     /**
+     * Discard retained draws after a terminal refusal so this surface can record a new frame.
+     * Canvas transform, clip and save state are preserved; recording resource budgets restart.
+     */
+    fun discardRecordedOperations() { buffer.discardRecordedOperations() }
+
+    /**
      * Render all recorded drawing commands to a pixel buffer.
      *
      * The returned [RenderResult] contains the rasterised pixels, any diagnostics
      * accumulated during processing, and rendering statistics. The pixel buffer
      * is allocated fresh each call.
      */
-    fun render(): RenderResult = renderViaGpu(buffer, width, height, format, config)
+    fun render(): RenderResult {
+        check(!SceneRecordingScope.isRecordingOnly()) {
+            "Surface.render is unavailable in a recording-only scene capture scope"
+        }
+        return renderViaGpu(buffer, width, height, format, config, captureLimits = captureLimits)
+    }
 
     /**
      * Render all recorded commands and capture the result as an [Image].
@@ -63,7 +93,39 @@ class Surface(
      * The returned [Image] carries pixel data and can be passed to
      * [Canvas.drawImage] on another surface.
      */
-    fun makeImageSnapshot(): Image = render().toImage("surface-snapshot")
+    fun makeImageSnapshot(): Image =
+        if (SceneRecordingScope.isRecordingOnly()) requireNotNull(recordingImageSnapshot())
+        else render().toImage("surface-snapshot")
+
+    /**
+     * Capture a full-surface image only when rendering completed without diagnostics
+     * or refused operations. In a recording-only scope, return the same unresolved
+     * external image reference used by [makeImageSnapshot] without submitting work.
+     * That recording-only reference has no pixels and makes no claim of rendered
+     * cleanliness or autonomous replay.
+     *
+     * @throws IllegalStateException if rendering is not clean or the scene is invalid
+     */
+    fun makeCleanImageSnapshot(): Image {
+        if (SceneRecordingScope.isRecordingOnly()) {
+            return requireNotNull(recordingImageSnapshot())
+        }
+        val result = render()
+        check(
+            result.isClean &&
+                result.diagnostics.isEmpty &&
+                result.stats.opsRefused == 0 &&
+                result.width == width &&
+                result.height == height &&
+                result.format == format,
+        ) {
+            "image.snapshot.not-clean: ${result.diagnostics.summary()}; " +
+                "refused=${result.stats.opsRefused}; " +
+                "output=${result.width}x${result.height}/${result.format}; " +
+                "expected=${width}x${height}/$format"
+        }
+        return result.toImage("surface-snapshot")
+    }
 
     /**
      * Render and capture a sub-rectangle as an [Image].
@@ -72,23 +134,37 @@ class Surface(
      * Returns null if [subset] is empty or lies outside the surface bounds.
      */
     fun makeImageSnapshot(subset: RectF32): Image? {
+        if (SceneRecordingScope.isRecordingOnly()) return recordingImageSnapshot(subset)
         val result = render()
         val sx = subset.left.toInt().coerceIn(0, result.width)
         val sy = subset.top.toInt().coerceIn(0, result.height)
         val sw = subset.width().toInt().coerceAtMost(result.width - sx)
         val sh = subset.height().toInt().coerceAtMost(result.height - sy)
         if (sw <= 0 || sh <= 0) return null
-        val pixels = ByteArray(sw * sh * 4)
+        val rowBytesI64 = Math.multiplyExact(sw.toLong(), 4L)
+        val sizeI64 = Math.multiplyExact(rowBytesI64, sh.toLong())
+        val sourceStrideI64 = Math.multiplyExact(result.width.toLong(), 4L)
+        val sourceStartI64 = Math.addExact(Math.multiplyExact(sy.toLong(), sourceStrideI64), Math.multiplyExact(sx.toLong(), 4L))
+        val sourceEndI64 = Math.addExact(Math.addExact(sourceStartI64,
+            Math.multiplyExact(sh.toLong() - 1L, sourceStrideI64)), rowBytesI64)
+        require(sizeI64 in 0L..Int.MAX_VALUE.toLong() && sourceEndI64 <= result.pixels.size.toLong()) {
+            "image.snapshot-layout-overflow"
+        }
+        val sourcePixels = result.pixels.toByteArray()
+        val pixels = ByteArray(sizeI64.toInt())
         for (row in 0 until sh) {
-            val srcOff = ((sy + row) * result.width + sx) * 4
-            val dstOff = row * sw * 4
-            result.pixels.toByteArray().copyInto(pixels, dstOff, srcOff, srcOff + sw * 4)
+            val srcOffI64 = Math.addExact(sourceStartI64, Math.multiplyExact(row.toLong(), sourceStrideI64))
+            val dstOffI64 = Math.multiplyExact(row.toLong(), rowBytesI64)
+            sourcePixels.copyInto(pixels, Math.toIntExact(dstOffI64), Math.toIntExact(srcOffI64),
+                Math.toIntExact(Math.addExact(srcOffI64, rowBytesI64)))
         }
         val colorType = when (result.format) {
             PixelFormat.RGBA8 -> ColorType.RGBA_8888
             PixelFormat.BGRA8 -> ColorType.BGRA_8888
         }
-        return Image(sw, sh, colorType, "surface-snapshot-subset", pixels, alphaType = AlphaType.PREMUL)
+        return Image(sw, sh, colorType, "surface-snapshot-subset", pixels, colorSpace = result.colorSpace,
+            alphaType = AlphaType.PREMUL,
+            premultiplication = result.premultiplication)
     }
 
     /**
@@ -100,6 +176,7 @@ class Surface(
      * @return true on success, false if the region is out of bounds
      */
     fun readPixels(src: RectF32, dstBuffer: UByteArray): Boolean {
+        if (SceneRecordingScope.isRecordingOnly()) return false
         val result = render()
         val sx = src.left.toInt().coerceIn(0, width)
         val sy = src.top.toInt().coerceIn(0, height)
@@ -116,10 +193,39 @@ class Surface(
         }
         return true
     }
-}
 
-private class SurfaceDisplayListBuffer : DisplayListBuffer {
-    private val ops = mutableListOf<DisplayOp>()
-    override fun append(op: DisplayOp) { ops.add(op) }
-    override fun ops(): List<DisplayOp> = ops.toList()
+    private fun recordingImageSnapshot(subset: RectF32? = null): Image? {
+        val (snapshotWidth, snapshotHeight, sourceSuffix) = if (subset == null) {
+            Triple(width, height, "full")
+        } else {
+            val sx = subset.left.toInt().coerceIn(0, width)
+            val sy = subset.top.toInt().coerceIn(0, height)
+            val sw = subset.width().toInt().coerceAtMost(width - sx)
+            val sh = subset.height().toInt().coerceAtMost(height - sy)
+            if (sw <= 0 || sh <= 0) return null
+            Triple(sw, sh, "subset:$sx,$sy,$sw,$sh")
+        }
+        val captured = when (val capture = snapshotScene()) {
+            is SceneCaptureResult.Captured -> capture
+            is SceneCaptureResult.Invalid -> throw IllegalStateException(
+                "recording-only Surface snapshot contains invalid scene data: " +
+                    capture.diagnostics.joinToString { diagnostic ->
+                        "${diagnostic.code.value}: ${diagnostic.message}"
+                    },
+            )
+        }
+        val colorType = when (format) {
+            PixelFormat.RGBA8 -> ColorType.RGBA_8888
+            PixelFormat.BGRA8 -> ColorType.BGRA_8888
+        }
+        return Image(
+            width = snapshotWidth,
+            height = snapshotHeight,
+            colorType = colorType,
+            sourceId = "scene-recording:v2:${config.compositionDomain.name}:${captured.scene.canonicalId.value}:$sourceSuffix",
+            pixels = null,
+            colorSpace = captured.scene.colorSpace,
+            alphaType = AlphaType.PREMUL,
+        )
+    }
 }

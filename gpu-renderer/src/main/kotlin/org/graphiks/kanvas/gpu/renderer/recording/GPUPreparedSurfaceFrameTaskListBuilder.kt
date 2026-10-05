@@ -1,5 +1,12 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
+import org.graphiks.kanvas.gpu.renderer.planning.toPlanCapabilitySnapshot
+import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -120,6 +127,14 @@ data class GPUPreparedSurfaceFrameRequest(
     val targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
     /** Legacy mask-blur intermediate budget (RenderConfig.maxMaskBlurIntermediateBytes). */
     val maskBlurIntermediateBudgetBytes: Long = 67_108_864L,
+    val w5aCoreMaterialAuthority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2? = null,
+    val w5bPointBlends: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan> = emptyMap(),
+    val w5bPointClips: Map<Int, org.graphiks.kanvas.render.ir.ClipStackNode> = emptyMap(),
+    val w5bPointCaptures: Map<Int, W5bPreparedPointCaptureV3> = emptyMap(),
+    val w5hPointSources: Map<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6> = emptyMap(),
+    val w5hPointBudget: org.graphiks.kanvas.gpu.plan.PlanBudget? = null,
+    val synthesizedSceneClearCommandIdI32: Int? = null,
+    val coreGeometryInventory: GPUCorePrimitiveFrameGeometryInventory? = null,
 )
 
 /** Checked structural ceilings applied before one prepared task graph is published. */
@@ -169,8 +184,8 @@ internal data class GPURecordedVerticesUpload(
     val resources: GPUVerticesFrameResourcePlan,
 )
 
-/** One frame-local Task 5 destination snapshot reserved for an exact ColorGlyph packet. */
-private data class GPUPreparedColorGlyphDestinationSnapshotPlan(
+/** One frame-local W5b destination snapshot reserved for one exact prepared-family packet. */
+private data class GPUPreparedDestinationSnapshotPlan(
     val groupIndex: Int,
     val packetId: GPUDrawPacketID,
     val commandIdValue: Int,
@@ -180,6 +195,7 @@ private data class GPUPreparedColorGlyphDestinationSnapshotPlan(
     val copiedBytes: Long,
     val copyLayout: GPUTextureCopyLayout,
     val targetGeneration: Long,
+    val logicalBounds: GPUPixelBounds,
 )
 
 /** One immutable, frame-global prepared-text instance buffer. */
@@ -559,6 +575,11 @@ class GPUPreparedTextBindingPreflightSeal(
     val materialEntryPoint: String,
     val materialAbiHash: String,
     val materialUniformContentHash: String,
+    /** Null for historical text materials; otherwise seals the exact W5a table/ref authority. */
+    val materialPlanProvenanceIdentity: String? = null,
+    /** Runtime-only compiler witness; not serializable or structurally substitutable. */
+    internal val materialPlanAdmissionToken:
+        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aAdmissionToken? = null,
     materialSampledResourceFacts: List<String>,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
@@ -587,6 +608,7 @@ class GPUPreparedTextBindingPreflightSeal(
         require(materialEntryPoint.isNotBlank())
         require(materialAbiHash.isNotBlank())
         require(materialUniformContentHash.isNotBlank())
+        require(materialPlanProvenanceIdentity == null || materialPlanProvenanceIdentity.isNotBlank())
         require(clipIdentity.isNotBlank())
         require(blendPlanIdentity.isNotBlank())
         require(capabilitySnapshotHash.isNotBlank())
@@ -811,6 +833,7 @@ class GPUPreparedTextRenderBinding(
 
 /** Passive Task 5 handoff; native execution consumes no materials-package semantic type. */
 internal class GPUPreparedTextNativeProgramHandoff private constructor(
+    val commonGeometry: Boolean,
     val wgslSource: String,
     val vertexEntryPoint: String,
     val fragmentEntryPoint: String,
@@ -820,6 +843,9 @@ internal class GPUPreparedTextNativeProgramHandoff private constructor(
     val atlasTextureBinding: Int,
     val atlasSamplerBinding: Int,
     val coverageMaskTextureBinding: Int?,
+    val destinationTextureGroup: Int?,
+    val destinationTextureBinding: Int?,
+    val destinationSamplerBinding: Int?,
     val sourceHash: String,
     val abiHash: String,
     val targetFormatClass: String,
@@ -840,17 +866,18 @@ internal class GPUPreparedTextNativeProgramHandoff private constructor(
         ): GPUPreparedTextNativeProgramHandoff {
             val fragment = program.bindingPlan.materialFragment
             return GPUPreparedTextNativeProgramHandoff(
+                commonGeometry = fragment == null,
                 wgslSource = program.wgslSource,
                 vertexEntryPoint = program.vertexEntryPoint,
                 fragmentEntryPoint = program.fragmentEntryPoint,
                 drawUniformBinding = program.bindingPlan.drawUniformBinding,
-                materialUniformBinding = fragment.uniformBinding?.let { binding ->
+                materialUniformBinding = fragment?.uniformBinding?.let { binding ->
                     GPUPreparedTextNativeUniformBinding(
                         binding = binding.binding,
                         minBindingSizeBytes = binding.minBindingSizeBytes,
                     )
                 },
-                materialSampledBindings = fragment.sampledBindings.map { binding ->
+                materialSampledBindings = fragment?.sampledBindings.orEmpty().map { binding ->
                     GPUPreparedTextNativeSampledBinding(
                         textureBinding = binding.textureBinding,
                         samplerBinding = binding.samplerBinding,
@@ -860,14 +887,26 @@ internal class GPUPreparedTextNativeProgramHandoff private constructor(
                 atlasSamplerBinding = program.bindingPlan.atlasSamplerBinding,
                 coverageMaskTextureBinding =
                     program.bindingPlan.coverageMaskTextureBinding,
+                destinationTextureGroup = program.bindingPlan.destinationTextureGroup,
+                destinationTextureBinding = program.bindingPlan.destinationTextureBinding,
+                destinationSamplerBinding = program.bindingPlan.destinationSamplerBinding,
                 sourceHash = program.sourceHash,
                 abiHash = program.abiHash,
                 targetFormatClass = program.targetFormatClass,
                 blendPlanIdentity = program.blendPlanIdentity,
-                fixedFunctionBlendState = checkNotNull(program.fixedFunctionBlendState) {
-                    "Prepared TextA8 native handoff requires preflight-authenticated " +
-                        "fixed-function blend state"
-                },
+                fixedFunctionBlendState = program.fixedFunctionBlendState
+                    ?: program.destinationBlend?.let {
+                        org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState(
+                            stateId = "w5b.prepared-text.destination-replace@v1",
+                            color = org.graphiks.kanvas.gpu.renderer.state
+                                .GPUFixedFunctionBlendComponent("one", "zero", "add"),
+                            alpha = org.graphiks.kanvas.gpu.renderer.state
+                                .GPUFixedFunctionBlendComponent("one", "zero", "add"),
+                            writeMask = "rgba",
+                        )
+                    } ?: error(
+                        "Prepared TextA8 native handoff requires an authenticated blend state",
+                    ),
                 sourceCoverageEncoding = program.sourceCoverageEncoding,
                 clipVariant = program.clipVariant,
                 vertexLayout = GPUPreparedTextVertexLayout(
@@ -908,11 +947,31 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             GPUPreparedSurfaceTaskGraphLimits(),
         allowEmptyBaseTaskList: Boolean = false,
     ): GPUPreparedSurfaceFrameResult {
+        request.w5aCoreMaterialAuthority?.let { authority ->
+            val materialized = authority.materialize(request.semanticsByCommandId, request.coreGeometryInventory)
+                ?: return refused("invalid.material.w5a_core_authority", "W5a core material authority does not match the frame.")
+            return build(
+                request.copy(semanticsByCommandId = materialized, w5aCoreMaterialAuthority = null),
+                configuredAggregateBudgetBytes, taskGraphLimits, allowEmptyBaseTaskList,
+            )
+        }
+        if (request.semanticsByCommandId.values.any { semantic ->
+                semantic is GPUDrawSemanticPayload.CorePrimitive &&
+                    semantic.material is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 &&
+                    request.w5hPointSources[semantic.payloadRef.commandIdValue]?.sourceRef != semantic.material.ref
+            }
+        ) return refused("invalid.material.w5a_core_authority", "W5a core material references require a sealed frame authority.")
         request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {
             return GPUPreparedSurfaceFrameResult.Refused(it.diagnostic.atRecordingBoundary())
         }
         request.baseTaskList.diagnostics.firstOrNull(GPUDiagnostic::isTerminal)?.let {
             return GPUPreparedSurfaceFrameResult.Refused(it.atRecordingBoundary())
+        }
+        request.baseTaskList.memoryBudget.diagnostic?.let {
+            return GPUPreparedSurfaceFrameResult.Refused(it.atRecordingBoundary())
+        }
+        if (!GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(request.baseTaskList.memoryBudget)) {
+            return refused("invalid.recording.prepared_surface_budget", "Prepared-surface base memory accounting is inconsistent.")
         }
         val baseRenders = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
         val semanticOnlyVertices = request.baseTaskList.tasks.filterIsInstance<GPUTask.SemanticOnly>()
@@ -947,7 +1006,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             baseRenders.flatMap(GPUTask.Render::drawPackets) +
                 semanticOnlyVertexPackets
             )
-        val packets = (
+        var packets = (
             if (semanticOnlyVertices.isNotEmpty()) {
                 combinedPackets.sortedBy(GPUDrawPacket::originalPaintOrder)
             } else {
@@ -1113,10 +1172,31 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val allCore = request.semanticsByCommandId.values
             .all { it is GPUDrawSemanticPayload.CorePrimitive }
-        if (allCore) {
+        val soleSceneInitialization = request.synthesizedSceneClearCommandIdI32 != null && packets.size == 1
+        if (soleSceneInitialization && !hasExactSoleSceneInitialization(request, packets)) {
+            return refused("invalid.recording.w5b-mixed-initialization",
+                "A sole synthesized clear must authenticate the complete mapped frame.")
+        }
+        if (allCore && !soleSceneInitialization && request.coreGeometryInventory == null) {
             @Suppress("UNCHECKED_CAST")
             val coreSemantics = request.semanticsByCommandId as
                 Map<Int, GPUDrawSemanticPayload.CorePrimitive>
+            // Only the exact admitted packet sequence may enter the replacement graph.
+            // Keep the common base/identity checks above and the graph-limit policy shared.
+            if (request.coreGeometryInventory == null) org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointBridgeV3.lower(
+                request, packets, configuredAggregateBudgetBytes,
+            )?.let { result ->
+                if (result is GPUPreparedSurfaceFrameResult.Recorded) {
+                    val frame = result.taskList
+                    val limit = taskGraphLimitRefusal(taskGraphLimits,
+                        frame.memoryBudget.allocations.count { it.resourceKind == GPUFrameMemoryResourceKind.Buffer },
+                        frame.memoryBudget.allocations.count { it.resourceKind == GPUFrameMemoryResourceKind.Texture2D },
+                        frame.memoryBudget.allocations.size, frame.tasks.size.toLong(),
+                        frame.dependencies.size.toLong(), 0)
+                    if (limit != null) return refused(limit.code, limit.message)
+                }
+                return result
+            }
             val coreBase = when (
                 val prepared = prepareCoreAuthorityBaseTaskList(
                     baseTaskList = request.baseTaskList,
@@ -1139,6 +1219,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         readbackRequestId = request.readbackRequestId,
                         configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
                         targetFormat = request.targetFormat,
+                        geometryInventory = request.coreGeometryInventory,
                     ),
                 )
             ) {
@@ -1244,6 +1325,35 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         val imageUploadByArtifactKey = recordedImageUploads.associateBy { upload ->
             upload.resources.bindingRequests.first().artifactKey
         }
+        val preparedDestinationSnapshots = try {
+            buildPreparedDestinationSnapshotPlans(request, packets)
+        } catch (_: ArithmeticException) {
+            return refused(
+                "invalid.recording.prepared_surface_destination_snapshot",
+                "Prepared destination-snapshot byte accounting overflowed.",
+            )
+        } catch (failure: IllegalArgumentException) {
+            return refused(
+                "invalid.recording.prepared_surface_destination_snapshot",
+                failure.message ?: "Prepared destination-snapshot planning failed.",
+            )
+        }
+        val mixedTimeline = try {
+            buildW5bMixedTimeline(request, packets, preparedDestinationSnapshots, configuredAggregateBudgetBytes)
+        } catch (failure: org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1.Refusal) {
+            return refused(failure.reason.code, "Mixed W5b timeline admission refused.")
+        } catch (_: MixedUnsupportedCapability) {
+            return refused("unsupported.w5b.mixed-capability", "Mixed W5b requires an observed plan capability snapshot.")
+        } catch (failure: IllegalArgumentException) {
+            return refused("invalid.recording.w5b-mixed-timeline", failure.message ?: "Mixed W5b timeline refused.")
+        } catch (_: ArithmeticException) {
+            return refused("resource-limit.w5b.mixed-overflow", "Mixed W5b timeline arithmetic overflowed.")
+        }
+        if (mixedTimeline != null) {
+            val noOps = mixedTimeline.draws.filter { it.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1 }
+                .map { it.commandIndexI32 }.toSet()
+            packets = packets.filterNot { it.commandIdValue in noOps }
+        }
         val verticesSemantics = packets.mapNotNull { packet ->
             request.semanticsByCommandId.getValue(packet.commandIdValue) as?
                 GPUDrawSemanticPayload.Vertices
@@ -1302,8 +1412,45 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 )
             }
         }
+        val preparedTextPacketsById = packets.mapNotNull { packet ->
+            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
+                GPUDrawSemanticPayload.TextA8 ?: return@mapNotNull null
+            val destination = preparedDestinationSnapshots.singleOrNull { plan ->
+                plan.packetId == packet.packetId
+            }
+            val preparedPacket = if (destination == null) {
+                packet.withSemantic(semantic)
+            } else {
+                val planned = semantic.w5bFinalBlendPlan as?
+                    org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1
+                    ?: return refused(
+                        "invalid.recording.prepared_text_destination_plan",
+                        "Prepared TextA8 destination read lost its W5b plan authority.",
+                    )
+                val destinationVersion = packets
+                    .takeWhile { candidate -> candidate.packetId != packet.packetId }
+                    .map(GPUDrawPacket::commandIdValue)
+                    .distinct()
+                    .size
+                    .toLong()
+                val sealed = mixedTimeline?.draws?.single { it.commandIndexI32 == packet.commandIdValue }?.blend
+                    as? org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1 ?: planned.copy(
+                    requiredDestinationVersion =
+                        org.graphiks.kanvas.gpu.plan.DestinationVersionI64(destinationVersion),
+                    snapshotResource =
+                        org.graphiks.kanvas.gpu.plan.PlanResourceId(destination.snapshot.value),
+                )
+                packet.withSemantic(
+                    semantic.withW5bFinalBlendPlan(sealed),
+                    blendOverride =
+                        org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(sealed),
+                )
+            }
+            packet.packetId to preparedPacket
+        }.toMap()
         val r8Semantics = packets.mapNotNull { packet ->
-            when (val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)) {
+            when (val semantic = preparedTextPacketsById[packet.packetId]?.semanticPayload
+                ?: request.semanticsByCommandId.getValue(packet.commandIdValue)) {
                 is GPUDrawSemanticPayload.TextA8 -> semantic
                 is GPUDrawSemanticPayload.ColorGlyph -> semantic
                 else -> null
@@ -1311,7 +1458,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val textA8Inputs = mutableListOf<GPUPreparedTextDrawUniformInput>()
         packets.forEach { packet ->
-            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
+            val preparedPacket = preparedTextPacketsById[packet.packetId] ?: packet
+            val semantic = preparedPacket.semanticPayload as?
                 GPUDrawSemanticPayload.TextA8 ?: return@forEach
             val executionPlan = packet.clipExecutionPlan ?: return refused(
                 "invalid.recording.prepared_text_clip_plan",
@@ -1330,7 +1478,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         preparedTextNativeBlendDomainRefusal(
             textA8Inputs.map { input ->
-                packets.single { packet -> packet.packetId == input.packetId }.blendPlan
+                preparedTextPacketsById.getValue(input.packetId).blendPlan
             },
         )?.let { refusal ->
             return refused(refusal.code, refusal.message)
@@ -1344,15 +1492,17 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     targetFormatClass = request.targetFormat.value,
                     blendPlanIdentity = input.semantic.blendPlanIdentity,
                     fixedFunctionBlendState = (
-                        packets.single { packet -> packet.packetId == input.packetId }.blendPlan as?
+                        preparedTextPacketsById.getValue(input.packetId).blendPlan as?
                             org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.FixedFunctionBlend
                         )?.state,
                     sourceCoverageEncoding =
                         checkNotNull(
-                            packets.single { packet -> packet.packetId == input.packetId }
+                            preparedTextPacketsById.getValue(input.packetId)
                                 .blendPlan,
                         ).sourceCoverageEncoding,
                     clipVariant = input.clipPlan.variant,
+                    destinationBlend = preparedTextPacketsById.getValue(input.packetId).blendPlan as?
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.ShaderBlendWithDstRead,
                 )
             ) {
                 is GPUPreparedTextCompositeProgramResult.Ready ->
@@ -1541,19 +1691,6 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     return GPUPreparedSurfaceFrameResult.Refused(plan.diagnostic)
             }
         }
-        val colorGlyphDestinationSnapshots = try {
-            buildPreparedColorGlyphDestinationSnapshotPlans(request, packets)
-        } catch (_: ArithmeticException) {
-            return refused(
-                "invalid.recording.prepared_surface_destination_snapshot",
-                "Prepared ColorGlyph destination-snapshot byte accounting overflowed.",
-            )
-        } catch (failure: IllegalArgumentException) {
-            return refused(
-                "invalid.recording.prepared_surface_destination_snapshot",
-                failure.message ?: "Prepared ColorGlyph destination-snapshot planning failed.",
-            )
-        }
         val standaloneTextCoverageMaskResult = buildTextOnlyCoverageMaskProducerTopologies(
             request = request,
             packets = packets,
@@ -1569,7 +1706,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             )
         }
         val enclosingAllocations = buildList {
-            colorGlyphDestinationSnapshots.forEach { plan -> add(plan.allocation) }
+            preparedDestinationSnapshots.forEach { plan -> add(plan.allocation) }
             standaloneTextCoverageMasks.forEach { topology -> add(topology.allocation) }
             imagePlans.forEach { plan -> addAll(plan.memoryAllocations) }
             recordedR8Uploads.forEach { upload -> addAll(upload.resources.memoryAllocations) }
@@ -1647,6 +1784,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             packets = packets,
             configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
             additionalMemoryAllocations = enclosingAllocations.distinct(),
+            mixedTimeline = mixedTimeline,
         )
         if (coreAssembly is MixedCoreAssembly.Refused) {
             return GPUPreparedSurfaceFrameResult.Refused(coreAssembly.diagnostic)
@@ -1717,8 +1855,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             request.targetBounds,
             request.targetFormat,
         )
-        preparations += colorGlyphDestinationSnapshots.map(
-            GPUPreparedColorGlyphDestinationSnapshotPlan::preparation,
+        preparations += preparedDestinationSnapshots.map(
+            GPUPreparedDestinationSnapshotPlan::preparation,
         )
         imagePlans.forEach { plan ->
             preparations += plan.preparationRequests
@@ -1979,22 +2117,62 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
             if (semantic is GPUDrawSemanticPayload.CorePrimitive) {
                 coreAssembly.packetByCommandId.getValue(packet.commandIdValue)
+            } else if (semantic is GPUDrawSemanticPayload.TextA8) {
+                listOf(preparedTextPacketsById.getValue(packet.packetId))
+            } else if (semantic is GPUDrawSemanticPayload.Vertices) {
+                val destination = preparedDestinationSnapshots.singleOrNull { plan ->
+                    plan.packetId == packet.packetId
+                }
+                if (destination == null) {
+                    listOf(packet.withSemantic(semantic))
+                } else {
+                    val planned = semantic.w5bFinalBlendPlan as?
+                        org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1
+                        ?: return refused(
+                            "invalid.recording.prepared_vertices_destination_plan",
+                            "Prepared vertices destination read lost its W5b plan authority.",
+                        )
+                    val destinationVersion = packets
+                        .takeWhile { candidate -> candidate.packetId != packet.packetId }
+                        .map(GPUDrawPacket::commandIdValue)
+                        .distinct()
+                        .size
+                        .toLong()
+                    val sealed = mixedTimeline?.draws?.single { it.commandIndexI32 == packet.commandIdValue }?.blend
+                        as? org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1 ?: planned.copy(
+                        requiredDestinationVersion =
+                            org.graphiks.kanvas.gpu.plan.DestinationVersionI64(destinationVersion),
+                        snapshotResource =
+                            org.graphiks.kanvas.gpu.plan.PlanResourceId(destination.snapshot.value),
+                    )
+                    listOf(
+                        packet.withSemantic(
+                            semantic.withW5bFinalBlendPlan(sealed),
+                            blendOverride =
+                                org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(sealed),
+                        ),
+                    )
+                }
             } else {
                 listOf(packet.withSemantic(semantic))
             }
         }
-        val routeRuns = orderedPreparedPackets.contiguousRouteRuns(preparedRenderByPacketId)
+        val routeRuns = orderedPreparedPackets.contiguousRouteRuns(preparedRenderByPacketId,
+            coreAssembly.destinationTasks.flatMap { it.payload.operations }.flatMap { it.consumers }.map { it.packetId }.toSet())
         val predictedTaskCount = 1L +
             recordedImageUploads.size +
             recordedR8Uploads.size +
             recordedMaterialUploads.size +
             coverageMaskProducerRenders.size +
             routeRuns.size +
-            (if (colorGlyphDestinationSnapshots.isNotEmpty()) 1L else 0L) +
+            (if (preparedDestinationSnapshots.isNotEmpty()) 1L else 0L) +
+            coreAssembly.destinationTasks.size.toLong() +
             (if (readbackRequest != null) 1L else 0L) +
             verticesUploadTasks.size
         val predictedDependencyCount =
             recordedImageUploads.size.toLong() +
+                coreAssembly.destinationTasks.sumOf { task -> 1L + task.payload.operations
+                    .flatMap { it.consumers }.map { it.renderTaskId }.distinct().size.toLong() } +
                 recordedR8Uploads.size.toLong() +
                 recordedMaterialUploads.size.toLong() +
                 coverageMaskProducerRenders.size.toLong() +
@@ -2004,9 +2182,9 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     }
                 }.toLong() +
                 routeRuns.size.toLong() +
-                if (colorGlyphDestinationSnapshots.isNotEmpty()) {
-                    1L + colorGlyphDestinationSnapshots.map(
-                        GPUPreparedColorGlyphDestinationSnapshotPlan::packetId,
+                if (preparedDestinationSnapshots.isNotEmpty()) {
+                    1L + preparedDestinationSnapshots.map(
+                        GPUPreparedDestinationSnapshotPlan::packetId,
                     ).map { packetId ->
                         routeRuns.indexOfFirst { run ->
                             run.any { packet -> packet.packetId == packetId }
@@ -2117,7 +2295,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 buildList {
                     addAll(atlasUses)
                     run.mapNotNull { packet ->
-                        colorGlyphDestinationSnapshots.singleOrNull { plan ->
+                        preparedDestinationSnapshots.singleOrNull { plan ->
                             plan.packetId == packet.packetId
                         }
                     }.forEach { destination ->
@@ -2226,7 +2404,23 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     }
                 }
             } else if (run.first().semanticPayload is GPUDrawSemanticPayload.Vertices) {
-                run.flatMap { packet ->
+                buildList {
+                    run.mapNotNull { packet ->
+                        preparedDestinationSnapshots.singleOrNull { plan ->
+                            plan.packetId == packet.packetId
+                        }
+                    }.forEach { destination ->
+                        add(
+                            GPUFrameResourceUse(
+                                destination.snapshot,
+                                GPUFrameResourceRole.DestinationSnapshot,
+                                GPUFrameResourceUsage.TextureBinding,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
+                    addAll(run.flatMap { packet ->
                     val semantic = packet.semanticPayload as GPUDrawSemanticPayload.Vertices
                     val plan = verticesPlanByArtifactKey.getValue(semantic.artifact.key)
                     listOfNotNull(
@@ -2250,10 +2444,16 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             )
                         },
                     )
+                    })
                 }.distinct()
             } else {
                 run.flatMap { packet ->
-                    coreAssembly.resourceUsesByCommandId[packet.commandIdValue].orEmpty()
+                    preparedRenderByPacketId.getValue(packet.packetId).resourceUses.filter { use ->
+                        use.role != GPUFrameResourceRole.PathDepthStencil || run.any {
+                            it.role in setOf(org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer,
+                                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover)
+                        }
+                    }
                 }.distinct()
             }
             GPUTask.Render(
@@ -2394,7 +2594,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
 
         val dependencies = mutableListOf<GPUTaskDependency>()
-        val destinationTask = colorGlyphDestinationSnapshots
+        val destinationTask = preparedDestinationSnapshots
             .takeIf { plans -> plans.isNotEmpty() }
             ?.let { plans ->
                 val renderByPacketId = renders.flatMap { render ->
@@ -2427,13 +2627,16 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                                             ),
                                         sampleContinuation = render.sampleContinuationKey,
                                         sourceIntermediate = null,
+                                        destinationVersion = (render.drawPackets.single { it.packetId == packet.packetId }
+                                            .blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
+                                            ?.sealedW5b?.requiredDestinationVersion,
                                     ),
-                                    logicalBounds = request.targetBounds,
+                                    logicalBounds = plan.logicalBounds,
                                     members = listOf(
                                         GPUDestinationReadMember(
                                             commandId = packet.commandIdValue.toString(),
                                             accessIndex = plan.groupIndex,
-                                            logicalBounds = request.targetBounds,
+                                            logicalBounds = plan.logicalBounds,
                                         ),
                                     ),
                                     copiedBytes = plan.copiedBytes,
@@ -2446,7 +2649,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             materializations = plans.map { plan ->
                                 GPUDestinationSnapshotMaterialization.TextureCopy(
                                     groupIndex = plan.groupIndex,
-                                    logicalBounds = request.targetBounds,
+                                    logicalBounds = plan.logicalBounds,
                                 )
                             },
                             totalCopiedBytes = plans.fold(0L) { total, plan ->
@@ -2466,7 +2669,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                                 groupIndex = plan.groupIndex,
                                 source = request.target,
                                 snapshot = plan.snapshot,
-                                logicalBounds = request.targetBounds,
+                                logicalBounds = plan.logicalBounds,
                                 copyLayout = plan.copyLayout,
                                 consumers = listOf(
                                     GPUDestinationSnapshotConsumerRef(
@@ -2484,7 +2687,22 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     ),
                 )
             }
-        destinationTask?.let { destination ->
+        val mixedRenderByPacketId = renders.flatMap { render ->
+            render.drawPackets.map { it.packetId to render }
+        }.toMap()
+        val coreDestinationTasks = coreAssembly.destinationTasks.map { original ->
+            GPUTask.DestinationSnapshots(original.taskId, original.recordingId, original.phase,
+                GPUDestinationSnapshotTaskPayload(original.payload.grouping,
+                    original.payload.operations.map { operation ->
+                        require(operation is GPUDestinationSnapshotOperation.TextureCopy)
+                        GPUDestinationSnapshotOperation.TextureCopy(operation.groupIndex, operation.source,
+                            operation.snapshot, operation.logicalBounds, operation.copyLayout,
+                            operation.consumers.map { consumer ->
+                                consumer.copy(renderTaskId = mixedRenderByPacketId.getValue(consumer.packetId).taskId)
+                            })
+                    }, original.payload.refusalBindings))
+        }
+        fun appendDestinationDependencies(destination: GPUTask.DestinationSnapshots) {
             dependencies += dependency(
                 prepareTask.taskId,
                 destination.taskId,
@@ -2506,6 +2724,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     )
                 }
         }
+        destinationTask?.let(::appendDestinationDependencies)
         uploads.forEachIndexed { index, upload ->
             dependencies += dependency(
                 prepareTask.taskId,
@@ -2695,7 +2914,10 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         tasks += verticesUploadTasks
         tasks += coverageMaskProducerRenders
         destinationTask?.let(tasks::add)
+        tasks += coreDestinationTasks
         tasks += renders
+        if (renders.isEmpty()) return refused("invalid.recording.w5b-mixed-initialization",
+            "An elided prepared frame requires an authenticated initialization render.")
         if (readbackRequest != null && readbackStaging != null) {
             val readbackTask = GPUTask.Readback(
                 taskId = GPUTaskID("task.prepared-surface.readback.${request.baseTaskList.frameId.value}"),
@@ -2714,6 +2936,9 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 "prepared-surface.readback",
             )
         }
+        // Core snapshot edges are a disjoint extension. Keep the prepared child's exact
+        // dependency inventory (including its ordinal use tokens) unchanged as a projection.
+        coreDestinationTasks.forEach(::appendDestinationDependencies)
         val colorDiagnostic = GPUDiagnostic(
             code = GPUDiagnosticCode("info.recording.prepared_image_color_contract"),
             domain = GPUDiagnosticDomain.Color,
@@ -2736,8 +2961,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         } else {
             request.baseTaskList.diagnostics + colorDiagnostic
         }
-        return GPUPreparedSurfaceFrameResult.Recorded(
-            GPUTaskList(
+        val completeTaskList = GPUTaskList(
                 frameId = request.baseTaskList.frameId,
                 capabilitySeal = request.baseTaskList.capabilitySeal,
                 recordingSeals = request.baseTaskList.recordingSeals,
@@ -2747,8 +2971,120 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 phaseOrder = request.baseTaskList.phaseOrder,
                 memoryBudget = memoryBudget,
                 diagnostics = diagnostics,
-            ),
-        )
+            )
+        if (mixedTimeline != null) {
+            try {
+                org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1.issue(
+                    mixedTimeline, completeTaskList,
+                    packets.flatMap { coreAssembly.packetByCommandId[it.commandIdValue].orEmpty() },
+                    coreAssembly.destinationTasks,
+                    coreAssembly.preparations, coreAssembly.memoryBudget?.allocations.orEmpty(),
+                    request.synthesizedSceneClearCommandIdI32,
+                )
+            } catch (failure: org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1.Refusal) {
+                return refused(failure.reason.code, "Mixed W5b frame admission refused.")
+            } catch (failure: IllegalArgumentException) {
+                return refused("invalid.recording.w5b-mixed-frame", failure.message ?: "Mixed W5b frame refused.")
+            } catch (_: ArithmeticException) {
+                return refused("resource-limit.w5b.mixed-overflow", "Mixed W5b physical inventory overflowed.")
+            }
+        }
+        return GPUPreparedSurfaceFrameResult.Recorded(completeTaskList)
+    }
+
+    private class MixedUnsupportedCapability : IllegalArgumentException()
+
+    private fun buildW5bMixedTimeline(
+        request: GPUPreparedSurfaceFrameRequest,
+        packets: List<GPUDrawPacket>,
+        snapshots: List<GPUPreparedDestinationSnapshotPlan>,
+        budgetI64: Long,
+    ): org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1? {
+        val finalBlends = request.semanticsByCommandId.values.mapNotNull { semantic -> when (semantic) {
+            is GPUDrawSemanticPayload.CorePrimitive -> (semantic.material as?
+                org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority?.finalBlend
+            is GPUDrawSemanticPayload.TextA8 -> semantic.w5bFinalBlendPlan
+            is GPUDrawSemanticPayload.Vertices -> semantic.w5bFinalBlendPlan
+            else -> null
+        } }
+        if (request.coreGeometryInventory == null && !hasExactSoleSceneInitialization(request, packets) &&
+            finalBlends.all(org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer::isLegacySrcOverEquivalent)) return null
+        val capability = request.capabilities.toPlanCapabilitySnapshot(request.baseTaskList.capabilitySeal.deviceGeneration)
+            as? org.graphiks.kanvas.gpu.renderer.planning.GpuPlanCapabilityAdapterResult.Supported
+            ?: throw MixedUnsupportedCapability()
+        val inputs = packets.filterNot { it.commandIdValue == request.synthesizedSceneClearCommandIdI32 }.map { packet ->
+            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
+            val source: Pair<org.graphiks.kanvas.gpu.plan.MaterialPlanTable, org.graphiks.kanvas.gpu.plan.MaterialPlanRef>
+            val blend: org.graphiks.kanvas.gpu.plan.BlendPlan
+            val snapshot: String?
+            when (semantic) {
+                is GPUDrawSemanticPayload.CorePrimitive -> {
+                    require(packet.hasCorePrimitiveSemanticAuthority(semantic, request.capabilities))
+                    val material = requireNotNull((semantic.material as?
+                        org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority)
+                    require(material.validates(packet.commandIdValue))
+                    source = material.sourcePlanTable to material.ref
+                    blend = requireNotNull(material.finalBlend)
+                    require(blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1 ||
+                        semantic.coverageMode in setOf(
+                            org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode.FullOrScissor,
+                            org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode.Stencil1x) &&
+                        (packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip || packet.clipExecutionPlan is GPUClipExecutionPlan.ScissorOnly)) {
+                        "unsupported.w5b.mixed-core-coverage"
+                    }
+                    snapshot = if (blend is org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1)
+                        "texture.core-primitive.destination-snapshot.${request.baseTaskList.frameId.value}" else null
+                }
+                is GPUDrawSemanticPayload.TextA8 -> {
+                    val material = requireNotNull(semantic.materialPlanProvenance)
+                    source = material.sourcePlanTable to material.ref
+                    blend = requireNotNull(semantic.w5bFinalBlendPlan)
+                    snapshot = snapshots.singleOrNull { it.packetId == packet.packetId }?.snapshot?.value
+                }
+                is GPUDrawSemanticPayload.Vertices -> {
+                    val material = requireNotNull(semantic.materialPlanProvenance)
+                    source = material.sourcePlanTable to material.ref
+                    blend = requireNotNull(semantic.w5bFinalBlendPlan)
+                    snapshot = snapshots.singleOrNull { it.packetId == packet.packetId }?.snapshot?.value
+                }
+                else -> throw IllegalArgumentException("unsupported.w5b.mixed-source")
+            }
+            org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1.Input(packet.commandIdValue, source.first, source.second,
+                blend, snapshot?.let { org.graphiks.kanvas.gpu.plan.PlanResourceId(it) })
+        }
+        require(inputs.isNotEmpty() || hasExactSoleSceneInitialization(request, packets) && snapshots.isEmpty()) {
+            "invalid.w5b.mixed-zero-survivor-initialization"
+        }
+        return org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1.seal(
+            org.graphiks.kanvas.gpu.plan.PlanResourceId(request.target.value), capability.snapshot,
+            org.graphiks.kanvas.gpu.plan.PlanBudget(budgetI64), inputs)
+    }
+
+    /** The renderer authenticates only the submitted mapped frame, never upstream operation elision. */
+    private fun hasExactSoleSceneInitialization(
+        request: GPUPreparedSurfaceFrameRequest,
+        packets: List<GPUDrawPacket>,
+    ): Boolean {
+        if (request.synthesizedSceneClearCommandIdI32 != 0 || packets.size != 1 ||
+            request.semanticsByCommandId.keys != setOf(0)) return false
+        val base = request.baseTaskList
+        if (GPUFramePlanner.validateRecordingEnvelope(base) != null ||
+            base.recordingSeals.size != 1 || base.phaseOrder != GPUTaskPhase.entries ||
+            base.diagnostics.isNotEmpty() || base.compositeCommands.isNotEmpty() ||
+            base.memoryBudget.allocations.isNotEmpty() || base.dependencies.isNotEmpty()) return false
+        val render = base.tasks.singleOrNull() as? GPUTask.Render ?: return false
+        val packet = packets.single()
+        val semantic = request.semanticsByCommandId.getValue(0) as? GPUDrawSemanticPayload.CorePrimitive ?: return false
+        return render.drawPackets.size == 1 && render.drawPackets.single() === packet &&
+            render.recordingId == base.recordingSeals.single().recordingId && render.target.value == "frame.scene" &&
+            render.phase == GPUTaskPhase.Render && render.compositeMembership == null &&
+            render.loadStore == org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan("load", GPUStorePlan.Store) &&
+            render.resourceUses.isEmpty() && render.depthStencilLoadStore == null && render.sampleContinuationKey == null &&
+            render.preparedImageBindingsByPacketId.isEmpty() && render.preparedTextBindingsByPacketId.isEmpty() &&
+            render.samplePlan == org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.SingleSampleFrame && packet.diagnostics.isEmpty() &&
+            packet.frameProvenance == org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance.None &&
+            packet.hasCorePrimitiveSemanticAuthority(semantic, request.capabilities) &&
+            org.graphiks.kanvas.gpu.renderer.passes.isW5bPreparedSceneInitialization(packet, semantic, request.targetBounds)
     }
 
     private fun prepareCoreAuthorityBaseTaskList(
@@ -2854,11 +3190,15 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         packets: List<GPUDrawPacket>,
         configuredAggregateBudgetBytes: Long,
         additionalMemoryAllocations: List<GPUFrameMemoryAllocation>,
+        mixedTimeline: org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1? = null,
     ): MixedCoreAssembly {
         val corePackets = packets.mapNotNull { packet ->
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
                 GPUDrawSemanticPayload.CorePrimitive ?: return@mapNotNull null
-            packet.withSemantic(semantic)
+            val blend = mixedTimeline?.draws?.singleOrNull { it.commandIndexI32 == packet.commandIdValue }?.blend
+                ?.let(org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer::lower)
+            packet.withSemantic(blend?.let { semantic.withW5bBlendIdentity(it.canonicalIdentity()) } ?: semantic,
+                blendOverride = blend ?: packet.blendPlan)
         }
         if (corePackets.isEmpty()) {
             return MixedCoreAssembly.Prepared(
@@ -2879,9 +3219,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             is CoreAuthorityBaseAssembly.Refused ->
                 return MixedCoreAssembly.Refused(prepared.diagnostic)
         }
-        val coreSemantics = request.semanticsByCommandId.mapNotNull { (commandId, semantic) ->
-            (semantic as? GPUDrawSemanticPayload.CorePrimitive)?.let { commandId to it }
-        }.toMap()
+        val coreSemantics = corePackets.associate { packet -> packet.commandIdValue to
+            (packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive) }
         return when (
             val result = GPUCorePrimitivePreparedFrameTaskListAssembler(readbackLayoutPlanner).build(
                 GPUCorePrimitivePreparedFrameRequest(
@@ -2893,6 +3232,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     readbackRequestId = null,
                     configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
                     targetFormat = request.targetFormat,
+                    geometryInventory = request.coreGeometryInventory,
                 ),
                 additionalMemoryAllocations = additionalMemoryAllocations,
             )
@@ -2910,11 +3250,11 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 }
                 val visibleConsumerRenders = renders - coverageMaskProducerRenders.toSet()
                 val consumerByCommandId = coreSemantics.keys.associateWith { commandId ->
-                    visibleConsumerRenders.singleOrNull { render ->
+                    visibleConsumerRenders.filter { render ->
                         render.drawPackets.any { packet -> packet.commandIdValue == commandId }
                     }
                 }
-                if (consumerByCommandId.values.any { it == null } ||
+                if (consumerByCommandId.values.any { it.isEmpty() } ||
                     visibleConsumerRenders.any { render ->
                         render.drawPackets.none { packet -> packet.commandIdValue in coreSemantics }
                     }
@@ -2928,7 +3268,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 } else {
                     MixedCoreAssembly.Prepared(
                         packetByCommandId = consumerByCommandId.mapValues { (commandId, render) ->
-                            val packetsForCommand = requireNotNull(render).drawPackets.filter { packet ->
+                            val packetsForCommand = render.flatMap { it.drawPackets }.filter { packet ->
                                 packet.commandIdValue == commandId
                             }
                             if (packetsForCommand.any { packet ->
@@ -2947,8 +3287,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             render.drawPackets.map { packet -> packet.packetId to render }
                         }.toMap(),
                         resourceUsesByCommandId = consumerByCommandId.mapValues { (commandId, render) ->
-                            val exactRender = requireNotNull(render)
-                            val hasPath = exactRender.drawPackets.any { packet ->
+                            val hasPath = render.flatMap { it.drawPackets }.any { packet ->
                                 packet.commandIdValue == commandId &&
                                     packet.role in setOf(
                                         org.graphiks.kanvas.gpu.renderer.passes
@@ -2957,7 +3296,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                                             .GPUDrawPacketRole.PathStencilCover,
                                     )
                             }
-                            exactRender.resourceUses.filter { use ->
+                            render.flatMap { it.resourceUses }.distinct().filter { use ->
                                 hasPath ||
                                 use.role != GPUFrameResourceRole.PathDepthStencil
                             }
@@ -2989,6 +3328,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         preparations = result.taskList.tasks
                             .filterIsInstance<GPUTask.PrepareResources>()
                             .flatMap(GPUTask.PrepareResources::requests),
+                        destinationTasks = result.taskList.tasks.filterIsInstance<GPUTask.DestinationSnapshots>(),
                         memoryBudget = result.taskList.memoryBudget,
                     )
                 }
@@ -3459,32 +3799,20 @@ sealed interface GPUPreparedSaveLayerFrameHandling {
     }
 }
 
-private fun buildPreparedColorGlyphDestinationSnapshotPlans(
+private fun buildPreparedDestinationSnapshotPlans(
     request: GPUPreparedSurfaceFrameRequest,
     packets: List<GPUDrawPacket>,
-): List<GPUPreparedColorGlyphDestinationSnapshotPlan> {
+): List<GPUPreparedDestinationSnapshotPlan> {
     val limits = requireNotNull(request.capabilities.limits) {
         "Prepared ColorGlyph destination snapshots require observed device limits."
     }
-    val logicalBytesPerRow = Math.multiplyExact(request.targetBounds.width.toLong(), 4L)
-    val paddedBytesPerRow = alignUpPreparedText(
-        logicalBytesPerRow,
-        limits.copyBytesPerRowAlignment,
-    )
-    val copiedBytes = Math.multiplyExact(
-        paddedBytesPerRow,
-        request.targetBounds.height.toLong(),
-    )
-    val textureBytes = Math.multiplyExact(
-        logicalBytesPerRow,
-        request.targetBounds.height.toLong(),
-    )
     return packets.mapNotNull { packet ->
         val semantic = request.semanticsByCommandId[packet.commandIdValue]
-        // The snapshot machinery plans by command and blend only (family-agnostic): ColorGlyph
-        // and core-primitive packets both consume one TextureCopy per destination-reading packet.
+        // The snapshot machinery plans by command and blend only (family-agnostic): admitted
+        // prepared families consume one TextureCopy per destination-reading packet.
         if (semantic !is GPUDrawSemanticPayload.ColorGlyph &&
-            semantic !is GPUDrawSemanticPayload.CorePrimitive
+            semantic !is GPUDrawSemanticPayload.TextA8 &&
+            semantic !is GPUDrawSemanticPayload.Vertices
         ) {
             return@mapNotNull null
         }
@@ -3495,11 +3823,16 @@ private fun buildPreparedColorGlyphDestinationSnapshotPlans(
         }
         packet
     }.mapIndexed { index, packet ->
+        val bounds = request.semanticsByCommandId.getValue(packet.commandIdValue).preparedDestinationBounds(request.targetBounds)
+        val logicalBytesPerRow = Math.multiplyExact(bounds.width.toLong(), 4L)
+        val paddedBytesPerRow = alignUpPreparedText(logicalBytesPerRow, limits.copyBytesPerRowAlignment)
+        val copiedBytes = Math.multiplyExact(paddedBytesPerRow, bounds.height.toLong())
+        val textureBytes = Math.multiplyExact(logicalBytesPerRow, bounds.height.toLong())
         val snapshot = GPUFrameTextureRef(
             "texture.prepared-surface.color-glyph-destination." +
                 "${request.baseTaskList.frameId.value}.$index",
         )
-        GPUPreparedColorGlyphDestinationSnapshotPlan(
+        GPUPreparedDestinationSnapshotPlan(
             groupIndex = index,
             packetId = packet.packetId,
             commandIdValue = packet.commandIdValue,
@@ -3507,7 +3840,7 @@ private fun buildPreparedColorGlyphDestinationSnapshotPlans(
             preparation = GPUResourcePreparationRequest(
                 resource = snapshot,
                 descriptor = GPUFrameTextureDescriptor(
-                    logicalBounds = request.targetBounds,
+                    logicalBounds = bounds,
                     format = request.targetFormat,
                     sampleCount = 1,
                 ),
@@ -3526,14 +3859,15 @@ private fun buildPreparedColorGlyphDestinationSnapshotPlans(
                 category = GPUFrameMemoryCategory.DestinationSnapshot,
                 bytes = textureBytes,
                 resourceKind = GPUFrameMemoryResourceKind.Texture2D,
-                extent = request.targetBounds,
+                extent = bounds,
             ),
             copiedBytes = copiedBytes,
             copyLayout = GPUTextureCopyLayout(
                 bytesPerRow = paddedBytesPerRow,
-                rowsPerImage = request.targetBounds.height,
+                rowsPerImage = bounds.height,
             ),
             targetGeneration = packet.resourceGeneration,
+            logicalBounds = bounds,
         )
     }
 }
@@ -3566,6 +3900,7 @@ private sealed interface MixedCoreAssembly {
         val coverageMaskProducerRenders: List<GPUTask.Render> = emptyList(),
         val coverageMaskConsumerUseByPlanIdentity: Map<String, GPUFrameResourceUse> = emptyMap(),
         val preparations: List<GPUResourcePreparationRequest>,
+        val destinationTasks: List<GPUTask.DestinationSnapshots> = emptyList(),
         val memoryBudget: GPUFrameMemoryBudgetPlan?,
     ) : MixedCoreAssembly
 
@@ -3891,17 +4226,23 @@ private data class PreparedRouteRunKey(
 
 private fun List<GPUDrawPacket>.contiguousRouteRuns(
     baseRenderByPacketId: Map<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID, GPUTask.Render>,
+    sealedCopyConsumers: Set<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID> = emptySet(),
 ): List<List<GPUDrawPacket>> {
-    val runs = mutableListOf<MutableList<GPUDrawPacket>>()
-    forEach { packet ->
-        val render = baseRenderByPacketId.getValue(packet.packetId)
-        val coreRouteIdentity = if (
-            packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
-        ) {
-            render.taskId.value
-        } else {
-            null
+    fun coreRouteIdentity(packet: GPUDrawPacket, render: GPUTask.Render): String? {
+        if (packet.semanticPayload !is GPUDrawSemanticPayload.CorePrimitive) return null
+        // Mixed assembly removes path depth/stencil from direct packets. Those consumers
+        // cannot rejoin a stencil-bearing run merely because the Core assembler batched
+        // their original packets. Keep the exact producer/cover pair together instead.
+        val path = packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ||
+            packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover
+        return "${render.taskId.value}.${if (path) "path-pair" else "direct"}"
+    }
+    fun key(packet: GPUDrawPacket): Any {
+        packet.corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.boundaries?.let { plan ->
+            return plan to plan.segment(packet.packetId)
         }
+        val render = baseRenderByPacketId.getValue(packet.packetId)
+        val coreRouteIdentity = coreRouteIdentity(packet, render)
         val key = PreparedRouteRunKey(
             semanticKind = when (packet.semanticPayload) {
                 is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
@@ -3928,51 +4269,9 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
             targetStateHash = coreRouteIdentity ?: packet.targetStateHash,
             continuationKey = render.sampleContinuationKey?.toString(),
         )
-        val current = runs.lastOrNull()
-        val currentKey = current?.firstOrNull()?.let { first ->
-            val firstRender = baseRenderByPacketId.getValue(first.packetId)
-            val firstCoreRouteIdentity = if (
-                first.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
-            ) {
-                firstRender.taskId.value
-            } else {
-                null
-            }
-            PreparedRouteRunKey(
-                semanticKind = when (first.semanticPayload) {
-                    is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
-                    is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
-                    is GPUDrawSemanticPayload.TextA8 -> "text-a8"
-                    is GPUDrawSemanticPayload.ColorGlyph -> "color-glyph"
-                    is GPUDrawSemanticPayload.Vertices -> "vertices"
-                    else -> "unsupported"
-                },
-                passId = first.passId,
-                renderStepId = firstCoreRouteIdentity ?: first.renderStepId.value,
-                renderStepVersion =
-                    if (firstCoreRouteIdentity == null) first.renderStepVersion else 0,
-                renderPipelineKey = if (firstCoreRouteIdentity == null) {
-                    first.renderPipelineKey?.value
-                } else {
-                    null
-                },
-                bindingLayoutHash = firstCoreRouteIdentity ?: first.bindingLayoutHash,
-                samplePlanKey = firstRender.samplePlan.specializationKey,
-                target = firstRender.target.value,
-                loadStore = firstRender.loadStore,
-                provisionalSegmentKey = firstRender.provisionalSegmentKey,
-                depthStencilLoadStore = firstRender.depthStencilLoadStore,
-                targetStateHash = firstCoreRouteIdentity ?: first.targetStateHash,
-                continuationKey = firstRender.sampleContinuationKey?.toString(),
-            )
-        }
-        if (current == null || currentKey != key) {
-            runs += mutableListOf(packet)
-        } else {
-            current += packet
-        }
+        return key
     }
-    return runs
+    return partitionHostRuns(this, ::key, { it.packetId in sealedCopyConsumers }, { it.packetId in sealedCopyConsumers })
 }
 
 private fun verticesStagingRef(frameId: GPUFrameID): GPUFrameBufferRef =
@@ -3988,6 +4287,7 @@ private fun GPUDrawPacket.withSemantic(
     semantic: GPUDrawSemanticPayload,
     clipCoverageOverride: GPUClipCoveragePlan? = clipCoveragePlan,
     clipExecutionOverride: GPUClipExecutionPlan? = clipExecutionPlan,
+    blendOverride: org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan? = blendPlan,
 ) = GPUDrawPacket(
     packetId = packetId,
     commandIdValue = commandIdValue,
@@ -4001,7 +4301,7 @@ private fun GPUDrawPacket.withSemantic(
     renderStepId = renderStepId,
     renderStepVersion = renderStepVersion,
     role = role,
-    blendPlan = blendPlan,
+    blendPlan = blendOverride,
     renderPipelineKey = renderPipelineKey,
     computePipelineKey = computePipelineKey,
     bindingLayoutHash = bindingLayoutHash,
@@ -4713,6 +5013,15 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
             .map(Int::toByte)
             .toByteArray()
             .sha256Hex(),
+        materialPlanProvenanceIdentity = (this as? GPUDrawSemanticPayload.TextA8)
+            ?.materialPlanProvenance
+            ?.canonicalIdentity(),
+        materialPlanAdmissionToken = (this as? GPUDrawSemanticPayload.TextA8)
+            ?.materialPlanProvenance
+            ?.let { provenance ->
+                material.preparedTextW5aAdmissionToken
+                    ?.takeIf(provenance::matchesAdmissionToken)
+            },
         materialSampledResourceFacts = material.sampledResources.flatMap { resource ->
             resource.identityFacts()
         },
